@@ -65,10 +65,15 @@ add_executable(metroid_prime_port
     platform/ai_dma.cpp)
 # aurora_core (webgpu/gpu.cpp) and aurora_gx reference each other; group them so
 # the linker rescans and resolves the cycle.
-target_link_libraries(metroid_prime_port PRIVATE
-    mp_game
-    aurora::main
-    "$<LINK_GROUP:RESCAN,aurora::core,aurora::gx>")
+if(MSVC)
+    target_link_libraries(metroid_prime_port PRIVATE
+        mp_game aurora::main aurora::core aurora::gx)
+else()
+    target_link_libraries(metroid_prime_port PRIVATE
+        mp_game
+        aurora::main
+        "$<LINK_GROUP:RESCAN,aurora::core,aurora::gx>")
+endif()
 
 # Aurora imports this machine-independent pipeline description cache and
 # compiles its entries in the background before first use.
