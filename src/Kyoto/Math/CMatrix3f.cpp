@@ -102,8 +102,8 @@ void CMatrix3f::AddScaledMatrix(const CMatrix3f& mat, float scale) {
 
 /* TODO: I think these are fake matches on compiler generated functions */
 #ifdef __MWERKS__
-CMatrix3f::CMatrix3f(register const CMatrix3f& other) {
-  register CMatrix3f& thiz = *this;
+CMatrix3f::CMatrix3f( const CMatrix3f& other) {
+   CMatrix3f& thiz = *this;
   asm volatile {
     lfd f0, CMatrix3f.m00(other);
     lfd f1, CMatrix3f.m02(other);
@@ -132,8 +132,8 @@ CMatrix3f::CMatrix3f(const CMatrix3f& other) {
 #endif
 
 #ifdef __MWERKS__
-const CMatrix3f& CMatrix3f::operator=(register const CMatrix3f& other) {
-  register CMatrix3f& thiz = *this;
+const CMatrix3f& CMatrix3f::operator=( const CMatrix3f& other) {
+   CMatrix3f& thiz = *this;
   asm volatile {
     lfd f0, CMatrix3f.m00(other);
     lfd f1, CMatrix3f.m02(other);

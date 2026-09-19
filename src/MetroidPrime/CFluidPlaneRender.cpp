@@ -25,11 +25,11 @@ static float sGlobalSineWave[256];
 static bool sSineWaveInitialized;
 
 #ifdef __MWERKS__
-static inline float fast_sqrt(register float x) {
+static inline float fast_sqrt( float x) {
   if (x == 0.f) {
     return x;
   }
-  register float rsq;
+   float rsq;
   asm {
     ps_rsqrte rsq, x
     ps_mul rsq, rsq, x

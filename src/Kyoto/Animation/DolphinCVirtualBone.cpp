@@ -38,8 +38,8 @@ CVirtualBone::CVirtualBone(CInputStream& in)
 static ConstMtxPtr TransformToMtx(const CTransform4f& xf) { return xf.GetCStyleMatrix(); }
 
 #ifdef __MWERKS__
-void TransformFromMatrixDelta(register CTransform4f* xf, register const CMatrix3f* rot,
-                              register const CVector3f* point) {
+void TransformFromMatrixDelta( CTransform4f* xf,  const CMatrix3f* rot,
+                               const CVector3f* point) {
   asm volatile {
     psq_l f0, 0(point), 0, 0;
     psq_l f1, 8(rot), 1, 0;
@@ -73,10 +73,10 @@ void TransformFromMatrixDelta(CTransform4f* xf, const CMatrix3f* rot, const CVec
 #endif
 
 #ifdef __MWERKS__
-void Transform2FromMatrixData(register CTransform4f* xf, register const CMatrix3f* rot,
-                              register const CVector3f* point, register float weight0,
-                              register const CMatrix3f* rotation1, register const CVector3f* point1,
-                              register float weight1) {
+void Transform2FromMatrixData( CTransform4f* xf,  const CMatrix3f* rot,
+                               const CVector3f* point,  float weight0,
+                               const CMatrix3f* rotation1,  const CVector3f* point1,
+                               float weight1) {
   __asm__ {
     fmr f4, weight0;
     psq_l f0, CMatrix3f.m00(rot), 0, 0;

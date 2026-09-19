@@ -7,9 +7,9 @@
 
 namespace CCast {
 #ifdef __MWERKS__
-inline uchar ToUint8(register float in) {
+inline uchar ToUint8( float in) {
   uchar a;
-  register uchar* ptr = &a;
+   uchar* ptr = &a;
 
   asm {
     psq_st  in, 0(ptr), 1, OS_FASTCAST_U8
@@ -17,9 +17,9 @@ inline uchar ToUint8(register float in) {
   return *ptr;
 }
 
-inline char ToInt8(register float in) {
+inline char ToInt8( float in) {
   char a;
-  register char* ptr = &a;
+   char* ptr = &a;
 
   asm {
     psq_st  in, 0(ptr), 1, OS_FASTCAST_S8
@@ -27,17 +27,17 @@ inline char ToInt8(register float in) {
   return *ptr;
 }
 
-inline float ToReal32(register const uchar& in) {
-  register float r;
+inline float ToReal32( const uchar& in) {
+   float r;
   asm {
     psq_l r, 0(in), 1, 2
   }
   return r;
 }
 
-inline short FtoS(register float in) {
+inline short FtoS( float in) {
   short a;
-  register short* ptr = &a;
+   short* ptr = &a;
 
   asm {
     psq_st  in, 0(ptr), 1, OS_FASTCAST_S16
@@ -45,7 +45,7 @@ inline short FtoS(register float in) {
   return *ptr;
 }
 
-inline ushort FtoUS(register float in) {
+inline ushort FtoUS( float in) {
   ushort a;
   register ushort* ptr = &a;
 
@@ -55,8 +55,8 @@ inline ushort FtoUS(register float in) {
   return *ptr;
 }
 
-inline float StoF(register const short& in) {
-  register float r;
+inline float StoF( const short& in) {
+   float r;
   asm {
     psq_l r, 0(in), 1, OS_FASTCAST_S16
   }

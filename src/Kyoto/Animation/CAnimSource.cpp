@@ -15,11 +15,11 @@ template class rstl::red_black_tree<
     rstl::less< rstl::pair< rstl::string, int > >, rstl::rmemory_allocator >;
 
 #ifdef __MWERKS__
-static float clamp_zero_to_one(register const float v) {
-  register float zero = 0.f;
-  register float one = 1.f;
+static float clamp_zero_to_one( const float v) {
+   float zero = 0.f;
+   float one = 1.f;
 
-  register float res, tmp;
+   float res, tmp;
 
   asm {
     fsel res, v, v, zero;

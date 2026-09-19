@@ -52,10 +52,10 @@ void ApplyRipples(const rstl::reserved_vector< CFluidPlaneCPURender::SRippleInfo
                   CFluidPlaneCPURender::SPatchInfo& info);
 
 #ifdef __MWERKS__
-static inline float fast_sqrt(register float x) {
+static inline float fast_sqrt( float x) {
   if (0.f == x)
     return x;
-  register float rsq;
+   float rsq;
   asm {
     ps_rsqrte rsq, x
     ps_mul rsq, rsq, x

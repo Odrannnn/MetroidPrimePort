@@ -25,8 +25,8 @@ public:
   static float Limit(float v, float h) { return fabs(v) > h ? h * Sign(v) : v; }
   static float Sign(float v) { return FastFSel(v, 1.f, -1.f); }
 #ifdef __MWERKS__
-  static float FastFSel(register float v, register float h, register float l) {
-    register float out;
+  static float FastFSel( float v,  float h,  float l) {
+     float out;
     asm {
       fsel out, v, h, l
     }
@@ -84,7 +84,7 @@ public:
                                const CVector3f& bary);
   // GetCatmullRomSplinePoint__5CMathFRC9CVector3fRC9CVector3fRC9CVector3fRC9CVector3ff global
 #ifdef __MWERKS__
-  static inline float FastSqrtF(register float x) {
+  static inline float FastSqrtF( float x) {
     if (x == 0.f) {
       return 0.f;
     }
