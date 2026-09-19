@@ -1,0 +1,51 @@
+#ifndef _CMETROIDMODELINSTANCE
+#define _CMETROIDMODELINSTANCE
+
+#include "Kyoto/Math/CAABox.hpp"
+#include "Kyoto/Math/CTransform4f.hpp"
+
+#include "rstl/vector.hpp"
+
+class CMetroidModelInstance {
+public:
+  CMetroidModelInstance(const void* header, const void* firstGeom, const void* positions,
+                        uint positionsSize, const void* normals, uint normalsSize,
+                        const void* colors, uint colorsSize, const void* texCoords,
+                        uint texCoordsSize, const void* packedTexCoords, uint packedTexCoordsSize,
+                        const rstl::vector< void* >& surfaces);
+  ~CMetroidModelInstance() {}
+
+  int GetFlags() const { return x0_visorFlags; }
+  const CAABox& GetBoundingBox() const { return x34_worldAABB; }
+  const void* GetMaterialPointer() const { return x4c_materialData; }
+  const rstl::vector< void* >& GetSurfaces() const { return x50_surfaces; }
+  const void* GetVertexPointer() const { return x60_positions; }
+  const void* GetNormalPointer() const { return x64_normals; }
+  const void* GetColorPointer() const { return x68_colors; }
+  const void* GetTCPointer() const { return x6c_texCoords; }
+  const void* GetPackedTCPointer() const { return x70_packedTexCoords; }
+  uint GetVertexSize() const { return x74_positionsSize; }
+  uint GetNormalSize() const { return x78_normalsSize; }
+  uint GetColorSize() const { return x7c_colorsSize; }
+  uint GetTCSize() const { return x80_texCoordsSize; }
+  uint GetPackedTCSize() const { return x84_packedTexCoordsSize; }
+
+private:
+  int x0_visorFlags;
+  CTransform4f x4_worldXf;
+  CAABox x34_worldAABB;
+  const void* x4c_materialData;
+  rstl::vector< void* > x50_surfaces;
+  const void* x60_positions;
+  const void* x64_normals;
+  const void* x68_colors;
+  const void* x6c_texCoords;
+  const void* x70_packedTexCoords;
+  uint x74_positionsSize;
+  uint x78_normalsSize;
+  uint x7c_colorsSize;
+  uint x80_texCoordsSize;
+  uint x84_packedTexCoordsSize;
+};
+
+#endif // _CMETROIDMODELINSTANCE

@@ -1,0 +1,74 @@
+#ifndef _CCHARACTERINFO
+#define _CCHARACTERINFO
+
+#include "types.h"
+
+#include "Kyoto/Particles/CEffectComponent.hpp"
+
+#include "Kyoto/Animation/CPASDatabase.hpp"
+#include "Kyoto/Animation/CSegId.hpp"
+#include "Kyoto/IObjectStore.hpp"
+#include "Kyoto/Math/CAABox.hpp"
+
+#include "rstl/pair.hpp"
+#include "rstl/string.hpp"
+#include "rstl/vector.hpp"
+
+class CCharacterInfo {
+public:
+  typedef rstl::vector< CEffectComponent > CEffectComponents;
+
+  class CParticleResData {
+  public:
+    CParticleResData() {}
+    CParticleResData(CInputStream& in, ushort tableCount);
+    CParticleResData(const rstl::vector< CAssetId >& part, const rstl::vector< CAssetId >& swhc,
+                     const rstl::vector< CAssetId >& elsc, const rstl::vector< CAssetId >& swoosh)
+    : x0_part(part), x10_swhc(swhc), x20_elsc(elsc), x30_elsc(swoosh) {}
+    rstl::vector< CAssetId > x0_part;
+    rstl::vector< CAssetId > x10_swhc;
+    rstl::vector< CAssetId > x20_elsc;
+    rstl::vector< CAssetId > x30_elsc;
+  };
+
+private:
+  ushort x0_tableCount;
+  rstl::string x4_name;
+  CAssetId x14_cmdl;
+  CAssetId x18_cksr;
+  CAssetId x1c_cinf;
+  rstl::vector< rstl::pair< int, rstl::pair< rstl::string, rstl::string > > > x20_animInfo;
+  CPASDatabase x30_pasDatabase;
+  CParticleResData x44_partRes;
+  uint x84_unk;
+  rstl::vector< rstl::pair< rstl::string, CAABox > > x88_aabbs;
+  rstl::vector< rstl::pair< rstl::string, CEffectComponents > > x98_effects;
+  uint xa8_cmdlOverlay;
+  uint xac_cksrOverlay;
+  rstl::vector< uint > xb0_animIdxs;
+
+public:
+  int GetAnimationIndex(const rstl::string& name) const;
+  const rstl::string& GetCharacterName() const { return x4_name; }
+  const CPASDatabase& GetPASDatabase() const { return x30_pasDatabase; }
+  const CParticleResData& GetParticleResData() const { return x44_partRes; }
+  const rstl::vector< uint >& GetAnimationIndexList() const { return xb0_animIdxs; }
+  const rstl::vector< rstl::pair< rstl::string, CAABox > >& GetAnimBBoxList() const {
+    return x88_aabbs;
+  }
+  const rstl::vector< rstl::pair< rstl::string, CEffectComponents > >&
+  GetEffectList() const {
+    return x98_effects;
+  }
+
+  CAssetId GetModelId() const { return x14_cmdl; }
+  CAssetId GetSkinRulesId() const { return x18_cksr; }
+  CAssetId GetCharLayoutInfoId() const { return x1c_cinf; }
+  CAssetId GetIceModelId() const { return xa8_cmdlOverlay; }
+  CAssetId GetIceSkinRulesId() const { return xac_cksrOverlay; }
+
+  CCharacterInfo(CInputStream& in);
+};
+CHECK_SIZEOF(CCharacterInfo, 0xc0)
+
+#endif // _CCHARACTERINFO

@@ -1,0 +1,69 @@
+/* Auto-generated Amuse Defines
+ *
+ * Project: Audio
+ * Subproject: OmegaPirate
+ * Date: Sat Sep  1 12:32:04 2018
+ */
+
+#define GRPOmegaPirate 57
+
+#define SFXopr_a_grenbnce_00 2831
+#define SFXopr_a_grenexpl_00 2832
+#define SFXopr_b_voxcall_00 2833
+#define SFXopr_b_voxcall_01 2834
+#define SFXopr_b_voxlaugh_00 2835
+#define SFXopr_r_moan_00 2836
+#define SFXsfx0B15 2837
+#define SFXopr_b_run_00 2838
+#define SFXopr_b_run_01 2839
+#define SFXsfx0B18 2840
+#define SFXopr_b_voxalert_00 2841
+#define SFXopr_b_voxalert_01 2842
+#define SFXopr_b_voxattak_00 2843
+#define SFXopr_b_voxattak_01 2844
+#define SFXopr_b_voxblok_00 2845
+#define SFXopr_b_voxidle_00 2846
+#define SFXopr_b_voxidle_01 2847
+#define SFXopr_b_voxpiss_00 2848
+#define SFXopr_b_voxtaunt_00 2849
+#define SFXopr_b_walklite_00 2850
+#define SFXopr_b_walklite_01 2851
+#define SFXopr_b_walk_00 2852
+#define SFXopr_b_walk_01 2853
+#define SFXopr_b_healnrg_lp_00 2854
+#define SFXopr_b_teleport_00 2855
+#define SFXopr_b_teleport_01 2856
+#define SFXsfx0B29 2857
+#define SFXopr_r_pain_00 2858
+#define SFXopr_r_pain_01 2859
+#define SFXopr_r_phazexp_01 2860
+#define SFXopr_b_invis_00 2861
+#define SFXopr_b_voxready_00 2862
+#define SFXsfx0B2F 2863
+#define SFXsfx0B30 2864
+#define SFXopr_r_pain_02 2865
+#define SFXsfx0B32 2866
+#define SFXopr_a_grenchrg_00 2867
+#define SFXsfx0B34 2868
+#define SFXopr_a_grenade_00 2869
+#define SFXopr_b_healplat_00 2870
+#define SFXopr_b_voxlaugh_01 2871
+#define SFXsfx0B38 2872
+#define SFXsfx0B39 2873
+#define SFXopr_c_bubbles_lp_00 2874
+#define SFXopr_c_explode_00 2875
+#define SFXopr_c_nrg_lp_00 2876
+#define SFXopr_r_death_00 2877
+#define SFXopr_r_death_01 2878
+#define SFXopr_c_sammove_lp_00 2879
+#define SFXopr_c_samswoosh_00 2880
+#define SFXmtb_b_voxtaunt_00 2881
+#define SFXsfx0B42 2882
+#define SFXsfx0B43 2883
+#define SFXsfx0B44 2884
+#define SFXsfx0B45 2885
+#define SFXsfx0B46 2886
+#define SFXsfx0B47 2887
+#define SFXsfx0B48 2888
+#define SFXsfx0B49 2889
+#define SFXsfx0B4A 2890

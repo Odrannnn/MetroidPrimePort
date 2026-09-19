@@ -1,0 +1,44 @@
+#ifndef _CELECTRICDESCRIPTION
+#define _CELECTRICDESCRIPTION
+
+#include "Kyoto/Particles/CGenDescription.hpp"
+#include "Kyoto/Particles/CParticleDataFactory.hpp"
+#include "Kyoto/Particles/CSwooshDescription.hpp"
+#include "Kyoto/TToken.hpp"
+#include "rstl/optional_object.hpp"
+
+class CColorElement;
+class CEmitterElement;
+class CIntElement;
+class CRealElement;
+
+class CElectricDescription {
+public:
+  CElectricDescription();
+  ~CElectricDescription();
+
+  CIntElement* x0_LIFE;
+  CIntElement* x4_SLIF;
+  CRealElement* x8_GRAT;
+  CIntElement* xc_SCNT;
+  CIntElement* x10_SSEG;
+  CColorElement* x14_COLR;
+  CEmitterElement* x18_IEMT;
+  CEmitterElement* x1c_FEMT;
+  CRealElement* x20_AMPL;
+  CRealElement* x24_AMPD;
+  CRealElement* x28_LWD1;
+  CRealElement* x2c_LWD2;
+  CRealElement* x30_LWD3;
+  CColorElement* x34_LCL1;
+  CColorElement* x38_LCL2;
+  CColorElement* x3c_LCL3;
+  rstl::optional_object< TCachedToken< CSwooshDescription > > x40_SSWH;
+  rstl::optional_object< TCachedToken< CGenDescription > > x50_GPSM;
+  rstl::optional_object< TCachedToken< CGenDescription > > x60_EPSM;
+  bool x70_ZERY;
+};
+
+CHECK_SIZEOF(CElectricDescription, 0x74)
+
+#endif // _CELECTRICDESCRIPTION

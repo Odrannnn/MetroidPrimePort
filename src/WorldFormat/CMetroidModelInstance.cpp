@@ -1,0 +1,58 @@
+#include "WorldFormat/CMetroidModelInstance.hpp"
+
+#include "Kyoto/Basics/CBasics.hpp"
+#include <string.h>
+
+#if TARGET_BIG_ENDIAN
+static const CTransform4f& TransformFromData(const void* ptr) {
+  return *static_cast< const CTransform4f* >(ptr);
+}
+#else
+static CTransform4f TransformFromData(const void* ptr) {
+  float values[12];
+  memcpy(values, ptr, sizeof(values));
+  for (int i = 0; i < 12; ++i) {
+    values[i] = CBasics::SwapBytes(values[i]);
+  }
+  return CTransform4f(values[0], values[1], values[2], values[3],
+                      values[4], values[5], values[6], values[7],
+                      values[8], values[9], values[10], values[11]);
+}
+#endif
+
+static CAABox BoundingBoxFromData(const void* ptr) {
+  float out[6];
+  const float* tmp = reinterpret_cast< const float* >(ptr);
+  for (int i = 0; i < 6; ++i) {
+    out[i] = CBasics::SwapBytes(tmp[i]);
+  }
+
+#ifdef __MWERKS__
+  return *reinterpret_cast< const CAABox* >(out);
+#else
+  return CAABox(CVector3f(out[0], out[1], out[2]), CVector3f(out[3], out[4], out[5]));
+#endif
+}
+
+CMetroidModelInstance::CMetroidModelInstance(const void* header, const void* firstGeom,
+                                             const void* positions, uint positionsSize,
+                                             const void* normals, uint normalsSize,
+                                             const void* colors, uint colorsSize,
+                                             const void* texCoords, uint texCoordsSize,
+                                             const void* packedTexCoords, uint packedTexCoordsSize,
+                                             const rstl::vector< void* >& surfaces)
+: x0_visorFlags(CBasics::SwapBytes(*reinterpret_cast< const uint* >(header)))
+, x4_worldXf(TransformFromData((uchar*)header + sizeof(uint)))
+, x34_worldAABB(BoundingBoxFromData((uchar*)header + sizeof(CTransform4f) + sizeof(uint)))
+, x4c_materialData(firstGeom)
+, x50_surfaces(surfaces)
+, x60_positions(positions)
+, x64_normals(normals)
+, x68_colors(colors)
+, x6c_texCoords(texCoords)
+, x70_packedTexCoords(packedTexCoords)
+, x74_positionsSize(positionsSize)
+, x78_normalsSize(normalsSize)
+, x7c_colorsSize(colorsSize)
+, x80_texCoordsSize(texCoordsSize)
+, x84_packedTexCoordsSize(packedTexCoordsSize) {}

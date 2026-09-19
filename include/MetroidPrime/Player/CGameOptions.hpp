@@ -1,0 +1,110 @@
+#ifndef _CGAMEOPTIONS
+#define _CGAMEOPTIONS
+
+#include "types.h"
+
+#include "rstl/pair.hpp"
+#include "rstl/reserved_vector.hpp"
+#include "rstl/vector.hpp"
+
+#include "Kyoto/Audio/CAudioSys.hpp"
+#include "Kyoto/SObjectTag.hpp"
+#include "MetroidPrime/TGameTypes.hpp"
+
+class CInputStream;
+class CMemoryStreamOut;
+class CFinalInput;
+
+enum EGameOption {
+  kGO_VisorOpacity,
+  kGO_HelmetOpacity,
+  kGO_HUDLag,
+  kGO_HintSystem,
+  kGO_ScreenBrightness,
+  kGO_ScreenOffsetX,
+  kGO_ScreenOffsetY,
+  kGO_ScreenStretch,
+  kGO_SFXVolume,
+  kGO_MusicVolume,
+  kGO_SoundMode,
+  kGO_ReverseYAxis,
+  kGO_Rumble,
+  kGO_SwapBeamControls,
+  kGO_RestoreDefaults
+};
+
+class CGameOptions {
+public:
+  static const bool skDefaultHudLag;
+  static const bool skDefaultInvertY;
+  static const bool skDefaultRumble;
+  static const bool skDefaultSwapBeamsControls;
+  static const bool skDefaultHintSystem;
+
+  static int GetOption(EGameOption option);
+  static void SetOption(EGameOption option, int value);
+  static void TryRestoreDefaults(const CFinalInput& input, int category, int option, bool frontEnd);
+
+  CGameOptions();
+  CGameOptions(CInputStream& in);
+  ~CGameOptions() {}
+
+  void PutTo(COutputStream&);
+
+  void InitSoundMode();
+  void ResetToDefaults();
+  void EnsureOptions();
+
+  void SetScreenBrightness(const int, const bool);
+  const float TuneScreenBrightness();
+  void SetScreenPositionX(const int, const bool);
+  void SetScreenPositionY(const int, const bool);
+  void SetScreenStretch(const int, const bool);
+  void SetSfxVolume(const int, const bool);
+  void SetMusicVolume(const int, const bool);
+  void SetSurroundMode(CAudioSys::ESurroundModes, bool);
+
+  const rstl::vector< rstl::pair< CAssetId, CAssetId > >& GetControlTXTRMap() const {
+    return x6c_controlTxtrMap;
+  }
+  int GetMusicVolume() const { return x5c_musicVol; }
+  const float GetHudAlpha() const;
+  int GetHUDAlpha() const { return x60_hudAlpha; }
+  const float GetHelmetAlpha() const;
+  void SetHelmetAlpha(const int);
+  void SetHUDLag(const bool);
+  bool GetHUDLag() const { return x68_24_hudLag; }
+  void SetIsHintSystemEnabled(bool);
+  void ToggleControls(const bool);
+  void ResetControllerAssets(const int);
+  void SetControls(const int);
+
+  void SetInvertYAxis(const bool invert);
+  const bool GetInvertYAxis() const { return x68_25_invertY; }
+  void SetIsRumbleEnabled(const bool rumble);
+  const bool GetIsRumbleEnabled() const { return x68_26_rumble; }
+  bool GetIsHintSystemEnabled() const { return x68_28_hintSystem; }
+  bool GetSwapBeamControls() const { return x68_27_swapBeamsControls; }
+
+private:
+  rstl::reserved_vector< uchar, 64 > x0_;
+  int x44_soundMode;
+  int x48_screenBrightness;
+  int x4c_screenXOffset;
+  int x50_screenYOffset;
+  int x54_screenStretch;
+  uint x58_sfxVol;
+  uint x5c_musicVol;
+  int x60_hudAlpha;
+  int x64_helmetAlpha;
+  bool x68_24_hudLag : 1;
+  bool x68_25_invertY : 1;
+  bool x68_26_rumble : 1;
+  bool x68_27_swapBeamsControls : 1;
+  bool x68_28_hintSystem : 1;
+  rstl::vector< rstl::pair< CAssetId, CAssetId > > x6c_controlTxtrMap;
+};
+
+CHECK_SIZEOF(CGameOptions, 0x7c)
+
+#endif // _CGAMEOPTIONS

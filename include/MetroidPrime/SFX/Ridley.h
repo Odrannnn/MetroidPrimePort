@@ -1,0 +1,69 @@
+/* Auto-generated Amuse Defines
+ *
+ * Project: Audio
+ * Subproject: Ridley
+ * Date: Sat Sep  1 12:32:04 2018
+ */
+
+#define GRPRidley 56
+
+#define SFXrid_a_flamerake_00 2771
+#define SFXrid_a_flame_lp_00 2772
+#define SFXrid_a_flame_lp_01 2773
+#define SFXrid_b_flap_00 2774
+#define SFXrid_b_land_00 2775
+#define SFXrid_b_passby_00 2776
+#define SFXrid_b_popup_00 2777
+#define SFXrid_b_voxangry_00 2778
+#define SFXrid_b_voxangry_01 2779
+#define SFXrid_b_voxattack_00 2780
+#define SFXrid_b_voxattack_01 2781
+#define SFXrid_b_voxidle_00 2782
+#define SFXrid_b_voxidle_01 2783
+#define SFXrid_b_voxtaunt_00 2784
+#define SFXrid_b_voxtaunt_01 2785
+#define SFXrid_b_walk_00 2786
+#define SFXrid_b_walk_01 2787
+#define SFXrid_b_jump_00 2788
+#define SFXrid_b_walksm_00 2789
+#define SFXrid_b_walksm_01 2790
+#define SFXrid_r_chestexp_00 2791
+#define SFXrid_r_death_00 2792
+#define SFXrid_r_painbig_00 2793
+#define SFXrid_r_pain_00 2794
+#define SFXrid_a_bombhit_00 2795
+#define SFXrid_a_chestglo_00 2796
+#define SFXrid_a_claw_00 2797
+#define SFXrid_a_mirvhit_00 2798
+#define SFXrid_a_mirv_00 2799
+#define SFXrid_a_mirv_lp_00 2800
+#define SFXrid_a_tail_00 2801
+#define SFXrid_a_flame_lp_02 2802
+#define SFXrid_a_bomb_00 2803
+#define SFXrid_b_voxangry_02 2804
+#define SFXrid_r_pain_lp_00 2805
+#define SFXrid_c_ridoexpi_00 2806
+#define SFXrid_c_ridovoxs_00 2807
+#define SFXrid_c_passby_00 2808
+#define SFXrid_c_smallexp_00 2809
+#define SFXrid_c_painbig_00 2810
+#define SFXrid_a_stomp_00_oneshot 2811
+#define SFXrid_b_land_01_oneshot 2812
+#define SFXsilence7_17 2813
+#define SFXsilence8_17 2814
+#define SFXsilence9_15 2815
+#define SFXsilence_29 2816
+#define SFXsilence1_57 2817
+#define SFXsilence2_64 2818
+#define SFXsilence3_34 2819
+#define SFXsilence4_29 2820
+#define SFXsilence5_24 2821
+#define SFXsilence6_18 2822
+#define SFXsilence7_18 2823
+#define SFXsilence8_20 2824
+#define SFXsilence9_16 2825
+#define SFXsilence_30 2826
+#define SFXsilence1_61 2827
+#define SFXsilence2_67 2828
+#define SFXsilence3_37 2829
+#define SFXsilence4_32 2830

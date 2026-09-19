@@ -1,0 +1,67 @@
+#ifndef _CPARTICLEDATA
+#define _CPARTICLEDATA
+
+#include "types.h"
+
+#include "Kyoto/IObjectStore.hpp"
+#include "Kyoto/Math/CVector3f.hpp"
+
+#include "rstl/string.hpp"
+
+class CInputStream;
+class CParticleData {
+public:
+  enum EParentedMode {
+    kPM_Initial,
+    kPM_ContinuousEmitter,
+    kPM_ContinuousSystem,
+  };
+
+  CParticleData(int duration = 0, const SObjectTag& tag = SObjectTag(0, 0),
+                const rstl::string& boneName = rstl::string_l("root"), float scale = 1.f,
+                EParentedMode mode = kPM_Initial)
+  : x0_duration(duration)
+  , x4_particle(tag)
+  , xc_boneName(boneName)
+  , x1c_scale(scale)
+  , x20_parentMode(mode) {}
+
+  CParticleData(CInputStream& in);
+
+  int GetDuration() const { return x0_duration; }
+  SObjectTag GetParticleAssetInfo() const {
+    return SObjectTag(x4_particle.GetType(), x4_particle.GetId());
+  }
+  const rstl::string& GetLocatorName() const { return xc_boneName; }
+  float GetScale() const { return x1c_scale; }
+  EParentedMode GetParentedMode() const { return static_cast< EParentedMode >(x20_parentMode); }
+
+private:
+  int x0_duration;
+  SObjectTag x4_particle;
+  rstl::string xc_boneName;
+  float x1c_scale;
+  int x20_parentMode;
+};
+
+class CAuxiliaryParticleData {
+public:
+  CAuxiliaryParticleData(uint duration, const SObjectTag& tag, const CVector3f& translation,
+                         float scale)
+  : x0_duration(duration), x4_particle(tag), xc_translation(translation), x18_scale(scale) {}
+
+  uint GetDuration() const { return x0_duration; }
+  SObjectTag GetParticleAssetInfo() const {
+    return SObjectTag(x4_particle.GetType(), x4_particle.GetId());
+  }
+  const CVector3f& GetTranslation() const { return xc_translation; }
+  float GetScale() const { return x18_scale; }
+
+private:
+  uint x0_duration;
+  SObjectTag x4_particle;
+  CVector3f xc_translation;
+  float x18_scale;
+};
+
+#endif // _CPARTICLEDATA

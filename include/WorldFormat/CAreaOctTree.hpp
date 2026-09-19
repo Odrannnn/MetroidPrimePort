@@ -1,0 +1,148 @@
+#ifndef _CAREAOCTTREE
+#define _CAREAOCTTREE
+
+#include "types.h"
+#include "Kyoto/Basics/CBasics.hpp"
+
+#include "WorldFormat/CCollisionSurface.hpp"
+
+#include "Kyoto/Math/CAABox.hpp"
+#include "Kyoto/Math/CPlane.hpp"
+
+#include "rstl/optional_object.hpp"
+
+#include "WorldFormat/CCollisionEdge.hpp"
+
+#if TARGET_LITTLE_ENDIAN
+#include "rstl/vector.hpp"
+#endif
+
+class CLine;
+class CMaterialFilter;
+
+class CAreaOctTree {
+public:
+  struct SRayResult {
+    CPlane x0_plane;
+    rstl::optional_object< CCollisionSurface > x10_surface;
+    float x3c_t;
+
+    SRayResult() : x0_plane(0.f, CUnitVector3f(1.f, 0.f, 0.f)), x3c_t(0.f) {}
+  };
+
+  class TriListReference {
+  public:
+    explicit TriListReference(const void* ptr) : m_ptr(reinterpret_cast< const ushort* >(ptr)) {}
+    explicit TriListReference(const ushort* ptr) : m_ptr(ptr) {}
+    const ushort GetAt(int idx) const {
+#if TARGET_LITTLE_ENDIAN
+      return CBasics::SwapBytes(m_ptr[idx + kTriangleDataOffset]);
+#else
+      return m_ptr[idx + kTriangleDataOffset];
+#endif
+    }
+    const ushort GetSize() const { return CBasics::SwapBytes(m_ptr[kTriangleCountOffset]); }
+
+  private:
+    // Leaf records store bounds, then a ushort count followed by the triangle indices.
+    enum {
+      kTriangleCountOffset = sizeof(CAABox) / sizeof(ushort),
+      kTriangleDataOffset = kTriangleCountOffset + 1,
+    };
+
+    const ushort* m_ptr;
+  };
+
+  class Node {
+  public:
+    enum ETreeType { kTT_Invalid, kTT_Branch, kTT_Leaf };
+
+    Node(const void* ptr, const CAABox& aabb, const CAreaOctTree& owner, ETreeType type)
+    : x0_aabb(aabb)
+    , x18_ptr(reinterpret_cast< const uchar* >(ptr))
+    , x1c_owner(owner)
+    , x20_nodeType(type) {}
+
+    bool LineTest(const CLine& line, const CMaterialFilter& filter, float length) const;
+    void LineTestEx(const CLine& line, const CMaterialFilter& filter, SRayResult& res,
+                    float length) const;
+
+    const CAreaOctTree& GetOwner() const { return x1c_owner; }
+    const CAABox& GetBoundingBox() const { return x0_aabb; }
+    ushort GetChildFlags() const {
+      return CBasics::SwapBytes(*reinterpret_cast< const ushort* >(x18_ptr));
+    }
+    Node GetChild(int idx) const;
+    TriListReference GetTriangleArray() const;
+    ETreeType GetChildType(int idx) const {
+      ushort flags = CBasics::SwapBytes(*reinterpret_cast< const ushort* >(x18_ptr));
+      return ETreeType((flags >> (2 * idx)) & 0x3);
+    }
+    ETreeType GetTreeType() const { return x20_nodeType; }
+
+  private:
+    CAABox x0_aabb;
+    const uchar* x18_ptr;
+    const CAreaOctTree& x1c_owner;
+    ETreeType x20_nodeType;
+
+    bool LineTestInternal(const CLine& line, const CMaterialFilter& filter, float lT, float hT,
+                          float maxT, const CVector3f& vec) const;
+    void LineTestExInternal(const CLine& line, const CMaterialFilter& filter, SRayResult& res,
+                            float lT, float hT, float maxT, const CVector3f& dirRecip) const;
+  };
+
+  CAreaOctTree(const CAABox& bounds, Node::ETreeType treeType, uchar* buf, void* treeBuf,
+               uint materialCount, uint* materials, uchar* vertexMaterials, uchar* edgeMaterials,
+               uchar* triMaterials, uint edgeCount, CCollisionEdge* edges, uint triCount,
+               ushort* triangles, uint vertexCount, CVector3f* vertices);
+  static void MakeFromMemory(void* buf, uint bufLen, CAreaOctTree** treeOut, bool* valid);
+  CCollisionSurface GetMasterListTriangle(ushort idx) const;
+  Node GetRootNode() const { return Node(x20_treeBuf, x0_aabb, *this, x18_treeType); }
+  const void* GetTreeMemory() const { return x20_treeBuf; }
+  const CAABox& GetBoundingBox() const { return x0_aabb; }
+  Node::ETreeType GetTreeType() const { return x18_treeType; }
+
+  const CVector3f& GetVert(int idx) const { return x4c_verts[idx]; }
+  const CCollisionEdge& GetEdge(int idx) const { return x3c_edges[idx]; }
+  uint GetVertMaterial(int idx) const { return x28_materials[x2c_vertMats[idx]]; }
+  uint GetEdgeMaterial(int idx) const { return x28_materials[x30_edgeMats[idx]]; }
+  uint GetTriangleMaterial(int idx) const { return x28_materials[x34_polyMats[idx]]; }
+  void GetTriangleVertexIndices(ushort idx, ushort indicesOut[3]) const;
+  const ushort* GetTriangleEdgeIndices(ushort idx) const;
+
+private:
+  CAABox x0_aabb;
+  Node::ETreeType x18_treeType;
+  const uchar* x1c_buf;
+  const void* x20_treeBuf;
+  uint x24_matCount;
+  const uint* x28_materials;
+  const uchar* x2c_vertMats;
+  const uchar* x30_edgeMats;
+  const uchar* x34_polyMats;
+  uint x38_edgeCount;
+  const CCollisionEdge* x3c_edges;
+  uint x40_polyCount;
+  const ushort* x44_polyEdges;
+  uint x48_vertCount;
+  const CVector3f* x4c_verts;
+
+#if TARGET_LITTLE_ENDIAN
+  rstl::vector< uint > mNativeMaterials;
+  rstl::vector< uchar > mNativeVertexMaterials;
+  rstl::vector< uchar > mNativeEdgeMaterials;
+  rstl::vector< uchar > mNativeTriangleMaterials;
+  rstl::vector< CCollisionEdge > mNativeEdges;
+  rstl::vector< ushort > mNativeTriangleEdges;
+  rstl::vector< CVector3f > mNativeVertices;
+#endif
+};
+#if TARGET_BIG_ENDIAN
+CHECK_SIZEOF(CAreaOctTree, 0x50)
+#endif
+NESTED_CHECK_SIZEOF(CAreaOctTree, Node, 0x24)
+NESTED_CHECK_SIZEOF(CAreaOctTree, TriListReference, 0x4)
+NESTED_CHECK_SIZEOF(CAreaOctTree, SRayResult, 0x40)
+
+#endif // _CAREAOCTTREE

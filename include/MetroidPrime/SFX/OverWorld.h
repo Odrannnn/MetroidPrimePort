@@ -1,0 +1,81 @@
+/* Auto-generated Amuse Defines
+ *
+ * Project: Audio
+ * Subproject: OverWorld
+ * Date: Sat Sep  1 12:32:04 2018
+ */
+
+#define GRPOverWorld 51
+
+#define SFXove_x_jungle_lp_02 2528
+#define SFXove_x_thunder_00 2529
+#define SFXsfx09E2 2530
+#define SFXove_c_thunder_02 2531
+#define SFXove_x_waterfal_lp_00 2532
+#define SFXove_x_waterfal_lp_01 2533
+#define SFXove_x_water_lp_00 2534
+#define SFXsfx09E7 2535
+#define SFXove_x_spinstop_00 2536
+#define SFXsfx09E9 2537
+#define SFXsfx09EA 2538
+#define SFXove_x_holodoor_lp_00 2539
+#define SFXove_x_phazon_lp_00 2540
+#define SFXsfx09ED 2541
+#define SFXart_c_mnolith_lp_00 2542
+#define SFXove_x_water_lp_01 2543
+#define SFXove_x_rain_lp_00l 2544
+#define SFXove_x_rain_lp_00r 2545
+#define SFXcrb_b_hiss_00 2546
+#define SFXcrb_b_idle_00 2547
+#define SFXsfx09F4 2548
+#define SFXsfx09F5 2549
+#define SFXsfx09F6 2550
+#define SFXove_x_wallfall_00 2551
+#define SFXove_x_flicker_lp_00 2552
+#define SFXove_x_spinbars_lp 2553
+#define SFXsfx09FA 2554
+#define SFXsfx09FB 2555
+#define SFXsfx09FC 2556
+#define SFXsfx09FD 2557
+#define SFXsfx09FE 2558
+#define SFXove_x_bird_00 2559
+#define SFXsfx0A00 2560
+#define SFXove_c_glimmer_lp_00 2561
+#define SFXove_c_hololith_lp_02 2562
+#define SFXove_c_redeye_lp_01 2563
+#define SFXove_c_laseye_lp_01 2564
+#define SFXsfx0A05 2565
+#define SFXsfx0A06 2566
+#define SFXsfx0A07 2567
+#define SFXsfx0A08 2568
+#define SFXove_x_heatvent_lp_00 2569
+#define SFXove_x_watrdrip_00 2570
+#define SFXsfx0A0B 2571
+#define SFXove_x_sapsac_00 2572
+#define SFXsfx0A0D 2573
+#define SFXsfx0A0E 2574
+#define SFXsfx0A0F 2575
+#define SFXove_c_thunder_01 2576
+#define SFXsfx0A11 2577
+#define SFXsfx0A12 2578
+#define SFXsfx0A13 2579
+#define SFXart_c_combined_01 2580
+#define SFXlbm_c_beam_lp_01 2581
+#define SFXsfx0A16 2582
+#define SFXsfx0A17 2583
+#define SFXsfx0A18 2584
+#define SFXsfx0A19 2585
+#define SFXsfx0A1A 2586
+#define SFXsfx0A1B 2587
+#define SFXsfx0A1C 2588
+#define SFXsfx0A1D 2589
+#define SFXsfx0A1E 2590
+#define SFXsfx0A1F 2591
+#define SFXsfx0A20 2592
+#define SFXsfx0A21 2593
+#define SFXsfx0A22 2594
+#define SFXsfx0A23 2595
+#define SFXsfx0A24 2596
+#define SFXsfx0A25 2597
+#define SFXsfx0A26 2598
+#define SFXsfx0A27 2599

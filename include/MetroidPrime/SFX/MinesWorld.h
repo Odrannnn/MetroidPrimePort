@@ -1,0 +1,90 @@
+/* Auto-generated Amuse Defines
+ *
+ * Project: Audio
+ * Subproject: MinesWorld
+ * Date: Sat Sep  1 12:32:04 2018
+ */
+
+#define GRPMinesWorld 48
+
+#define SFXmin_x_force_lp_00 2284
+#define SFXmin_x_machum_lp_00 2285
+#define SFXmin_x_laser_lp_00 2286
+#define SFXmin_x_laser_lp_01 2287
+#define SFXmin_x_alarm_lp_00 2288
+#define SFXsfx08F1 2289
+#define SFXmin_x_cranestop_00 2290
+#define SFXmin_x_gears_lp_00 2291
+#define SFXmin_x_piston_00 2292
+#define SFXmin_x_wind_lp_00l 2293
+#define SFXmin_x_wind_lp_00r 2294
+#define SFXmin_x_wind_lp_01l 2295
+#define SFXmin_x_wind_lp_01r 2296
+#define SFXmin_x_crane_lp_00 2297
+#define SFXmin_x_generator_lp_00 2298
+#define SFXsfx08FB 2299
+#define SFXmin_x_nrgtank_lp_00 2300
+#define SFXmin_x_bluegoo_lp_00 2301
+#define SFXmin_x_column_lp_00 2302
+#define SFXmin_x_colmstop_00 2303
+#define SFXsfx0900 2304
+#define SFXmin_x_nrgsmall_lp_00 2305
+#define SFXmin_x_plat_lp_00 2306
+#define SFXopr_c_land_00 2307
+#define SFXmin_x_comp_lp_01 2308
+#define SFXmin_x_platstop_00 2309
+#define SFXmin_x_plat_lp_01 2310
+#define SFXmin_x_bigfan_lp_00 2311
+#define SFXmin_x_gason_00 2312
+#define SFXmin_x_gears_lp_01 2313
+#define SFXmin_x_pillar_lp_00 2314
+#define SFXsfx090B 2315
+#define SFXmin_x_elecarc_lp_00 2316
+#define SFXmin_x_machexpl 2317
+#define SFXmin_x_mazeout 2318
+#define SFXmin_x_maze_lp 2319
+#define SFXmin_x_watrsuck 2320
+#define SFXmin_x_machum_lp_01 2321
+#define SFXmin_x_machum_lp_02 2322
+#define SFXsfx0913 2323
+#define SFXmin_x_force_lp_01 2324
+#define SFXmin_x_sliddoor_lp_00 2325
+#define SFXsfx0916 2326
+#define SFXmin_x_turbine_lp_00 2327
+#define SFXsfx0918 2328
+#define SFXsfx0919 2329
+#define SFXmin_x_phazcrak_00 2330
+#define SFXmin_x_phazcrak_01 2331
+#define SFXmin_x_lasrchrg_00 2332
+#define SFXmin_x_rotate_lp 2333
+#define SFXsfx091E 2334
+#define SFXsfx091F 2335
+#define SFXsfx0920 2336
+#define SFXsfx0921 2337
+#define SFXsfx0922 2338
+#define SFXsfx0923 2339
+#define SFXsfx0924 2340
+#define SFXsfx0925 2341
+#define SFXsfx0926 2342
+#define SFXsfx0927 2343
+#define SFXsfx0928 2344
+#define SFXsfx0929 2345
+#define SFXsfx092A 2346
+#define SFXsfx092B 2347
+#define SFXsfx092C 2348
+#define SFXsfx092D 2349
+#define SFXsfx092E 2350
+#define SFXsfx092F 2351
+#define SFXsfx0930 2352
+#define SFXsfx0931 2353
+#define SFXsfx0932 2354
+#define SFXsfx0933 2355
+#define SFXsfx0934 2356
+#define SFXsfx0935 2357
+#define SFXsfx0936 2358
+#define SFXsfx0937 2359
+#define SFXsfx0938 2360
+#define SFXsfx0939 2361
+#define SFXsfx093A 2362
+#define SFXsfx093B 2363
+#define SFXsfx093C 2364

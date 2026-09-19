@@ -1,0 +1,59 @@
+#ifndef _CTEXTCOLOR
+#define _CTEXTCOLOR
+
+#include <types.h>
+
+#ifdef __MWERKS__
+#pragma cpp_extensions on
+#endif
+
+class CTextColor {
+public:
+  // TODO: Verify component ordering, there is evidence this might actually be ABGR instead of RGBA
+  CTextColor(uchar r, uchar g, uchar b, uchar a) : mR(r), mG(g), mB(b), mA(a) {}
+
+  CTextColor(const CTextColor& other) : mR(other.mR), mG(other.mG), mB(other.mB), mA(other.mA) {}
+
+  const CTextColor& operator=(const CTextColor& other) {
+    mR = other.mR;
+    mG = other.mG;
+    mB = other.mB;
+    mA = other.mA;
+    return *this;
+  }
+  
+#ifdef __MWERKS__
+  uint GetRGBA() const { return mRgba; }
+#else
+  uint GetRGBA() const { return (uint(mR) << 24) | (uint(mG) << 16) | (uint(mB) << 8) | mA; }
+#endif
+  
+  const uchar GetAlpha() const { return mA; }
+  const uchar GetBlue() const { return mB; }
+  const uchar GetGreen() const { return mG; }
+  const uchar GetRed() const { return mR; }
+
+private:
+#ifdef __MWERKS__
+  union {
+    struct {
+      uchar mR;
+      uchar mG;
+      uchar mB;
+      uchar mA;
+    };
+    uint mRgba;
+  };
+#else
+  ALIGNAS(uint) uchar mR;
+  uchar mG;
+  uchar mB;
+  uchar mA;
+#endif
+};
+
+#ifdef __MWERKS__
+#pragma cpp_extensions reset
+#endif
+
+#endif // _CTEXTCOLOR
