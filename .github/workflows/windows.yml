@@ -29,6 +29,24 @@ jobs:
       - name: Build
         run: cmake --build build-win -j
 
+      - name: Inspect archive
+        if: always()
+        shell: pwsh
+        run: |
+          $ar = "C:\Program Files\LLVM\bin\llvm-ar.exe"
+          if (-not (Test-Path $ar)) { $ar = (Get-Command llvm-ar).Source }
+          Write-Host "ar=$ar"
+          Write-Host "=== members ==="
+          & $ar t build-win/mp_game.lib 2>&1 | Select-String -Pattern "CDvdRequestManager|CProjectileWeapon"
+          Write-Host "=== defined symbols ==="
+          $nm = "C:\Program Files\LLVM\bin\llvm-nm.exe"
+          if (-not (Test-Path $nm)) { $nm = (Get-Command llvm-nm).Source }
+          & $nm --defined-only build-win/mp_game.lib 2>&1 | Select-String -Pattern "CProjectileWeapon|CDvdRequestManager" | Select-Object -First 15
+          Write-Host "=== build.ninja archive rule ==="
+          Select-String -Path build-win/build.ninja -Pattern "mp_game.lib" | Select-Object -First 3
+          Write-Host "=== object files ==="
+          Get-ChildItem "build-win/CMakeFiles/mp_game.dir/src/Weapons/CProjectileWeapon.cpp.obj","build-win/CMakeFiles/mp_game.dir/src/Kyoto/CDvdRequestManager.cpp.obj" -ErrorAction SilentlyContinue | Select-Object FullName,Length
+
       - name: Package
         shell: pwsh
         run: |
