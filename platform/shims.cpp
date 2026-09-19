@@ -8,6 +8,25 @@
 #include <dolphin/gx/GXShims.h>
 #include <dolphin/PPCArch.h>
 
+#include <cstdarg>
+#include <cstdio>
+
+// --- OS report --------------------------------------------------------------
+// Aurora declares OSReport/OSVReport weak but does not define them for
+// TARGET_PC. ELF tolerates an unresolved weak symbol; COFF does not, so the
+// port supplies them here.
+extern "C" void OSVReport(const char* msg, va_list args) {
+    vfprintf(stderr, msg, args);
+    fflush(stderr);
+}
+
+extern "C" void OSReport(const char* msg, ...) {
+    va_list args;
+    va_start(args, msg);
+    OSVReport(msg, args);
+    va_end(args);
+}
+
 // --- PowerPC architecture ---------------------------------------------------
 extern "C" void PPCSync(void) {
 #if defined(__GNUC__) || defined(__clang__)

@@ -66,8 +66,11 @@ add_executable(metroid_prime_port
 # aurora_core (webgpu/gpu.cpp) and aurora_gx reference each other; group them so
 # the linker rescans and resolves the cycle.
 if(MSVC)
+    # COFF has no --start-group; pull every game member so intra-archive
+    # references (e.g. CProjectileWeapon from CBloodFlower) resolve.
     target_link_libraries(metroid_prime_port PRIVATE
-        mp_game aurora::main aurora::core aurora::gx)
+        "$<LINK_LIBRARY:WHOLE_ARCHIVE,mp_game>"
+        aurora::main aurora::core aurora::gx)
 else()
     target_link_libraries(metroid_prime_port PRIVATE
         mp_game
