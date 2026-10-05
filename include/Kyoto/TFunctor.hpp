@@ -4,6 +4,8 @@
 #include "types.h"
 #include <string.h>
 
+class CMethodPtrStoreUnknown;
+
 class CMethodPtrStore {
 public:
   typedef void (*DummyFunctor)();
@@ -22,9 +24,12 @@ public:
   const void* GetMethodPointer() const { return mFuncStorage; }
 
 private:
+  // Room for any member-function pointer. Retail sized it for a plain function
+  // pointer, but they are 16 bytes on Itanium and 24 under MSVC's /vmg (issue
+  // #4), and a pointer to a member of an incomplete class is the largest form.
   union {
     DummyFunctor mFunc;
-    char mFuncStorage[(sizeof(DummyFunctor) + 15) & ~15];
+    char mFuncStorage[(sizeof(void (CMethodPtrStoreUnknown::*)()) + 15) & ~15];
   };
 };
 
@@ -68,6 +73,7 @@ public:
     typedef typename TFunctor1< P1 >::Functor InternalFunctorPtr;
 
     InternalFunctorPtr bridgeFunc = CallbackBridge::Function;
+    static_assert(sizeof(method) <= sizeof(CMethodPtrStore), "method pointer does not fit");
     char methodData[sizeof(method)];
     memcpy(methodData, &method, sizeof(method));
 
@@ -117,6 +123,7 @@ public:
     typedef typename TFunctor2< P1, P2 >::Functor InternalFunctorPtr;
 
     InternalFunctorPtr bridgeFunc = CallbackBridge::Function;
+    static_assert(sizeof(method) <= sizeof(CMethodPtrStore), "method pointer does not fit");
     char methodData[sizeof(method)];
     memcpy(methodData, &method, sizeof(method));
 
@@ -168,6 +175,7 @@ public:
     typedef typename TFunctor3< P1, P2, P3 >::Functor InternalFunctorPtr;
 
     InternalFunctorPtr bridgeFunc = CallbackBridge::Function;
+    static_assert(sizeof(method) <= sizeof(CMethodPtrStore), "method pointer does not fit");
     char methodData[sizeof(method)];
     memcpy(methodData, &method, sizeof(method));
 
