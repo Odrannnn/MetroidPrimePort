@@ -979,6 +979,9 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
     };
     constexpr std::array disableToggles{
         "timestamp_quantization",
+        // Adreno 740 (Galaxy S23, Odin 2) crashes in vkCreateGraphicsPipelines with it on.
+        // Upstream aurora bded88e9: https://github.com/TwilitRealm/dusklight/issues/2563
+        "use_spirv_reconvergence_mode",
     };
     wgpu::DawnTogglesDescriptor togglesDescriptor(wgpu::DawnTogglesDescriptor::Init{
         .nextInChain = &cacheDescriptor,
