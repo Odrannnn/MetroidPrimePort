@@ -156,6 +156,10 @@ jobs:
           $process = Start-Process -FilePath ./dist/metroid_prime_port.exe -WorkingDirectory ./dist -Wait -PassThru -RedirectStandardError ./startup-error.log
           if ($process.ExitCode -ne 1) { throw "Unexpected exit code: $($process.ExitCode)" }
           if (-not (Select-String -Path ./startup-error.log -Pattern 'no disc image given')) { throw 'Packaged executable did not reach main' }
+          # The run above left its log and caches in dist. Ship none of them:
+          # copied over an install, a cache file without its old -wal/-shm
+          # reads as malformed and feeds Dawn bad pipeline blobs.
+          Remove-Item -Force -ErrorAction SilentlyContinue ./dist/metroid_prime_port.log, ./dist/dawn_cache.db*, ./dist/pipeline_cache.db*
 
       - uses: actions/upload-artifact@v4
         with:
