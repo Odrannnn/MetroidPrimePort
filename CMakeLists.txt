@@ -55,6 +55,16 @@ function(mp_signed_char target)
     endif()
 endfunction()
 
+# MSVC picks a member-function pointer's size per translation unit, from
+# whether the class is complete where the pointer type is first needed.
+# CAiStateFunc/CAiTriggerFunc point into CAi, which some headers only
+# forward-declare, so CAiState had a different layout in CStateMachine.cpp
+# than in CPatterned.cpp, and the first AI think jumped to garbage (issue #4).
+# /vmg uses the general representation everywhere, as Itanium's fixed one does.
+if(MSVC)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/vmg>)
+endif()
+
 if(MP_ANDROID_NOD_STUB)
     if(NOT ANDROID)
         message(FATAL_ERROR "MP_ANDROID_NOD_STUB is only valid for Android builds")
