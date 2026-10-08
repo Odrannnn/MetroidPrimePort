@@ -6956,9 +6956,10 @@ void DrawLanguageSection() {
                      static_cast< int >(PortRemastered::kTextLanguageCount) + 1)) {
       SetTextLanguage(language == 0 ? "" : PortRemastered::kTextLanguages[language - 1].code);
     }
-    ItemHelp("The language of the game's text. Only English is on the disc: the others come with the "
-             "Remastered import (its text), and any text it lacks stays English. Text already on "
-             "screen changes the next time its menu or screen opens.");
+    ItemHelp("The language of the game's text. A USA disc has only English; a PAL disc also has French, "
+             "German, Spanish and Italian, and the Remastered import adds its languages (its text wins). "
+             "Text missing in a language stays English. Text already on screen changes the next time "
+             "its menu or screen opens.");
   }
 
 }

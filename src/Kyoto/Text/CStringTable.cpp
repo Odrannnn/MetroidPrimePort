@@ -162,6 +162,22 @@ const rstl::vector< rstl::vector< wchar_t > >& CStringTable::PortStrings() const
         return mPortSections[i].strings;
       }
     }
+    // A PAL disc's own sections, for a language a Remastered import doesn't
+    // add to this table.
+    static const FourCC kPalSections[][2] = {
+        {'EUFR', 'FREN'}, {'USFR', 'FREN'}, {'EUGE', 'GERM'},
+        {'EUSP', 'SPAN'}, {'USSP', 'SPAN'}, {'EUIT', 'ITAL'},
+    };
+    for (size_t k = 0; k < sizeof(kPalSections) / sizeof(kPalSections[0]); ++k) {
+      if (kPalSections[k][0] != language) {
+        continue;
+      }
+      for (size_t i = 0; i < mPortSections.size(); ++i) {
+        if (mPortSections[i].language == kPalSections[k][1]) {
+          return mPortSections[i].strings;
+        }
+      }
+    }
   }
   return mNativeStrings;
 }
