@@ -22,6 +22,11 @@ public:
               CAssetId jpFontId, int jpExtentX, int jpExtentY);
 #else
   static CGuiWidget* Create(CGuiFrame* frame, CInputStream& in, CSimplePool* sp);
+#ifdef TARGET_PC
+  // The header version of the frame being loaded. PAL frames (version 1)
+  // add a Japanese font and extents to each text pane, which 1.00 skips.
+  static uint sPortFrameVersion;
+#endif
   CGuiTextPane(const CGuiWidgetParms& parms, CSimplePool* sp, const float dimX, const float dimY,
               const CVector3f& vec, const CAssetId fontId, const CGuiTextProperties& props,
               const CColor& col1, const CColor& col2, const int padX, const int padY);

@@ -7,6 +7,7 @@
 #include "GuiSys/CGuiLight.hpp"
 #include "GuiSys/CGuiModel.hpp"
 #include "GuiSys/CGuiSys.hpp"
+#include "GuiSys/CGuiTextPane.hpp"
 #include "GuiSys/CGuiWidget.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Graphics/CCubeMaterial.hpp"
@@ -71,6 +72,10 @@ CGuiFrame* CGuiFrame::CreateFrame(uint id, CGuiSys& sys, CInputStream& in, CSimp
   CGuiFeeHelper::SetCurrentLoadingFrame(frame);
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
   frame->LoadWidgetsInGame(in, sp, version);
+#elif defined(TARGET_PC)
+  CGuiTextPane::sPortFrameVersion = version;
+  frame->LoadWidgetsInGame(in, sp);
+  CGuiTextPane::sPortFrameVersion = 0;
 #else
   frame->LoadWidgetsInGame(in, sp);
 #endif
