@@ -3487,6 +3487,7 @@ float sUiAppliedScale = 1.f;
 int sThemeApplied = -1;        // the resolved theme the style holds, -1 = none yet
 float sThemeAppliedScale = 0.f;
 int sThemeResolved = kThemePrime; // what Auto resolves to now; read by the colour helpers
+static bool sUiScaleKnown = false;
 
 // Whether the Remastered import is loaded: the mods are on, and a mod made by the import is
 // enabled. CurrentStatus is in memory (rescanned only on a reload), so this is cheap per frame.
@@ -3781,6 +3782,7 @@ void UpdateUiScale() {
   if (window == nullptr) {
     return;
   }
+  sUiScaleKnown = true;
   const float displayScale = SDL_GetWindowDisplayScale(window);
   const float uiScale = std::clamp(displayScale, 1.f, 4.f);
   if (uiScale == sUiAppliedScale) {
@@ -4702,6 +4704,72 @@ void DrawStaleImportToast() {
   ImGui::End();
 }
 
+// The shader compilation toast as drawn this frame: x0, y0, x1, y1. Cleared at the start of DrawUI.
+bool sShaderToastShown = false;
+ImVec4 sShaderToastRect;
+
+// Upper-left, or just below the shader compilation toast when the two overlap this frame.
+ImVec2 StartupHintPosition(const ImGuiViewport* viewport, const ImVec2& size) {
+  const float margin = 16.f;
+  const float gap = 10.f;
+  const ImVec2 corner(viewport->Pos.x + margin, viewport->Pos.y + margin);
+  const bool overlaps = sShaderToastShown && corner.x < sShaderToastRect.z && corner.x + size.x > sShaderToastRect.x &&
+                        corner.y < sShaderToastRect.w && corner.y + size.y > sShaderToastRect.y;
+  if (!overlaps) {
+    return corner;
+  }
+  const float bottom = std::max(corner.y, viewport->Pos.y + viewport->Size.y - margin - size.y);
+  return ImVec2(corner.x, std::clamp(sShaderToastRect.w + gap, corner.y, bottom));
+}
+
+// Once per launch: ends as soon as the overlay opens, by F1 or any other way.
+void DrawStartupHint() {
+  const char* const kText = "Press F1 to open the settings overlay";
+  const double kShowSeconds = 6.0;
+  const double kFadeSeconds = 1.5;
+  static double sShownAt = -1.0;
+  static bool sDone = false;
+  if (sDone) {
+    return;
+  }
+  if (sVisible) {
+    sDone = true;
+    return;
+  }
+  // Asset-loading frames draw before the main loop applies the UI scale and theme.
+  if (!sUiScaleKnown) {
+    return;
+  }
+  const double now = ImGui::GetTime();
+  const double elapsed = sShownAt < 0.0 ? 0.0 : now - sShownAt;
+  if (elapsed > kShowSeconds) {
+    sDone = true;
+    return;
+  }
+  const float alpha = static_cast<float>(std::min(1.0, (kShowSeconds - elapsed) / kFadeSeconds));
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  // ImGui's auto-fit size, known before Begin so the position needs no measurement frame.
+  const ImVec2 textSize = ImGui::CalcTextSize(kText);
+  const ImVec2 padding = ImGui::GetStyle().WindowPadding;
+  const ImVec2 size(textSize.x + padding.x * 2.f, textSize.y + padding.y * 2.f);
+  ImGui::SetNextWindowPos(StartupHintPosition(viewport, size), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.7f);
+  ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+  bool open = true;
+  if (ImGui::Begin("##startup-hint", &open,
+                   ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
+                       ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
+                       ImGuiWindowFlags_AlwaysAutoResize)) {
+    // ImGui hides a new auto-sized window on its first frame while it measures it.
+    if (sShownAt < 0.0 && !ImGui::GetCurrentWindow()->Hidden) {
+      sShownAt = now;
+    }
+    ImGui::TextUnformatted(kText);
+  }
+  ImGui::End();
+  ImGui::PopStyleVar();
+}
+
 // Once per launch, for 12 s: a newer release than this build is out.
 // Taps arrive on Android's UI thread (TouchControlsView), so the rect is shared under
 // a lock and a hit only sets a flag; the page opens on the game thread.
@@ -4804,6 +4872,12 @@ void DrawShaderCompilationToast() {
     ImGui::TextUnformatted(label);
     ImGui::ProgressBar(total != 0 ? static_cast<float>(done) / static_cast<float>(total) : 0.f,
                        ImVec2(width, std::max(6.f, ImGui::GetFontSize() * 0.4f)), "");
+    if (!ImGui::GetCurrentWindow()->Hidden) {
+      const ImVec2 pos = ImGui::GetWindowPos();
+      const ImVec2 size = ImGui::GetWindowSize();
+      sShaderToastShown = true;
+      sShaderToastRect = ImVec4(pos.x, pos.y, pos.x + size.x, pos.y + size.y);
+    }
   }
   ImGui::End();
 }
@@ -8423,6 +8497,7 @@ bool DrawDesktopWindow() {
 }
 
 void DrawUI() {
+  sShaderToastShown = false;
   EnsureInitialized();
   if (!sAudioSettingsApplied) {
     // Apply persisted audio mutes once the backends are alive.
@@ -8459,6 +8534,7 @@ void DrawUI() {
   DrawDiscReadFailedAlert();
   DrawGpuDriverTrial();
   DrawShaderCompilationToast();
+  DrawStartupHint();
   if (sTouchLayoutSavePending.exchange(false, std::memory_order_acq_rel)) {
     MarkDirty();
     SaveSettings();
