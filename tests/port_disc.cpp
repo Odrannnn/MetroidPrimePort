@@ -17,6 +17,7 @@ bool Rejected(uint32_t address, uint32_t size) {
   return false;
 }
 }
+extern "C" DVDDiskID* DVDGetCurrentDiskID(void) { return nullptr; }
 extern "C" const u8* DVDGetDOLLocation(s32* size) {
   *size = dolSize;
   return dol.data();
@@ -32,6 +33,25 @@ int main() {
   Check(Rejected(0x8122ffff, 4));
   Big32(7 * 4, 0xfffffff0);
   Check(Rejected(0x81230002, 4));
+  // Found by its first bytes when the address holds something else.
+  const uint8_t sig[] = {0x33, 0x34};
+  Big32(7 * 4, 0x100);
+  const auto found = PortFindDolResource(0x81230000, 3, sig, sizeof(sig));
+  Check(found.size() == 3 && found.front() == 0x33 && found.back() == 0x35);
+  const uint8_t absent[] = {0x99};
+  bool threw = false;
+  try { PortFindDolResource(0x81230000, 1, absent, sizeof(absent)); }
+  catch (const std::runtime_error&) { threw = true; }
+  Check(threw);
+  using PortDisc::Version;
+  Check(PortDisc::Identify("GM8E01", 0, 0) == Version::Usa100);
+  Check(PortDisc::Identify("GM8E01", 0, 2) == Version::Usa102);
+  Check(PortDisc::Identify("GM8E01", 0, 3) == Version::Unknown);
+  Check(PortDisc::Identify("GM8P01", 0, 0) == Version::Pal);
+  Check(PortDisc::Identify("GM8J01", 0, 0) == Version::Unknown);
+  Check(PortDisc::Identify("GM8E01", 1, 0) == Version::Unknown);
+  Check(PortDisc::Current() == Version::Unknown);
+  Check(PortDisc::IsAccepted(Version::Usa100) && !PortDisc::IsAccepted(Version::Unknown));
   dolSize = 4;
   Check(Rejected(0x81230000, 4));
 }

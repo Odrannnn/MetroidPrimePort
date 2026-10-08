@@ -376,9 +376,15 @@ CGameGlobalObjects::CGameGlobalObjects(COsContext& osContext, CMemorySys& memory
 
 CRasterFont* CGameGlobalObjects::LoadDefaultFont() {
 #ifdef TARGET_PC
-  // Verified GM8E01_00 symbols; see config/GM8E01_00/symbols.txt.
-  const auto fontData = PortReadDolResource(0x803cb3a0, 0x650);
-  const auto fontTexture = PortReadDolResource(0x803cb9f0, 0x45c);
+  // Verified GM8E01_00 symbols; see config/GM8E01_00/symbols.txt. Other
+  // discs have them elsewhere: found by their first bytes (zlib streams).
+  static const uint8_t kFontDataStart[] = {0x78, 0xda, 0x8d, 0x57, 0x5b, 0x6f, 0x54, 0x55,
+                                           0x14, 0x5e, 0xa5, 0x74, 0x3a, 0x9d, 0x96, 0x82};
+  static const uint8_t kFontTextureStart[] = {0x78, 0xda, 0xed, 0x59, 0xdb, 0x92, 0x14, 0x31,
+                                              0x08, 0x05, 0xcb, 0x07, 0x1f, 0xc3, 0x1f, 0xf9};
+  const auto fontData = PortFindDolResource(0x803cb3a0, 0x650, kFontDataStart, sizeof(kFontDataStart));
+  const auto fontTexture =
+      PortFindDolResource(0x803cb9f0, 0x45c, kFontTextureStart, sizeof(kFontTextureStart));
   CZipInputStream fontDataStream(rs_new CMemoryInStream(fontData.data(), fontData.size()));
   rstl::single_ptr<CRasterFont> font(rs_new CRasterFont(fontDataStream, nullptr));
   CZipInputStream fontTextureStream(rs_new CMemoryInStream(fontTexture.data(), fontTexture.size()));

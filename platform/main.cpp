@@ -16,6 +16,7 @@
 #include "port_env.h"
 #include "port_embedded.h"
 #include "port_crash.h"
+#include "port_disc.h"
 #include "port_debug.h"
 #include "port_paths.h"
 #include "port_actor_collision_bounds.h"
@@ -123,6 +124,10 @@ bool IsDiscImage(const std::filesystem::path& path) {
 // .gcm, NKit's .nkit.iso) start with the disc header, so the wrong game or
 // region can be skipped before it fails to boot; the compressed formats keep
 // it elsewhere and are taken on trust, after any plain image that matched.
+bool IsSupportedId(const char* id6, unsigned diskNumber, unsigned version) {
+    return PortDisc::IsAccepted(PortDisc::Identify(id6, diskNumber, version));
+}
+
 enum class DiscMatch { No, Maybe, Yes };
 
 DiscMatch MatchDiscImage(const std::filesystem::path& path) {
@@ -142,8 +147,8 @@ DiscMatch MatchDiscImage(const std::filesystem::path& path) {
     Uint8 header[8] = {};
     const size_t got = SDL_ReadIO(file, header, sizeof(header));
     SDL_CloseIO(file);
-    // Game id, maker, disc number, revision: GM8E01, disc 0, v1.00.
-    return got == sizeof(header) && std::memcmp(header, "GM8E01", 6) == 0 && header[6] == 0 && header[7] == 0
+    // Game id, maker, disc number, revision.
+    return got == sizeof(header) && IsSupportedId(reinterpret_cast<const char*>(header), header[6], header[7])
                ? DiscMatch::Yes
                : DiscMatch::No;
 }
@@ -302,10 +307,6 @@ bool ResolveDiscFromArgs(int argc, char** argv) {
     return env != nullptr && env[0] != '\0';
 }
 
-bool IsSupportedId(const char* id6, unsigned diskNumber, unsigned version) {
-    return std::memcmp(id6, "GM8E01", 6) == 0 && diskNumber == 0 && version == 0;
-}
-
 // The disc id's game name and maker as one six-character id.
 std::array<char, 6> DiscId6(const DVDDiskID& id) {
     std::array<char, 6> id6{};
@@ -360,6 +361,13 @@ std::string FindUnreadableDiscFile() {
 }
 
 constexpr const char* kSupportedDisc = "Only Metroid Prime for the GameCube, USA version 1.00\n(GM8E01, revision 0), is supported.";
+// Shown instead while other releases are opted into (MP_DISC_ANY_VERSION).
+constexpr const char* kSupportedDiscAny =
+    "Metroid Prime for the GameCube is supported: USA 1.00, 1.01\nand 1.02 (GM8E01) and PAL (GM8P01).";
+
+const char* SupportedDiscText() {
+    return PortDisc::IsAccepted(PortDisc::Version::Pal) ? kSupportedDiscAny : kSupportedDisc;
+}
 
 // What the user picked instead, in words: the usual mistakes are another
 // region or a later revision of the same game.
@@ -430,7 +438,7 @@ bool AskPickDisc(const char* title, const std::string& message, const char* pick
 // like a crash on start) and asks whether to pick another or close the game.
 bool ShowDiscError(const std::string& problem, const std::string& path, bool askNext) {
     // Short lines: some message boxes do not wrap (SDL's X11 one).
-    const std::string message = problem + "\n\n" + path + "\n\n" + kSupportedDisc;
+    const std::string message = problem + "\n\n" + path + "\n\n" + SupportedDiscText();
     return AskPickDisc("Metroid Prime: wrong disc image", message, "Pick another disc", askNext);
 }
 
@@ -534,7 +542,7 @@ std::string CopyDiscFromContentUri(const std::string& uri) {
         const bool container = std::memcmp(header, "RVZ", 3) == 0 || std::memcmp(header, "WIA", 3) == 0 ||
                                std::memcmp(header, "WBFS", 4) == 0 || std::memcmp(header, "CISO", 4) == 0;
         if (!container && !IsSupportedId(reinterpret_cast<const char*>(header), header[6], header[7])) {
-            PortLog::Write("metroid_prime_port: not copying the picked image: %s Expected GM8E01 revision 0.\n",
+            PortLog::Write("metroid_prime_port: not copying the picked image: %s\n",
                            DescribeDisc(reinterpret_cast<const char*>(header), header[7]).c_str());
             SDL_CloseIO(in);
             return {};
@@ -757,7 +765,7 @@ std::string PickDisc() {
         if (!disc.empty() || !cancelled) {
             return disc;
         }
-        if (!AskPickDisc("Metroid Prime: no disc image", std::string("No disc image was picked.\n\n") + kSupportedDisc,
+        if (!AskPickDisc("Metroid Prime: no disc image", std::string("No disc image was picked.\n\n") + SupportedDiscText(),
                          "Pick a disc", true)) {
             return {};
         }
@@ -840,9 +848,8 @@ int main(int argc, char** argv) {
         }
         const DVDDiskID* id = DVDGetCurrentDiskID();
         int result = 1;
-        if (id == nullptr || std::memcmp(id->gameName, "GM8E", 4) != 0 || std::memcmp(id->company, "01", 2) != 0 ||
-            id->diskNumber != 0 || id->gameVersion != 0) {
-            std::fprintf(stderr, "unsupported disc; expected GM8E01 USA revision 0\n");
+        if (!IsSupportedDisc(id)) {
+            std::fprintf(stderr, "unsupported disc: %s\n", DescribeUnsupportedDisc(id).c_str());
         } else {
             result = PortRemastered::RunImportFromCommandLine(argv[2], argc >= 4 ? argv[3] : "", importMovies);
         }
@@ -1214,7 +1221,7 @@ int main(int argc, char** argv) {
             problem = "This file could not be read as a GameCube disc image.";
         } else if (!IsSupportedDisc(DVDGetCurrentDiskID())) {
             problem = DescribeUnsupportedDisc(DVDGetCurrentDiskID());
-            PortLog::Write("metroid_prime_port: unsupported disc: %s Expected GM8E01 revision 0.\n", problem.c_str());
+            PortLog::Write("metroid_prime_port: unsupported disc: %s\n", problem.c_str());
             aurora_dvd_close();
         } else if (DiscReadFailedLastTime(discImage)) {
             PortLog::Write("metroid_prime_port: refused the disc image: a read of it failed last session\n");
@@ -1248,6 +1255,7 @@ int main(int argc, char** argv) {
         discPath = discImage.c_str();
     }
     std::printf("metroid_prime_port: disc mounted: %s\n", discPath);
+    PortLog::Write("metroid_prime_port: disc is %s\n", PortDisc::Name(PortDisc::Current()));
     s_mountedDisc = discImage;
     aurora_dvd_set_read_error_callback(NoteDiscReadFailure);
     // A Remastered import finished in the last session becomes the mod now,
