@@ -385,6 +385,19 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
   const bool frictionApplied =
       (x258_movementState != NPlayer::kMS_ApplyJump || GetSurfaceRestraint() != kSR_Air) &&
       x304_orbitState == kOS_NoOrbit;
+  // Direct aim moves along the stick as retail moves forward. The friction is
+  // subtracted per body axis, so each axis's force law offsets it in full; while
+  // none is (a jump's rise), the offset goes along the stick's unit direction,
+  // or a diagonal would head for more than retail's top speed, and faster.
+  float strafeDirection = 0.f;
+  float forwardDirection = forwardInput > 0.f ? 1.f : -1.f;
+  if (mouseMovement && !frictionApplied) {
+    const float length = std::hypot(strafeInput, forwardInput);
+    if (length > 0.f) {
+      strafeDirection = strafeInput / length;
+      forwardDirection = forwardInput / length;
+    }
+  }
 #endif
   float forwardForce;
   if (!close_enough(0.f, forwardInput)) {
@@ -404,9 +417,10 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
     }
 #endif
     float desiredSpeed = forwardInput * (maxSpeed - frictionSpeed);
-    desiredSpeed += frictionSpeed * (forwardInput > 0.f ? 1.f : -1.f);
 #ifdef TARGET_PC
-    desiredSpeed += law.shift * (forwardInput > 0.f ? 1.f : -1.f);
+    desiredSpeed += (frictionSpeed + law.shift) * forwardDirection;
+#else
+    desiredSpeed += frictionSpeed * (forwardInput > 0.f ? 1.f : -1.f);
 #endif
     const float forwardFraction = CMath::Clamp(
         -1.f, (desiredSpeed - GetTransform().TransposeRotate(GetVelocityWR()).GetY()) / maxSpeed,
@@ -426,7 +440,8 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
     const float sideVelocity = GetTransform().TransposeRotate(GetVelocityWR()).GetX();
     strafeForce = PortMouse::AxisForce(strafeInput, sideVelocity, maxSpeed,
                                       gpTweakPlayer->GetPlayerTranslationFriction(GetSurfaceRestraint()),
-                                      GetMass(), dt, acceleration, tickScale, frictionApplied);
+                                      GetMass(), dt, acceleration, tickScale, frictionApplied,
+                                      strafeDirection);
     // Retail has no sideways force, so strafing the way a dash carries the
     // player must not brake its momentum back to walking speed.
     if (CMath::AbsF(sideVelocity) > maxSpeed && sideVelocity * strafeInput > 0.f) {

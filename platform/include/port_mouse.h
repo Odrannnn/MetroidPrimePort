@@ -48,11 +48,14 @@ inline ForceLaw ForceLawAtRate(float tickScale, float friction, float mass, floa
 
 // The retail forward-force law applied to either horizontal axis. Damping and
 // collision integration remain in the player; this is not teleport movement.
+// direction is this axis's component of the unit stick direction (0: the input's
+// sign). Pass it while no friction is applied: the offset then only raises the
+// target, and in full on each axis it would raise a diagonal's past retail's.
 inline float AxisForce(float input, float velocity, float maxSpeed, float friction,
                        float mass, float dt, float acceleration, float tickScale = 1.f,
-                       bool frictionApplied = true) {
+                       bool frictionApplied = true, float direction = 0.f) {
   if (input == 0.f || maxSpeed <= 0.f || dt <= 0.f || acceleration <= 0.f) return 0.f;
-  const float sign = input > 0.f ? 1.f : -1.f;
+  const float sign = direction != 0.f ? direction : input > 0.f ? 1.f : -1.f;
   float frictionSpeed = friction * mass * maxSpeed / (dt * acceleration);
   ForceLaw law{frictionSpeed, 0.f, 1.f};
   if (tickScale != 1.f) {
