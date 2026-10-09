@@ -133,6 +133,8 @@ public:
   void ResetBeamParams(CStateManager&, const CPlayerState&, bool);
   void ChangeWeapon(const CPlayerState&, CStateManager&);
   void StartPhazonBeamTransition(bool, CStateManager&, CPlayerState&);
+  // Port: console `phazongun`: sets the same flags standing in phazon with the Phazon Suit does.
+  void PortForcePhazonBeam(bool on);
   void HandleWeaponChange(const CFinalInput&, CStateManager&);
   void HandleBeamChange(const CFinalInput&, CStateManager&);
 #ifdef TARGET_PC

@@ -1689,6 +1689,13 @@ void CPlayerGun::ChangeWeapon(const CPlayerState& playerState, CStateManager& mg
   x678_morph.StartWipe(CGunMorph::kD_In);
 }
 
+void CPlayerGun::PortForcePhazonBeam(const bool on) {
+  x835_24_canFirePhazon = on;
+  if (on) {
+    x835_25_inPhazonBeam = true;
+  }
+}
+
 void CPlayerGun::StartPhazonBeamTransition(bool active, CStateManager& mgr,
                                            CPlayerState& playerState) {
   if (x833_28_phazonBeamActive == active) {

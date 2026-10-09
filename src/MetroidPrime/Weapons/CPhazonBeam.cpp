@@ -2,6 +2,7 @@
 
 #include "Kyoto/Audio/CSfxHandle.hpp"
 #include "Kyoto/Graphics/CGX.hpp"
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "MetaRender/CCubeRenderer.hpp"
 #include "MetroidPrime/CStateManager.hpp"
@@ -11,6 +12,8 @@
 #include "Weapons/CProjectileWeapon.hpp"
 
 #include <Kyoto/Particles/CElementGen.hpp>
+
+#include <algorithm>
 
 extern void DrawClipCube(const CAABox&);
 const ushort CPhazonBeam::skSoundIds[] = {
@@ -47,12 +50,24 @@ void CPhazonBeam::ReInitVariables() {
   mClipWipeScale = 0.f;
   mClipWipeTranslate = 0.f;
   mIndirectAlpha = 1.f;
+#ifdef TARGET_PC
+  mDisintegration = 0.f;
+  CCubeModel::PortSetDisintegration(0.f);
+#endif
   mChargeFxGen = nullptr;
   mVeinsData = nullptr;
   mLoaded = false;
   mClipWipeActive = true;
   mVeinsAlphaActive = false;
   x1cc_enabledSecondaryEffect = kSFT_None;
+}
+
+bool CPhazonBeam::PortRemasteredBeam() const {
+#ifdef TARGET_PC
+  return !mChargeFxGen.null() && mChargeFxGen->PortIsRemastered();
+#else
+  return false;
+#endif
 }
 
 bool CPhazonBeam::IsFiring(const CStateManager& mgr) const { return mFireTime < 0.16667f; }
@@ -97,6 +112,14 @@ void CPhazonBeam::DrawMuzzleFx(const CStateManager& mgr) const {
 
 void CPhazonBeam::Draw(const bool drawSuitArm, const CStateManager& mgr, const CTransform4f& xf,
                        const CModelFlags& flags, const CActorLights* lights) const {
+#ifdef TARGET_PC
+  // Port: CPhazonBeamMP1::Draw (0xd6917c) is only the base gun draw. The Remastered gun model
+  // carries its own veins, so retail's veins model, clip wipe and indirect effect are skipped.
+  if (PortRemasteredBeam()) {
+    CGunWeapon::Draw(drawSuitArm, mgr, xf, flags, lights);
+    return;
+  }
+#endif
   const bool standardVisor = mgr.GetPlayerState()->IsStandardVisor(mgr);
   CCubeRenderer* renderer = gpRender;
   if (standardVisor) {
@@ -180,6 +203,15 @@ void CPhazonBeam::Update(const float dt, CStateManager& mgr) {
     }
   }
 
+#ifdef TARGET_PC
+  if (IsLoaded() && PortRemasteredBeam()) {
+    // CPhazonBeamMP1::Update: once loaded, DisintegrationAmount fades 0 -> 1 at 0.75/s on the
+    // gun model's material variable. Retail's clip wipe and veins alpha feed only the retail veins.
+    mDisintegration = std::min(mDisintegration + 0.75f * dt, 1.f);
+    CCubeModel::PortSetDisintegration(mDisintegration);
+    return;
+  }
+#endif
   if (!IsLoaded()) {
     if (CGunWeapon::IsLoaded() && mLoaded != true) {
       mLoaded = mPhazon2nd1.TryCache() && mVeins.IsLoaded();
