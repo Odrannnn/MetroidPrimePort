@@ -716,7 +716,7 @@ struct Pairing {
 
 // The retail PARTs an effect replaces: the id it carried over, else its
 // matches' (one effect can stand for several PARTs).
-std::vector<Pairing> RetailEffects(const EffectGuid& id) {
+std::vector<Pairing> RetailEffects(const EffectGuid& id, const std::vector<EffectPairing>& found) {
   if (const std::optional<uint32_t> retail = EffectRetailId(Swap(id))) {
     return {{*retail, "carried-over"}};
   }
@@ -728,6 +728,15 @@ std::vector<Pairing> RetailEffects(const EffectGuid& id) {
       method = matched.id + 1;
     } else if (text == matched.id) {
       out.push_back({matched.retail, method});
+    }
+  }
+  for (const EffectPairing& pairing : found) {
+    if (pairing.id != id) {
+      continue;
+    }
+    const bool known = std::any_of(out.begin(), out.end(), [&](const Pairing& have) { return have.retail == pairing.retail; });
+    if (!known) {
+      out.push_back({pairing.retail, pairing.method});
     }
   }
   return out;
@@ -1144,7 +1153,7 @@ public:
 
   EffectImportResult Run() {
     for (const EffectGuid& id : m_io.effects) {
-      const std::vector<Pairing> pairings = RetailEffects(id);
+      const std::vector<Pairing> pairings = RetailEffects(id, m_io.pairings);
       if (pairings.empty() && m_io.report) {
         EffectReportRow row;
         row.genp = EffectGuidString(Swap(id));

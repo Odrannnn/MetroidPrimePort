@@ -24,10 +24,21 @@
 
 namespace PortRemastered {
 
+// A retail PART (or SWHC) an effect replaces that the import found by itself, not from the
+// table in the importer: how `method` says.
+struct EffectPairing {
+  EffectGuid id;  // in a pak's byte order
+  uint32_t retail;
+  std::string method;
+};
+
 // Ids are in a pak's byte order (what IdToString prints) unless said otherwise.
 struct EffectImportIO {
   // Every GENP and standalone swoosh (SWSH) in the image, each once.
   std::vector<EffectGuid> effects;
+  // Optional: pairings the image itself gives (a projectile's particles, from its WPSM and the
+  // disc's WPSC), used after the importer's own table.
+  std::vector<EffectPairing> pairings;
   // A Remastered asset's bytes by type ('GENP', 'MATI', 'TXTR') and id; false
   // when the image has none.
   std::function<bool(uint32_t type, const EffectGuid& id, std::vector<uint8_t>& out, std::string& error)> read;
