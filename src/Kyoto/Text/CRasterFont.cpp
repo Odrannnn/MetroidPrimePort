@@ -17,11 +17,17 @@
 #include "rstl/vector.hpp"
 
 #ifdef TARGET_PC
+#include "Kyoto/Graphics/CTexture.hpp"
+#include "Kyoto/Streams/CMemoryInStream.hpp"
+#include "port_debug.h"
+#include "port_disc.h"
 #include "port_font_accent.h"
 #include "port_hd_font.h"
 #include "port_log.h"
+#include "port_pal_languages.h"
 
 #include <algorithm>
+#include <string.h>
 #include <vector>
 #endif
 
@@ -656,6 +662,26 @@ const CFactoryFnReturn FRasterFontFactory(const SObjectTag& tag, CInputStream& i
   const rstl::rc_ptr< IVParamObj > obj = xfer.x0_obj;
   CSimplePool* pool = static_cast< TObjOwnerParam< CSimplePool* >* >(obj.GetPtr())->GetData();
 
+#ifdef TARGET_PC
+  // A French, German, Spanish or Italian text from an imported PAL disc draws
+  // with that disc's font (same id): the USA fonts have no accented letters.
+  if (PortDisc::Current() != PortDisc::Version::Pal) {
+    const char* code = PortDebug::TextLanguage();
+    static const char* const kPalLanguages[] = {"EUFR", "USFR", "EUGE", "EUSP", "USSP", "EUIT"};
+    bool palLanguage = false;
+    for (size_t i = 0; i < sizeof(kPalLanguages) / sizeof(kPalLanguages[0]); ++i) {
+      palLanguage = palLanguage || strncmp(code, kPalLanguages[i], 4) == 0;
+    }
+    std::vector< uint8_t > fontData, textureData;
+    if (palLanguage && PortPalLanguages::ReadFont(tag.GetId(), fontData, textureData)) {
+      CMemoryInStream fontStream(fontData.data(), fontData.size());
+      CRasterFont* font = rs_new CRasterFont(fontStream, nullptr);
+      CMemoryInStream textureStream(textureData.data(), textureData.size());
+      font->SetTexture(rs_new CTexture(textureStream, CTexture::kAM_Zero, CTexture::kBK_Zero));
+      return font;
+    }
+  }
+#endif
   return rs_new CRasterFont(in, pool);
 }
 

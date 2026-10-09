@@ -55,6 +55,10 @@ public:
   // Rebuilds the table so string i is old string from[i] in every language;
   // a negative entry -(k + 1) takes string k of `extra` (same language).
   void PortRemap(const std::vector< int >& from, const CStringTable* extra);
+  // Takes the languages of `other` (another region's version of this table, in
+  // this one's order) that this table lacks, and fills the strings a
+  // Remastered language section left in English from the matching one.
+  void PortAddLanguages(const CStringTable& other);
 #endif
   int GetStringCount() const { return x0_stringCount; }
 };

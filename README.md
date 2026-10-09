@@ -124,7 +124,8 @@ succeeds but links a stub that cannot open a disc — see
 The disc can also be set with `MP_DISC`, kept beside the executable, or picked
 through a file dialog the first time you launch without one — the choice is
 remembered in the settings. The image must be `GM8E01`, disc 0, revision 0 (USA 1.00), or
-`GM8P01` (PAL, which also brings its French, German, Spanish and Italian text). If a
+`GM8P01` (PAL, which also brings its French, German, Spanish and Italian text;
+a USA player can add those from a PAL image in F1 > Game > Language). If a
 remembered disc stops opening — the file moved, or on Android the system revoked
 its access grant — the port asks again rather than exiting.
 

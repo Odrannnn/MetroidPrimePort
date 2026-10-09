@@ -36,6 +36,8 @@
 #include "port_textures.h"
 #include "port_build_info.h"
 #include "port_gpu_driver.h"
+#include "port_disc.h"
+#include "port_pal_languages.h"
 #if defined(__ANDROID__)
 #include "touch_pad.h"
 #endif
@@ -4362,6 +4364,9 @@ void DrawMemoryCard() {
 // key file, converted here into the remastered-models mod.
 std::mutex sRemasteredPickMutex;
 std::vector<std::pair<int, std::string>> sRemasteredPicks;
+// Which 2 of the same picker: a PAL image for its languages (DrawLanguageSection).
+constexpr int kPalLanguagesPick = 2;
+std::string sPalLanguagesPick;
 
 #if defined(__ANDROID__)
 // Not SDL_ShowOpenFileDialog: Android often kills the game behind the picker
@@ -4410,13 +4415,21 @@ void OpenRemasteredDialog(int which) {
   const SDL_DialogFileCallback done = [](void* userdata, const char* const* files, int) {
     if (files != nullptr && files[0] != nullptr) {
       std::lock_guard lock(sRemasteredPickMutex);
-      sRemasteredPicks.emplace_back(int(reinterpret_cast< intptr_t >(userdata)), files[0]);
+      const int which = int(reinterpret_cast< intptr_t >(userdata));
+      if (which == kPalLanguagesPick) {
+        sPalLanguagesPick = files[0];
+      } else {
+        sRemasteredPicks.emplace_back(which, files[0]);
+      }
     }
   };
   static const SDL_DialogFileFilter imageFilters[] = {{"Switch images (.nsp, .xci)", "nsp;xci"}, {"All files", "*"}};
   static const SDL_DialogFileFilter keyFilters[] = {{"Key files (.keys)", "keys"}, {"All files", "*"}};
+  static const SDL_DialogFileFilter discFilters[] = {
+      {"GameCube images (.iso, .gcm, .rvz, .wia, .gcz, .ciso, .wbfs, .tgc)", "iso;gcm;rvz;wia;gcz;ciso;wbfs;tgc"},
+      {"All files", "*"}};
   SDL_ShowOpenFileDialog(done, reinterpret_cast< void* >(static_cast< intptr_t >(which)), window,
-                         which == 0 ? imageFilters : keyFilters, 2, nullptr, false);
+                         which == 0 ? imageFilters : which == 1 ? keyFilters : discFilters, 2, nullptr, false);
 }
 #endif
 
@@ -6873,6 +6886,67 @@ void DrawRemasteredWarning() {
 
 }
 
+// The PAL disc's languages for a USA one (port_pal_languages.h).
+void DrawPalLanguages() {
+  if (PortDisc::Current() == PortDisc::Version::Pal) {
+    return;
+  }
+  std::string picked;
+  {
+    std::lock_guard lock(sRemasteredPickMutex);
+#if defined(__ANDROID__)
+    // A pick the previous process never saw (the game was killed behind the picker).
+    static bool sTookFile = false;
+    if (!sTookFile) {
+      sTookFile = true;
+      std::ifstream in(RemasteredPickFile(kPalLanguagesPick));
+      std::string uri;
+      if (std::getline(in, uri) && !uri.empty()) {
+        sPalLanguagesPick = uri;
+      }
+    }
+#endif
+    picked.swap(sPalLanguagesPick);
+  }
+  static std::string sStartError;
+  if (!picked.empty()) {
+#if defined(__ANDROID__)
+    std::remove(RemasteredPickFile(kPalLanguagesPick).c_str());
+#endif
+    sStartError = PortPalLanguages::Start(picked) ? "" : "An import is already running.";
+  }
+  const PortPalLanguages::State state = PortPalLanguages::Status();
+  const int installed = PortPalLanguages::Installed();
+  ImGui::BeginDisabled(state.running);
+  if (ImGui::Button(installed > 0 ? "Import the PAL languages again..." : "Add languages from a PAL disc...")) {
+    OpenRemasteredDialog(kPalLanguagesPick);
+  }
+  ImGui::EndDisabled();
+  ItemHelp("For a USA disc: pick your own PAL Metroid Prime image (GM8P01) to add its French, German, "
+           "Spanish and Italian text and its fonts. Only the text is taken; the game stays the USA "
+           "one. Restart afterwards so every menu and the font take it.");
+  if (installed > 0 && !state.running) {
+    ImGui::SameLine();
+    if (ImGui::Button("Remove")) {
+      PortPalLanguages::Remove();
+    }
+    ImGui::SetItemTooltip("Deletes the imported PAL languages. Text already loaded stays until a restart.");
+  }
+  if (state.running) {
+    ImGui::TextDisabled("%s...", state.message.c_str());
+  } else if (state.finished) {
+    if (state.ok) {
+      ImGui::TextWrapped("%s", state.message.c_str());
+    } else {
+      ImGui::TextColored(ThemeWarnColor(), "%s", state.message.c_str());
+    }
+  } else if (!sStartError.empty()) {
+    ImGui::TextColored(ThemeWarnColor(), "%s", sStartError.c_str());
+  } else if (installed > 0) {
+    ImGui::TextDisabled("PAL languages added (%d text tables).", installed);
+  }
+}
+
 void DrawLanguageSection() {
   ImGui::SeparatorText("Language");
   {
@@ -6891,10 +6965,11 @@ void DrawLanguageSection() {
       SetTextLanguage(language == 0 ? "" : PortRemastered::kTextLanguages[language - 1].code);
     }
     ItemHelp("The language of the game's text. A USA disc has only English; a PAL disc also has French, "
-             "German, Spanish and Italian, and the Remastered import adds its languages (its text wins). "
-             "Text missing in a language stays English. Text already on screen changes the next time "
-             "its menu or screen opens.");
+             "German, Spanish and Italian (or add them below), and the Remastered import adds its "
+             "languages (its text wins). Text missing in a language stays English. Text already on screen "
+             "changes the next time its menu or screen opens; the font changes after a restart.");
   }
+  DrawPalLanguages();
 
 }
 
@@ -8748,7 +8823,11 @@ Java_org_metroidprime_port_MetroidPrimeActivity_nativeRemasteredPicked(JNIEnv* e
   const char* chars = env->GetStringUTFChars(uri, nullptr);
   if (chars != nullptr) {
     std::lock_guard lock(PortDebug::sRemasteredPickMutex);
-    PortDebug::sRemasteredPicks.emplace_back(int(which), chars);
+    if (which == PortDebug::kPalLanguagesPick) {
+      PortDebug::sPalLanguagesPick = chars;
+    } else {
+      PortDebug::sRemasteredPicks.emplace_back(int(which), chars);
+    }
     env->ReleaseStringUTFChars(uri, chars);
   }
 }

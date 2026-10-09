@@ -29,6 +29,7 @@
 #include "port_log.h"
 #include "port_log_file.h"
 #include "port_mods.h"
+#include "port_pal_languages.h"
 #include "port_room_geo.h"
 #include "port_importers.h"
 #include "port_remastered_import.h"
@@ -857,6 +858,15 @@ int main(int argc, char** argv) {
         }
         aurora_dvd_close();
         return result;
+    }
+    // --import-pal-languages <image>: add a PAL disc's languages to a USA game
+    // (port_pal_languages.h), without starting it.
+    if (argc >= 2 && std::strcmp(argv[1], "--import-pal-languages") == 0) {
+        if (argc != 3) {
+            std::fprintf(stderr, "usage: %s %s <PAL disc image>\n", argv[0], argv[1]);
+            return 2;
+        }
+        return PortPalLanguages::RunFromCommandLine(argv[2]);
     }
 #endif
     // The file log starts first so it holds everything after it, build id included.

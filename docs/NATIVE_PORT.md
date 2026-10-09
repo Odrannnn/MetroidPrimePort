@@ -695,9 +695,15 @@ one, else English. A PAL disc's French, German, Spanish and Italian work without
 the mod too. Pick the language in F1 > Game > Language (ini key
 `text_language`, or `MP_LANGUAGE=EUFR` for one run). It changes while the game
 runs (console: `language EUGE`, `language en`): text already on screen
-switches the next time its menu or screen opens. Without the mod a USA disc stays in English. The disc's fonts are
-ASCII only, so each accented letter is drawn as its base letter, unless the
-mod's typeface (`font/deface.sdfont`) is loaded, which draws the real one.
+switches the next time its menu or screen opens. Without the mod a USA disc stays in English
+unless a PAL image's languages are added: F1 > Game > Language > "Add languages
+from a PAL disc..." (or `--import-pal-languages <image>` on the command line)
+reads the PAL image once and copies its French, German, Spanish and Italian
+text tables and fonts to `<user>/languages/`. The game keeps running from the
+USA disc, and the PAL image isn't needed afterwards. "Remove" deletes the copy.
+The USA disc's fonts are ASCII only, so each accented letter is drawn as its base
+letter, unless the PAL fonts were added (they take effect after a restart) or
+the mod's typeface (`font/deface.sdfont`) is loaded; either one draws the real letter.
 
 It also writes Remastered's typeface as `font/deface.sdfont` (see above): the
 FONT asset with the most characters, its first face.

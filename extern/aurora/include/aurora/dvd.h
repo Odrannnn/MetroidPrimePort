@@ -150,6 +150,27 @@ int64_t aurora_dvd_base_offset(s32 entrynum);
  */
 void aurora_dvd_set_read_error_callback(void (*callback)(void));
 
+/**
+ * \brief A second disc image, read-only and separate from the game's disc (e.g. another region's, for its text).
+ */
+typedef struct AuroraDiscImage AuroraDiscImage;
+
+/** \brief Opens an image; writes its 6-character game id, disc number and version. Returns null on failure. */
+AuroraDiscImage* aurora_disc_image_open(const char* path, char gameId[6], u8* discNumber, u8* discVersion);
+
+/** \brief Calls `callback` for every file (not directory) of the image's data partition, with its FST index. */
+void aurora_disc_image_list(AuroraDiscImage* image, void (*callback)(u32 index, const char* name, u32 size, void* user),
+                            void* user);
+
+/**
+ * \brief Opens a file of the image by FST index. Read, seek and close it with the aurora_dvd_base_* calls (its
+ * failures aren't reported to the read error callback). Close it before the image.
+ */
+void* aurora_disc_image_file_open(AuroraDiscImage* image, u32 index);
+
+/** \brief Closes an image from aurora_disc_image_open. */
+void aurora_disc_image_close(AuroraDiscImage* image);
+
 #ifdef __cplusplus
 }
 #endif

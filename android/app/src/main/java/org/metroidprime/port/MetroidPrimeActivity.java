@@ -203,7 +203,8 @@ public final class MetroidPrimeActivity extends SDLActivity {
     }
 
     // Called from the debug overlay, on the SDL thread: picks the Remastered
-    // .nsp/.xci (which 0) or prod.keys (which 1). Neither has a MIME type of its own.
+    // .nsp/.xci (which 0), prod.keys (which 1) or a PAL disc image for its
+    // languages (which 2). None has a MIME type of its own.
     public void pickRemasteredFile(int which) {
         runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -244,7 +245,7 @@ public final class MetroidPrimeActivity extends SDLActivity {
             }
             return;
         }
-        if (requestCode == REQUEST_REMASTERED || requestCode == REQUEST_REMASTERED + 1) {
+        if (requestCode >= REQUEST_REMASTERED && requestCode <= REQUEST_REMASTERED + 2) {
             Uri uri = data != null && resultCode == RESULT_OK ? data.getData() : null;
             if (uri != null) {
                 rememberRemasteredPick(requestCode - REQUEST_REMASTERED, uri);
