@@ -817,7 +817,7 @@ final class TouchControlsView extends View {
                     updateStick(target, event.getX(i), event.getY(i));
                 } else if (target.type == AIM || target.aiming) {
                     updateAim(target, event, i);
-                } else if (target.type == BUTTON && target.id == BTN_SOUTH && aim &&
+                } else if (target.type == BUTTON && aimsWhileHeld(target) && aim &&
                            aimPointer == -1) {
                     startButtonAim(event.getPointerId(i), target, event, i);
                 } else if (target.type == MAP_PAN) {
@@ -1191,8 +1191,16 @@ final class TouchControlsView extends View {
                y > cy - (baseCy - baseTop) * scale && y <= cy + (height - baseCy) * scale;
     }
 
-    // A held A (charging) that slides past the tap slop aims too, so one thumb
-    // can charge and aim; A stays held until the finger lifts.
+    // Fire, Jump and Turbo face buttons aim when slid (see startButtonAim). Pills
+    // and the D-pad don't: their targets carry no start point.
+    private static boolean aimsWhileHeld(TouchTarget target) {
+        return target.control instanceof ControlButton &&
+               (target.id == BTN_SOUTH || target.id == BTN_EAST || target.id == TURBO_FIRE);
+    }
+
+    // A held Fire (charging), Jump or Turbo that slides past the tap slop aims
+    // too, so one thumb can press and aim; the button stays held until the
+    // finger lifts.
     private void startButtonAim(int pointerId, TouchTarget target, MotionEvent event, int index) {
         if (Math.hypot(event.getX(index) - target.startX, event.getY(index) - target.startY) <
             dp(MAP_TAP_SLOP_DP)) {
@@ -1434,8 +1442,14 @@ final class TouchControlsView extends View {
         }
         final Iterator<TouchTarget> it = targets.values().iterator();
         while (it.hasNext()) {
-            if (it.next().id == TURBO_FIRE) {
+            final TouchTarget target = it.next();
+            if (target.id == TURBO_FIRE) {
                 it.remove();
+                // A finger sliding on Turbo was also aiming.
+                if (target.aiming) {
+                    aimPointer = -1;
+                    nativeTouchAimDown(false);
+                }
             }
         }
         held.remove(TURBO_FIRE);
