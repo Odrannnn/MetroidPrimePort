@@ -185,17 +185,39 @@ static const float skStage3AttackWeights[6][6] = {
     {0.f, 0.f, 50.f, 0.f, 0.f, 50.f},  {0.f, 40.f, 60.f, 0.f, 0.f, 0.f},
 };
 
+#ifdef TARGET_PC
+// Port: PAL's Ridley has 40 properties, not 47/48. It lacks the first ten
+// model ids (Metroid4.pak CMDLs absent from the PAL disc), adds a WPSC after
+// xac_ and a trailing damage info (left unread; the loader skips it).
+static const int kPalRidleyProperties = 40;
+
+static CAssetId ReadUsaOnlyId(CInputStream& in, int propCount) {
+  return propCount == kPalRidleyProperties ? kInvalidAssetId : CAssetId(in.ReadLong());
+}
+
+static CAssetId ReadSkippingPalId(CInputStream& in, int propCount) {
+  CAssetId id = in.ReadLong();
+  if (propCount == kPalRidleyProperties) {
+    in.ReadLong();
+  }
+  return id;
+}
+#define RIDLEY_USA_ID() ReadUsaOnlyId(in, propCount)
+#else
+#define RIDLEY_USA_ID() in.ReadLong()
+#endif
+
 CRidleyData::CRidleyData(CInputStream& in, int propCount)
-: x0_(in.ReadLong())
-, x4_(in.ReadLong())
-, x8_(in.ReadLong())
-, xc_(in.ReadLong())
-, x10_(in.ReadLong())
-, x14_(in.ReadLong())
-, x18_(in.ReadLong())
-, x1c_(in.ReadLong())
-, x20_(in.ReadLong())
-, x24_(in.ReadLong())
+: x0_(RIDLEY_USA_ID())
+, x4_(RIDLEY_USA_ID())
+, x8_(RIDLEY_USA_ID())
+, xc_(RIDLEY_USA_ID())
+, x10_(RIDLEY_USA_ID())
+, x14_(RIDLEY_USA_ID())
+, x18_(RIDLEY_USA_ID())
+, x1c_(RIDLEY_USA_ID())
+, x20_(RIDLEY_USA_ID())
+, x24_(RIDLEY_USA_ID())
 , x28_(in.ReadLong())
 , x2c_(in.ReadLong())
 , x30_(in.ReadLong())
@@ -207,7 +229,11 @@ CRidleyData::CRidleyData(CInputStream& in, int propCount)
 , x48_(in)
 , x64_(in)
 , xa8_(CSfxManager::TranslateSFXID(in.ReadLong()))
+#ifdef TARGET_PC
+, xac_(ReadSkippingPalId(in, propCount))
+#else
 , xac_(in.ReadLong())
+#endif
 , xb0_(in)
 , xcc_(CCameraShakeData::EatOldCameraShakerData(in))
 , x1a0_(in.ReadLong())
@@ -268,7 +294,14 @@ CRidley::CRidley(TUniqueId uid, const rstl::string& name, const CEntityInfo& inf
 , xa34_24_(false)
 , xa34_25_(false)
 , xa34_26_(false)
+#ifdef TARGET_PC
+// Port: PAL data has no x24_ model (see CRidleyData).
+, xa38_(x568_data.x24_ != kInvalidAssetId
+            ? CModelData(CStaticRes(x568_data.x24_, 4.f * mData.ScaleCopy()))
+            : CModelData::CModelDataNull())
+#else
 , xa38_(CStaticRes(x568_data.x24_, 4.f * mData.ScaleCopy()))
+#endif
 , xa84_(CTransform4f::Identity())
 , xab4_(20.f)
 , xab8_(12.f)
