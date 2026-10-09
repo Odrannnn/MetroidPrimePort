@@ -14,6 +14,11 @@ std::vector<uint8_t> PortReadDolResource(uint32_t address, uint32_t length);
 std::vector<uint8_t> PortFindDolResource(uint32_t address, uint32_t length, const uint8_t* signature,
                                          size_t signatureLength);
 
+// The default font embedded in the DOL, found by the texture it names (its
+// bytes differ by region: PAL's is a FONT v4): the zlib stream that inflates
+// to that FONT, and the one after it, its TXTR. False if there is none.
+bool PortFindDolFont(uint32_t textureId, std::vector<uint8_t>& font, std::vector<uint8_t>& texture);
+
 namespace PortDisc {
 
 // The releases the port knows. The game code is always 1.00's; the other

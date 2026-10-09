@@ -58,6 +58,7 @@ CTexture::CTexture(ETexelFormat fmt, const short w, const short h, int mips)
 , mPortNativeId(0)
 , mPortTexelsChanged(false)
 , mPortClampT(kCM_Repeat)
+, mPortLayerBandHeight(0)
 #endif
 {
   InitBitmapBuffers(fmt, w, h, mips);
@@ -88,6 +89,7 @@ CTexture::CTexture(CInputStream& in, EAutoMipmap automip, EBlackKey blackKey)
 , mPortNativeId(0)
 , mPortTexelsChanged(false)
 , mPortClampT(kCM_Repeat)
+, mPortLayerBandHeight(0)
 #endif
 {
   mTexelFormat = ETexelFormat(in.Get< uint >());

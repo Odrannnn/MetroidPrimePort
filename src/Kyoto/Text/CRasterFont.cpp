@@ -21,6 +21,7 @@
 #include "port_hd_font.h"
 #include "port_log.h"
 
+#include <algorithm>
 #include <vector>
 #endif
 
@@ -29,10 +30,20 @@ CRasterFont::CRasterFont(CInputStream& in, IObjectStore* store)
 , x4_monoWidth(16)
 , x8_monoHeight(16)
 , x2c_mode(kFM_OneLayer)
-, x90_lineMargin(0) {
+, x90_lineMargin(0)
+#ifdef TARGET_PC
+, mPortLayerMode(-1)
+#endif
+{
   if (in.ReadInt32() == 'FONT') {
     int version = in.ReadInt32();
-    if (version >= 0 && version <= 2) {
+#ifdef TARGET_PC
+    // PAL discs have version 4 (bytes per glyph field, a layer each).
+    const int maxVersion = 4;
+#else
+    const int maxVersion = 2;
+#endif
+    if (version >= 0 && version <= maxVersion) {
       x4_monoWidth = in.ReadInt32();
       x8_monoHeight = in.ReadInt32();
       if (version >= 1) {
@@ -68,6 +79,11 @@ CRasterFont::CRasterFont(CInputStream& in, IObjectStore* store)
         x2c_mode = kFM_OneLayerOutline;
         break;
       }
+#ifdef TARGET_PC
+      if (version >= 4) {
+        mPortLayerMode = mode;
+      }
+#endif
 
       int glyphCount = in.ReadInt32();
       xc_glyphs.reserve(glyphCount);
@@ -78,6 +94,24 @@ CRasterFont::CRasterFont(CInputStream& in, IObjectStore* store)
         float startV = in.ReadFloat();
         float endU = in.ReadFloat();
         float endV = in.ReadFloat();
+#ifdef TARGET_PC
+        if (version >= 4) {
+          // char is unsigned on ARM: the spacings and baseline are signed bytes.
+          const int layer = static_cast< unsigned char >(in.ReadChar());
+          const int a = static_cast< signed char >(in.ReadChar());
+          const int b = static_cast< signed char >(in.ReadChar());
+          const int c = static_cast< signed char >(in.ReadChar());
+          const int cellWidth = static_cast< unsigned char >(in.ReadChar());
+          const int cellHeight = static_cast< unsigned char >(in.ReadChar());
+          const int baseline = static_cast< signed char >(in.ReadChar());
+          const int kernStart = static_cast< short >(in.ReadShort());
+          xc_glyphs.push_back(rstl::pair< wchar_t, CGlyph >(
+              chr, CGlyph(a, b, c, startU, startV, endU, endV, cellWidth, cellHeight, baseline,
+                          kernStart)));
+          mPortLayers.push_back(std::pair< wchar_t, int >(chr, layer));
+          continue;
+        }
+#endif
         int a = in.ReadInt32();
         int b = in.ReadInt32();
         int c = in.ReadInt32();
@@ -91,7 +125,11 @@ CRasterFont::CRasterFont(CInputStream& in, IObjectStore* store)
       }
       rstl::sort_by_key(xc_glyphs);
 #ifdef TARGET_PC
-      PortAddStandIns();
+      if (mPortLayerMode < 0) {
+        PortAddStandIns();
+      } else if (x80_texture.valid()) {
+        PortUnpackLayers();  // adds the stand-ins once the cells are in place
+      }  // else SetTexture does (the default font)
 #endif
 
       int kerningCount = in.ReadInt32();
@@ -364,6 +402,122 @@ bool CRasterFont::PortAddAccents(const std::vector< PortAccentPending >& pending
   tex->UnLock();
   return true;
 }
+
+// PAL fonts (FONT v4) pack two or four layers of glyphs into the bits of each
+// texel; their code picks a layer per glyph. The 1.00 renderer draws one
+// layer, bit 0 the ink and bit 1 the outline. So each layer gets a band of
+// rows of its own, its glyphs move there, and the font takes the one-layer
+// mode. A texture shared by fonts is unpacked once.
+void CRasterFont::PortUnpackLayers() {
+  int layerCount = 0;
+  EFontMode mode = kFM_OneLayer;
+  switch (mPortLayerMode) {
+  case 0:
+  case 1:
+    break;
+  case kFM_FourLayers:
+    layerCount = 4;
+    break;
+  case kFM_TwoLayersOutline:
+  case 5:  // two layers, outline bits first
+    layerCount = 2;
+    mode = kFM_OneLayerOutline;
+    break;
+  case kFM_TwoLayers:
+    layerCount = 2;
+    break;
+  default:
+    PortLog::Write("[font] %s: unknown mode %d\n", PortGetName(), mPortLayerMode);
+    break;
+  }
+  if (layerCount == 0) {
+    mPortLayerMode = -1;
+    mPortLayers.clear();
+    PortAddStandIns();
+    return;
+  }
+  CTexture* tex = **x80_texture;
+  int bandH = tex->PortLayerBandHeight();
+  if (bandH == 0) {
+    PortFontAccent::Format format;
+    switch (tex->GetTexelFormat()) {
+    case kTF_C4:
+      format = PortFontAccent::Format::C4;
+      break;
+    case kTF_C8:
+      format = PortFontAccent::Format::C8;
+      break;
+    default:
+      PortLog::Write("[font] %s: layered font with texel format %d\n", PortGetName(),
+                     int(tex->GetTexelFormat()));
+      return;
+    }
+    const int texW = tex->GetWidth();
+    bandH = tex->GetHeight();
+    std::vector< uint8_t > packed(size_t(texW) * size_t(bandH));
+    {
+      const uint8_t* texels = static_cast< const uint8_t* >(tex->GetConstBitMapData(0));
+      const size_t size = tex->GetMemoryAllocated();
+      for (int y = 0; y < bandH; ++y) {
+        for (int x = 0; x < texW; ++x) {
+          PortFontAccent::Decode(texels, size, format, texW, bandH, x, y,
+                                 packed[size_t(y) * size_t(texW) + size_t(x)]);
+        }
+      }
+    }
+    // Keep the height a power of two, as retail's are (NPOT textures clamp).
+    int newH = 1;
+    while (newH < bandH * layerCount) {
+      newH <<= 1;
+    }
+    if (!tex->PortGrowHeight(newH - bandH)) {
+      PortLog::Write("[font] %s: could not unpack its layers\n", PortGetName());
+      return;
+    }
+    uint8_t* dest = static_cast< uint8_t* >(tex->GetBitMapData(0));
+    const size_t destSize = tex->GetMemoryAllocated();
+    for (int layer = 0; layer < layerCount; ++layer) {
+      for (int y = 0; y < bandH; ++y) {
+        for (int x = 0; x < texW; ++x) {
+          const int n = packed[size_t(y) * size_t(texW) + size_t(x)];
+          int value;
+          if (mPortLayerMode == 5) {
+            value = ((n >> (2 + layer)) & 1) | (((n >> layer) & 1) << 1);
+          } else if (mode == kFM_OneLayerOutline) {
+            value = (n >> (2 * layer)) & 3;
+          } else {
+            value = (n >> layer) & 1;
+          }
+          PortFontAccent::Encode(dest, destSize, format, texW, newH, x, layer * bandH + y,
+                                 uint8_t(value));
+        }
+      }
+    }
+    tex->UnLock();
+    tex->PortSetLayerBandHeight(bandH);
+  }
+  const float bandV = float(bandH) / float(tex->GetHeight());
+  std::sort(mPortLayers.begin(), mPortLayers.end(),
+            [](const std::pair< wchar_t, int >& l, const std::pair< wchar_t, int >& r) {
+              return l.first < r.first;
+            });
+  for (int i = 0; i < xc_glyphs.size(); ++i) {
+    const wchar_t chr = xc_glyphs[i].first;
+    const auto it = std::lower_bound(
+        mPortLayers.begin(), mPortLayers.end(), chr,
+        [](const std::pair< wchar_t, int >& l, wchar_t c) { return l.first < c; });
+    const int layer = it != mPortLayers.end() && it->first == chr ? it->second : 0;
+    const CGlyph& g = xc_glyphs[i].second;
+    xc_glyphs[i].second =
+        CGlyph(g.GetA(), g.GetB(), g.GetC(), g.GetStartU(), (layer + g.GetStartV()) * bandV,
+               g.GetEndU(), (layer + g.GetEndV()) * bandV, g.GetCellWidth(), g.GetCellHeight(),
+               g.GetBaseLine(), g.GetKernStart());
+  }
+  x2c_mode = mode;
+  mPortLayerMode = -1;
+  mPortLayers.clear();
+  PortAddStandIns();
+}
 #endif
 
 EFontMode CRasterFont::GetMode() const { return x2c_mode; }
@@ -537,4 +691,9 @@ bool CRasterFont::IsFinishedLoading() { return x80_texture && x80_texture->IsLoa
 void CRasterFont::SetTexture(TToken< CTexture > texture) {
   x80_texture = texture;
   x80_texture->Lock();
+#ifdef TARGET_PC
+  if (mPortLayerMode >= 0) {
+    PortUnpackLayers();
+  }
+#endif
 }

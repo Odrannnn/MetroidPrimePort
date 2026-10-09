@@ -143,6 +143,7 @@ private:
   uint mPortNativeId;
   mutable bool mPortTexelsChanged; // written in place since the last Load
   mutable EClampMode mPortClampT;  // mClampMode is the S axis's
+  int mPortLayerBandHeight;        // a PAL font's packed height, once unpacked
 
 public:
   void PortSetNativeId(uint id);
@@ -152,6 +153,10 @@ public:
   // mip 0's texels. Only single-mip 4/8-bit textures; false otherwise and when
   // a mod replaces the texels. Existing UVs must be rescaled by old/new height.
   bool PortGrowHeight(int extraRows);
+  // Non-zero once a layered (PAL) font's layers were unpacked into bands of
+  // this many rows each (CRasterFont::PortUnpackLayers).
+  int PortLayerBandHeight() const { return mPortLayerBandHeight; }
+  void PortSetLayerBandHeight(int rows) { mPortLayerBandHeight = rows; }
   // Load with a mode per axis (a Remastered material's sampler).
   void PortLoad(GXTexMapID texMapId, EClampMode clampS, EClampMode clampT) const;
   // The GX object PortLoad just bound (valid until the texture is freed); the

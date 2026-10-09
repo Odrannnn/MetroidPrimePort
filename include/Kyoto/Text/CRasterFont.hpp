@@ -162,6 +162,10 @@ private:
   const CGlyph* InternalGetGlyph(wchar_t c) const;
 #ifdef TARGET_PC
   void PortAddStandIns();
+  void PortUnpackLayers();
+  // A layered (FONT v4) font's mode in the file and its glyphs' layers, until unpacked.
+  int mPortLayerMode;
+  std::vector< std::pair< wchar_t, int > > mPortLayers;
   struct PortAccentPending {
     wchar_t chr;
     const CGlyph* base;
