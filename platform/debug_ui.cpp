@@ -5928,8 +5928,13 @@ void DrawControlsKeyboardMouse() {
   bool mouseAim = sMouseAim;
   if (ImGui::Checkbox("Mouse aim", &mouseAim)) {
     SetMouseAim(mouseAim);
+    // Mouse aim replaces the R-button free look, so without twin-stick a pad
+    // would have no aim at all. Both add into the same aim; twin-stick can
+    // still be switched off on its own.
+    if (mouseAim) SetTwinStick(true);
     MarkDirty();
   }
+  ImGui::TextDisabled("Also switches on Twin stick, so a controller's right stick aims too.");
   if (ImGui::SliderFloat("Sensitivity", &sMouseSensitivity, 0.0005f, 0.02f, "%.4f rad/px",
                          ImGuiSliderFlags_Logarithmic)) {
     MarkDirty();

@@ -1070,10 +1070,10 @@ void ApplyKeyPreset(EKeyPreset preset) {
     layout.Bind(ControlMapper::kFL_DPadLeft, SDL_SCANCODE_LEFT);
     layout.Bind(ControlMapper::kFL_DPadRight, SDL_SCANCODE_RIGHT);
     layout.Apply(kControlPort);
-    // The keyboard C-stick picks beams only without twin-stick, which takes
-    // the C-stick for aim.
+    // Twin-stick leaves a C-stick held from the keyboard to the game, so 1-4
+    // still pick beams while a pad's right stick aims alongside the mouse.
     PortDebug::SetMouseAim(true);
-    PortDebug::SetTwinStick(false);
+    PortDebug::SetTwinStick(true);
     break;
   }
   }
@@ -1115,6 +1115,17 @@ void ApplyDefaultKeyBindings(unsigned port) {
   for (const PADKeyAxisBinding& binding : axes) {
     PADSetKeyAxisBindingSlot(port, 1, {PAD_KEY_INVALID, binding.padAxis, 1});
   }
+}
+
+bool ApplyKeyPresetNamed(std::string_view name) {
+  if (name == "classic") {
+    ApplyKeyPreset(EKeyPreset::kClassic);
+  } else if (name == "mouse") {
+    ApplyKeyPreset(EKeyPreset::kMouseKeyboard);
+  } else {
+    return false;
+  }
+  return true;
 }
 
 bool ShiftHeld() {
@@ -1281,8 +1292,8 @@ void DrawKeyboardMouse() {
                   "left ctrl or C morph ball, F or middle click missile,\n"
                   "right click or Q lock on, left alt free look, Tab or M map,\n"
                   "1-4 beams, 5-8 visors (arrows too), left shift beam shift.\n"
-                  "Turns on mouse aim and off Twin Stick Aim, which would take the\n"
-                  "beam keys for aim.");
+                  "Turns on mouse aim and Twin Stick Aim, so a controller's right\n"
+                  "stick aims too.");
 
 
   const float rowX = ImGui::GetCursorPosX();
