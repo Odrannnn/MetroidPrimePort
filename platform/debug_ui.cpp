@@ -182,6 +182,9 @@ bool sCinemaBars = false;
 bool sSharpScanWindow = false;
 bool sShowShaderCompilation = true;
 int sHudScale = PortDebug::kHudScaleMax;
+int sCrosshairOpacity = PortDebug::kCrosshairOpacityMax;
+bool sCrosshairCustomColor = false;
+float sCrosshairColor[3] = {1.f, 1.f, 1.f};
 bool sHideHelmet = false;
 bool sHideVisorEffects = false;
 bool sRevealMap = false;
@@ -589,6 +592,21 @@ void ApplySetting(const std::string& key, const std::string& value) {
     if (s >= PortDebug::kHudScaleMin && s <= PortDebug::kHudScaleMax) {
       sHudScale = s;
     }
+  } else if (key == "crosshair_opacity") {
+    const int s = std::atoi(value.c_str());
+    if (s >= PortDebug::kCrosshairOpacityMin && s <= PortDebug::kCrosshairOpacityMax) {
+      sCrosshairOpacity = s;
+    }
+  } else if (key == "crosshair_color") {
+    // RRGGBB, or empty for the game's own colour.
+    unsigned rgb = 0;
+    sCrosshairCustomColor =
+        value.size() == 6 && std::sscanf(value.c_str(), "%6x", &rgb) == 1;
+    if (sCrosshairCustomColor) {
+      for (int i = 0; i < 3; ++i) {
+        sCrosshairColor[i] = static_cast< float >((rgb >> (16 - 8 * i)) & 0xff) / 255.f;
+      }
+    }
   } else if (key == "hide_helmet") {
     sHideHelmet = ParseBool(value);
   } else if (key == "hide_visor_effects") {
@@ -904,6 +922,18 @@ std::string SettingsText() {
   file << "sharp_scan_window=" << (sSharpScanWindow ? 1 : 0) << '\n';
   file << "show_shader_compilation=" << (sShowShaderCompilation ? 1 : 0) << '\n';
   file << "hud_scale=" << sHudScale << '\n';
+  file << "crosshair_opacity=" << sCrosshairOpacity << '\n';
+  {
+    char hex[8] = "";
+    if (sCrosshairCustomColor) {
+      unsigned rgb = 0;
+      for (const float c : sCrosshairColor) {
+        rgb = rgb << 8 | static_cast< unsigned >(std::lround(std::clamp(c, 0.f, 1.f) * 255.f));
+      }
+      std::snprintf(hex, sizeof(hex), "%06x", rgb);
+    }
+    file << "crosshair_color=" << hex << '\n';
+  }
   file << "hide_helmet=" << (sHideHelmet ? 1 : 0) << '\n';
   file << "hide_visor_effects=" << (sHideVisorEffects ? 1 : 0) << '\n';
   file << "reveal_map=" << (sRevealMap ? 1 : 0) << '\n';
@@ -1628,6 +1658,20 @@ void SetHudScale(int percent) {
   EnsureInitialized();
   sHudScale = std::clamp(percent, kHudScaleMin, kHudScaleMax);
   MarkDirty();
+}
+
+int CrosshairOpacity() {
+  EnsureInitialized();
+  return sOriginalExperience ? kCrosshairOpacityMax : sCrosshairOpacity;
+}
+
+bool CrosshairColor(float rgb[3]) {
+  EnsureInitialized();
+  if (!sCrosshairCustomColor || sOriginalExperience) {
+    return false;
+  }
+  std::copy_n(sCrosshairColor, 3, rgb);
+  return true;
 }
 
 bool HideHelmet() {
@@ -5694,6 +5738,23 @@ void DrawVideoDisplay() {
   if (ImGui::SliderInt("HUD scale", &hudScale, kHudScaleMin, kHudScaleMax, "%d%%")) {
     SetHudScale(hudScale);
   }
+  if (ImGui::SliderInt("Crosshair opacity", &sCrosshairOpacity, kCrosshairOpacityMin,
+                       kCrosshairOpacityMax, "%d%%")) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("The crosshair in the middle of the screen (free aim, mouse aim, twin "
+                        "stick).");
+  if (ImGui::Checkbox("Custom crosshair colour", &sCrosshairCustomColor)) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("Off: the game's own colour.");
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!sCrosshairCustomColor);
+  if (ImGui::ColorEdit3("##crosshair_color", sCrosshairColor,
+                        ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
+    MarkDirty();
+  }
+  ImGui::EndDisabled();
   bool hideHelmet = sHideHelmet;
   if (ImGui::Checkbox("Hide helmet", &hideHelmet)) {
     SetHideHelmet(hideHelmet);

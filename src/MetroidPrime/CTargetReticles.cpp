@@ -1209,8 +1209,15 @@ void CCompoundTargetReticle::DrawOrbitZoneGroup(const CMatrix3f& rot,
 #endif
     gpRender->SetModelMatrix(CTransform4f(rot, targetPos) * CTransform4f::Scale(scale));
 
-    model->Draw(CModelFlags::Additive(
-                    tweak->x1c0_crosshairsColor.WithAlphaModulatedBy(x1e8_crosshairsScale))
+    CColor color = tweak->x1c0_crosshairsColor;
+#ifdef TARGET_PC
+    float rgb[3];
+    if (PortDebug::CrosshairColor(rgb)) {
+      color = CColor(rgb[0], rgb[1], rgb[2], color.GetAlpha());
+    }
+    color = color.WithAlphaModulatedBy(static_cast< float >(PortDebug::CrosshairOpacity()) / 100.f);
+#endif
+    model->Draw(CModelFlags::Additive(color.WithAlphaModulatedBy(x1e8_crosshairsScale))
                     .DepthCompareUpdate(false, false));
   }
 }

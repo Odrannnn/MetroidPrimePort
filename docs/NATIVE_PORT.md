@@ -849,7 +849,7 @@ unpacks to a temporary directory instead of mounting.
   game as retail without touching the saved settings, so turning it off restores
   them. It forces 640x480 (EFB scale 1x, no dynamic resolution, MSAA and
   anisotropy off), 4:3 without the widescreen HUD or Vert+, FOV 55, HUD scale
-  100, the helmet and visor effects, cutscene bars, unskippable cutscenes and
+  100, the game's crosshair, the helmet and visor effects, cutscene bars, unskippable cutscenes and
   elevator rides, a 60 Hz simulation with the frame cap and no interpolation,
   the disc's font and GameCube button prompts, no mods, unlocks or revealed map,
   and retail controls (no spring ball, fast morph, sticky or rapid charge,
@@ -1023,6 +1023,10 @@ unpacks to a temporary directory instead of mounting.
   menus and the minimap toward the screen centre, each frame as a whole so the
   pieces stay on the visor frame. The helmet is not scaled. The minimap eases
   back to full size as it opens into the map screen.
+- Crosshair opacity and colour (Video > Display, persisted as `crosshair_opacity`,
+  0-100 percent, default 100, and `crosshair_color`, `RRGGBB` or empty for the
+  game's own colour): the centre crosshair of free aim, mouse aim and twin stick.
+  Original experience ignores both.
 - Hide helmet and hide visor effects (Video > Display and pause Options > Visor,
   persisted as `hide_helmet` and `hide_visor_effects`, off by default): the
   first drops the helmet frame (the dome and the lights at the bottom); the

@@ -191,6 +191,12 @@ const int kHudScaleMin = 50;
 const int kHudScaleMax = 100;
 int HudScale();
 void SetHudScale(int percent);
+// The centre crosshair (free aim, mouse aim, twin stick): opacity in percent,
+// and an optional colour that replaces the game's (false = the game's own).
+const int kCrosshairOpacityMin = 0;
+const int kCrosshairOpacityMax = 100;
+int CrosshairOpacity();
+bool CrosshairColor(float rgb[3]);
 // Hide the helmet frame (the visor rim and its glow and lights).
 bool HideHelmet();
 void SetHideHelmet(bool enabled);
