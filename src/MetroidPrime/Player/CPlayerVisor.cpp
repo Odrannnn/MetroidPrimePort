@@ -28,6 +28,7 @@
 
 #ifdef TARGET_PC
 #include "port_debug.h"
+#include "port_room_env.h"
 #endif
 
 static const int skPixelsPerTileDimension16Bit = 4;
@@ -228,6 +229,9 @@ void CPlayerVisor::Update(float dt, const CStateManager& mgr) {
   x90_xrayBlur.Update(dt);
   const CPlayerState& playerState = *mgr.GetPlayerState();
   CPlayerState::EPlayerVisor activeVisor = playerState.GetActiveVisor(mgr);
+#ifdef TARGET_PC
+  PortRoomEnv::XRayTick(dt, activeVisor == CPlayerState::kPV_XRay);
+#endif
   CPlayerState::EPlayerVisor curVisor = playerState.GetCurrentVisor();
   CPlayerState::EPlayerVisor transVisor = playerState.GetTransitioningVisor();
   CPlayer::EPlayerScanState scanState = mgr.GetPlayer()->GetPlayerScanState();
@@ -310,7 +314,15 @@ void CPlayerVisor::Touch() const {
 
 void CPlayerVisor::DrawThermalEffect(const CStateManager& mgr) const {}
 
-void CPlayerVisor::DrawXRayEffect(const CStateManager& mgr) const { x90_xrayBlur.Draw(); }
+void CPlayerVisor::DrawXRayEffect(const CStateManager& mgr) const {
+#ifdef TARGET_PC
+  // Remastered's ramp and vignette replace retail's blur copy.
+  if (PortRoomEnv::XRayPass(false)) {
+    return;
+  }
+#endif
+  x90_xrayBlur.Draw();
+}
 
 // The scan window is authored in pixels of a 448-high 4:3 view. Below 4:3 the view is narrower
 // than that, so the window shrinks to keep its share of the width (and its proportions).

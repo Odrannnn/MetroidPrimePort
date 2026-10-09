@@ -281,6 +281,12 @@ void GXPortVolumetricFogEnd(void);
 // their blend mode is additive or premultiplied (the static render state's "no fog" flag), when
 // they are not fogged at all and only add to the already fogged frame.
 void GXPortSetParticleFog(GXBool on);
+// Port extension: one of Remastered's X-ray visor post passes (shader 00089f0) over the EFB as
+// drawn so far. `p` is the shader's constants p0..p7; p[0][2] == 1 runs the distortion after the
+// opaque world (it reads the depth, whose GX z range is depthRange), anything else the ramp and
+// vignette after the post effects. `tone` is the curve the EFB was drawn through. False if it
+// could not be recorded.
+GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[2]);
 // Stores a 33x33x33 RGBA8 colour grade LUT (red fastest) under a non-zero id.
 void GXPortColorGradeLut(u32 id, const u8* rgba);
 // The average radiance (linear rgb) of the latest frame measured by GXPortPostProcess, and a

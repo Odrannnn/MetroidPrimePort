@@ -3328,6 +3328,10 @@ void CStateManager::DrawWorld() const {
   // Remastered fogs the opaque world and sky full-screen, then the actors and transparents as
   // they draw (up to GXPortVolumetricFogEnd).
   PortDrawVolumetricFog(*this, backupViewMatrix, frustum);
+  // Remastered's X-ray distortion of the opaque world (pass A of its visor post).
+  if (GetPlayerState()->GetActiveVisor(*this) == CPlayerState::kPV_XRay) {
+    PortRoomEnv::XRayPass(true);
+  }
 #endif
   bool morphingPlayerVisible = false;
   rstl::reserved_vector< const CActor*, 1024 > thermalActors;

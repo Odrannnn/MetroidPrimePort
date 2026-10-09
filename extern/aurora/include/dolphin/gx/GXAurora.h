@@ -324,6 +324,8 @@ extern "C" {
 #define GX_AURORA_PORT_ROOM_LIGHTS 0x0069
 // Port extension: the draws that follow are particles (GXPortSetParticleFog). Payload: u8 on.
 #define GX_AURORA_PORT_PARTICLE_FOG 0x006A
+// Port extension: Remastered's X-ray visor post passes (GXPortXRayPass). Payload: 48 u32 words.
+#define GX_AURORA_PORT_XRAY 0x006B
 
 #define GX2_SET_POLYGON_OFFSET 0x1000
 

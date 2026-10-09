@@ -6,6 +6,7 @@
 #include "../../gfx/probe.hpp"
 #include "../../gfx/shadow.hpp"
 #include "../../gfx/volfog.hpp"
+#include "../../gfx/xray.hpp"
 #include "../../webgpu/gpu_prof.hpp"
 
 #include <atomic>
@@ -172,6 +173,24 @@ void GXPortVolumetricFogEnd() { GX_WRITE_AURORA(GX_AURORA_PORT_VOLUMETRIC_FOG_EN
 void GXPortSetParticleFog(GXBool on) {
   GX_WRITE_AURORA(GX_AURORA_PORT_PARTICLE_FOG);
   GX_WRITE_U8(on ? 1 : 0);
+}
+
+GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[2]) {
+  if (!aurora::gfx::xray::ensure_task()) {
+    return false;
+  }
+  aurora::gfx::xray::Params params{};
+  std::memcpy(params.tone, tone, sizeof(params.tone));
+  std::memcpy(params.p, p, sizeof(params.p));
+  params.depth[0] = depthRange[0];
+  params.depth[1] = depthRange[1];
+  u32 words[sizeof(params) / sizeof(u32)];
+  std::memcpy(words, &params, sizeof(words));
+  GX_WRITE_AURORA(GX_AURORA_PORT_XRAY);
+  for (const u32 word : words) {
+    GX_WRITE_U32(word);
+  }
+  return true;
 }
 
 void GXPortSetShadowCaster(GXBool on) {

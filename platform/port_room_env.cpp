@@ -1,5 +1,6 @@
 // Room environments at run time: which areas have one, their cubes on the GPU, and the
 // cube and ambient for a model. See port_room_env.h.
+#include "port_debug.h"
 #include "port_env.h"
 #include "port_room_env.h"
 #include "port_strings.h"
@@ -1530,6 +1531,36 @@ float GlowScale() {
   // 2^(3 - EV) / 2^(3 - static EV).
   const float scale = std::exp2(sFrame.shown[5] - sFrame.ev.value);
   return std::isfinite(scale) && scale > 0.f ? scale : 1.f;
+}
+
+static float sXRayTime = 0.f;
+
+void XRayTick(float dt, bool xrayActive) { sXRayTime = xrayActive ? sXRayTime + dt : 0.f; }
+
+bool XRayPass(bool distortion) {
+  if (PortDebug::OriginalExperience()) {
+    return false;
+  }
+  const float exposure = FrameExposure();
+  float tone[3][4];
+  if (!(exposure > 0.f) || !Tone(tone)) {
+    return false;
+  }
+  // Shader 00089f0's constants (kb topic/xray-post-shader-00089f0.md): the tweak values of
+  // init_frame 0xfb34b0; the BSS words are never written.
+  const float p[8][4] = {
+      {0.28986f, 1.3f, distortion ? 1.f : 0.f, 1.f / exposure},
+      {0.f, 0.f, 0.01f, -1.5f},
+      {0.f, 0.f, 0.f, 0.9865f},
+      {0.65f, 0.9f, 0.9f, 0.999f},
+      {0.95f, 1.5f, 3.f, 0.76f},
+      {3.5e-7f, 1.3125e-8f, 2.f, sXRayTime},
+      {0.18f, 0.22f, 0.44f, 0.7f},
+      {0.f, 15.f, 0.f, 0.f},
+  };
+  // SetupViewForDraw's depth range.
+  const float depthRange[2] = {0.125f, 1.f};
+  return GXPortXRayPass(p, tone, depthRange);
 }
 
 float SkyGain() {

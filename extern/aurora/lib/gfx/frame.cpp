@@ -5,6 +5,7 @@
 #include "bloom.hpp"
 #include "shadow.hpp"
 #include "volfog.hpp"
+#include "xray.hpp"
 #include <aurora/vfx.hpp>
 #include <aurora/water.hpp>
 #include "probe.hpp"
@@ -601,6 +602,7 @@ void shutdown() {
   probe::shutdown();
   bloom::shutdown();
   volfog::shutdown();
+  xray::shutdown();
   shadow::shutdown();
   vfx::shutdown();
   water::shutdown();

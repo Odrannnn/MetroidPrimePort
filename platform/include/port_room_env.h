@@ -744,6 +744,13 @@ void SetProbeBlend(bool on);
 bool ProbeBlend();
 // The camera's position, once a frame: the probe blend follows it.
 void SetViewPoint(const float pos[3]);
+// Remastered's X-ray visor post (shader 00089f0): pass A (distortion = true) after the opaque
+// world, pass B (ramp and vignette) after the post-FX. xrayTime is dt accumulated while the
+// X-ray visor is active (XRayTick). False when the gate (Remastered rooms exposed, not
+// Original experience) is closed; the caller then draws retail's.
+bool XRayPass(bool distortion);
+void XRayTick(float dt, bool xrayActive);
+
 // The frame's tone curve, for GXSetPBRTone; false when rooms are not exposed or the
 // camera's room has no environment.
 bool Tone(float rows[3][4]);
