@@ -361,13 +361,14 @@ std::string FindUnreadableDiscFile() {
     return {};
 }
 
-constexpr const char* kSupportedDisc = "Only Metroid Prime for the GameCube, USA version 1.00\n(GM8E01, revision 0), is supported.";
+constexpr const char* kSupportedDisc =
+    "Metroid Prime for the GameCube is supported: USA 1.00\n(GM8E01, revision 0) and PAL (GM8P01).";
 // Shown instead while other releases are opted into (MP_DISC_ANY_VERSION).
 constexpr const char* kSupportedDiscAny =
     "Metroid Prime for the GameCube is supported: USA 1.00, 1.01\nand 1.02 (GM8E01) and PAL (GM8P01).";
 
 const char* SupportedDiscText() {
-    return PortDisc::IsAccepted(PortDisc::Version::Pal) ? kSupportedDiscAny : kSupportedDisc;
+    return PortDisc::IsAccepted(PortDisc::Version::Usa101) ? kSupportedDiscAny : kSupportedDisc;
 }
 
 // What the user picked instead, in words: the usual mistakes are another
@@ -696,7 +697,7 @@ std::string AskForDiscImage(bool* cancelled = nullptr) {
     SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 2);
     SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
     SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING,
-                          "Select your Metroid Prime disc image (GameCube, USA, v1.00)");
+                          "Select your Metroid Prime disc image (GameCube, USA v1.00 or PAL)");
     SDL_ShowFileDialogWithProperties(
         SDL_FILEDIALOG_OPENFILE,
         [](void*, const char* const* files, int) {
@@ -1198,7 +1199,7 @@ int main(int argc, char** argv) {
     if (discImage.empty()) {
         PortLog::Write(
                      "metroid_prime_port: no disc image given.\n"
-                     "  usage: %s <path to Metroid Prime (USA) (v1.00).iso>\n"
+                     "  usage: %s <path to Metroid Prime (USA v1.00 or PAL).iso>\n"
                      "  or set MP_DISC, or place the image next to the executable.\n", argv[0]);
         aurora_shutdown();
         return 1;

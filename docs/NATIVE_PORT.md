@@ -68,14 +68,18 @@ path. Preserve the accompanying dependency licenses/notices.
 Alternatively set `MP_DISC`, keep the image beside the executable (or in a
 folder beside it; for an AppImage, beside the `.AppImage` file), which starts
 the game with no prompt, or let the port ask for it. A plain `.iso`/`.gcm` there
-is only taken when its header says GM8E01 v1.00, so another game's image next to
+is only taken when its header says a supported version, so another game's image next to
 it is skipped; compressed formats are taken as found, after a matching plain
 image. Otherwise, when no disc is found it opens the platform's file dialog and
 remembers the answer as `disc_path` in the settings file. There is no prompt
 when the port has no window to show one on, or with `MP_NO_DISC_DIALOG=1`
 (for scripted runs that do have a window, as on a build runner). The disc must
-identify as **GM8E01, disc 0, revision 0**; other revisions/regions are
-rejected. Nod/Aurora supports additional image
+identify as **GM8E01, disc 0, revision 0** (USA 1.00) or **GM8P01** (PAL).
+A PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port
+feature (Remastered import, randomizer, Archipelago, cutscene skips) and its
+languages; its saves are kept apart from USA ones. USA 1.01 and 1.02 are only
+taken with `MP_DISC_ANY_VERSION=1` (untested); Japanese, Korean and Wii discs
+are rejected. Nod/Aurora supports additional image
 containers, but the same retail content is required.
 
 `metroid_prime_port --version` prints the source revision without initializing
@@ -683,10 +687,12 @@ Remastered's French, Spanish, German, Italian and Dutch text comes along too
 (about 1,900 strings each), as extra language sections in the same tables,
 named by Remastered's language codes (`EUFR`, `EUSP`, `EUGE`, `EUIT`, `EUDU`).
 A string Remastered doesn't translate, or one whose buttons don't line up with
-the disc's, stays in English. Pick the language in F1 > Game > Language (ini key
+the disc's, keeps the disc's wording: a PAL disc's own translation where it has
+one, else English. A PAL disc's French, German, Spanish and Italian work without
+the mod too. Pick the language in F1 > Game > Language (ini key
 `text_language`, or `MP_LANGUAGE=EUFR` for one run). It changes while the game
 runs (console: `language EUGE`, `language en`): text already on screen
-switches the next time its menu or screen opens. Without the mod the game stays in English. The disc's fonts are
+switches the next time its menu or screen opens. Without the mod a USA disc stays in English. The disc's fonts are
 ASCII only, so each accented letter is drawn as its base letter, unless the
 mod's typeface (`font/deface.sdfont`) is loaded, which draws the real one.
 

@@ -156,7 +156,7 @@ const char* Name(Version version) {
 }
 
 bool IsAccepted(Version version) {
-  if (version == Version::Usa100)
+  if (version == Version::Usa100 || version == Version::Pal)
     return true;
   return version != Version::Unknown && port::EnvFlag("MP_DISC_ANY_VERSION");
 }

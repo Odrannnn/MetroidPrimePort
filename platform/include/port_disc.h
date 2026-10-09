@@ -31,7 +31,7 @@ Version Identify(const char* id6, unsigned diskNumber, unsigned revision);
 Version Current();
 // "USA 1.00", "PAL", ...
 const char* Name(Version version);
-// Whether the port accepts this disc. Only 1.00 for now: the others are
+// Whether the port accepts this disc: USA 1.00 and PAL. 1.01 and 1.02 are
 // accepted with MP_DISC_ANY_VERSION=1 until their data is known to load.
 bool IsAccepted(Version version);
 
