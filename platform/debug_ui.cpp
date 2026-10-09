@@ -222,6 +222,7 @@ bool sLogFile = true;
 bool sLockOnToggle = false;
 bool sStickyCharge = false;
 bool sRapidCharge = false;
+bool sRemasteredMovement = true;
 // The Randomizer page's options; the console's `rando gen` reads them too.
 std::mutex sRandoMutex;
 PortRandoGen::Settings sRandoSettings;
@@ -821,6 +822,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sStickyCharge = ParseBool(value);
   } else if (key == "rapid_charge") {
     sRapidCharge = ParseBool(value);
+  } else if (key == "remastered_movement") {
+    sRemasteredMovement = ParseBool(value);
   } else if (key == "rando_settings") {
     PortRandoGen::Settings parsed;
     if (!PortRandoGen::ParseSettings(value, parsed)) {
@@ -1008,6 +1011,7 @@ std::string SettingsText() {
   file << "lock_on_toggle=" << (sLockOnToggle ? 1 : 0) << '\n';
   file << "sticky_charge=" << (sStickyCharge ? 1 : 0) << '\n';
   file << "rapid_charge=" << (sRapidCharge ? 1 : 0) << '\n';
+  file << "remastered_movement=" << (sRemasteredMovement ? 1 : 0) << '\n';
   {
     std::lock_guard< std::mutex > lock(sRandoMutex);
     file << "rando_settings=" << PortRandoGen::SettingsText(sRandoSettings) << '\n';
@@ -1261,6 +1265,7 @@ void EnsureInitialized() {
   sCinemaBars = port::EnvFlag("MP_CINEMA_BARS", sCinemaBars);
   sSharpScanWindow = port::EnvFlag("MP_SHARP_SCAN_WINDOW", sSharpScanWindow);
   sRapidCharge = port::EnvFlag("MP_RAPID_CHARGE", sRapidCharge);
+  sRemasteredMovement = port::EnvFlag("MP_REMASTERED_MOVEMENT", sRemasteredMovement);
   if (port::EnvFlag("MP_MOUSE_AIM")) {
     sMouseAim = true;
   }
@@ -2209,6 +2214,17 @@ bool RapidCharge() {
 void SetRapidCharge(bool enabled) {
   EnsureInitialized();
   sRapidCharge = enabled;
+  MarkDirty();
+}
+
+bool RemasteredMovement() {
+  EnsureInitialized();
+  return sRemasteredMovement && !sOriginalExperience;
+}
+
+void SetRemasteredMovement(bool enabled) {
+  EnsureInitialized();
+  sRemasteredMovement = enabled;
   MarkDirty();
 }
 
@@ -6241,6 +6257,14 @@ void DrawControlsController() {
   ItemHelp("Twin stick uses the right stick as a direct camera aim (the same path as the mouse) and "
            "consumes it, so it no longer free-looks. Fire stays on whatever is bound to A; remap it "
            "in Controls > Controller.");
+  bool remasteredMovement = sRemasteredMovement;
+  if (ImGui::Checkbox("Remastered movement (twin stick and mouse aim)", &remasteredMovement)) {
+    SetRemasteredMovement(remasteredMovement);
+  }
+  ItemHelp("Moves as Metroid Prime Remastered and PrimeHack do: diagonals as fast as straight "
+           "ahead, and a steady air drag, so a jump keeps a smooth arc. Off, jumps move as on the "
+           "GameCube, whose speed dips at takeoff and picks up again near the top. Classic "
+           "controls always move as on the GameCube.");
   // Shown only with twin stick on, as the pause menu's Stick Aim Speed row.
   if (sTwinStick) {
     float stickRate = sStickAimRate;

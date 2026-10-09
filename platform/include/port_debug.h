@@ -407,6 +407,10 @@ bool RapidCharge();
 // The Randomizer page's saved options (rando_settings= in the settings file).
 PortRandoGen::Settings RandoSettings();
 void SetRapidCharge(bool enabled);
+// Remastered movement under twin stick/mouse aim: one force along the stick and
+// Remastered's planar friction and air drag (CPlayer::ComputeMovement, issue #46).
+bool RemasteredMovement();
+void SetRemasteredMovement(bool enabled);
 // Spring Ball on a gyro flick (pad or phone tilted up sharply, like Trilogy's
 // nunchuk flick), on top of C-stick up. Rate is the pitch speed in rad/s a flick
 // must pass. The gyro source is the aim's.
