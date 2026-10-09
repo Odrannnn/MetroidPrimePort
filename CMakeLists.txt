@@ -272,6 +272,9 @@ if(ANDROID)
 else()
     add_executable(metroid_prime_port ${MP_PORT_SOURCES})
 endif()
+# disc.cpp and port_pal_languages.cpp inflate compressed images and fonts. Aurora
+# provides ZLIB::ZLIB everywhere (its zlib-ng on Windows).
+target_link_libraries(metroid_prime_port PRIVATE ZLIB::ZLIB)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
     # port_crash.cpp logs each C++ throw's type and stack.
     target_link_options(metroid_prime_port PRIVATE "-Wl,--wrap=__cxa_throw")
