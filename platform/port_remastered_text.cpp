@@ -632,13 +632,30 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
       ++reworded;
     }
   }
-  // A language starts as the English, so a string without a translation stays readable.
+  // A language starts as the disc's own section for it (PAL's FREN for EUFR), else
+  // the English, so a string without a translation stays readable.
+  static const struct {
+    const char* remastered;
+    uint32_t disc;
+  } kDiscSections[] = {
+      {"EUFR", FourCc("FREN")}, {"USFR", FourCc("FREN")}, {"EUGE", FourCc("GERM")},
+      {"EUSP", FourCc("SPAN")}, {"USSP", FourCc("SPAN")}, {"EUIT", FourCc("ITAL")},
+  };
   for (size_t k = 0; k < kTextLanguageCount; ++k) {
     const uint32_t code = FourCc(kTextLanguages[k].code);
     if (std::find(codes.begin(), codes.end(), code) != codes.end()) {
       continue;
     }
-    std::vector<std::u16string> strings = tables[english];
+    size_t base = english;
+    for (const auto& section : kDiscSections) {
+      if (std::strcmp(section.remastered, kTextLanguages[k].code) == 0) {
+        const auto at = std::find(codes.begin(), codes.end(), section.disc);
+        if (at != codes.end()) {
+          base = size_t(at - codes.begin());
+        }
+      }
+    }
+    std::vector<std::u16string> strings = tables[base];
     int done = 0;
     for (size_t s = 0; s < count; ++s) {
       if (versions[s] == nullptr) {

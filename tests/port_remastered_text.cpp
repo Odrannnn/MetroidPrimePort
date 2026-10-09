@@ -267,9 +267,9 @@ void TestMerge() {
         "two strings are translated");
   expect = Strg({{0x4652454E, {u"un", u"deux", u"trois"}},
                  {english, {u"one", u"&just=center;second", u"three"}},
-                 {french, {u"one", u"&just=center;seconde", u"troisi\u00e8me"}}});
+                 {french, {u"un", u"&just=center;seconde", u"troisi\u00e8me"}}});
   Check(merged.size() >= expect.size() && std::memcmp(merged.data(), expect.data(), expect.size()) == 0,
-        "a language is added, English where it has no translation");
+        "a language is added, the disc's own French where it has no translation");
 
   // A screen title keeps the disc's brackets.
   const std::vector<uint8_t> titled = Strg({{english, {u"&just=center;[ Inventory ]"}}});
@@ -308,7 +308,7 @@ void TestMerge() {
                   {u"New", u"Morph Ball kept in the suit", u"A log the PAL disc wrote again from the start here"}},
                  {french, {u"New", u"Boule", u"A log the PAL disc wrote again from the start here"}}});
   Check(merged.size() >= expect.size() && std::memcmp(merged.data(), expect.data(), expect.size()) == 0,
-        "a moved string is found, a rewritten one is left");
+        "a moved string is found, a rewritten one is left, English where the disc has no French");
 
   // A table the version kept as it was takes Remastered's renames by index.
   const std::vector<uint8_t> kept = Strg({{english, {u"Metroid"}}});
