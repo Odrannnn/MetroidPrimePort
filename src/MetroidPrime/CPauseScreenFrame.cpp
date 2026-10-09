@@ -209,7 +209,7 @@ enum EPortOption {
 #define PORT_OPTION(opt) static_cast< EGameOption >(opt)
 
 // Aim speed steps: 900 px/s (the default) at 10, x9 per 10 steps, so 0 is
-// 100 px/s and 16 about 3370 px/s (the overlay's slider covers 100-3000).
+// 100 px/s and 20 is 8100 px/s (the overlay's slider covers 100-8100).
 static const float kAimSpeedDefault = 900.f;
 static const float kAimSpeedDefaultStep = 10.f;
 static float AimSpeedFromStep(int step) {
@@ -252,7 +252,7 @@ static const SGameOption skPortControllerOptions[] = {
     {kGO_Rumble, 33, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {kGO_SwapBeamControls, 34, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_TwinStick), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
-    {PORT_OPTION(kPO_AimSpeed), -1, 0.f, 16.f, 1.f, kOT_Float},
+    {PORT_OPTION(kPO_AimSpeed), -1, 0.f, 20.f, 1.f, kOT_Float},
     {PORT_OPTION(kPO_CrosshairSize), -1, PortDebug::kCrosshairSizeMin,
      PortDebug::kCrosshairSizeMax, 5.f, kOT_Float},
     {PORT_OPTION(kPO_FastMorph), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
@@ -261,6 +261,21 @@ static const SGameOption skPortControllerOptions[] = {
     {PORT_OPTION(kPO_RapidCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {kGO_RestoreDefaults, 35, 0.f, 1.f, 1.f, kOT_RestoreDefaults},
 };
+// The same without Stick Aim Speed, which only shows while Twin Stick is on.
+static const SGameOption skPortControllerOptionsNoAim[] = {
+    {kGO_ReverseYAxis, 32, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {kGO_Rumble, 33, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {kGO_SwapBeamControls, 34, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_TwinStick), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_CrosshairSize), -1, PortDebug::kCrosshairSizeMin,
+     PortDebug::kCrosshairSizeMax, 5.f, kOT_Float},
+    {PORT_OPTION(kPO_FastMorph), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_LockOnToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_StickyCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_RapidCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {kGO_RestoreDefaults, 35, 0.f, 1.f, 1.f, kOT_RestoreDefaults},
+};
+static const SOptionCategory skPortControllerCategoryNoAim = {10, skPortControllerOptionsNoAim};
 static SOptionCategory skPauseOptions[] = {
     {11, skPortVisorOptions},     {12, skPortDisplayOptions}, {4, skSoundOptions},
     {11, skPortControllerOptions}, {0, nullptr},
@@ -464,7 +479,13 @@ static void SetPortOption(EGameOption option, int value) {
 }
 
 static const SOptionCategory& GetOptionCategory(int category, bool frontEnd) {
-  return frontEnd ? skGameOptions[category] : skPauseOptions[category];
+  if (frontEnd) {
+    return skGameOptions[category];
+  }
+  if (category == 3 && !PortDebug::PadTwinStick()) {
+    return skPortControllerCategoryNoAim;
+  }
+  return skPauseOptions[category];
 }
 #else
 static const SOptionCategory& GetOptionCategory(int category, bool frontEnd) {
@@ -653,7 +674,12 @@ COptionsScreen::COptionsScreen(const CStateManager& mgr, CGuiFrame& frame,
 , x19c_quitGame(nullptr)
 , x1a0_gameCube(rs_new CGameCubeDoll())
 , x29c_optionAlpha(0.f)
-, x2a0_24_inOptionBody(false) {}
+, x2a0_24_inOptionBody(false)
+#ifdef TARGET_PC
+, mPortRowCount(0)
+#endif
+{
+}
 
 COptionsScreen::~COptionsScreen() {
   CSfxManager::SfxStop(x1a4_sliderSfx);
@@ -670,6 +696,21 @@ bool COptionsScreen::InputDisabled() const { return !x19c_quitGame.null(); }
 
 void COptionsScreen::Update(float dt, CRandom16& rand, CArchitectureQueue& queue) {
   x1a8_rumble.Update(dt);
+#ifdef TARGET_PC
+  // Twin Stick (its row, Restore Defaults or F1) shows or hides the Stick Aim
+  // Speed row: redraw the titles and keep the selection on a row.
+  const uint rowCount = GetRightTableCount();
+  if (rowCount != mPortRowCount) {
+    if (mPortRowCount == 0) {
+      // First frame: the rows were just set up.
+    } else if (x10_mode == kM_RightTable) {
+      SetRightTableSelection(x1c_rightSel, x1c_rightSel);
+    } else {
+      UpdateRightTitles();
+    }
+    mPortRowCount = rowCount;
+  }
+#endif
   CPauseScreenBase::Update(dt, rand, queue);
   const bool sliding = x18c_slidergroup_slider->GetState() != CGuiSliderGroup::kS_None;
   if (bool(x1a4_sliderSfx) != sliding) {

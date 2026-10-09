@@ -642,7 +642,7 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sTouchFloatingStick = ParseBool(value);
   } else if (key == "stick_aim_rate") {
     const float f = static_cast< float >(std::atof(value.c_str()));
-    if (std::isfinite(f) && f >= 50.f && f <= 4000.f) {
+    if (std::isfinite(f) && f >= 50.f && f <= 10000.f) {
       sStickAimRate = f;
     }
   } else if (key == "gyro_mode") {
@@ -2124,7 +2124,7 @@ float StickAimRate() {
 
 void SetStickAimRate(float pixelsPerSecond) {
   EnsureInitialized();
-  if (std::isfinite(pixelsPerSecond) && pixelsPerSecond >= 50.f && pixelsPerSecond <= 4000.f) {
+  if (std::isfinite(pixelsPerSecond) && pixelsPerSecond >= 50.f && pixelsPerSecond <= 10000.f) {
     sStickAimRate = pixelsPerSecond;
     MarkDirty();
   }
@@ -5991,20 +5991,23 @@ void DrawControlsController() {
   ItemHelp("Twin stick uses the right stick as a direct camera aim (the same path as the mouse) and "
            "consumes it, so it no longer free-looks. Fire stays on whatever is bound to A; remap it "
            "in Controls > Controller.");
-  ImGui::BeginDisabled(!sTwinStick);
-  float stickRate = sStickAimRate;
-  if (ImGui::SliderFloat("Stick aim speed", &stickRate, 100.f, 3000.f, "%.0f px/s",
-                         ImGuiSliderFlags_Logarithmic)) {
-    SetStickAimRate(stickRate);
+  // Shown only with twin stick on, as the pause menu's Stick Aim Speed row.
+  if (sTwinStick) {
+    float stickRate = sStickAimRate;
+    if (ImGui::SliderFloat("Stick aim speed", &stickRate, 100.f, 8100.f, "%.0f px/s",
+                           ImGuiSliderFlags_Logarithmic)) {
+      SetStickAimRate(stickRate);
+    }
+    ItemHelp("How fast the right stick turns the camera at full tilt. 900 px/s (the default) is "
+             "about 180 degrees a second at the default mouse sensitivity.");
+    // The game's own option, saved with its settings; free look uses it too.
+    ImGui::BeginDisabled(gpGameState == nullptr);
+    bool invertY = gpGameState != nullptr && gpGameState->GameOptions().GetInvertYAxis();
+    if (ImGui::Checkbox("Invert stick aim Y (the game's Reverse Y Axis)", &invertY)) {
+      gpGameState->GameOptions().SetInvertYAxis(invertY);
+    }
+    ImGui::EndDisabled();
   }
-  // The game's own option, saved with its settings; free look uses it too.
-  ImGui::BeginDisabled(gpGameState == nullptr);
-  bool invertY = gpGameState != nullptr && gpGameState->GameOptions().GetInvertYAxis();
-  if (ImGui::Checkbox("Invert stick aim Y (the game's Reverse Y Axis)", &invertY)) {
-    gpGameState->GameOptions().SetInvertYAxis(invertY);
-  }
-  ImGui::EndDisabled();
-  ImGui::EndDisabled();
   PortControls::DrawController();
 }
 

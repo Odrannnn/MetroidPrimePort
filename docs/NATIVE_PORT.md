@@ -861,7 +861,9 @@ unpacks to a temporary directory instead of mounting.
 - `MP_ASPECT=4:3|16:9|window` (default `window`, persisted as `aspect`); the legacy `MP_WIDESCREEN` selects 16:9.
 - `MP_TWIN_STICK=1` (Controls > Options, persisted as `twin_stick`): twin-stick aiming. The
   right stick feeds the first-person aim through the same path as the mouse (so
-  the same sensitivity/invert apply, tuned by `stick_aim_rate`, default 900 px/s)
+  the same sensitivity/invert apply, tuned by `stick_aim_rate`, default 900 px/s, 50-10000; the F1
+  slider and the pause menu's Stick Aim Speed row, both shown only with twin stick
+  on, go up to 8100)
   and is consumed, so it no longer drives the game's free-look. Under mouse aim
   a C-stick held from the keyboard is not consumed, so keyboard beam keys still
   pick beams, and an L from a key or mouse button stays lock-on (not a beam
