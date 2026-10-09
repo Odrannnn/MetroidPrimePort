@@ -19,13 +19,6 @@ bool ApplyPadPresetNamed(std::string_view name);
 // True while the Controls tab is waiting for, or settling after, an input to
 // bind; controller navigation of the overlay should ignore the pad then.
 bool Capturing();
-// True while a bound beam shift key or pad input is held (Controls tab;
-// PortDebug::ShiftBinding stores them).
-bool ShiftHeld();
-// True while a bound turbo fire key or pad input is held (PortDebug::TurboBinding).
-bool TurboHeld();
-// The PAD bits whose alt controller button (PortDebug::PadAltButton) is held.
-unsigned HeldAltPadButtons();
 // True if the native controller button (SDL_GamepadButton) presses a PAD button
 // other than L, as its main or alt binding.
 bool PadButtonBoundBesidesL(int native);

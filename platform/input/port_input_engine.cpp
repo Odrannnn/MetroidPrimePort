@@ -375,7 +375,9 @@ float Runtime::RunTrigger(int bi, bool expr, const RawState& raw, double nowMs) 
     return 0.f;
   }
   if (b.turboHz != 0) {
-    const auto phase = int64_t((nowMs - s.outSince) * b.turboHz * 2.0 / 1000.0);
+    // The epsilon keeps a phase that lands exactly on a poll (the clock sums
+    // tick periods) from rounding down a poll late.
+    const auto phase = int64_t(std::floor((nowMs - s.outSince) * b.turboHz * 2.0 / 1000.0 + 1e-6));
     if (phase % 2 != 0) {
       return 0.f;
     }

@@ -302,6 +302,8 @@ bool g_suppressHeldOnRead = false;
 std::array<PADButton, PAD_CHANMAX> g_suppressedButtons{};
 std::array<bool, PAD_CHANMAX> g_suppressLeftTrigger{};
 std::array<bool, PAD_CHANMAX> g_suppressRightTrigger{};
+std::array<PADStatus, PAD_CHANMAX> g_portOverride{};
+std::array<bool, PAD_CHANMAX> g_portOverrideSet{};
 
 bool is_mouse_scancode(const s32 scancode) { return scancode < PAD_KEY_INVALID; }
 bool is_mouse_button_pressed(const s32 scancode) {
@@ -782,8 +784,11 @@ u32 PADRead(PADStatus* status) {
     if (device_rumble_available_for_port(i)) {
       rumbleSupport |= PAD_CHAN0_BIT;
     }
+    const bool overridden = g_portOverrideSet[i];
+    g_portOverrideSet[i] = false;
     auto controller = aurora::input::get_controller_for_player(i);
-    if (controller == nullptr && !g_keyboardBindings[i].m_mappingsSet && !g_virtualPadActive[i]) {
+    if (controller == nullptr && !g_keyboardBindings[i].m_mappingsSet && !g_virtualPadActive[i] &&
+        !(overridden && g_portOverride[i].err == PAD_ERR_NONE)) {
       status[i].err = PAD_ERR_NO_CONTROLLER;
       g_suppressedButtons[i] = 0;
       g_suppressLeftTrigger[i] = false;
@@ -792,7 +797,10 @@ u32 PADRead(PADStatus* status) {
     }
 
     status[i].err = PAD_ERR_NONE;
-    if (g_keyboardBindings[i].m_mappingsSet) {
+    if (overridden) {
+      status[i] = g_portOverride[i];
+      status[i].err = PAD_ERR_NONE;
+    } else if (g_keyboardBindings[i].m_mappingsSet) {
       const auto keyPressed = [&kbState, numKeys](const s32 scancode) {
         if (scancode > PAD_KEY_INVALID) {
           return scancode < numKeys && kbState[scancode];
@@ -865,22 +873,6 @@ u32 PADRead(PADStatus* status) {
 
     if (controller) {
       EnsureMappingLoaded(controller);
-      bool leftTriggerSet = false;
-      bool rightTriggerSet = false;
-      std::ranges::for_each(controller->m_buttonMapping, [&controller, &i, &status, &leftTriggerSet,
-                                                          &rightTriggerSet](const auto& mapping) {
-        if (native_button_held(controller, mapping.nativeButton)) {
-          status[i].button |= mapping.padButton;
-        }
-
-        if (mapping.padButton == PAD_TRIGGER_L && mapping.nativeButton != PAD_NATIVE_BUTTON_INVALID) {
-          leftTriggerSet = true;
-        }
-        if (mapping.padButton == PAD_TRIGGER_R && mapping.nativeButton != PAD_NATIVE_BUTTON_INVALID) {
-          rightTriggerSet = true;
-        }
-      });
-
       // TODO: Add serializable mappings for these (probably not necessary)?
       static constexpr std::array<std::pair<SDL_GamepadButton, PADExtButton>, PAD_EXT_BUTTON_COUNT> kExtButtonMappings{{
           {SDL_GAMEPAD_BUTTON_BACK, PAD_BUTTON_BACK},
@@ -906,91 +898,109 @@ u32 PADRead(PADStatus* status) {
         }
       }
 
-      const auto xlPos = _get_axis_value(controller, PAD_AXIS_LEFT_X_POS);
-      const auto xlNeg = _get_axis_value(controller, PAD_AXIS_LEFT_X_NEG);
-      const auto ylPos = _get_axis_value(controller, PAD_AXIS_LEFT_Y_POS);
-      const auto ylNeg = _get_axis_value(controller, PAD_AXIS_LEFT_Y_NEG);
+      if (!overridden) {
+        bool leftTriggerSet = false;
+        bool rightTriggerSet = false;
+        std::ranges::for_each(controller->m_buttonMapping, [&controller, &i, &status, &leftTriggerSet,
+                                                            &rightTriggerSet](const auto& mapping) {
+          if (native_button_held(controller, mapping.nativeButton)) {
+            status[i].button |= mapping.padButton;
+          }
 
-      auto xl = static_cast<Sint16>((xlPos + -xlNeg) / 2);
-      // SDL's gamepad y-axis is inverted from GC's
-      auto yl = static_cast<Sint16>((-ylPos + ylNeg) / 2);
-      if (controller->m_deadZones.useDeadzones) {
-        if (std::abs(xl) > controller->m_deadZones.stickDeadZone) {
+          if (mapping.padButton == PAD_TRIGGER_L && mapping.nativeButton != PAD_NATIVE_BUTTON_INVALID) {
+            leftTriggerSet = true;
+          }
+          if (mapping.padButton == PAD_TRIGGER_R && mapping.nativeButton != PAD_NATIVE_BUTTON_INVALID) {
+            rightTriggerSet = true;
+          }
+        });
+
+        const auto xlPos = _get_axis_value(controller, PAD_AXIS_LEFT_X_POS);
+        const auto xlNeg = _get_axis_value(controller, PAD_AXIS_LEFT_X_NEG);
+        const auto ylPos = _get_axis_value(controller, PAD_AXIS_LEFT_Y_POS);
+        const auto ylNeg = _get_axis_value(controller, PAD_AXIS_LEFT_Y_NEG);
+
+        auto xl = static_cast<Sint16>((xlPos + -xlNeg) / 2);
+        // SDL's gamepad y-axis is inverted from GC's
+        auto yl = static_cast<Sint16>((-ylPos + ylNeg) / 2);
+        if (controller->m_deadZones.useDeadzones) {
+          if (std::abs(xl) > controller->m_deadZones.stickDeadZone) {
+            xl /= 256;
+          } else {
+            xl = 0;
+          }
+          if (std::abs(yl) > controller->m_deadZones.stickDeadZone) {
+            yl = static_cast<Sint16>(-(yl + 1u) / 256u);
+          } else {
+            yl = 0;
+          }
+        } else {
           xl /= 256;
-        } else {
-          xl = 0;
-        }
-        if (std::abs(yl) > controller->m_deadZones.stickDeadZone) {
           yl = static_cast<Sint16>(-(yl + 1u) / 256u);
-        } else {
-          yl = 0;
         }
-      } else {
-        xl /= 256;
-        yl = static_cast<Sint16>(-(yl + 1u) / 256u);
-      }
 
-      // Merge with the keyboard values set above instead of overwriting them: a
-      // connected pad (including a centred Android touch pad) would otherwise
-      // disable keyboard movement entirely.
-      status[i].stickX = static_cast<int8_t>(dominant_axis_value(status[i].stickX, xl, -127, 127));
-      status[i].stickY = static_cast<int8_t>(dominant_axis_value(status[i].stickY, yl, -127, 127));
+        // Merge with the keyboard values set above instead of overwriting them: a
+        // connected pad (including a centred Android touch pad) would otherwise
+        // disable keyboard movement entirely.
+        status[i].stickX = static_cast<int8_t>(dominant_axis_value(status[i].stickX, xl, -127, 127));
+        status[i].stickY = static_cast<int8_t>(dominant_axis_value(status[i].stickY, yl, -127, 127));
 
-      const auto xrPos = _get_axis_value(controller, PAD_AXIS_RIGHT_X_POS);
-      const auto xrNeg = _get_axis_value(controller, PAD_AXIS_RIGHT_X_NEG);
-      const auto yrPos = _get_axis_value(controller, PAD_AXIS_RIGHT_Y_POS);
-      const auto yrNeg = _get_axis_value(controller, PAD_AXIS_RIGHT_Y_NEG);
+        const auto xrPos = _get_axis_value(controller, PAD_AXIS_RIGHT_X_POS);
+        const auto xrNeg = _get_axis_value(controller, PAD_AXIS_RIGHT_X_NEG);
+        const auto yrPos = _get_axis_value(controller, PAD_AXIS_RIGHT_Y_POS);
+        const auto yrNeg = _get_axis_value(controller, PAD_AXIS_RIGHT_Y_NEG);
 
-      auto xr = static_cast<Sint16>((xrPos + -xrNeg) / 2);
-      // SDL's gamepad y-axis is inverted from GC's
-      auto yr = static_cast<Sint16>((-yrPos + yrNeg) / 2);
-      if (controller->m_deadZones.useDeadzones) {
-        if (std::abs(xr) > controller->m_deadZones.substickDeadZone) {
+        auto xr = static_cast<Sint16>((xrPos + -xrNeg) / 2);
+        // SDL's gamepad y-axis is inverted from GC's
+        auto yr = static_cast<Sint16>((-yrPos + yrNeg) / 2);
+        if (controller->m_deadZones.useDeadzones) {
+          if (std::abs(xr) > controller->m_deadZones.substickDeadZone) {
+            xr /= 256;
+          } else {
+            xr = 0;
+          }
+
+          if (std::abs(yr) > controller->m_deadZones.substickDeadZone) {
+            yr = static_cast<Sint16>(-(yr + 1u) / 256u);
+          } else {
+            yr = 0;
+          }
+        } else {
           xr /= 256;
-        } else {
-          xr = 0;
-        }
-
-        if (std::abs(yr) > controller->m_deadZones.substickDeadZone) {
           yr = static_cast<Sint16>(-(yr + 1u) / 256u);
-        } else {
-          yr = 0;
         }
-      } else {
-        xr /= 256;
-        yr = static_cast<Sint16>(-(yr + 1u) / 256u);
-      }
 
-      status[i].substickX = static_cast<int8_t>(dominant_axis_value(status[i].substickX, xr, -127, 127));
-      status[i].substickY = static_cast<int8_t>(dominant_axis_value(status[i].substickY, yr, -127, 127));
+        status[i].substickX = static_cast<int8_t>(dominant_axis_value(status[i].substickX, xr, -127, 127));
+        status[i].substickY = static_cast<int8_t>(dominant_axis_value(status[i].substickY, yr, -127, 127));
 
-      Sint16 tl = trigger_axis_taken(controller, PAD_AXIS_TRIGGER_L)
-                      ? 0
-                      : std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_L));
-      Sint16 tr = trigger_axis_taken(controller, PAD_AXIS_TRIGGER_R)
-                      ? 0
-                      : std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_R));
+        Sint16 tl = trigger_axis_taken(controller, PAD_AXIS_TRIGGER_L)
+                        ? 0
+                        : std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_L));
+        Sint16 tr = trigger_axis_taken(controller, PAD_AXIS_TRIGGER_R)
+                        ? 0
+                        : std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_R));
 
-      if (controller->m_deadZones.emulateTriggers) {
-        if (!leftTriggerSet && tl > controller->m_deadZones.leftTriggerActivationZone) {
-          status[i].button |= PAD_TRIGGER_L;
+        if (controller->m_deadZones.emulateTriggers) {
+          if (!leftTriggerSet && tl > controller->m_deadZones.leftTriggerActivationZone) {
+            status[i].button |= PAD_TRIGGER_L;
+          }
+          if (!rightTriggerSet && tr > controller->m_deadZones.rightTriggerActivationZone) {
+            status[i].button |= PAD_TRIGGER_R;
+          }
         }
-        if (!rightTriggerSet && tr > controller->m_deadZones.rightTriggerActivationZone) {
-          status[i].button |= PAD_TRIGGER_R;
+        tl /= 128;
+        tr /= 128;
+
+        status[i].triggerLeft = std::max(status[i].triggerLeft, static_cast<u8>(tl));
+        status[i].triggerRight = std::max(status[i].triggerRight, static_cast<u8>(tr));
+
+        // If the digital button is activated, set the analog value to max.
+        if (status[i].button & PAD_TRIGGER_L) {
+          status[i].triggerLeft = 180;
         }
-      }
-      tl /= 128;
-      tr /= 128;
-
-      status[i].triggerLeft = std::max(status[i].triggerLeft, static_cast<u8>(tl));
-      status[i].triggerRight = std::max(status[i].triggerRight, static_cast<u8>(tr));
-
-      // If the digital button is activated, set the analog value to max.
-      if (status[i].button & PAD_TRIGGER_L) {
-        status[i].triggerLeft = 180;
-      }
-      if (status[i].button & PAD_TRIGGER_R) {
-        status[i].triggerRight = 180;
+        if (status[i].button & PAD_TRIGGER_R) {
+          status[i].triggerRight = 180;
+        }
       }
 
       if (controller->m_hasRumble) {
@@ -1026,6 +1036,53 @@ void PADSetVirtualStatus(const u32 port, const PADStatus* virtualStatus) {
   g_virtualPadStatus[port] = *virtualStatus;
   g_virtualPadStatus[port].err = PAD_ERR_NONE;
   g_virtualPadActive[port] = true;
+}
+
+void PADSetPortOverride(const u32 port, const PADStatus* status) {
+  if (port >= PAD_CHANMAX) {
+    return;
+  }
+  g_portOverrideSet[port] = status != nullptr;
+  if (status != nullptr) {
+    g_portOverride[port] = *status;
+  }
+}
+
+BOOL PADGetRawState(const u32 port, PADRawState* state) {
+  if (state == nullptr) {
+    return FALSE;
+  }
+  *state = {};
+  auto* controller = port < PAD_CHANMAX ? aurora::input::get_controller_for_player(port) : nullptr;
+  if (controller == nullptr || controller->m_controller == nullptr) {
+    return FALSE;
+  }
+  EnsureMappingLoaded(controller);
+  static_assert(SDL_GAMEPAD_BUTTON_COUNT <= PAD_RAW_BUTTON_TRIGGER_LEFT);
+  for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; ++b) {
+    if (SDL_GetGamepadButton(controller->m_controller, static_cast<SDL_GamepadButton>(b))) {
+      state->buttons |= 1u << b;
+    }
+  }
+  for (int a = 0; a < PAD_RAW_AXIS_COUNT; ++a) {
+    state->axes[a] = SDL_GetGamepadAxis(controller->m_controller, static_cast<SDL_GamepadAxis>(a));
+  }
+  const Sint16 tl = state->axes[SDL_GAMEPAD_AXIS_LEFT_TRIGGER];
+  const Sint16 tr = state->axes[SDL_GAMEPAD_AXIS_RIGHT_TRIGGER];
+  // native_button_held's half pull, and PADRead's emulated trigger click.
+  if (tl >= 16384) {
+    state->buttons |= 1u << PAD_RAW_BUTTON_TRIGGER_LEFT;
+  }
+  if (tr >= 16384) {
+    state->buttons |= 1u << PAD_RAW_BUTTON_TRIGGER_RIGHT;
+  }
+  if (tl > controller->m_deadZones.leftTriggerActivationZone) {
+    state->buttons |= 1u << PAD_RAW_BUTTON_TRIGGER_LEFT_CLICK;
+  }
+  if (tr > controller->m_deadZones.rightTriggerActivationZone) {
+    state->buttons |= 1u << PAD_RAW_BUTTON_TRIGGER_RIGHT_CLICK;
+  }
+  return TRUE;
 }
 
 void PADClearVirtualStatus(const u32 port) {

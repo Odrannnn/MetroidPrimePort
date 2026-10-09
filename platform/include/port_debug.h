@@ -320,12 +320,12 @@ void SetSpringBall(bool enabled);
 // layout), off by default.
 bool SwapScanXray();
 void SetSwapScanXray(bool enabled);
-// The beam shift's bindings (PortControls::ShiftHeld): slots 0 and 1 are keys
+// The beam shift's bindings (read by PortInputDevices): slots 0 and 1 are keys
 // or mouse buttons (scancode or PAD_KEY_MOUSE_*), slot 2 a controller button
 // (SDL gamepad button or PAD_NATIVE_BUTTON_TRIGGER_*); -1 for none.
 int ShiftBinding(int slot);
 void SetShiftBinding(int slot, int code);
-// The turbo fire's bindings (PortControls::TurboHeld), laid out as ShiftBinding's
+// The turbo fire's bindings (read by PortInputDevices), laid out as ShiftBinding's
 // (slot 2 reads -1 while touch is in use); all -1 (none) by default.
 int TurboBinding(int slot);
 void SetTurboBinding(int slot, int code);

@@ -35,7 +35,7 @@ namespace PortInput {
 enum class Device : uint8_t {
   None,
   Key,         // code: SDL scancode
-  MouseButton, // code: 0 left, 1 middle, 2 right, 3 x1, 4 x2
+  MouseButton, // code: 0 left, 1 middle, 2 right, 3 x1, 4 x2 (the port maps more ids above)
   MouseWheel,  // code: 0 vertical, 1 horizontal; dir picks the way
   MouseMotion, // code: 0 x, 1 y; dir 0 = signed delta
   PadButton,   // code: SDL_GamepadButton
@@ -46,7 +46,7 @@ enum class Device : uint8_t {
 };
 
 constexpr int kKeyCount = 512;
-constexpr int kMouseButtonCount = 5;
+constexpr int kMouseButtonCount = 32;
 constexpr int kPadButtonCount = 32;
 constexpr int kPadAxisCount = 8;
 constexpr int kTouchCount = 64;
@@ -69,7 +69,7 @@ struct Input {
 // (pad triggers 0..1); mouse motion and wheel are this poll's deltas.
 struct RawState {
   std::bitset<kKeyCount> keys;
-  uint8_t mouseButtons = 0;
+  uint32_t mouseButtons = 0;
   float wheel[2] = {};
   float mouseDelta[2] = {};
   uint32_t padButtons = 0;
@@ -197,6 +197,7 @@ struct Binding {
   bool invert = false;
   uint16_t contexts = kCtxAll;
 
+  bool operator==(const Binding&) const = default;
   bool IsChord() const { return count > 1; }
   bool Uses(const Input& in) const;
 };
@@ -204,6 +205,8 @@ struct Binding {
 struct Profile {
   std::vector<Binding> bindings;
   uint16_t chordWindowMs = 40;
+
+  bool operator==(const Profile&) const = default;
 };
 
 struct Output {

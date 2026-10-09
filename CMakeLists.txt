@@ -165,6 +165,8 @@ set(MP_PORT_SOURCES
     platform/port_textures.cpp
     platform/port_prompts.cpp
     platform/port_controls.cpp
+    platform/input/port_input_devices.cpp
+    platform/input/port_input_engine.cpp
     platform/port_randomizer.cpp
     platform/port_ap_metroidprime.cpp
     platform/port_ap_protocol.cpp

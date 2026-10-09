@@ -235,6 +235,28 @@ void PADSetVirtualStatus(u32 port, const PADStatus* status);
 void PADClearVirtualStatus(u32 port);
 void PADClearAllVirtualStatus();
 
+/* The next PADRead takes this status for the port in place of its own keyboard
+ * and controller mapping (blocking, unblock suppression, the virtual status,
+ * rumble and LEDs still apply). One read only. An err other than PAD_ERR_NONE
+ * means nothing is pressed: the port then reports no controller when it has
+ * none, as without the override. */
+void PADSetPortOverride(u32 port, const PADStatus* status);
+
+/* The unmapped state of the port's controller: SDL gamepad buttons in bits
+ * 0..SDL_GAMEPAD_BUTTON_COUNT-1, the analog triggers as buttons in the bits
+ * below (half pulled, and past the emulated-click activation zone), and the
+ * SDL gamepad axes. Returns FALSE (and zeroes it) without a controller. */
+#define PAD_RAW_BUTTON_TRIGGER_LEFT 26
+#define PAD_RAW_BUTTON_TRIGGER_RIGHT 27
+#define PAD_RAW_BUTTON_TRIGGER_LEFT_CLICK 28
+#define PAD_RAW_BUTTON_TRIGGER_RIGHT_CLICK 29
+#define PAD_RAW_AXIS_COUNT 6
+typedef struct PADRawState {
+  u32 buttons;
+  s16 axes[PAD_RAW_AXIS_COUNT];
+} PADRawState;
+BOOL PADGetRawState(u32 port, PADRawState* state);
+
 /**
  * Set the default controller mapping used.
  *
