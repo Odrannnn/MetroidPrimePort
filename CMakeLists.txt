@@ -45,6 +45,19 @@ endif()
 option(MP_EMBED_RESOURCES "Build the controller glyph textures and the pipeline cache seed into the executable (desktop)" ${_mp_embed_default})
 option(MP_ENABLE_SMOKE_DRIVER "Enable the opt-in real-disc lifecycle test driver" OFF)
 option(MP_ANDROID_NOD_STUB "Use a non-functional nod stub for Android build probes" OFF)
+# A system Abseil, fmt, SQLite, libpng or freetype ties the binary to the build
+# host's copies; Abseil's sonames change with every release, so a distro update
+# stops it starting (issue #27). Bundled, they are built from source and linked
+# in statically. SDL3, OpenSSL, zlib and zstd stay as they are: their sonames are
+# stable, and a static OpenSSL would look for CA certificates where the build
+# host's distro keeps them.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+    set(_mp_bundled_default ON)
+else()
+    set(_mp_bundled_default OFF)
+endif()
+option(MP_BUNDLED_DEPS "Build Abseil, fmt, SQLite, libpng and freetype from source and link them statically, ignoring system copies" ${_mp_bundled_default})
+set(AURORA_BUNDLED_DEPS ${MP_BUNDLED_DEPS})
 
 # The decompiled game/engine sources and the port code around them are written
 # for a *signed* plain `char`: the PowerPC/MWCC original and every host the port

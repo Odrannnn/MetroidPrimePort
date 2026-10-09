@@ -31,7 +31,14 @@ Plain MSVC `cl.exe`, MinGW, macOS, and ARM builds are not currently validated.
 
 If `ccache` is installed, configure compiles through it, and on Linux `mold`
 links when it is installed. Turn them off with `-DMP_USE_CCACHE=OFF` /
-`-DMP_USE_MOLD=OFF`. The cache is shared between build directories in the same
+`-DMP_USE_MOLD=OFF`.
+
+On Linux, Abseil, fmt, SQLite, libpng and FreeType are built from source and
+linked statically even when the system has them (`MP_BUNDLED_DEPS`, on by
+default), so a distro update can't stop the binary starting. It then needs only
+OpenSSL 3 and the C/C++ runtime. `-DMP_BUNDLED_DEPS=OFF` uses system copies.
+
+The cache is shared between build directories in the same
 checkout, so a new `build/<name>` mostly fills from it instead of recompiling.
 One configuration takes about 0.5 GB of cache (`ccache -M` sets the limit).
 
