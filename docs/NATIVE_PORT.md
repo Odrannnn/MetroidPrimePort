@@ -295,13 +295,10 @@ the driver the GPU reports, e.g. `Mesa Turnip ...`, since adrenotools quietly fa
 back to the system driver when its hooks fail. The OpenGL ES backend always uses
 the system driver.
 
-A driver can start and still draw garbage (Turnip builds for another GPU did), so
-the first run on a newly chosen driver shows "Keep this Vulkan driver?" for 30 s.
-Without "Keep" the game closes and the next start uses System. While that prompt is
-up, `gpu_driver_starting` stays in the user folder, so a crash (or a closed game)
-also reverts at the next start, like the OpenGL ES toggle does. A kept driver is
-saved as `gpu_driver_ok=<id>` and isn't asked about again; `MP_GPU_DRIVER` runs
-skip the prompt.
+While the GPU starts, `gpu_driver_starting` stays in the user folder, so a crash
+there reverts to System at the next start, like the OpenGL ES toggle does. A driver
+that starts but draws garbage (Turnip builds for another GPU did) has to be switched
+back by hand.
 
 If Vulkan doesn't start at all with the chosen driver (Qualcomm's own driver
 packs for the Adreno 840 failed this way), the game retries Vulkan with the

@@ -1100,10 +1100,10 @@ int main(int argc, char** argv) {
         std::error_code ec;
         if (!driver.empty() && config.desiredBackend != BACKEND_OPENGLES && PortGpuDriver::Supported()) {
             if (std::filesystem::exists(driverMarker, ec)) {
-                PortLog::Write("port: the last start with GPU driver %s crashed or wasn't kept; using the system driver\n",
+                PortLog::Write("port: the last start with GPU driver %s crashed; using the system driver\n",
                                driver.c_str());
                 PortDebug::SetGpuDriver("");
-                PortGpuDriver::SetLoadError("it crashed or wasn't kept last time; switched back to the system driver");
+                PortGpuDriver::SetLoadError("it crashed last time; switched back to the system driver");
                 std::filesystem::remove(driverMarker, ec);
             } else {
                 std::ofstream(driverMarker) << driver << '\n';
@@ -1130,12 +1130,8 @@ int main(int argc, char** argv) {
         }
         PortGpuDriver::SetLoadError("Vulkan failed to start with it; switched back to the system driver");
     }
-    // A driver's first run (not yet kept; MP_GPU_DRIVER runs are tests) keeps its
-    // marker until the user keeps it, since one that starts can still draw garbage.
-    if (!PortGpuDriver::Active().empty() && envDriver == nullptr &&
-        PortGpuDriver::Active() != PortDebug::GpuDriverKept()) {
-        PortDebug::BeginGpuDriverTrial(driverMarker.string());
-    } else {
+    // The driver started: only a crash before this point reverts it.
+    {
         std::error_code ec;
         std::filesystem::remove(driverMarker, ec);
     }

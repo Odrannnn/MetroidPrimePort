@@ -252,11 +252,6 @@ void SetOpenGles(bool enabled);
 // next start, "" = the system's. Android only.
 const std::string& GpuDriver();
 void SetGpuDriver(const std::string& id);
-// Setting `gpu_driver_ok`: the driver the user kept after its trial run.
-const std::string& GpuDriverKept();
-// main(), after a driver not yet kept started: asks the user to keep it. Until they
-// do, `markerPath` stays, so a closed game comes back on the system driver.
-void BeginGpuDriverTrial(const std::string& markerPath);
 // Setting `storage_clamp` (Auto/Off/On): sets MP_STORAGE_CLAMP for aurora's shader
 // generator unless it's already in the environment. Call before aurora_initialize.
 void ApplyStorageClamp();
