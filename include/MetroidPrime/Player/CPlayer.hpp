@@ -292,6 +292,10 @@ public:
   void UpdateGunTransform(const CVector3f& gunPos, CStateManager& mgr);
 #ifdef TARGET_PC
   CVector3f PortAnchorGunDown(const CVector3f& pos, CStateManager& mgr) const;
+  TUniqueId PortPlayerHint() const { return x830_playerHint; }
+  int PortPlayerHintCount() const { return x838_playerHints.size(); }
+  bool PortControlDirOverride() const { return x9c4_30_controlDirOverride; }
+  const CVector3f& PortControlDirFlat() const { return x54c_controlDirFlat; }
 #endif
   const CTransform4f& GetFirstPersonCameraTransform(CStateManager& mgr) const;
   void UpdateDebugCamera(CStateManager& mgr);

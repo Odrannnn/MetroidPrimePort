@@ -130,6 +130,10 @@ public:
   void AddToRenderer(const CFrustumPlanes&, const CStateManager&) const override;
   void Render(const CStateManager&) const override;
   rstl::optional_object< CAABox > GetTouchBounds() const override { return x1c8_touchBounds; }
+#ifdef TARGET_PC
+  ESpecialFunction PortFunction() const { return xe8_function; }
+  const rstl::string& PortLocatorName() const { return xec_locatorName; }
+#endif
 
   void SkipCinematic(CStateManager&);
   void RingScramble(CStateManager&);

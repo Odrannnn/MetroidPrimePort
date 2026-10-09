@@ -55,6 +55,8 @@
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
+#include "MetroidPrime/ScriptObjects/CScriptPlayerHint.hpp"
+#include "MetroidPrime/ScriptObjects/CScriptSpecialFunction.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptWater.hpp"
 #include "MetroidPrime/TCastTo.hpp"
 #include "WorldFormat/CAreaOctTree.hpp"
@@ -783,6 +785,20 @@ void CmdObj(CStateManager& mgr) {
       Out("touch bounds (%.1f, %.1f, %.1f) .. (%.1f, %.1f, %.1f)", lo.GetX(), lo.GetY(), lo.GetZ(),
           hi.GetX(), hi.GetY(), hi.GetZ());
     }
+  }
+  if (const CPlayer* player = TCastToConstPtr< CPlayer >(ent)) {
+    const CVector3f dir = player->PortControlDirFlat();
+    Out("player hint u%d (%d queued), control dir override %d, control dir flat (%.2f, %.2f, %.2f)",
+        player->PortPlayerHint().Value(), player->PortPlayerHintCount(),
+        player->PortControlDirOverride() ? 1 : 0, dir.GetX(), dir.GetY(), dir.GetZ());
+  }
+  if (const CScriptSpecialFunction* func = TCastToConstPtr< CScriptSpecialFunction >(ent)) {
+    Out("special function %d, locator \"%s\"", static_cast< int >(func->PortFunction()),
+        func->PortLocatorName().data());
+  }
+  if (const CScriptPlayerHint* hint = TCastToConstPtr< CScriptPlayerHint >(ent)) {
+    Out("player hint flags 0x%x, priority %d, count %d", hint->GetOverrideFlags(), hint->GetPriority(),
+        hint->GetObjectCount());
   }
   if (const CPhysicsActor* physics = TCastToConstPtr< CPhysicsActor >(ent)) {
     const CVector3f vel = physics->GetVelocityWR();
