@@ -675,6 +675,40 @@ static Sint16 _get_axis_value(const aurora::input::GameController* controller, /
   return 0;
 }
 
+// Whether an L/R analog's input also presses another PAD button (A on the right
+// trigger, say, kept there by binding both). Games read L/R's analog value on
+// its own (the pause screen pages on it, and the analog press comes before the
+// half-pull click), so that input then drives only the button.
+static bool trigger_axis_taken(const aurora::input::GameController* controller, PADAxis axis) {
+  const auto iter =
+      std::ranges::find_if(controller->m_axisMapping, [axis](const auto& pair) { return pair.padAxis == axis; });
+  if (iter == controller->m_axisMapping.end()) {
+    return false;
+  }
+  u32 native = static_cast<u32>(iter->nativeButton);
+  if (iter->nativeAxis.nativeAxis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER) {
+    native = PAD_NATIVE_BUTTON_TRIGGER_LEFT;
+  } else if (iter->nativeAxis.nativeAxis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+    native = PAD_NATIVE_BUTTON_TRIGGER_RIGHT;
+  } else if (iter->nativeAxis.nativeAxis != -1) {
+    return false;
+  }
+  if (native == PAD_NATIVE_BUTTON_INVALID) {
+    return false;
+  }
+  bool other = false;
+  for (const auto& mapping : controller->m_buttonMapping) {
+    if (mapping.nativeButton != native) {
+      continue;
+    }
+    if (mapping.padButton == PAD_TRIGGER_L || mapping.padButton == PAD_TRIGGER_R) {
+      return false;
+    }
+    other = true;
+  }
+  return other;
+}
+
 static void neutralize_status(PADStatus& status) {
   status.button = 0;
   status.stickX = 0;
@@ -930,8 +964,12 @@ u32 PADRead(PADStatus* status) {
       status[i].substickX = static_cast<int8_t>(dominant_axis_value(status[i].substickX, xr, -127, 127));
       status[i].substickY = static_cast<int8_t>(dominant_axis_value(status[i].substickY, yr, -127, 127));
 
-      Sint16 tl = std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_L));
-      Sint16 tr = std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_R));
+      Sint16 tl = trigger_axis_taken(controller, PAD_AXIS_TRIGGER_L)
+                      ? 0
+                      : std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_L));
+      Sint16 tr = trigger_axis_taken(controller, PAD_AXIS_TRIGGER_R)
+                      ? 0
+                      : std::max(static_cast<Sint16>(0), _get_axis_value(controller, PAD_AXIS_TRIGGER_R));
 
       if (controller->m_deadZones.emulateTriggers) {
         if (!leftTriggerSet && tl > controller->m_deadZones.leftTriggerActivationZone) {
