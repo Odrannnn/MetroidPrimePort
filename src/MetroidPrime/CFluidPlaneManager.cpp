@@ -87,7 +87,12 @@ float CFluidPlaneManager::GetLastRippleDeltaTime(TUniqueId rippler) const {
 
 void CFluidPlaneManager::CreateSplash(TUniqueId splasher, CStateManager& mgr,
                                       const CScriptWater& water, const CVector3f& pos, float factor,
-                                      bool sfx) {
+                                      bool sfx
+#ifdef TARGET_PC
+                                      ,
+                                      bool effect
+#endif
+) {
   if (!water.CanRippleAtPoint(pos)) {
     return;
   }
@@ -109,7 +114,11 @@ void CFluidPlaneManager::CreateSplash(TUniqueId splasher, CStateManager& mgr,
   }
 
   float splashScale = water.GetSplashEffectScale(factor);
-  if (water.GetSplashEffect(factor)) {
+  if (
+#ifdef TARGET_PC
+      effect &&
+#endif
+      water.GetSplashEffect(factor)) {
     CEntity* expl = rs_new CExplosion(
             *water.GetSplashEffect(factor), mgr.AllocateUniqueId(), true,
             CEntityInfo(water.GetCurrentAreaId(), CEntity::NullConnectionList),

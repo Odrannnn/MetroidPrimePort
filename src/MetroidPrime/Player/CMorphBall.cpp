@@ -437,6 +437,7 @@ CMorphBall::CMorphBall(CPlayer& player, float radius)
   xPortGlowVarIdx = 0;
   xPortFlashVarGen = nullptr;
   xPortWaterFactor = 0.f;
+  xPortTimeSinceBombJump = 0.f;
 #endif
 }
 
@@ -1233,6 +1234,9 @@ template class TReservedAverage< CQuaternion, 5 >;
 template class TReservedAverage< CVector3f, 5 >;
 
 void CMorphBall::UpdateBallDynamics(CStateManager& mgr, float dt) {
+#ifdef TARGET_PC
+  xPortTimeSinceBombJump = rstl::min_val(100.f, xPortTimeSinceBombJump + dt);
+#endif
   CVector3f ballContactNormal(0.f, 0.f, 0.f);
   CVector3f ballContactPoint(0.f, 0.f, 0.f);
   CTransform4f ballToWorldXf(CTransform4f::Identity());
@@ -1626,6 +1630,41 @@ void CMorphBall::PortBindGlowVars() {
     const float b = n1 + boost * (kGlowBoosted[k][idx * 2 + 1] - n1);
     gen->PortBindReal(xPortGlowVars[k], a + xPortWaterFactor * (b - a));
   }
+}
+
+// Remastered's CMorphBallMP1::Render (0xcea524) draws the hull with a model colour-add: the
+// damage flash (dmg,0,0)*Damaged[idx] plus the boost glow lerp(0, Glow[idx]*Intensity[idx], t).
+// The glow table is stored linear (SRGB_To_Linear of the bytes) in Remastered.
+CModelFlags CMorphBall::PortHullFlashFlags() const {
+  static const float kBoostedHullGlowIntensities[5] = {0.8f, 0.9f, 0.35f, 0.8f, 0.15f};
+  static const float kDamagedHullFlashIntensities[5] = {1.f, 1.f, 1.f, 1.f, 1.f};
+  static const float kBoostedHullGlow[5][3] = {{160.f, 25.f, 25.f},
+                                               {67.f, 159.f, 217.f},
+                                               {60.f, 150.f, 30.f},
+                                               {96.f, 51.f, 255.f},
+                                               {255.f, 60.f, 0.f}};
+  const float damage = x1e44_damageEffect;
+  const float charge = x1de8_boostChargeTime;
+  const float drain = x1df4_boostDrainTime;
+  if (damage <= 0.f && charge <= 0.f && drain <= 0.f) {
+    return CModelFlags::Normal();
+  }
+  const uint idx = rstl::min_val(4u, static_cast< uint >(x8_ballGlowColorIdx));
+  float add[3] = {0.f, 0.f, 0.f};
+  if (damage > 0.f) {
+    add[0] += damage * kDamagedHullFlashIntensities[idx];
+  }
+  if (charge > 0.f || drain > 0.f) {
+    const float t = drain == 0.f ? charge / gpTweakBall->GetBoostBallMaxChargeTime()
+                                 : 1.f - drain / gpTweakBall->GetBoostBallDrainTime();
+    for (int i = 0; i < 3; ++i) {
+      const float c = kBoostedHullGlow[idx][i] / 255.f;
+      const float lin = c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+      add[i] += lin * kBoostedHullGlowIntensities[idx] * t;
+    }
+  }
+  return CModelFlags(CModelFlags::kT_Two, CColor(rstl::min_val(1.f, add[0]), rstl::min_val(1.f, add[1]),
+                                                 rstl::min_val(1.f, add[2]), 1.f));
 }
 
 void CMorphBall::PortBindFlashColor() {
@@ -2278,6 +2317,11 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
     const float fade = 1.f - x1e44_damageEffect;
     ballFlags = CModelFlags(CModelFlags::kT_One, CColor(1.f, fade, fade, 1.f));
   }
+#ifdef TARGET_PC
+  if (x19b8_slowBlueTailSwooshGen->PortIsRemastered()) {
+    ballFlags = PortHullFlashFlags();
+  }
+#endif
 
   if (x1c1c_rainSplashGen.get() != nullptr && x1c1c_rainSplashGen->IsRaining()) {
     CSkinnedModel::SetPointGeneratorFunc(x1c1c_rainSplashGen.get(), &CMorphBall::PointGenerator);
@@ -2939,6 +2983,44 @@ void CMorphBall::FluidFXThink(CActor::EFluidState state, CScriptWater& water, CS
   const float flatMoveSpeed = x0_player.x4fc_flatMoveSpeed;
   const CVector3f splashPos(x0_player.GetTranslation().GetX(), x0_player.GetTranslation().GetY(),
                             water.GetTriggerBoundsWR().GetMaxPoint().GetZ());
+#ifdef TARGET_PC
+  // Remastered (CMorphBallMP1::FluidFXThink 0xcecb64; kb func/CMorphBallMP1-fluidfx).
+  if (x19b8_slowBlueTailSwooshGen->PortIsRemastered()) {
+    const float maxVel = x0_player.GetBallMaxVelocity();
+    const float threshold = rstl::min_val(8.f, maxVel - 0.1f);
+    // The 8th CreateSplash argument: no splash particles on lava.
+    const CFluidPlane::EFluidType type = water.GetFluidPlane().GetFluidType();
+    const bool effect = type != CFluidPlane::kFT_Lava && type != CFluidPlane::kFT_ThickLava;
+    CFluidPlaneManager* fluidMgr = mgr.FluidPlaneManager();
+    if (flatMoveSpeed >= threshold &&
+        fluidMgr->GetLastSplashDeltaTime(x0_player.GetUniqueId()) >=
+            0.1f * ((maxVel - flatMoveSpeed) / (maxVel - threshold))) {
+      fluidMgr->CreateSplash(x0_player.GetUniqueId(), mgr, water, splashPos, 0.3f,
+                             fluidState == CActor::kFS_EnteredFluid, effect);
+    }
+    if (flatMoveSpeed >= 0.2f) {
+      const float rippleDt = fluidMgr->GetLastRippleDeltaTime(x0_player.GetUniqueId());
+      float minRippleDt = 0.13f;
+      if (flatMoveSpeed > 15.f) {
+        minRippleDt = rstl::max_val(0.1f, 0.13f - (0.029999994f * (flatMoveSpeed - 15.f)) /
+                                                      (maxVel - flatMoveSpeed));
+      }
+      if (rippleDt >= minRippleDt) {
+        water.FluidPlane().AddRipple(flatMoveSpeed * 0.07f / maxVel, x0_player.GetUniqueId(),
+                                     splashPos, water, mgr);
+      }
+    }
+    if (fluidMgr->GetLastSplashDeltaTime(x0_player.GetUniqueId()) >= 0.2f) {
+      if (fluidState == CActor::kFS_EnteredFluid) {
+        fluidMgr->CreateSplash(x0_player.GetUniqueId(), mgr, water, splashPos, 0.3f, true, effect);
+      } else if (fluidState == CActor::kFS_LeftFluid && xPortTimeSinceBombJump >= 0.2f) {
+        fluidMgr->CreateSplash(x0_player.GetUniqueId(), mgr, water, splashPos, 0.15f, true,
+                               effect);
+      }
+    }
+    return;
+  }
+#endif
 
   if (flatMoveSpeed >= 8.f) {
     const float maxVel = x0_player.GetBallMaxVelocity();

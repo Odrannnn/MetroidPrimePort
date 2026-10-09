@@ -198,6 +198,9 @@ public:
   void DisableBallShadow();
   void PreRenderBallShadow(CStateManager&);
   void SetDisableSpiderBallTime(float time);
+#ifdef TARGET_PC
+  void PortResetTimeSinceBombJump() { xPortTimeSinceBombJump = 0.f; }
+#endif
 
   u32 GetMorphballModelShader() const { return x5c_ballModelShader; } // name?
 
@@ -327,10 +330,12 @@ private:
   const void* xPortFlashVarGen;
   u16 xPortFlashVar;
   float xPortWaterFactor;
+  float xPortTimeSinceBombJump; // CMorphBallMP1 + 0x1f64, capped at 100
   void PortBindSwooshVars();
   void PortUpdateWaterFactor(float dt, const CStateManager& mgr);
   void PortBindGlowVars();
   void PortBindFlashColor();
+  CModelFlags PortHullFlashFlags() const;
 #endif
   TReservedAverage< CQuaternion, 5 > x1c3c_ballOrientAvg;
   TReservedAverage< CVector3f, 5 > x1c90_ballPosAvg;
