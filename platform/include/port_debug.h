@@ -1,6 +1,7 @@
 #ifndef METROID_PRIME_PORT_PORT_DEBUG_H
 #define METROID_PRIME_PORT_PORT_DEBUG_H
 
+#include "port_input_settings.h"
 #include "port_rando_gen.h"
 
 #include <cstdint>
@@ -331,7 +332,7 @@ void SetTurboBinding(int slot, int code);
 // A second controller button for a GameCube button (Aurora maps one each),
 // ORed in by CDolphinController: `bit` is the PAD_BUTTON_* / PAD_TRIGGER_* bit's
 // position, the code as ShiftBinding's slot 2; -1 for none.
-constexpr int kPadAltCount = 16;
+constexpr int kPadAltCount = PortInput::kPadAltCount;
 int PadAltButton(int bit);
 void SetPadAltButton(int bit, int code);
 // What mouse button `button` (0 left, 1 middle, 2 right, 3 X1, 4 X2) does under
@@ -454,9 +455,9 @@ bool MouseCrosshair();
 // Crosshair size in percent while mouse aim or twin stick is on (the retail
 // free-aim crosshair is sized for a held R, and it stays up the whole time
 // under those modes). Retail R free-aim keeps 100.
-const int kCrosshairSizeMin = 25;
-const int kCrosshairSizeMax = 100;
-const int kCrosshairSizeDefault = 50;
+const int kCrosshairSizeMin = PortInput::kCrosshairSizeMin;
+const int kCrosshairSizeMax = PortInput::kCrosshairSizeMax;
+const int kCrosshairSizeDefault = PortInput::kCrosshairSizeDefault;
 int CrosshairSize();
 void SetCrosshairSize(int percent);
 unsigned MouseWeaponButtons(unsigned held);
