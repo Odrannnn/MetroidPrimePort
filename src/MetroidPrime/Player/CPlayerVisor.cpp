@@ -7,6 +7,8 @@
 #include "MetroidPrime/Factories/CScannableObjectInfo.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/TCastTo.hpp"
+#include "Collision/CMaterialFilter.hpp"
+#include "Collision/CRayCastResult.hpp"
 #include "MetroidPrime/Tweaks/CTweakGui.hpp"
 #include "MetroidPrime/Tweaks/CTweakGuiColors.hpp"
 #include "MetroidPrime/Tweaks/CTweakPlayer.hpp"
@@ -50,6 +52,14 @@ static bool PortScanIconsRemastered(const CModel* model) {
   }
   return false;
 }
+
+// Port: stand-ins for Remastered's runtime-built scan filters (0x4b22be0 family, contents not
+// recoverable from the binary); same shape as the orbit line-of-sight filters.
+static const CMaterialFilter kPortScanLosFilter = CMaterialFilter::MakeIncludeExclude(
+    CMaterialList(kMT_Solid), CMaterialList(kMT_ProjectilePassthrough, kMT_ScanPassthrough, kMT_Player));
+static const CMaterialFilter kPortScanOccluderFilter = CMaterialFilter::MakeIncludeExclude(
+    CMaterialList(kMT_Solid, kMT_Occluder),
+    CMaterialList(kMT_ProjectilePassthrough, kMT_ScanPassthrough, kMT_Player));
 
 // Remastered's smoothstep of the pop-in t (0xe62e74).
 static float PortScanSmooth(float t) { return t * t * (3.f - 2.f * t); }
@@ -725,9 +735,28 @@ void CPlayerVisor::UpdateScanObjectIndicators(const CStateManager& mgr, float dt
           orbitPos, mgr.GetPlayer()->GetOrbitZoneMode(), mgr.GetPlayer()->GetOrbitZoneType());
 #ifdef TARGET_PC
       if (portRem) {
-        // t eases 3/s toward in the box and out of it (the line-of-sight term Remastered
-        // ANDs in, IsScanOrGrapplePointVisibleToRender, is not reproduced).
-        target.xPort_t = CMath::Clamp(0.f, target.xPort_t + (inBox ? 3.f : -3.f) * dt, 1.f);
+        // t eases 3/s toward "in the box and visible" (0xe632c4). Visibility is last frame's
+        // (the render list is swapped one frame late). Remastered takes static LOS or a GPU
+        // occlusion query of a 0.2x0.2 sprite; the port approximates both with one world ray
+        // from the camera to the orbit position (unverified filter, no GPU query).
+        const bool wasVisible = target.xPort_visible;
+        {
+          const CVector3f camPos = camera.GetTranslation();
+          const CVector3f toTarget = actor->GetOrbitPosition(mgr) - camPos;
+          const float len = toTarget.Magnitude();
+          bool clear = false;
+          if (len > 0.f && len < gpTweakPlayer->GetScanMaxTargetDistance()) {
+            const CVector3f dir = toTarget * (1.f / len);
+            TEntityList nearList;
+            TUniqueId hitId = kInvalidUniqueId;
+            CStateManager& smgr = const_cast< CStateManager& >(mgr);
+            smgr.BuildNearList(nearList, camPos, dir, len, kPortScanOccluderFilter, nullptr);
+            clear = smgr.RayWorldIntersection(hitId, camPos, dir, len, kPortScanLosFilter, nearList)
+                        .IsInvalid();
+          }
+          target.xPort_visible = clear;
+        }
+        target.xPort_t = CMath::Clamp(0.f, target.xPort_t + ((inBox && wasVisible) ? 3.f : -3.f) * dt, 1.f);
       }
 #endif
       if (inBox != target.xc_inBox) {
