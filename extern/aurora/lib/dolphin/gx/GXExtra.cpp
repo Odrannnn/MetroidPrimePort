@@ -6,6 +6,7 @@
 #include "../../gfx/probe.hpp"
 #include "../../gfx/shadow.hpp"
 #include "../../gfx/volfog.hpp"
+#include "../../gfx/thermal.hpp"
 #include "../../gfx/xray.hpp"
 #include "../../webgpu/gpu_prof.hpp"
 
@@ -188,6 +189,25 @@ GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRa
   u32 words[sizeof(params) / sizeof(u32)];
   std::memcpy(words, &params, sizeof(words));
   GX_WRITE_AURORA(GX_AURORA_PORT_XRAY);
+  for (const u32 word : words) {
+    GX_WRITE_U32(word);
+  }
+  return true;
+}
+
+GXBool GXPortSetThermalLut(const u8* rgba, u32 size) { return aurora::gfx::thermal::set_lut(rgba, size); }
+
+GXBool GXPortThermalPass(const f32 tone[3][4], const f32 v[4], const f32 r[4]) {
+  if (!aurora::gfx::thermal::ensure_task()) {
+    return false;
+  }
+  aurora::gfx::thermal::Params params{};
+  std::memcpy(params.tone, tone, sizeof(params.tone));
+  std::memcpy(params.v, v, sizeof(params.v));
+  std::memcpy(params.r, r, sizeof(params.r));
+  u32 words[sizeof(params) / sizeof(u32)];
+  std::memcpy(words, &params, sizeof(words));
+  GX_WRITE_AURORA(GX_AURORA_PORT_THERMAL);
   for (const u32 word : words) {
     GX_WRITE_U32(word);
   }

@@ -287,6 +287,14 @@ void GXPortSetParticleFog(GXBool on);
 // vignette after the post effects. `tone` is the curve the EFB was drawn through. False if it
 // could not be recorded.
 GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[3]);
+// Port extension: the thermal visor's heat gradient (256x4 RGBA8, as the Remastered import writes it).
+// False if the size is wrong. Call before the first GXPortThermalPass.
+GXBool GXPortSetThermalLut(const u8* rgba, u32 size);
+// Port extension: one of Remastered's thermal visor post passes over the EFB as drawn so far.
+// `v` = (pass: 0 cold / 1 hot, area heat, thermal time in s, ghost: 1 blends the previous hot
+// frame), `r` = the cold pass's two CRandom16 draws. `tone` is the curve the EFB was drawn through.
+// False if it could not be recorded.
+GXBool GXPortThermalPass(const f32 tone[3][4], const f32 v[4], const f32 r[4]);
 // Stores a 33x33x33 RGBA8 colour grade LUT (red fastest) under a non-zero id.
 void GXPortColorGradeLut(u32 id, const u8* rgba);
 // The average radiance (linear rgb) of the latest frame measured by GXPortPostProcess, and a

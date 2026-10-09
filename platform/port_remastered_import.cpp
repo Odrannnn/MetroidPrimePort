@@ -3091,6 +3091,26 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       }
       ++compassModels;
     }
+    // The thermal visor post's heat gradient (port_thermal.h): raw RGBA, 256x4.
+    {
+      // a30fbad7-6022-44d0-b832-f8b13f04bb58, in the order the bytes are written, else the mixed-endian one.
+      static constexpr ModelUuid kPlain = {0xa3, 0x0f, 0xba, 0xd7, 0x60, 0x22, 0x44, 0xd0,
+                                           0xb8, 0x32, 0xf8, 0xb1, 0x3f, 0x04, 0xbb, 0x58};
+      static constexpr ModelUuid kSwapped = {0xd7, 0xba, 0x0f, 0xa3, 0x22, 0x60, 0xd0, 0x44,
+                                             0xb8, 0x32, 0xf8, 0xb1, 0x3f, 0x04, 0xbb, 0x58};
+      std::vector<uint8_t> raw;
+      TxtrImage lut;
+      std::string lutError;
+      if ((remastered.ReadTexture(kPlain, raw, lutError) || remastered.ReadTexture(kSwapped, raw, lutError)) &&
+          DecodeTxtr(raw.data(), raw.size(), lut, lutError) && lut.width == 256 && lut.height == 4 &&
+          lut.rgba.size() == 256 * 4 * 4) {
+        if (!makeIO(0, hudFolder).write("thermal.lut", lut.rgba)) {
+          AddLine("thermal visor gradient: cannot write");
+        }
+      } else {
+        AddLine("thermal visor gradient: " + (lutError.empty() ? std::string("unexpected size") : lutError));
+      }
+    }
     if (hudFrames == 0 && compassModels == 0) {
       fs::remove_all(hudFolder, ec);
     }

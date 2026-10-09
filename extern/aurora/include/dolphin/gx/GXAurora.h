@@ -326,6 +326,8 @@ extern "C" {
 #define GX_AURORA_PORT_PARTICLE_FOG 0x006A
 // Port extension: Remastered's X-ray visor post passes (GXPortXRayPass). Payload: 48 u32 words.
 #define GX_AURORA_PORT_XRAY 0x006B
+// Port extension: one pass of Remastered's thermal visor post (GXPortThermalPass). Payload: 20 u32 words.
+#define GX_AURORA_PORT_THERMAL 0x006C
 
 #define GX2_SET_POLYGON_OFFSET 0x1000
 

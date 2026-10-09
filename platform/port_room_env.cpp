@@ -12,6 +12,7 @@
 #include "port_room_env_lod.h"
 #include "port_room_geo.h"
 
+#include <Kyoto/CRandom16.hpp>
 #include <dolphin/gx/GXExtra.h>
 
 #include <algorithm>
@@ -1547,6 +1548,54 @@ float GlowScale() {
   // 2^(3 - EV) / 2^(3 - static EV).
   const float scale = std::exp2(sFrame.shown[5] - sFrame.ev.value);
   return std::isfinite(scale) && scale > 0.f ? scale : 1.f;
+}
+
+// Remastered's thermal visor post (kb topic/thermal-post.md); MP_THERMAL_POST=0 keeps the retail
+// blend, as does Original experience or a mod without the imported gradient.
+static float sThermalTime = 0.f;
+static bool sThermalLutSent = false;
+
+static bool ThermalPostEnabled() {
+  static const bool sEnv = port::EnvFlag("MP_THERMAL_POST", true);
+  return sEnv && !PortDebug::OriginalExperience();
+}
+
+void ThermalTick(float dt, bool thermalActive) {
+  sThermalTime = thermalActive ? sThermalTime + dt : 0.f;
+}
+
+bool ThermalPass(bool hot, float areaHeat) {
+  if (!ThermalPostEnabled()) {
+    return false;
+  }
+  if (!sThermalLutSent) {
+    const std::string path = PortMods::ThermalLutPath();
+    if (path.empty()) {
+      return false;
+    }
+    sThermalLutSent = true;
+    std::ifstream in(PortGci::PathFromString(path), std::ios::binary);
+    const std::vector<uint8_t> data = ReadAll(in);
+    if (!in || !GXPortSetThermalLut(data.data(), uint32_t(data.size()))) {
+      PortLog::Write("room env: %s: cannot read the thermal gradient\n", path.c_str());
+      return false;
+    }
+  }
+  float tone[3][4];
+  if (!(FrameExposure() > 0.f) || !Tone(tone)) {
+    return false;
+  }
+  // The cold pass's noise offset: two draws of Remastered's CRandom16 (seed 0x54524d4c), one
+  // generator kept across calls.
+  static CRandom16 sRandom(0x54524d4c);
+  float r[4] = {0.f, 0.f, 0.f, 0.f};
+  if (!hot) {
+    r[0] = sRandom.Float();
+    r[1] = sRandom.Float();
+  }
+  // The ghost: the previous frame's target over this one, past 0.1 s of thermal time.
+  const float v[4] = {hot ? 1.f : 0.f, areaHeat, sThermalTime, sThermalTime > 0.1f ? 1.f : 0.f};
+  return GXPortThermalPass(tone, v, r);
 }
 
 void XRayTick(float dt, bool xrayActive) {

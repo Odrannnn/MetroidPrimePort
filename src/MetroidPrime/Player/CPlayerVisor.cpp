@@ -231,6 +231,7 @@ void CPlayerVisor::Update(float dt, const CStateManager& mgr) {
   CPlayerState::EPlayerVisor activeVisor = playerState.GetActiveVisor(mgr);
 #ifdef TARGET_PC
   PortRoomEnv::XRayTick(dt, activeVisor == CPlayerState::kPV_XRay);
+  PortRoomEnv::ThermalTick(dt, activeVisor == CPlayerState::kPV_Thermal);
 #endif
   CPlayerState::EPlayerVisor curVisor = playerState.GetCurrentVisor();
   CPlayerState::EPlayerVisor transVisor = playerState.GetTransitioningVisor();

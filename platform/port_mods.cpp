@@ -58,6 +58,8 @@ std::unordered_map<uint32_t, std::string> sRoomGeos;
 std::unordered_map<uint32_t, std::string> sRoomLiquids;
 // <FRME id>.hudbars files, by frame.
 std::unordered_map<uint32_t, std::string> sHudBars;
+// thermal.lut: the thermal visor's heat gradient (port_thermal.h).
+std::string sThermalLut;
 struct BoundTexture {
   aurora::texture::ReplacementRegistration registration;
   uint32_t id = 0;
@@ -351,6 +353,8 @@ std::string HudBarsPath(uint32_t frame) {
   return found != sHudBars.end() ? found->second : std::string();
 }
 
+std::string ThermalLutPath() { return sThermalLut; }
+
 std::string RoomGeoPath(uint32_t mrea) {
   const auto found = sRoomGeos.find(mrea);
   return found != sRoomGeos.end() ? found->second : std::string();
@@ -402,6 +406,7 @@ void Initialize() {
   sRoomGeos.clear();
   sRoomLiquids.clear();
   sHudBars.clear();
+  sThermalLut.clear();
   sStatus.folder = Folder();
   sStatus.active = PortDebug::ModsEnabled() && !sSuspended;
   if (sStatus.folder.empty()) {
@@ -504,6 +509,10 @@ void Initialize() {
       }
       if (ParseMaterialCubeName(name, id)) {
         sMaterialCubes[id] = PathString(file);
+        continue;
+      }
+      if (name == "thermal.lut") {
+        sThermalLut = PathString(file);
         continue;
       }
       if (PortHudBars::ParseFileName(name, id)) {

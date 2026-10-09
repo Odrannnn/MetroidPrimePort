@@ -3462,6 +3462,9 @@ void CStateManager::DrawWorld() const {
       }
       CGraphics::SetDepthRange(0.125f, 1.f);
     }
+#ifdef TARGET_PC
+    if (!PortRoomEnv::ThermalPass(false, xf28_thermColdScale2 + xf24_thermColdScale1))
+#endif
     gpRender->DoThermalBlendCold();
     xf34_thermalFlag = kTD_Hot;
     for (const TUniqueId* it = renderFirst.begin(); it != renderFirst.end(); ++it) {
@@ -3566,6 +3569,9 @@ void CStateManager::DrawWorld() const {
     CGraphics::SetDepthRange(0.125f, 1.f);
   }
   if (thermal) {
+#ifdef TARGET_PC
+    if (!PortRoomEnv::ThermalPass(true, xf28_thermColdScale2 + xf24_thermColdScale1))
+#endif
     gpRender->DoThermalBlendHot();
     gpRender->SetThermal(false, 0.f, CColor::Black());
     xf34_thermalFlag = kTD_Bypass;
