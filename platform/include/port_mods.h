@@ -222,6 +222,8 @@ std::string BrdfLutPath();
 std::vector<std::string> GalleryPaths();
 // The <FRME id>.hudbars a mod supplies for a HUD frame (port_hud_bars.h); empty when none.
 std::string HudBarsPath(uint32_t frame);
+// The thermal.lut a mod supplies (the thermal visor's heat gradient, 256x4 RGBA8); empty when none.
+std::string ThermalLutPath();
 // The <MREA id>.roomgeo a mod supplies for an area (port_room_geo.h); empty when none.
 std::string RoomGeoPath(uint32_t mrea);
 // The same for its liquid surfaces (port_room_liquid.h).

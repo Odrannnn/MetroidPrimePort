@@ -253,7 +253,7 @@ typedef struct {
   f32 viewToWorld[3][4];   // rows: world = row . (view, 1)
   f32 worldToVolume[3][4]; // rows: world -> the ambient volume's texture coordinates
   f32 frustum[4];          // left, right, bottom, top at a view depth of 1
-  f32 depth[4];            // near, far, and the GX z range the world draws in (min, max)
+  f32 depth[4];            // near, far, and the GX z range the world draws in (min, max), and the scale of the low-resolution target (pass 1)
   f32 fog[4];              // range, scatter, absorb, density
   f32 shape[4];            // height slope, height bias (over world z), noise frequency, noise strength
   f32 noise[4];            // xyz: the noise's offset, w: the light's largest channel
@@ -281,6 +281,20 @@ void GXPortVolumetricFogEnd(void);
 // their blend mode is additive or premultiplied (the static render state's "no fog" flag), when
 // they are not fogged at all and only add to the already fogged frame.
 void GXPortSetParticleFog(GXBool on);
+// Port extension: one of Remastered's X-ray visor post passes (shader 00089f0) over the EFB as
+// drawn so far. `p` is the shader's constants p0..p7; p[0][2] == 1 runs the distortion after the
+// opaque world (it reads the depth, whose GX z range is depthRange), anything else the ramp and
+// vignette after the post effects. `tone` is the curve the EFB was drawn through. False if it
+// could not be recorded.
+GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[3]);
+// Port extension: the thermal visor's heat gradient (256x4 RGBA8, as the Remastered import writes it).
+// False if the size is wrong. Call before the first GXPortThermalPass.
+GXBool GXPortSetThermalLut(const u8* rgba, u32 size);
+// Port extension: one of Remastered's thermal visor post passes over the EFB as drawn so far.
+// `v` = (pass: 0 cold / 1 hot, area heat, thermal time in s, ghost: 1 blends the previous hot
+// frame), `r` = the cold pass's two CRandom16 draws. `tone` is the curve the EFB was drawn through.
+// False if it could not be recorded.
+GXBool GXPortThermalPass(const f32 tone[3][4], const f32 v[4], const f32 r[4]);
 // Stores a 33x33x33 RGBA8 colour grade LUT (red fastest) under a non-zero id.
 void GXPortColorGradeLut(u32 id, const u8* rgba);
 // The average radiance (linear rgb) of the latest frame measured by GXPortPostProcess, and a

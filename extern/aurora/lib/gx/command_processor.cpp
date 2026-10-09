@@ -2,6 +2,8 @@
 
 #include "../gfx/bloom.hpp"
 #include "../gfx/volfog.hpp"
+#include "../gfx/thermal.hpp"
+#include "../gfx/xray.hpp"
 #include "../gfx/depth_peek.hpp"
 #include "../gfx/probe.hpp"
 #include "../gfx/shadow.hpp"
@@ -1298,6 +1300,22 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.volFog = false;
       g_gxState.dirty |= DirtyPipeline;
     }
+  } else if (subCmd == GX_AURORA_PORT_XRAY) {
+    gfx::xray::Params params;
+    u32 words[sizeof(params) / sizeof(u32)];
+    for (u32& word : words) {
+      word = reader.read<u32>();
+    }
+    std::memcpy(&params, words, sizeof(params));
+    gfx::xray::record(params);
+  } else if (subCmd == GX_AURORA_PORT_THERMAL) {
+    gfx::thermal::Params params;
+    u32 words[sizeof(params) / sizeof(u32)];
+    for (u32& word : words) {
+      word = reader.read<u32>();
+    }
+    std::memcpy(&params, words, sizeof(params));
+    gfx::thermal::record(params);
   } else if (subCmd == GX_AURORA_PORT_PARTICLE_FOG) {
     const bool on = reader.read<u8>() != 0;
     if (g_gxState.particleFog != on) {
