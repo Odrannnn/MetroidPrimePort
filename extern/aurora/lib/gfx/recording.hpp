@@ -81,6 +81,11 @@ Range push_indices(ArrayRef<T> data, size_t alignment) {
   return push_indices(reinterpret_cast<const uint8_t*>(data.data()), data.size() * sizeof(T), alignment);
 }
 Range push_uniform(const uint8_t* data, size_t length);
+// Reserves a MaxUniformSize window of uniform data for the caller to fill in place, saving push_uniform's
+// copy; unmap_uniform then gives back what wasn't used. out is null (and the range OverflowRange) when the
+// frame's uniform buffer is full. Nothing else may push uniforms in between.
+Range map_uniform(uint8_t*& out);
+void unmap_uniform(Range& range, size_t length);
 template <typename T>
 Range push_uniform(const T& data) {
   return push_uniform(reinterpret_cast<const uint8_t*>(&data), sizeof(T));

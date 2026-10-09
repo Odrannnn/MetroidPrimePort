@@ -323,6 +323,8 @@ public:
   }
 
   void clear() { m_length = 0; }
+  // Drops everything past size bytes.
+  void truncate(size_t size) noexcept { m_length = std::min(m_length, size); }
   void reserve_extra(size_t size) { resize(m_length + size, true); }
 
   ByteBuffer clone() const {
