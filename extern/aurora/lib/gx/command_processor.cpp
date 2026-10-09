@@ -32,73 +32,60 @@ namespace {
 constexpr Module Log{"aurora::gx::fifo"};
 
 u16 prepare_idx_buffer(ByteBuffer& buf, GXPrimitive prim, u16 vtxStart, u16 vtxCount) noexcept {
-  u16 numIndices = 0;
+  // Sized once and written directly: this runs for nearly every draw.
+  u32 numIndices = 0;
   if (prim == GX_QUADS) {
-    buf.reserve_extra((vtxCount / 4) * 6 * sizeof(u16));
-
-    for (u16 v = 0; v < vtxCount; v += 4) {
-      u16 idx0 = vtxStart + v;
-      u16 idx1 = vtxStart + v + 1;
-      u16 idx2 = vtxStart + v + 2;
-      u16 idx3 = vtxStart + v + 3;
-
-      buf.append(idx0);
-      buf.append(idx1);
-      buf.append(idx2);
-      numIndices += 3;
-
-      buf.append(idx2);
-      buf.append(idx3);
-      buf.append(idx0);
-      numIndices += 3;
-    }
+    numIndices = (u32(vtxCount) + 3) / 4 * 6;
   } else if (prim == GX_TRIANGLES) {
-    buf.reserve_extra(vtxCount * sizeof(u16));
-    for (u16 v = 0; v < vtxCount; ++v) {
-      const u16 idx = vtxStart + v;
-      buf.append(idx);
-      ++numIndices;
-    }
-  } else if (prim == GX_TRIANGLEFAN) {
-    buf.reserve_extra(((u32(vtxCount) - 3) * 3 + 3) * sizeof(u16));
-    for (u16 v = 0; v < vtxCount; ++v) {
-      const u16 idx = vtxStart + v;
-      if (v < 3) {
-        buf.append(idx);
-        ++numIndices;
-        continue;
-      }
-      buf.append(std::array{vtxStart, static_cast<u16>(idx - 1), idx});
-      numIndices += 3;
-    }
-  } else if (prim == GX_TRIANGLESTRIP) {
-    buf.reserve_extra(((static_cast<u32>(vtxCount) - 3) * 3 + 3) * sizeof(u16));
-    for (u16 v = 0; v < vtxCount; ++v) {
-      const u16 idx = vtxStart + v;
-      if (v < 3) {
-        buf.append(idx);
-        ++numIndices;
-        continue;
-      }
-      if ((v & 1) == 0) {
-        buf.append(std::array{static_cast<u16>(idx - 2), static_cast<u16>(idx - 1), idx});
-      } else {
-        buf.append(std::array{static_cast<u16>(idx - 1), static_cast<u16>(idx - 2), idx});
-      }
-      numIndices += 3;
-    }
+    numIndices = vtxCount;
+  } else if (prim == GX_TRIANGLEFAN || prim == GX_TRIANGLESTRIP) {
+    numIndices = vtxCount <= 3 ? vtxCount : 3 + (u32(vtxCount) - 3) * 3;
   } else if (prim == GX_LINES || prim == GX_LINESTRIP || prim == GX_POINTS) {
-    buf.reserve_extra(6 * sizeof(u16));
-    buf.append<u16>(0);
-    buf.append<u16>(1);
-    buf.append<u16>(3);
-    buf.append<u16>(3);
-    buf.append<u16>(2);
-    buf.append<u16>(0);
     numIndices = 6;
   } else
     UNLIKELY FATAL("unsupported primitive type {}", static_cast<u32>(prim));
-  return numIndices;
+  u16* out = reinterpret_cast<u16*>(buf.append_uninit(numIndices * sizeof(u16)));
+  if (prim == GX_QUADS) {
+    for (u32 v = 0; v < vtxCount; v += 4) {
+      const u16 idx0 = vtxStart + v;
+      *out++ = idx0;
+      *out++ = idx0 + 1;
+      *out++ = idx0 + 2;
+      *out++ = idx0 + 2;
+      *out++ = idx0 + 3;
+      *out++ = idx0;
+    }
+  } else if (prim == GX_TRIANGLES) {
+    for (u32 v = 0; v < vtxCount; ++v) {
+      *out++ = vtxStart + v;
+    }
+  } else if (prim == GX_TRIANGLEFAN) {
+    for (u32 v = 0; v < vtxCount; ++v) {
+      const u16 idx = vtxStart + v;
+      if (v >= 3) {
+        *out++ = vtxStart;
+        *out++ = idx - 1;
+      }
+      *out++ = idx;
+    }
+  } else if (prim == GX_TRIANGLESTRIP) {
+    for (u32 v = 0; v < vtxCount; ++v) {
+      const u16 idx = vtxStart + v;
+      if (v >= 3) {
+        *out++ = (v & 1) == 0 ? idx - 2 : idx - 1;
+        *out++ = (v & 1) == 0 ? idx - 1 : idx - 2;
+      }
+      *out++ = idx;
+    }
+  } else {
+    *out++ = 0;
+    *out++ = 1;
+    *out++ = 3;
+    *out++ = 3;
+    *out++ = 2;
+    *out++ = 0;
+  }
+  return static_cast<u16>(numIndices);
 }
 
 // GX FIFO opcodes - use CP_ prefix to avoid clashing with GXCommandList.h macros
@@ -839,7 +826,13 @@ void handle_aurora(ByteReader& reader) noexcept {
     auto& array = g_gxState.arrays[attrIdx];
     const auto newData = reinterpret_cast<void*>(arrayAddr);
     if (array.data != newData || array.size != arraySize || array.le != le) {
-      if (array.le != le || (attrIdx == GX_VA_TEX7 && (array.data == nullptr) != (newData == nullptr))) {
+      // Only an indexed attribute's array, or TEX7's under pbr (bind_pos_active), is in the
+      // pipeline config (a VCD or pbr change dirties it anyway).
+      const auto type = g_gxState.vtxDesc[attrIdx];
+      const bool inConfig =
+          type == GX_INDEX8 || type == GX_INDEX16 || (attrIdx == GX_VA_TEX7 && g_gxState.pbr != 0);
+      if (inConfig &&
+          (array.le != le || (attrIdx == GX_VA_TEX7 && (array.data == nullptr) != (newData == nullptr)))) {
         // Endianness is baked into the shader
         g_gxState.dirty |= DirtyPipeline;
       }

@@ -686,6 +686,12 @@ void cp_array_stride(u8 addr, u32 value) noexcept {
   u32 attrIdx = addr - 0xB0 + GX_VA_POS;
   if (attrIdx < GX_VA_MAX_ATTR) {
     g_gxState.arrays[attrIdx].stride = static_cast<u8>(value);
+    // Only an indexed attribute's stride is in the pipeline config (a VCD change dirties it
+    // anyway). Skinned and static models toggle TEX7's between draws.
+    const auto type = g_gxState.vtxDesc[attrIdx];
+    if (type == GX_INDEX8 || type == GX_INDEX16) {
+      g_gxState.dirty |= DirtyPipeline;
+    }
   }
 }
 
@@ -702,7 +708,7 @@ constexpr auto kCpRegs = [] {
   }
   for (u8 i = 0; i < 0x10; ++i) {
     regs[0xA0 + i] = {cp_arraybase_unsupported, 0, /* alwaysHandle */ true};
-    regs[0xB0 + i] = {cp_array_stride, DirtyPipeline};
+    regs[0xB0 + i] = {cp_array_stride, 0};
   }
   return regs;
 }();
