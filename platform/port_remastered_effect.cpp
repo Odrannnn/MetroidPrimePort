@@ -1290,14 +1290,16 @@ void CollectGuids(const EffectNode& node, std::vector<EffectGuid>& out) {
 bool ParseEffect(const uint8_t* data, size_t size, EffectNode& out, std::string& error, size_t* failOffset) {
   out = EffectNode();
   if (size < kRootAt + 25 || std::memcmp(data, "RFRM", 4) != 0 ||
-      (std::memcmp(data + 0x14, "GENP", 4) != 0 && std::memcmp(data + 0x14, "SWSH", 4) != 0)) {
+      (std::memcmp(data + 0x14, "GENP", 4) != 0 && std::memcmp(data + 0x14, "SWSH", 4) != 0 &&
+       std::memcmp(data + 0x14, "ELSM", 4) != 0 && std::memcmp(data + 0x14, "ELC2", 4) != 0)) {
     error = "not a GENP form";
     return false;
   }
   Parser parser(data, size);
-  // A standalone swoosh (SWSH form) has the same header, with a SWSH root.
-  const bool swoosh = std::memcmp(data + 0x14, "SWSH", 4) == 0;
-  if (!(swoosh ? parser.Child(kRootAt) : parser.Generator(kRootAt, true))) {
+  // A standalone swoosh (SWSH form) or electric effect (ELSM, ELC2) has the same header, with
+  // that form as its root.
+  const bool child = std::memcmp(data + 0x14, "GENP", 4) != 0;
+  if (!(child ? parser.Child(kRootAt) : parser.Generator(kRootAt, true))) {
     char text[64];
     std::snprintf(text, sizeof(text), "no parse past 0x%zx", parser.Furthest());
     error = text;
