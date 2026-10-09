@@ -181,6 +181,7 @@ bool sHudWide = true;
 bool sCinemaBars = false;
 bool sSharpScanWindow = false;
 bool sShowShaderCompilation = true;
+bool sShowMenuHint = true;
 int sHudScale = PortDebug::kHudScaleMax;
 int sCrosshairOpacity = PortDebug::kCrosshairOpacityMax;
 bool sCrosshairCustomColor = false;
@@ -586,6 +587,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sSharpScanWindow = ParseBool(value);
   } else if (key == "show_shader_compilation") {
     sShowShaderCompilation = ParseBool(value);
+  } else if (key == "show_menu_hint") {
+    sShowMenuHint = ParseBool(value);
   } else if (key == "hud_wide") {
     sHudWide = ParseBool(value);
   } else if (key == "hud_scale") {
@@ -924,6 +927,7 @@ std::string SettingsText() {
   file << "cinema_bars=" << (sCinemaBars ? 1 : 0) << '\n';
   file << "sharp_scan_window=" << (sSharpScanWindow ? 1 : 0) << '\n';
   file << "show_shader_compilation=" << (sShowShaderCompilation ? 1 : 0) << '\n';
+  file << "show_menu_hint=" << (sShowMenuHint ? 1 : 0) << '\n';
   file << "hud_scale=" << sHudScale << '\n';
   file << "crosshair_opacity=" << sCrosshairOpacity << '\n';
   {
@@ -5050,7 +5054,7 @@ void DrawShaderCompilationToast() {
 void DrawMenuHintToast() {
   static double sShownAt = -1.0;
   static bool sDone = false;
-  if (sDone) {
+  if (sDone || !sShowMenuHint) {
     return;
   }
   if (sVisible) {
@@ -5984,6 +5988,11 @@ void DrawVideoQuality() {
   }
   ImGui::SetItemTooltip("A small progress bar while the shader cache compiles at startup (longest on the first\n"
                         "start after an install or update). Draws whose shader isn't ready yet are skipped.");
+  if (ImGui::Checkbox("Show F1 hint at launch", &sShowMenuHint)) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("A note in the top left corner for the first seconds of each launch saying how to\n"
+                        "open this panel.");
   locked = BeginOriginalLocked();
   {
     int aniso = 0;
