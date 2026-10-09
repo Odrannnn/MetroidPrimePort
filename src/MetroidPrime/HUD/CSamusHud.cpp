@@ -1054,6 +1054,33 @@ void CSamusHud::UpdateHudDamage(float dt, const CStateManager& mgr, uint helmetV
           : x3f4_damageFilterAmt / peak;
   colorGain *= x3f8_damageFilterAmtGain;
   colorGain = CMath::Clamp(0.f, colorGain, 1.f);
+#ifdef TARGET_PC
+  // Remastered's UpdateHudDamage (0xcad714) takes the tint from its own colour tables (LDTA
+  // TweakGuiColorsMP1: foot 0x398 = (1, 0x3ececedd, 0x3ca0a0f5, 0x3e4ccccd), ball 0x3a8 =
+  // (1, 0x3ececedd, 0, 1), pulse 0x428 = (1, 0.25, 0, 1) x alpha 1), scales the tail of a short
+  // flash by 0.25, tests the summed alpha as a float and has no 0.75 ball factor.
+  const bool remasteredTint =
+      (x274_loadedFrmeBaseHud != nullptr && x274_loadedFrmeBaseHud->PortHasHudInterference()) ||
+      (x288_loadedSelectedHud != nullptr && x288_loadedSelectedHud->PortHasHudInterference());
+  const bool ball = mgr.GetPlayer()->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed;
+  const CColor color0 = remasteredTint
+                            ? (ball ? CColor(1.f, 0x1.9d9dbap-2f, 0.f, 1.f)
+                                    : CColor(1.f, 0x1.9d9dbap-2f, 0x1.4141eap-6f, 0x1.99999ap-3f))
+                                  .WithAlphaModulatedBy(colorGain)
+                            : ambientColor.WithAlphaModulatedBy(colorGain);
+  const CColor color1 = remasteredTint ? CColor(1.f, 0.25f, 0.f, 1.f)
+                                             .WithAlphaModulatedBy(x3ec_damageLightPulser)
+                                       : gpTweakGuiColors->GetDamageAmbientPulseColor()
+                                             .WithAlphaModulatedBy(x3ec_damageLightPulser);
+  CColor filterColor = CColor::Add(color0, color1);
+  if (remasteredTint && x3f0_damageFilterAmtInit - peak < 2.f * dt) {
+    filterColor = filterColor.WithAlphaModulatedBy(0.25f);
+  }
+  if (remasteredTint ? filterColor.GetAlpha() > 0.f : filterColor.GetAlphau8()) {
+    if (!remasteredTint && ball) {
+      filterColor = filterColor.WithAlphaModulatedBy(0.75f);
+    }
+#else
   const CColor color0 = ambientColor.WithAlphaModulatedBy(colorGain);
   const CColor color1 =
       gpTweakGuiColors->GetDamageAmbientPulseColor().WithAlphaModulatedBy(x3ec_damageLightPulser);
@@ -1062,6 +1089,7 @@ void CSamusHud::UpdateHudDamage(float dt, const CStateManager& mgr, uint helmetV
     if (mgr.GetPlayer()->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed) {
       filterColor = filterColor.WithAlphaModulatedBy(0.75f);
     }
+#endif
     x3a8_camFilter.SetFilter(CCameraFilterPass::kFT_Add, CCameraFilterPass::kFS_Fullscreen, 0.f,
                              filterColor, kInvalidAssetId);
   } else {
