@@ -23,6 +23,9 @@ bool ShiftHeld();
 bool TurboHeld();
 // The PAD bits whose alt controller button (PortDebug::PadAltButton) is held.
 unsigned HeldAltPadButtons();
+// True if the native controller button (SDL_GamepadButton) presses a PAD button
+// other than L, as its main or alt binding.
+bool PadButtonBoundBesidesL(int native);
 // The Controls page's Keyboard & mouse and Controller sub-tabs of the debug
 // overlay. Each polls the capture and shows its prompt, so a binding can be
 // started from either.

@@ -227,6 +227,8 @@ void CDolphinController::ReadDevices() {
     // under twin-stick left shift (and the touch overlay's held Beam button) is a
     // beam shift too, and so are the L trigger and LB unless a pad button is
     // bound as the shift (Remastered's layout locks on with L and jumps with LB).
+    // LB bound to another button (e.g. a visor's D-pad direction) is that button
+    // only: held as the shift, it would turn its own D-pad press into a beam.
     // Touch has its own shift button, so there L and LB stay lock-on and jump.
     // Under mouse aim an L from a key or mouse button is lock-on only: the
     // keyboard has its own beam keys, and the arrows stay the D-pad while locked on.
@@ -235,10 +237,10 @@ void CDolphinController::ReadDevices() {
     const bool padShiftBound = PortDebug::ShiftBinding(2) >= 0 || PortDebug::TouchActive();
     const bool lFromPad =
         !keyboard.triggerL && !mouseL && (x4_status[0].button & PAD_TRIGGER_L) != 0;
-    const bool beamModifier =
-        shiftHeld || (keys != nullptr && keys[SDL_SCANCODE_LSHIFT] != 0) ||
-        (!padShiftBound && (lFromPad ||
-                            (pad != nullptr && SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))));
+    const bool lbShift = pad != nullptr && SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) &&
+                         !PortControls::PadButtonBoundBesidesL(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    const bool beamModifier = shiftHeld || (keys != nullptr && keys[SDL_SCANCODE_LSHIFT] != 0) ||
+                              (!padShiftBound && (lFromPad || lbShift));
     if (beamModifier) {
       ApplyBeamShift(x4_status[0]);
     }

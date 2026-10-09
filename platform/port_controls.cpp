@@ -937,7 +937,8 @@ void ShiftTooltip() {
     ImGui::SetTooltip("While held, the D-pad picks beams instead of switching visors:\n"
                       "each direction gives the beam that direction on the C-stick does.\n"
                       "Under Twin Stick Aim, left shift does it too, and so do L and LB\n"
-                      "while no controller button is bound here.");
+                      "while no controller button is bound here (LB only while it has\n"
+                      "no other binding).");
   }
 }
 
@@ -1163,6 +1164,22 @@ unsigned HeldAltPadButtons() {
     }
   }
   return buttons;
+}
+
+bool PadButtonBoundBesidesL(s32 native) {
+  u32 count = 0;
+  const PADButtonMapping* list = PADGetButtonMappings(kControlPort, &count);
+  for (u32 i = 0; list != nullptr && i < count; ++i) {
+    if (list[i].nativeButton == static_cast< u32 >(native) && list[i].padButton != PAD_TRIGGER_L) {
+      return true;
+    }
+  }
+  for (const SControlPadButton& row : kControlPadButtons) {
+    if (row.button != PAD_TRIGGER_L && PortDebug::PadAltButton(PadBit(row.button)) == native) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool Capturing() {
