@@ -16,12 +16,14 @@
 #include <condition_variable>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <filesystem>
 #include <limits>
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <vector>
 
 #include <SDL3/SDL_iostream.h>
 #include <absl/container/flat_hash_map.h>
@@ -71,7 +73,7 @@ constexpr size_t BuildPipelinesPerFrame = 5;
 #else
 constexpr size_t BuildPipelinesPerFrame = 1;
 #endif
-static std::thread g_pipelineThread;
+static std::vector<std::thread> g_pipelineThreads;
 static std::atomic_bool g_pipelineThreadEnd = false;
 static std::condition_variable g_pipelineQueueCv;
 static std::condition_variable g_pipelineReadyCv;
@@ -80,6 +82,7 @@ static std::deque<PendingPipeline> g_pipelineQueue;
 static std::deque<PendingPipeline> g_backgroundPipelineQueue;
 static absl::flat_hash_set<PipelineRef> g_pendingPipelines;
 static std::atomic_bool g_gpuCachePrunePending = false;
+static std::chrono::steady_clock::time_point g_pipelineLoadStart;
 
 static sqlite3* g_pipelineCacheDb = nullptr;
 static sqlite3_stmt* g_pipelineCacheLoadStmt = nullptr;
@@ -467,6 +470,10 @@ static wgpu::RenderPipeline create_pipeline_timed(PipelineRef hash, NewPipelineC
 static void notify_pipeline_ready(bool queued) {
   ++createdPipelines;
   if (queued && --queuedPipelines == 0 && g_gpuCachePrunePending.exchange(false, std::memory_order_acq_rel)) {
+    Log.info("pipeline cache: {} pipelines ready {} ms after startup", static_cast<uint32_t>(createdPipelines),
+             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                                                   g_pipelineLoadStart)
+                 .count());
     // Prune GPU cache entries after fully loading the pipeline cache.
     webgpu::cache_prune();
   }
@@ -1050,17 +1057,15 @@ static void pipeline_worker() {
   tracy::SetThreadName("Pipeline compilation thread");
 #endif
 
-  bool hasMore = false;
   while (g_hasPipelineThread || g_pipelinesPerFrame < BuildPipelinesPerFrame) {
     PendingPipeline pending;
     {
       std::unique_lock lock{g_pipelineMutex};
       if (g_hasPipelineThread) {
-        if (!hasMore) {
-          g_pipelineQueueCv.wait(lock, [] {
-            return !g_pipelineQueue.empty() || !g_backgroundPipelineQueue.empty() || g_pipelineThreadEnd;
-          });
-        }
+        // Several workers share the queues, so check them again under the lock every time.
+        g_pipelineQueueCv.wait(lock, [] {
+          return !g_pipelineQueue.empty() || !g_backgroundPipelineQueue.empty() || g_pipelineThreadEnd;
+        });
       } else if (g_pipelineQueue.empty() && g_backgroundPipelineQueue.empty()) {
         return;
       }
@@ -1079,13 +1084,26 @@ static void pipeline_worker() {
                                                 .firstFrameUsed = pending.firstFrameUsed,
                                             });
       g_pendingPipelines.erase(pending.hash);
-      hasMore = !g_pipelineQueue.empty() || !g_backgroundPipelineQueue.empty();
     }
     if (!g_hasPipelineThread) {
       ++g_pipelinesPerFrame;
     }
     notify_pipeline_ready(true);
   }
+}
+
+// Pipelines compile on a pool: Tint and the driver's compiler are single threaded, so one
+// worker left a cold cache (a new install, a driver update) compiling for over a minute on
+// phones. GL keeps one worker, since its contexts are per thread. MP_PIPELINE_THREADS
+// overrides the count.
+static size_t pipeline_thread_count() {
+  if (webgpu::g_backendType == wgpu::BackendType::OpenGL || webgpu::g_backendType == wgpu::BackendType::OpenGLES) {
+    return 1;
+  }
+  if (const char* env = std::getenv("MP_PIPELINE_THREADS"); env != nullptr && *env != '\0') {
+    return std::clamp<size_t>(std::strtoul(env, nullptr, 10), 1, 16);
+  }
+  return std::clamp<size_t>(std::thread::hardware_concurrency() / 2, 1, 8);
 }
 
 template <typename PipelineConfig, typename CreateFn>
@@ -1208,11 +1226,16 @@ void initialize_pipeline_cache() {
   g_pipelineThreadEnd = false;
   g_gpuCachePrunePending = false;
 
+  g_pipelineLoadStart = std::chrono::steady_clock::now();
   if (webgpu::g_backendType == wgpu::BackendType::WebGPU) {
     g_hasPipelineThread = false;
   } else {
     g_hasPipelineThread = true;
-    g_pipelineThread = std::thread(pipeline_worker);
+    const size_t threads = pipeline_thread_count();
+    for (size_t i = 0; i < threads; ++i) {
+      g_pipelineThreads.emplace_back(pipeline_worker);
+    }
+    Log.info("pipeline cache: {} compile thread(s)", threads);
   }
 
   const size_t loadedCount = load_pipeline_cache();
@@ -1230,7 +1253,10 @@ void shutdown_pipeline_cache() {
     g_pipelineThreadEnd = true;
     g_pipelineQueueCv.notify_all();
     g_pipelineReadyCv.notify_all();
-    g_pipelineThread.join();
+    for (auto& thread : g_pipelineThreads) {
+      thread.join();
+    }
+    g_pipelineThreads.clear();
   }
   g_hasPipelineThread = false;
 
