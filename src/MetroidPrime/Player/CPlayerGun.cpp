@@ -164,6 +164,10 @@ static const SPortRapidCharge* PortRapidChargeFor(CPlayerState::EBeamId beam) {
              ? &skPortRapidCharge[int(beam)]
              : nullptr;
 }
+
+// Port: set each frame when the gun runs Remastered's effects (its holo
+// transition PART is the Remastered one), so the gun moves as there too.
+static bool sPortRemasteredGun = false;
 #endif
 
 static const CPlayerState::EItemType skItemArr[2] = {
@@ -909,6 +913,9 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
     UpdateLeftArmTransform(beamModel, mgr);
   }
 
+#ifdef TARGET_PC
+  sPortRemasteredGun = x774_holoTransitionGen->PortIsRemastered();
+#endif
   x6a0_motionState.Update((x2f0_pressedFireButtonStates & 1) != 0 && x832_28_readyForShot &&
                               x32c_chargePhase < kCP_AnimAndSfx && !player.IsInFreeLook(),
                           advDt, x4a8_gunWorldXf, mgr);
@@ -2222,6 +2229,14 @@ void CPlayerGun::CMotionState::Update(bool firing, float dt, CTransform4f& xf, C
     float extendT = xc_curExtendDist * (1.0f / gGunExtendDistance);
     CTransform4f other =
         CTransform4f::RotateZ(CRelAngle::FromDegrees(extendT * -4.f * (extendT - 1.f) * 15.f));
+#ifdef TARGET_PC
+    // Remastered pitches the gun 10 degrees on the lock-on extend instead of
+    // yawing it 15: RotateX(+a) in its swizzled gun space ((x,y,z) -> (-x,z,y))
+    // is RotateX(-a) here (kb func/gunmotion-state-sway-extend).
+    if (sPortRemasteredGun) {
+      other = CTransform4f::RotateX(CRelAngle::FromDegrees(extendT * 4.f * (extendT - 1.f) * 10.f));
+    }
+#endif
     other.SetTranslation(CVector3f(0.f, xc_curExtendDist, 0.f));
     xf = xf * other;
   } else if (x24_fireState == kFS_StartFire || x24_fireState == kFS_Firing) {
@@ -2774,6 +2789,12 @@ void CPlayerGun::UpdateGunLight(const CTransform4f& xf, CStateManager& mgr) {
         CLight genLight = chargeFx->GetLight();
         genLight.SetColor(
             CColor::Lerp(0, genLight.GetColor().GetColor_u32(), x340_chargeBeamFactor));
+#ifdef TARGET_PC
+        // Remastered has no charge-beam light: its charge effects light nothing.
+        if (chargeFx->PortIsRemastered()) {
+          genLight.SetColor(CColor::Black());
+        }
+#endif
         light->SetLight(genLight);
       }
     }
@@ -2880,8 +2901,21 @@ void CPlayerGun::ProcessGunMorph(float dt, CStateManager& mgr) {
     break;
   case CGunMorph::kGS_InWipe:
   case CGunMorph::kGS_OutWipe:
-    x774_holoTransitionGen->SetGlobalScale(kScaleVector);
-    x774_holoTransitionGen->SetGlobalTranslation(CVector3f(0.f, x678_morph.GetYLerp(), 0.f));
+#ifdef TARGET_PC
+    // Remastered grows its holo to 3 while wiping in and starts it 0.4 lower
+    // (morph range -0.2..1.292392, retail 0.2..; kb func/gunmorph-constants).
+    if (x774_holoTransitionGen->PortIsRemastered()) {
+      x774_holoTransitionGen->SetGlobalScale(gunState == CGunMorph::kGS_InWipe
+                                                 ? CVector3f(3.f, 3.f, 3.f)
+                                                 : kScaleVector);
+      x774_holoTransitionGen->SetGlobalTranslation(CVector3f(
+          0.f, x678_morph.GetYLerp() - 0.4f * (1.f - x678_morph.GetTransitionFactor()), 0.f));
+    } else
+#endif
+    {
+      x774_holoTransitionGen->SetGlobalScale(kScaleVector);
+      x774_holoTransitionGen->SetGlobalTranslation(CVector3f(0.f, x678_morph.GetYLerp(), 0.f));
+    }
     x774_holoTransitionGen->Update(dt);
     break;
   default:
