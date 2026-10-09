@@ -165,6 +165,9 @@ jobs:
           cat startup-error.log
           [ "$code" = 1 ] || { echo "Unexpected exit code: $code" >&2; exit 1; }
           grep -q 'no disc image given' startup-error.log || { echo 'Packaged executable did not reach main' >&2; exit 1; }
+          # The data folder must be outside the bundle, or the signature breaks.
+          [ ! -e "dist/Metroid Prime Port.app/Contents/Resources/user" ] || { echo 'Startup wrote into the app bundle' >&2; exit 1; }
+          codesign --verify --deep --strict "dist/Metroid Prime Port.app"
 
       - uses: actions/upload-artifact@v4
         with:
