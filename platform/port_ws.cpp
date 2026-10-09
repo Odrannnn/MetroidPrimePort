@@ -46,6 +46,7 @@
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 #if !defined(_WIN32)
 #include <csignal>
 #include <ctime>
@@ -610,6 +611,82 @@ size_t LoadWindowsRoots(X509_STORE* store) {
   CertCloseStore(system, 0);
   ERR_clear_error(); // duplicates are reported as errors
   return loaded;
+}
+
+// Whether Windows itself trusts the chain the server sent, for a TLS server
+// named `host`. Windows fetches a root it doesn't have yet (Automatic Root
+// Certificates Update) only while CryptoAPI builds a chain, and browsers no
+// longer do that, so the local ROOT store LoadWindowsRoots reads can lack a
+// root as common as ISRG Root X1 (issue #51).
+bool WindowsTrustsChain(X509_STORE_CTX* ctx, const char* host) {
+  X509* leaf = X509_STORE_CTX_get0_cert(ctx);
+  if (leaf == nullptr || host == nullptr || *host == '\0')
+    return false;
+  if (X509_check_host(leaf, host, 0, 0, nullptr) != 1)
+    return false;
+  auto toContext = [](X509* cert) -> PCCERT_CONTEXT {
+    unsigned char* der = nullptr;
+    const int size = i2d_X509(cert, &der);
+    if (size <= 0)
+      return nullptr;
+    PCCERT_CONTEXT context = CertCreateCertificateContext(X509_ASN_ENCODING, der, static_cast<DWORD>(size));
+    OPENSSL_free(der);
+    return context;
+  };
+  PCCERT_CONTEXT leafContext = toContext(leaf);
+  if (leafContext == nullptr)
+    return false;
+  // The server's intermediates, which CryptoAPI only knows from this store.
+  HCERTSTORE sent = CertOpenStore(CERT_STORE_PROV_MEMORY, 0, 0, 0, nullptr);
+  if (STACK_OF(X509)* chain = X509_STORE_CTX_get0_untrusted(ctx); chain != nullptr && sent != nullptr) {
+    for (int i = 0; i < sk_X509_num(chain); ++i) {
+      if (PCCERT_CONTEXT context = toContext(sk_X509_value(chain, i))) {
+        CertAddCertificateContextToStore(sent, context, CERT_STORE_ADD_USE_EXISTING, nullptr);
+        CertFreeCertificateContext(context);
+      }
+    }
+  }
+  char serverAuth[] = szOID_PKIX_KP_SERVER_AUTH;
+  LPSTR usages[] = {serverAuth};
+  CERT_CHAIN_PARA chainPara{};
+  chainPara.cbSize = sizeof(chainPara);
+  chainPara.RequestedUsage.dwType = USAGE_MATCH_TYPE_AND;
+  chainPara.RequestedUsage.Usage.cUsageIdentifier = 1;
+  chainPara.RequestedUsage.Usage.rgpszUsageIdentifier = usages;
+  PCCERT_CHAIN_CONTEXT chainContext = nullptr;
+  bool trusted = false;
+  if (CertGetCertificateChain(nullptr, leafContext, nullptr, sent, &chainPara, 0, nullptr, &chainContext)) {
+    // The host name was checked above, so the SSL policy checks the chain only.
+    SSL_EXTRA_CERT_CHAIN_POLICY_PARA sslPara{};
+    sslPara.cbSize = sizeof(sslPara);
+    sslPara.dwAuthType = AUTHTYPE_SERVER;
+    CERT_CHAIN_POLICY_PARA policyPara{};
+    policyPara.cbSize = sizeof(policyPara);
+    policyPara.pvExtraPolicyPara = &sslPara;
+    CERT_CHAIN_POLICY_STATUS status{};
+    status.cbSize = sizeof(status);
+    trusted = CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_SSL, chainContext, &policyPara, &status) &&
+              status.dwError == 0;
+    CertFreeCertificateChain(chainContext);
+  }
+  if (sent != nullptr)
+    CertCloseStore(sent, 0);
+  CertFreeCertificateContext(leafContext);
+  return trusted;
+}
+
+// OpenSSL's verification against the loaded ROOT store, and where that fails,
+// Windows' own.
+int VerifyWithWindowsFallback(X509_STORE_CTX* ctx, void*) {
+  if (X509_verify_cert(ctx) == 1)
+    return 1;
+  SSL* ssl = static_cast<SSL*>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
+  const char* host = ssl != nullptr ? SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name) : nullptr;
+  if (!WindowsTrustsChain(ctx, host))
+    return 0;
+  X509_STORE_CTX_set_error(ctx, X509_V_OK);
+  ERR_clear_error();
+  return 1;
 }
 #endif
 
@@ -1345,12 +1422,17 @@ bool Client::OpenTransport(const std::string& host, uint16_t port, bool secure, 
       if (loaded == 0)
         return TransportFail("no TLS root certificates: loaded 0 from " + tried);
 #ifdef _WIN32
-    } else if (LoadWindowsRoots(SSL_CTX_get_cert_store(mSslContext)) == 0) {
-      return TransportFail("no TLS root certificates in the Windows ROOT store");
-#endif
+    } else {
+      // An empty ROOT store is not fatal: Windows' own check can still fetch
+      // the root the server needs.
+      LoadWindowsRoots(SSL_CTX_get_cert_store(mSslContext));
+      SSL_CTX_set_cert_verify_callback(mSslContext, VerifyWithWindowsFallback, nullptr);
+    }
+#else
     } else if (SSL_CTX_set_default_verify_paths(mSslContext) != 1) {
       return TransportFail("could not load the system TLS trust store: " + TlsQueueText());
     }
+#endif
     mSsl = SSL_new(mSslContext);
     if (mSsl == nullptr)
       return TransportFail("could not create TLS session: " + TlsQueueText());
