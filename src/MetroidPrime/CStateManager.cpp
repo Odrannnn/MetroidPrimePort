@@ -300,7 +300,27 @@ bool PortStartAreaMusic(CStateManager& mgr) {
 }
 } // namespace
 
-bool PortWarpKeepsMusic() { return sPortWarpMusicPending; }
+// Port: a save-state load (PortSaveState) quits like a world warp and then
+// places Samus away from the spawn point, so it keeps the track the same way
+// and starts the area's music once she is placed. With none found, the old
+// track plays on in the same world and stops in another.
+bool sPortStateLoadMusic = false;
+bool sPortStateLoadSameWorld = false;
+
+bool PortWarpKeepsMusic() { return sPortWarpMusicPending || sPortStateLoadMusic; }
+
+void PortKeepMusicForStateLoad(bool sameWorld) {
+  sPortStateLoadMusic = true;
+  sPortStateLoadSameWorld = sameWorld;
+}
+
+void PortStartStateLoadMusic(CStateManager& mgr) {
+  if (!sPortStateLoadMusic)
+    return;
+  sPortStateLoadMusic = false;
+  if (!PortStartAreaMusic(mgr) && !sPortStateLoadSameWorld)
+    CStreamAudioManager::StopAll();
+}
 
 namespace {
 
