@@ -656,6 +656,22 @@ constexpr MatchedEffect kMatchedEffects[] = {
     {"7f32b829-f973-453a-8391-9d4a5c40d38d", 0x1362BBA1},  // 76C35773 60 234 380
     {"c6b710b7-641a-48b6-8e2d-6a64b375c0e1", 0x66916F48},  // 0E49E5F0 14 19 28 39
     {"ffda5e7f-1a9f-4acb-a5b8-dbe83791dd2e", 0x898E2B24},  // FD49BDDE 18 23 976 981
+    {"#action-name", 0},  // method of the entries below
+    // The six CHPRs that carry a CActionData names block name each effect
+    // slot (retail ANCS names them the same way); the slot's bone is a
+    // retail locator, so the name and bone pick the PART. Re-derives the 15
+    // known slots with no wrong one (build/fx-name/vote.py). 74d36fa3 also
+    // sits on D3BD37FC in one slot, where 4d818e87 holds it in four: left out.
+    {"24a6477f-84e7-4183-9fe4-7c939d430e67", 0xDE82C4CF},  // 2ECB9FBF ScubaBubbles
+    {"53941a1a-f87b-422c-a4c3-b4a891d4c730", 0xCF07A1F9},  // 2ECB9FBF ScubaGear
+    {"3bf15154-3b64-43af-9a09-9d407e186ebe", 0x66CD9E79},  // 2ECB9FBF Eyes
+    {"45f196c2-0073-42bb-abde-13d7231aff66", 0x235E23AD},  // 2ECB9FBF JetPack
+    {"2aef03af-ea67-4e3d-9fff-e5936472ba91", 0x7579513D},  // 2ECB9FBF LandingSmoke
+    {"cdf30852-2632-4596-9dd1-e85e2908daea", 0x4A5F51FD},  // 65177C3A Fire1/Fire2
+    {"4d818e87-ce9b-4581-aeba-e8155b813082", 0xD3BD37FC},  // 65177C3A Fire2/Fire3
+    {"74d36fa3-690a-456e-9469-09b97fcc554a", 0x1233E83C},  // 65177C3A Fire3
+    {"00aadc3b-c393-4e1b-b379-2b114bc1bbe8", 0x9884632F},  // 6B45F06D Eyes
+    {"cc86c15d-0f2a-4807-a727-eda4723f3a9c", 0x273375E3},  // 8169653A TwoEyes
     {"#by-hand", 0},  // method of the entries below
     // By hand, from the events (build/fx-hand/view.py) and textures (sheet.py).
     // Ridley's jaw effect: the same frames as 4B55EA17 in 07BEED38 (26 42),

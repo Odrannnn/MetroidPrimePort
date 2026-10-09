@@ -357,6 +357,25 @@ bool CDSPStream::IsStreamAvailable(int handle) {
   return ret;
 }
 
+#ifdef TARGET_PC
+// True while a silenced stream of this kind still holds its slot. Silence only
+// mutes it; the mixer's next UpdateStream (or the pending read's completion)
+// frees it.
+bool CDSPStream::IsReleasing(int oneshot) {
+  bool ret = false;
+  BOOL ints = StreamLock();
+  for (int i = 0; i < 4; ++i) {
+    const CDSPStream& stream = g_Streams[i];
+    if (stream.x1_oneshot == oneshot && stream.x0_state != 0 &&
+        (stream.xe8_silenced != 0 || stream.xf0_stopRequested != 0)) {
+      ret = true;
+    }
+  }
+  StreamUnlock(ints);
+  return ret;
+}
+#endif
+
 void CDSPStream::StopStream() {
   if (xec_readsPending == 0) {
     CloseFiles();

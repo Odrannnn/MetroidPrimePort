@@ -112,7 +112,7 @@
 //          (linear, times the intensity), f32 near, f32 far (already times the entity's scale),
 //          f32 inner, f32 outer (cone, full angles in degrees), u32 group (as a sun's),
 //          u32 links, then links as a grade's with the light actions (kLightStart...),
-//          u8 animated, u8 playing, u8 loop, u8 offAtEnd, u8 animFalloff, u8 pad[3],
+//          u8 animated, u8 playing, u8 loop, u8 offAtStart, u8 animFalloff, u8 pad[3],
 //          f32 length, f32 scale x, f32 scale y, f32 intensity, f32 rgb[3] (the colour's
 //          two factors, for a timeline without their spline), then kLightSplines splines (PointLight's
 //          order), each u32 bytes (0: none) and that many bytes of a CMayaSpline padded to 4.
@@ -318,7 +318,8 @@ struct SunLight {
 // stops at the end unless `loop` wraps it; backwards mirrors that) gives t, and then the
 // intensity is intensity(t), the colour the gradient (r, g, b) at saturate(color(t)), near and
 // far near(t) and far(t) times the entity's scale x and y, the cone inner(t) and outer(t);
-// a missing spline keeps the static value. `offAtEnd`: its finished event deactivates it.
+// a missing spline keeps the static value. `offAtStart`: its reached-start event (a backward
+// play ending at t = 0) deactivates it; the forward end doesn't.
 // Links: kShow / kHide / kToggle set it active; the light actions (each only while active):
 // Start plays from where it is, Stop pauses, Reset rewinds to 0, Forward / Backward set the
 // direction, Reverse flips it.
@@ -353,7 +354,7 @@ struct PointLight {
   bool animated = false;
   bool playing = false;
   bool loop = false;
-  bool offAtEnd = false;
+  bool offAtStart = false;
   uint8_t animFalloff = 3;
   float length = 0.f;
   float scale[2] = {1.f, 1.f};
@@ -724,6 +725,10 @@ float SkyGain();
 // pass) takes the frame's. 0.10 where rooms are not exposed or MP_REMASTERED_GLOW_EXPOSURE=0,
 // the constant the glow used to be baked at.
 float GlowGain(bool frameExposed);
+// What a bare unlit surface (mode bit 131072: the Surface shaders 67135a0b / 6fc4d540) is
+// multiplied by besides GlowScale, so that it is exposed at the frame's 2^(3 - EV) as the
+// tonemap exposes it; GlowGain's rule without the 0.10 fallback (1 outside exposed rooms).
+float UnlitGain(bool frameExposed);
 void SetStaticExposure(bool on);
 bool StaticExposure();
 // Whether a model lit by the baked light (an absolute ambient or a volume) also takes the

@@ -271,8 +271,19 @@ those back to retail PARTs (checked 2026-10-05):
   group against the retail EVNT's), and their generators. Scripts: `build/fx-hand/` (`bones2.py`,
   `frames.py`, `view.py` lists what is left per character, `sheet.py` draws
   texture contact sheets).
-- Still unpaired (2026-10-05): the CHPR effect sets name 242 fresh GENPs, 113
-  of them unpaired (103 of the 232 in a retail ANCS). These rules were tried and
+- By action name (2026-10-08): six CHPRs (2ECB9FBF, 65177C3A, 6B45F06D, 8169653A,
+  8DC8052E, F9F4B18F) keep CActionData's names block (ext block: ne pairs of u16
+  start/stop stream ids, then ne NUL-terminated names), the same named effect
+  list retail's ANCS holds. A spawn stream (op 0: tag index at d[7:9], bone
+  u16/192 after 05) gives the slot's GENP and bone; the retail ANCS effect of
+  the same name whose locator is that bone gives the PART. It re-derives the 15
+  known slots (3 GENPs) with none wrong, and adds 10 GENPs (Scuba*, Eyes,
+  JetPack, LandingSmoke, Fire1-3's three, TwoEyes). Left out: SpeedSwoosh (a
+  retail SWHC, not a PART) and 74d36fa3 on D3BD37FC (one slot, against four for
+  4d818e87). Only these six CHPRs carry names. Import: 539 imported (529 before).
+  Scripts `build/fx-name/` (`vote.py`).
+- Still unpaired (2026-10-08): the CHPR effect sets name 242 fresh GENPs, 103
+  of them unpaired (93 of the 232 in a retail ANCS). These rules were tried and
   fail when a known pair is hidden, so none is used:
   - Texture ids: only 2 GENP textures are carried-over copies.
   - LTME/MAXP: the child generators' values differ from retail in 291 of 423.

@@ -322,6 +322,8 @@ extern "C" {
 // Payload: u32 count, then count records of 16 f32 (see GXPortSetRoomLights). Lasts until the
 // end of the frame.
 #define GX_AURORA_PORT_ROOM_LIGHTS 0x0069
+// Port extension: the draws that follow are particles (GXPortSetParticleFog). Payload: u8 on.
+#define GX_AURORA_PORT_PARTICLE_FOG 0x006A
 
 #define GX2_SET_POLYGON_OFFSET 0x1000
 

@@ -63,6 +63,11 @@ void CStreamAudioManager::UpdateSoftwareChannel(ESoftwareChannel chan, float dt)
   if (p.x10_playState == 0) {
     SDSPStreamCacheEntry& qp = s_QueuedPlayers[chan];
     if (qp.x10_playState != 0) {
+#ifdef TARGET_PC
+      // See PlaySoftwareAudio: wait until the stopped track's streams are freed.
+      if (CDSPStreamManager::IsReleasing(chan == kSC_Default ? 0 : 1))
+        return;
+#endif
       PlaySoftwareAudio(chan, qp.x0_fileName, qp.x18_fadeIn, qp.x1c_fadeOut,
                         static_cast< uchar >(qp.x14_volume), qp.x28_music);
       qp = SDSPStreamCacheEntry();
@@ -197,6 +202,16 @@ void CStreamAudioManager::PlaySoftwareAudio(ESoftwareChannel chan, const rstl::s
       p.x10_playState = 1;
     }
   } else {
+#ifdef TARGET_PC
+    // A stopped track's streams are only muted until the mixer frees them. On
+    // the GameCube the new file's header read outlasted that; here it lands at
+    // once, the stream allocation fails and the track is dropped (issue #20: a
+    // boss theme queued behind the room music never played). Keep it queued.
+    if (CDSPStreamManager::IsReleasing(chan == kSC_Default ? 0 : 1)) {
+      qp = SDSPStreamCacheEntry(1, fileName, volume & 0xFF, fadeIn, fadeOut, -1, music);
+      return;
+    }
+#endif
     int state;
     int vol;
     if (fadeIn > 0.f) {

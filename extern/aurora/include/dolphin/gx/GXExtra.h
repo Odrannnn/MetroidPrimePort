@@ -211,7 +211,7 @@ void GXSetPBRBakedLightModulation(const f32 rgb[3]);
 // pow(saturate(dot(plane, (view position, 1))), power): `plane` gives 0 at the low end of the
 // model's bounds along its own y and 1 at the high end (power 1: no fade). `back` and `top` scale the materials'
 // strengths (4 and 2 in Remastered). Null plane turns it off.
-void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 top);
+void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 top, f32 bindScale, f32 bindOffset);
 // Aurora extension: the constants of a kind 14 PBR material (Remastered's BoundaryShield force
 // field), as the shader reads them. Rows 0-6 are the material's CCH0..CCH6, row 7 is
 // DIFC (x, y, z, w). Stays in effect until changed; null is all zero.
@@ -276,6 +276,11 @@ GXBool GXPortVolumetricFog(const GXPortFogParams* params);
 // opaque ones per pixel as the full-screen pass, blended and additive ones per vertex (blended:
 // colour T + in-scatter, additive: colour T). Harmless when no fog was drawn.
 void GXPortVolumetricFogEnd(void);
+// Marks the draws up to the next call with false as particles' (inside the volumetric fog). As
+// Remastered's particle renderers, they fog themselves per vertex as colour T + in-scatter unless
+// their blend mode is additive or premultiplied (the static render state's "no fog" flag), when
+// they are not fogged at all and only add to the already fogged frame.
+void GXPortSetParticleFog(GXBool on);
 // Stores a 33x33x33 RGBA8 colour grade LUT (red fastest) under a non-zero id.
 void GXPortColorGradeLut(u32 id, const u8* rgba);
 // The average radiance (linear rgb) of the latest frame measured by GXPortPostProcess, and a

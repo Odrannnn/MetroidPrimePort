@@ -196,6 +196,7 @@ bool sSwapScanXray = false;
 bool sTouchColors = false; // Android touch overlay: the GameCube pad's colours
 bool sTouchLabels = true;  // and each button's function under its letter
 bool sTouchTurbo = false;  // a Turbo button beside Fire
+bool sTouchFloatingStick = true;  // the left stick appears where the left half is touched
 bool sFastMorph = false;
 bool sInvulnerable = false;
 // MP_GODMODE, for this run only: -1 unset, else 0 or 1. Never saved, and changing the
@@ -222,10 +223,6 @@ bool sOpenGlesAtStart = false;
 // Setting `gpu_driver`: an installed custom Vulkan driver's id (port_gpu_driver.h), "" = the system's.
 std::string sGpuDriver;
 std::string sGpuDriverAtStart;
-// Setting `gpu_driver_ok`: the driver last kept after its trial run (DrawGpuDriverTrial).
-std::string sGpuDriverKept;
-// This run is a driver's trial: the marker main() left, removed once the user keeps it.
-std::string sGpuDriverTrialMarker;
 bool sUnlockHardMode = false;
 // Setting `storage_clamp`: -1 auto (aurora decides), 0 off, 1 on; read once when shaders are first made.
 int sStorageClamp = -1;
@@ -397,6 +394,7 @@ std::atomic< bool > sOverlayVisible{false};
 std::atomic< bool > sTouchColorsFlag{false};
 std::atomic< bool > sTouchLabelsFlag{true};
 std::atomic< bool > sTouchTurboFlag{false};
+std::atomic< bool > sTouchFloatingStickFlag{true};
 // The Android touch overlay's gap to the side edges for every control, and the
 // left stick's extra gap on top of it, in dp. Read from the UI thread.
 constexpr float kTouchMarginMaxDp = 300.f;
@@ -614,8 +612,6 @@ void ApplySetting(const std::string& key, const std::string& value) {
   } else if (key == "gpu_driver") {
     sGpuDriver = value;
     sGpuDriverAtStart = value;
-  } else if (key == "gpu_driver_ok") {
-    sGpuDriverKept = value;
   } else if (key == "storage_clamp") {
     const int v = std::atoi(value.c_str());
     sStorageClamp = v < 0 ? -1 : (v > 0 ? 1 : 0);
@@ -640,6 +636,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sTouchLabels = ParseBool(value);
   } else if (key == "touch_turbo") {
     sTouchTurbo = ParseBool(value);
+  } else if (key == "touch_floating_stick") {
+    sTouchFloatingStick = ParseBool(value);
   } else if (key == "stick_aim_rate") {
     const float f = static_cast< float >(std::atof(value.c_str()));
     if (std::isfinite(f) && f >= 50.f && f <= 4000.f) {
@@ -907,7 +905,6 @@ void SaveSettings() {
   file << "msaa=" << sMsaa << '\n';
   file << "opengles=" << (sOpenGles ? 1 : 0) << '\n';
   file << "gpu_driver=" << sGpuDriver << '\n';
-  file << "gpu_driver_ok=" << sGpuDriverKept << '\n';
   file << "anisotropy=" << sAnisotropy << '\n';
   file << "unlock_hard_mode=" << (sUnlockHardMode ? 1 : 0) << '\n';
   file << "unlock_fusion_suit=" << (sUnlockFusionSuit ? 1 : 0) << '\n';
@@ -946,6 +943,7 @@ void SaveSettings() {
   file << "touch_colors=" << (sTouchColors ? 1 : 0) << '\n';
   file << "touch_labels=" << (sTouchLabels ? 1 : 0) << '\n';
   file << "touch_turbo=" << (sTouchTurbo ? 1 : 0) << '\n';
+  file << "touch_floating_stick=" << (sTouchFloatingStick ? 1 : 0) << '\n';
   file << "spring_ball=" << (sSpringBall ? 1 : 0) << '\n';
   file << "swap_scan_xray=" << (sSwapScanXray ? 1 : 0) << '\n';
   file << "shift_key=" << sShiftBindings[0] << '\n';
@@ -1702,20 +1700,6 @@ void SetGpuDriver(const std::string& id) {
     sGpuDriver = id;
     MarkDirty();
   }
-  // Keeping confirms only the current choice: another one gets its own trial.
-  if (sGpuDriverKept != id) {
-    sGpuDriverKept.clear();
-  }
-}
-
-const std::string& GpuDriverKept() {
-  EnsureInitialized();
-  return sGpuDriverKept;
-}
-
-void BeginGpuDriverTrial(const std::string& markerPath) {
-  EnsureInitialized();
-  sGpuDriverTrialMarker = markerPath;
 }
 
 int Anisotropy() {
@@ -3386,6 +3370,7 @@ bool OverlayVisible() { return sOverlayVisible.load(std::memory_order_acquire); 
 bool TouchColorsFlag() { return sTouchColorsFlag.load(std::memory_order_acquire); }
 bool TouchLabelsFlag() { return sTouchLabelsFlag.load(std::memory_order_acquire); }
 bool TouchTurboFlag() { return sTouchTurboFlag.load(std::memory_order_acquire); }
+bool TouchFloatingStickFlag() { return sTouchFloatingStickFlag.load(std::memory_order_acquire); }
 float TouchSideMarginDp() { return sTouchSideMargin.load(); }
 float TouchStickInsetDp() { return sTouchStickInset.load(); }
 float TouchButtonInsetDp() { return sTouchButtonInset.load(); }
@@ -3858,6 +3843,7 @@ void UpdateControllerNav() {
   sTouchColorsFlag.store(sTouchColors, std::memory_order_release);
   sTouchLabelsFlag.store(sTouchLabels, std::memory_order_release);
   sTouchTurboFlag.store(sTouchTurbo && !sOriginalExperience, std::memory_order_release);
+  sTouchFloatingStickFlag.store(sTouchFloatingStick, std::memory_order_release);
 
   ImGuiIO& io = ImGui::GetIO();
   io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
@@ -4838,72 +4824,6 @@ void DrawDiscReadFailedAlert() {
   ImGui::PopStyleColor(3);
 }
 
-// A custom driver's first run: it may start fine and still draw garbage (Turnip
-// builds made for another GPU did), which leaves no readable menu to switch back.
-// So it has to be kept here within kTrialSeconds; otherwise, or if the game closes
-// first (main() finds the marker), the system driver comes back.
-void DrawGpuDriverTrial() {
-  constexpr float kTrialSeconds = 30.f;
-  static float sElapsed = 0.f;
-  if (sGpuDriverTrialMarker.empty()) {
-    return;
-  }
-  // The panel stays open meanwhile: it's what routes taps and clicks to this window.
-  sVisible = true;
-  // Long frames (pipeline builds, the app in the background) don't eat into the time
-  // the user has to read the prompt.
-  sElapsed += std::min(ImGui::GetIO().DeltaTime, 0.1f);
-  const auto finish = [](bool keep) {
-    std::error_code ec;
-    std::filesystem::remove(sGpuDriverTrialMarker, ec);
-    sGpuDriverTrialMarker.clear();
-    sVisible = false;
-    if (keep) {
-      sGpuDriverKept = PortGpuDriver::Active();
-    } else if (sGpuDriver == PortGpuDriver::Active()) {
-      sGpuDriver.clear();
-    }
-    MarkDirty();
-    SaveSettings();
-    if (!keep) {
-      // The driver can't be swapped while running; the next start uses the system's.
-      PortLog::Write("port: GPU driver %s not kept; closing to start on the system driver\n",
-                     PortGpuDriver::Active().c_str());
-      SDL_Event quit{};
-      quit.type = SDL_EVENT_QUIT;
-      SDL_PushEvent(&quit);
-    }
-  };
-  const float left = kTrialSeconds - sElapsed;
-  if (left <= 0.f) {
-    finish(false);
-    return;
-  }
-  const ImGuiViewport* viewport = ImGui::GetMainViewport();
-  ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-  ImGui::SetNextWindowSize(ImVec2(std::min(viewport->Size.x - 32.f, ImGui::GetFontSize() * 32.f), 0.f));
-  const bool open = ImGui::Begin("Keep this Vulkan driver?", nullptr,
-                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                                     ImGuiWindowFlags_NoSavedSettings);
-  // Drawn before the panel, which would otherwise cover it.
-  ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
-  if (open) {
-    ImGui::TextWrapped("The game is running on %s.", aurora_get_gpu_driver());
-    ImGui::TextWrapped("If the picture looks right, keep it. Otherwise the game closes in %d s and starts on the "
-                       "system driver next time.",
-                       int(left) + 1);
-    const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-    if (ImGui::Button("Keep", ImVec2(width, 0.f))) {
-      finish(true);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Use system driver", ImVec2(width, 0.f))) {
-      finish(false);
-    }
-  }
-  ImGui::End();
-}
-
 void DrawRemasteredImport() {
   static char sImage[1024] = "";
   static char sKeys[1024] = "";
@@ -5650,8 +5570,6 @@ void ProcessGpuDriverPick() {
   if (id.empty()) {
     sGpuDriverStatus = "Couldn't install it: " + error + ".";
   } else {
-    // A reinstalled id may be a different build of the driver.
-    sGpuDriverKept.clear();
     SetGpuDriver(id);
     sGpuDriverStatus = "Installed " + id + ".";
   }
@@ -6090,6 +6008,12 @@ void DrawControlsTouchGyro() {
   ImGui::EndDisabled();
   ItemHelp("Adds a Turbo button next to Fire: holding it fires as if Fire were tapped as fast as the "
            "game accepts. It can be moved and resized in Edit layout.");
+  if (ImGui::Checkbox("Floating left stick", &sTouchFloatingStick)) {
+    MarkDirty();
+  }
+  ItemHelp("Hides the left stick until a finger touches a free spot on the left half of the screen, "
+           "then centres it under that finger. Another finger on the left half aims, like the rest "
+           "of the free area. The map screen keeps the fixed stick.");
   int touchLayout = sTouchClassic ? 1 : sTouchTwinStick ? 2 : 0;
   static const char* const kTouchLayouts[] = {"Default", "Classic GameCube", "Twin stick (Remastered)"};
   if (ImGui::Combo("Layout", &touchLayout, kTouchLayouts, 3)) {
@@ -8445,7 +8369,6 @@ void DrawUI() {
   DrawStaleImportToast();
   DrawUpdateToast();
   DrawDiscReadFailedAlert();
-  DrawGpuDriverTrial();
   DrawShaderCompilationToast();
   if (sTouchLayoutSavePending.exchange(false, std::memory_order_acq_rel)) {
     MarkDirty();
@@ -8741,6 +8664,11 @@ Java_org_metroidprime_port_TouchControlsView_nativeTouchColors(JNIEnv*, jclass) 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_metroidprime_port_TouchControlsView_nativeTouchLabels(JNIEnv*, jclass) {
   return PortDebug::TouchLabelsFlag() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_metroidprime_port_TouchControlsView_nativeTouchFloatingStick(JNIEnv*, jclass) {
+  return PortDebug::TouchFloatingStickFlag() ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jfloat JNICALL

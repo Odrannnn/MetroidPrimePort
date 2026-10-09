@@ -319,6 +319,10 @@ bool CDSPStreamManager::CanStop(int handle) {
   return !CDSPStream::IsStreamActive(g_Streams[idx].x7c_streamId);
 }
 
+#ifdef TARGET_PC
+bool CDSPStreamManager::IsReleasing(int oneshot) { return CDSPStream::IsReleasing(oneshot); }
+#endif
+
 CDSPStreamManager::EState CDSPStreamManager::GetStreamState(int handle) {
   CInterruptGuard interrupts;
   int idx = FindClaimedStreamIdx(handle);

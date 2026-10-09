@@ -1224,6 +1224,36 @@ bool ParseModel(const uint8_t* data, size_t size, Model& out, std::string& error
                               break;
                             }
                           }
+                          out.windSets.clear();
+                          out.windMaterialSet.clear();
+                          for (size_t i = 0; rest != nullptr && i + 8 < left; ++i) {
+                            if (std::memcmp(rest + i, "WIND", 4) != 0) {
+                              continue;
+                            }
+                            size_t at = i + 4;
+                            uint32_t sets = 0;
+                            std::memcpy(&sets, rest + at, 4);
+                            at += 4;
+                            if (sets > (left - at) / 36) {
+                              break;
+                            }
+                            std::vector<std::array<float, 9>> parsed(sets);
+                            for (uint32_t s = 0; s < sets; ++s, at += 36) {
+                              std::memcpy(parsed[s].data(), rest + at, 36);
+                            }
+                            uint32_t mats = 0;
+                            if (at + 4 > left) {
+                              break;
+                            }
+                            std::memcpy(&mats, rest + at, 4);
+                            at += 4;
+                            if (mats > left - at) {
+                              break;
+                            }
+                            out.windSets = std::move(parsed);
+                            out.windMaterialSet.assign(rest + at, rest + at + mats);
+                            break;
+                          }
                         }
                         sawHeader = true;
                         return content.ok();

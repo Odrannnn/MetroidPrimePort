@@ -405,6 +405,9 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
 // over a frame the full-screen pass has already fogged: an alpha-blended surface as colour T +
 // in-scatter, an additive one as colour T, so it adds no in-scatter of its own. Blends that
 // multiply or subtract the frame are left alone: fogging them would fog what is behind twice.
+// Particles are the exception to the additive rule: Remastered's particle renderers inject only
+// the colour T + in-scatter block, and an additive or premultiplied particle (blend mode 2 or 1)
+// carries the static render state's "no fog" flag, so it is not fogged at all.
 static u8 vol_fog_mode(bool depthOnly) noexcept {
   if (!g_gxState.volFog || depthOnly || !g_gxState.colorUpdate) {
     return VolFogNone;
@@ -420,13 +423,13 @@ static u8 vol_fog_mode(bool depthOnly) noexcept {
   }
   const bool srcScales = src == GX_BL_ONE || src == GX_BL_SRCALPHA || src == GX_BL_INVSRCALPHA;
   if (srcScales && dst == GX_BL_ONE) {
-    return VolFogAdditive;
+    return g_gxState.particleFog ? VolFogNone : VolFogAdditive;
   }
   if (src == GX_BL_SRCALPHA && dst == GX_BL_INVSRCALPHA) {
     return VolFogBlended;
   }
   if (src == GX_BL_ONE && dst == GX_BL_INVSRCALPHA) {
-    return VolFogPremultiplied;
+    return g_gxState.particleFog ? VolFogNone : VolFogPremultiplied;
   }
   return VolFogNone;
 }
@@ -447,6 +450,10 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
         g_gxState.vtxDesc[lightmapAttr] != GX_NONE) {
       config.shaderConfig.pbrLightmapAttr = lightmapAttr;
     }
+  }
+  if (bind_pos_active()) {
+    config.shaderConfig.pbrBindPos = true;
+    config.shaderConfig.pbrBindLe = g_gxState.arrays[GX_VA_TEX7].le;
   }
   config.shaderConfig.sdf = g_gxState.sdf;
   config.shaderConfig.hudSample = g_gxState.hudSample;

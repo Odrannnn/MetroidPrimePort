@@ -177,8 +177,9 @@ the tick right before.
 - The arm cannon stays on the simulation camera, so it is fixed on screen while
   the world turns, like a view model. Its camera-relative pose (bob, sway,
   recoil) is blended with `actor_interpolation` (section 7). The free-aim crosshair
-  (`CCompoundTargetReticle::DrawOrbitZoneGroup`) is drawn at a world point, so
-  it is rotated by the same look rotation to stay centred.
+  (`CCompoundTargetReticle::DrawOrbitZoneGroup`) is drawn at a world point placed
+  against the simulation camera, so it is carried into the presented camera's
+  frame (look rotation and camera blend) to stay fixed on screen.
 - The game's own stick look stays per-tick (it is integrated with acceleration
   curves in the game code); only its result is blended like any camera.
 - Fixed on the way: gyro aim used to write into the per-tick mouse frame delta,

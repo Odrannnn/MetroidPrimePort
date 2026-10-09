@@ -1,5 +1,7 @@
 #ifndef METROID_PRIME_PORT_PORT_FX_DEBUG_H
 #define METROID_PRIME_PORT_PORT_FX_DEBUG_H
+#include <dolphin/gx/GXExtra.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -107,12 +109,18 @@ private:
 struct RenderScope {
   RenderScope() {
     top = depth()++ == 0;
+    if (top) {
+      GXPortSetParticleFog(GX_TRUE);
+    }
     if (top && gTiming) {
       t0 = std::chrono::steady_clock::now();
     }
   }
   ~RenderScope() {
     --depth();
+    if (top) {
+      GXPortSetParticleFog(GX_FALSE);
+    }
     if (top && gTiming) {
       gRenderNs += std::chrono::duration_cast< std::chrono::nanoseconds >(
                        std::chrono::steady_clock::now() - t0)

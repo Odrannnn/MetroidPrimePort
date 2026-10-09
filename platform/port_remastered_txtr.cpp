@@ -3031,6 +3031,72 @@ bool DecodeTxtrVolumeRgba8(const uint8_t* data, size_t size, uint32_t& width, ui
   return true;
 }
 
+bool DecodeTxtrVolume(const uint8_t* data, size_t size, uint32_t& width, uint32_t& height, uint32_t& depth,
+                      bool& srgb, std::vector<uint8_t>& rgba, std::string& error) {
+  rgba.clear();
+  if (data == nullptr || size == 0) {
+    error = "remastered txtr: no data";
+    return false;
+  }
+  TextureHeader head;
+  if (!ReadHeader(data, size, head, error)) {
+    return false;
+  }
+  if (head.kind != 2) {
+    error = "remastered txtr: not a 3D texture";
+    return false;
+  }
+  width = head.width;
+  height = head.height;
+  depth = head.layers;
+  srgb = FormatIsSrgb(head.format);
+  if (width == 0 || height == 0 || depth == 0 || width > 256 || height > 256 || depth > 256) {
+    error = "remastered txtr: a volume of " + std::to_string(width) + "x" + std::to_string(height) + "x" +
+            std::to_string(depth);
+    return false;
+  }
+  BlockSize block{};
+  size_t bytesPerPixel = 1;
+  if (!FormatBlockSize(head.format, block, bytesPerPixel)) {
+    error = "remastered txtr: cannot decode " + std::string(FormatName(head.format));
+    return false;
+  }
+  Meta meta;
+  if (!ReadMeta(data, size, meta, error)) {
+    return false;
+  }
+  std::vector<uint8_t> surface;
+  if (!BuildSurface(data, size, meta, surface, error)) {
+    return false;
+  }
+  // DecodeTxtr's layout, every slice: blocks one GOB tall, the block depth from BlockDepth. DeswizzleMip
+  // writes each slice it is given to the same place, so it is called per slice with that slice's offset.
+  const size_t mipWidth = DivRoundUp(size_t(width), block.width);
+  const size_t mipHeight = DivRoundUp(size_t(height), block.height);
+  const size_t mipBlockDepth = MipBlockDepth(depth, BlockDepth(depth));
+  const uint32_t mipBlockHeight = MipBlockHeight(mipHeight, 1);
+  if (surface.size() < SwizzledMipSize(mipWidth, mipHeight, depth, mipBlockHeight, bytesPerPixel)) {
+    error = "remastered txtr: the volume's surface is short";
+    return false;
+  }
+  const size_t rowBytes = mipWidth * bytesPerPixel;
+  const size_t sliceSize = DivRoundUp(mipHeight, size_t(mipBlockHeight) * kGobHeightBytes) * kGobSizeBytes *
+                           mipBlockHeight * mipBlockDepth * DivRoundUp(rowBytes, kGobWidthBytes);
+  std::vector<uint8_t> untiled(mipWidth * mipHeight * bytesPerPixel);
+  const size_t sliceBytes = size_t(width) * height * 4;
+  rgba.assign(sliceBytes * depth, 0);
+  for (size_t z = 0; z < depth; ++z) {
+    const size_t offsetZ = (z / mipBlockDepth) * sliceSize + (z & (mipBlockDepth - 1)) * kGobSizeBytes * mipBlockHeight;
+    DeswizzleMip(mipWidth, mipHeight, 1, mipBlockHeight, mipBlockDepth, bytesPerPixel, surface.data(), offsetZ,
+                 untiled.data());
+    if (!DecodeBlocks(head.format, width, height, untiled.data(), rgba.data() + z * sliceBytes, error)) {
+      rgba.clear();
+      return false;
+    }
+  }
+  return true;
+}
+
 bool DecodeTxtrCubeLinear(const uint8_t* data, size_t size, uint32_t& edge, std::vector<float>& rgba,
                           std::string& error) {
   rgba.clear();

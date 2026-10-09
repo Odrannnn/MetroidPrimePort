@@ -112,6 +112,10 @@ bool DecodeVolumeFloat(const uint8_t* compressed, size_t compressedSize, size_t 
 // TXTR file; `rgba` gets width * height * depth * 4 bytes, z slowest, x fastest.
 bool DecodeTxtrVolumeRgba8(const uint8_t* data, size_t size, uint32_t& width, uint32_t& height, uint32_t& depth,
                            std::vector<uint8_t>& rgba, std::string& error);
+// The top mip of a 3D texture of any decodable format (ASTC volumes included) as RGBA8, every slice:
+// `rgba` gets width * height * depth * 4 bytes, z slowest, x fastest. `srgb` says the texels are sRGB encoded.
+bool DecodeTxtrVolume(const uint8_t* data, size_t size, uint32_t& width, uint32_t& height, uint32_t& depth,
+                      bool& srgb, std::vector<uint8_t>& rgba, std::string& error);
 // The top mip of every face of a cube map (the materials' REFL cubes) as linear RGBA
 // floats, as the GPU samples it: sRGB formats through the exact sRGB EOTF, UNORM ones
 // as they are, BC6H at its full range. `rgba` gets 6 faces of edge * edge texels, face

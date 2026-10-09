@@ -453,8 +453,9 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
 
   DrawImmediateData immediates{
       .vtxStart = vertRange.offset, .currentPnMtx = state.currentPnMtx, .serial = state.drawSerial};
+  const bool bindPos = bind_pos_active();
   for (int i = GX_VA_POS; i <= GX_VA_TEX7; ++i) {
-    if (state.vtxDesc[i] != GX_INDEX8 && state.vtxDesc[i] != GX_INDEX16) {
+    if (state.vtxDesc[i] != GX_INDEX8 && state.vtxDesc[i] != GX_INDEX16 && !(bindPos && i == GX_VA_TEX7)) {
       continue;
     }
     auto& array = state.arrays[i];
@@ -838,7 +839,7 @@ void handle_aurora(ByteReader& reader) noexcept {
     auto& array = g_gxState.arrays[attrIdx];
     const auto newData = reinterpret_cast<void*>(arrayAddr);
     if (array.data != newData || array.size != arraySize || array.le != le) {
-      if (array.le != le) {
+      if (array.le != le || (attrIdx == GX_VA_TEX7 && (array.data == nullptr) != (newData == nullptr))) {
         // Endianness is baked into the shader
         g_gxState.dirty |= DirtyPipeline;
       }
@@ -1248,12 +1249,14 @@ void handle_aurora(ByteReader& reader) noexcept {
     std::memcpy(&params, words, sizeof(params));
     if (gfx::volfog::record(params)) {
       // The draws after it fog themselves through the froxels it fills.
-      // w: where the world's depth range starts; nearer is the viewmodel, which isn't fogged.
+      // w: where the world's depth range starts; nearer is the viewmodel (vf_depth).
       const Vec4<float> fogParams{params.depth[0], params.fog[0], params.colorA[3], params.depth[2]};
       std::array<Vec4<float>, 3> tone;
       for (size_t i = 0; i < tone.size(); ++i) {
         tone[i] = {params.tone[i][0], params.tone[i][1], params.tone[i][2], params.tone[i][3]};
       }
+      // The viewmodel's depth reading (vf_depth) needs 1 - near / far; tone[0].w is unused.
+      tone[0] = {params.tone[0][0], params.tone[0][1], params.tone[0][2], 1.f - params.depth[0] / params.depth[1]};
       if (!g_gxState.volFog) {
         g_gxState.volFog = true;
         g_gxState.dirty |= DirtyPipeline;
@@ -1269,6 +1272,12 @@ void handle_aurora(ByteReader& reader) noexcept {
   } else if (subCmd == GX_AURORA_PORT_VOLUMETRIC_FOG_END) {
     if (g_gxState.volFog) {
       g_gxState.volFog = false;
+      g_gxState.dirty |= DirtyPipeline;
+    }
+  } else if (subCmd == GX_AURORA_PORT_PARTICLE_FOG) {
+    const bool on = reader.read<u8>() != 0;
+    if (g_gxState.particleFog != on) {
+      g_gxState.particleFog = on;
       g_gxState.dirty |= DirtyPipeline;
     }
   } else if (subCmd == GX_AURORA_PORT_SHADOW_CASTER) {
@@ -1348,16 +1357,19 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.dirty |= DirtyUniform;
     }
   } else if (subCmd == GX_AURORA_SET_PBR_BACKLIGHT) {
-    f32 v[9];
+    f32 v[11];
     for (f32& f : v) {
       f = reader.read<f32>();
     }
     const std::array<Vec4<float>, 3> value{
         Vec4<float>{v[0], v[1], v[2], v[3]},
         Vec4<float>{v[4], v[5], v[6], v[7]},
-        Vec4<float>{v[8], 0.f, 0.f, 0.f},
+        Vec4<float>{v[8], v[9], v[10], 0.f},
     };
     if (g_gxState.pbrBacklightLights != value) {
+      if ((g_gxState.pbrBacklightLights[2].z() > 0.f) != (value[2].z() > 0.f)) {
+        g_gxState.dirty |= DirtyPipeline;
+      }
       g_gxState.pbrBacklightLights = value;
       g_gxState.dirty |= DirtyUniform;
     }

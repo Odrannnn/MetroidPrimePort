@@ -24,6 +24,9 @@ public:
   static bool IsStreamAvailable(int handle);
   static bool CanStop(int handle);
   static EState GetStreamState(int handle);
+#ifdef TARGET_PC
+  static bool IsReleasing(int oneshot);
+#endif
 
 private:
   static int FindUnclaimedStreamIdx();

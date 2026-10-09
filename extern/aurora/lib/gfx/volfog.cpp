@@ -214,12 +214,12 @@ fn fs_apply(in: VertexOutput) -> @location(0) vec4f {
   let f = textureLoad(src, min(vec2i(floor(in.pos.xy)), size - vec2i(1)), 0);
   let depthSize = vec2i(textureDimensions(depthTex));
   let at = min(vec2i(in.uv * vec2f(depthSize)), depthSize - vec2i(1));
-  // Reversed Z; nearer than the world's depth range is the viewmodel, which is not fogged.
+  // Reversed Z. Nearer than the world's depth range is the viewmodel: Remastered draws it in
+  // 0.0097656..0.0386719 of the depth buffer and this pass reads that as a full-range depth.
   let z = 1.0 - textureLoad(depthTex, at, 0);
-  if (z < p.depth.z) {
-    return f;
-  }
-  let d = clamp((z - p.depth.z) / max(p.depth.w - p.depth.z, 1e-6), 0.0, 1.0);
+  let gun = z < p.depth.z;
+  let d = select(clamp((z - p.depth.z) / max(p.depth.w - p.depth.z, 1e-6), 0.0, 1.0),
+                 mix(0.0097656, 0.0386719, z / p.depth.z), gun);
   let near = p.depth.x;
   let far = p.depth.y;
   let zlin = near * far / (far - d * (far - near));

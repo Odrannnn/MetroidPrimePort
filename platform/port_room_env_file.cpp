@@ -820,7 +820,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       l.animated = a[0] != 0;
       l.playing = a[1] != 0;
       l.loop = a[2] != 0;
-      l.offAtEnd = a[3] != 0;
+      l.offAtStart = a[3] != 0;
       l.animFalloff = a[4];
       l.length = ReadLEFloat(a + 8);
       l.scale[0] = ReadLEFloat(a + 12);

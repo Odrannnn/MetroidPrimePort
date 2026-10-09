@@ -100,6 +100,9 @@ struct ConvertIO {
   // 6 faces of edge * edge texels (DecodeTxtrCubeLinear). Without it no material gets a
   // reflection cube of its own.
   std::function<bool(const ModelUuid& id, uint32_t& edge, std::vector<float>& rgba, std::string& error)> cube;
+  // Optional: a Remastered 3D texture of 64 slices of 64 x 64 as one 512 x 512 RGBA8 atlas, slice z at tile
+  // (z % 8, z / 8) (DecodeTxtrVolume). Without it a material that needs one keeps the generic shader.
+  std::function<bool(const ModelUuid& id, Image& out, std::string& error)> volume;
   // Optional, for converters that run side by side into one folder: asked once
   // for each PBR map a converter is about to write, by the id it will have;
   // false when another converter has taken it, and this one then only names it.

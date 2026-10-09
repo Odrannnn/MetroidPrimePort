@@ -71,6 +71,9 @@ public:
 
   static void FreeAllStreams();
   static void Initialize();
+#ifdef TARGET_PC
+  static bool IsReleasing(int oneshot);
+#endif
 
 private:
   void DoAllocateStream();

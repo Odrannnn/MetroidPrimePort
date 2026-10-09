@@ -134,8 +134,9 @@ constexpr uint32_t kPropLightConeDynamicOuter = 0xca7e1d6f;
 constexpr uint32_t kPropLightColorDynamic = 0xe9141c0f;  // .spline, .gradient
 constexpr uint32_t kPropLightColorDynamicSpline = 0x085586c6;
 constexpr uint32_t kPropLightColorDynamicGradient = 0xe6222427;
-// What a LightDynamic sends at the end of its timeline.
-constexpr uint32_t kEventLightFinished = 0xeb2a4a08;
+// What a LightDynamic sends when a backward, non-looping play reaches t = 0 (CLightDynamicGOC::Think,
+// CTimePlaybackManager::Update result 1). The forward end sends c6ef90ff, which no room links.
+constexpr uint32_t kEventLightReachedStart = 0xeb2a4a08;
 constexpr uint32_t kPropRegionMode = 0xd4aa2ccb;
 constexpr uint32_t kPropRegionDistance = 0xbaf7ac02;
 constexpr uint32_t kPropRegionTransmittance = 0xd1fc0ce8;
@@ -1749,8 +1750,8 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           }
           continue;
         }
-        // A light that switches itself off as its timeline ends (PointLightData::offAtEnd).
-        if (light && depth == 0 && sender.entity == e.entity && c->event == kEventLightFinished) {
+        // A light that switches itself off as a backward play reaches its start (PointLightData::offAtStart).
+        if (light && depth == 0 && sender.entity == e.entity && c->event == kEventLightReachedStart) {
           continue;
         }
         // Remastered's own objects, and keyframes, are followed by the script (below).
@@ -2088,7 +2089,7 @@ struct PointLightData {
   // The animated path: timeline flags, its falloff, whether its end deactivates it (its
   // finished event -> ICMP/ICTV on itself), the entity's scale x and y (for near and far),
   // and the splines' bytes (PortRoomEnv::kLightSplines; empty: absent).
-  bool animated = false, playing = false, loop = false, offAtEnd = false;
+  bool animated = false, playing = false, loop = false, offAtStart = false;
   uint8_t animFalloff = 3;
   float length = 0.f;
   float scale[2] = {1.f, 1.f};
@@ -2935,9 +2936,9 @@ void Writer::ReadPointLights(const RoomData& r, const SceneryScripts& scripts, c
       for (const Connection& conn : ReadConnections(r.room)) {
         const int target = r.room.ByGuid(conn.target);
         if (r.room.Components()[conn.sender].entity == c->entity && target >= 0 &&
-            r.room.Components()[size_t(target)].entity == c->entity && conn.event == kEventLightFinished &&
+            r.room.Components()[size_t(target)].entity == c->entity && conn.event == kEventLightReachedStart &&
             (conn.action == kActionComponentDeactivate || conn.action == kActionEntityDeactivate)) {
-          l.offAtEnd = true;
+          l.offAtStart = true;
         }
       }
     }
@@ -5058,7 +5059,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     out.push_back(l.animated ? 1 : 0);
     out.push_back(l.playing ? 1 : 0);
     out.push_back(l.loop ? 1 : 0);
-    out.push_back(l.offAtEnd ? 1 : 0);
+    out.push_back(l.offAtStart ? 1 : 0);
     out.push_back(l.animFalloff);
     out.insert(out.end(), 3, 0);
     AppendLEFloat(out, l.length);

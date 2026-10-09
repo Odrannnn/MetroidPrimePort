@@ -1717,7 +1717,7 @@ TEST_F(GXFifoTest, PBRBacklight_PropagatesAndTurnsOff) {
   EXPECT_EQ(g_gxState.pbrBacklightLights[1].w(), 0.f);
   const f32 plane[4] = {0.f, 0.5f, 0.f, 0.25f};
   const f32 backDir[3] = {0.57735f, 0.57735f, -0.57735f};
-  GXSetPBRBacklight(plane, backDir, 4.f, 2.f);
+  GXSetPBRBacklight(plane, backDir, 4.f, 2.f, 0.f, 0.f);
   auto bytes = capture_fifo();
   EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_SET_PBR_BACKLIGHT));
   reset_gx_state();
@@ -1728,10 +1728,10 @@ TEST_F(GXFifoTest, PBRBacklight_PropagatesAndTurnsOff) {
   EXPECT_EQ(g_gxState.pbrBacklightLights[1].w(), 4.f);
   EXPECT_EQ(g_gxState.pbrBacklightLights[2].x(), 2.f);
 
-  GXSetPBRBacklight(plane, backDir, 4.f, 2.f);
+  GXSetPBRBacklight(plane, backDir, 4.f, 2.f, 0.f, 0.f);
   EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_PBR_BACKLIGHT));
 
-  GXSetPBRBacklight(nullptr, nullptr, 0.f, 0.f);
+  GXSetPBRBacklight(nullptr, nullptr, 0.f, 0.f, 0.f, 0.f);
   decode_fifo(capture_fifo());
   EXPECT_EQ(g_gxState.pbrBacklightLights[1].w(), 0.f);
   EXPECT_EQ(g_gxState.pbrBacklightLights[2].x(), 0.f);

@@ -169,6 +169,11 @@ GXBool GXPortVolumetricFog(const GXPortFogParams* fog) {
 
 void GXPortVolumetricFogEnd() { GX_WRITE_AURORA(GX_AURORA_PORT_VOLUMETRIC_FOG_END); }
 
+void GXPortSetParticleFog(GXBool on) {
+  GX_WRITE_AURORA(GX_AURORA_PORT_PARTICLE_FOG);
+  GX_WRITE_U8(on ? 1 : 0);
+}
+
 void GXPortSetShadowCaster(GXBool on) {
   GX_WRITE_AURORA(GX_AURORA_PORT_SHADOW_CASTER);
   GX_WRITE_U8(on ? 1 : 0);
@@ -622,14 +627,15 @@ void GXSetPBRBakedLightModulation(const f32 rgb[3]) {
   }
 }
 
-void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 top) {
+void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 top, f32 bindScale, f32 bindOffset) {
   struct Write {
-    f32 values[9];
+    f32 values[11];
   };
   static LastPBRWrite<Write> sLast;
   Write now{};
   if (plane != nullptr && backDir != nullptr) {
-    now = Write{{plane[0], plane[1], plane[2], plane[3], backDir[0], backDir[1], backDir[2], back, top}};
+    now = Write{{plane[0], plane[1], plane[2], plane[3], backDir[0], backDir[1], backDir[2], back, top, bindOffset,
+                 bindScale}};
   }
   if (sLast.repeats(now)) {
     return;

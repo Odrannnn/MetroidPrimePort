@@ -450,6 +450,8 @@ struct GXState {
   std::array<Vec4<float>, 3> volFogTone{};
   // GX_AURORA_PORT_SHADOW_*: the following draws are the world's (they cast and receive the sun's
   // shadow), and this frame's sun (shadowActive) with its uniform (gfx/shadow.hpp's Uniform).
+  // GX_AURORA_PORT_PARTICLE_FOG: the draws are particles (vol_fog_mode)
+  bool particleFog = false;
   bool shadowCaster = false;
   bool shadowCasterOnly = false; // they cast but aren't drawn (GXPortSetShadowCasterOnly)
   bool shadowActive = false;
@@ -501,6 +503,16 @@ struct GXState {
   void clearVtxSizeCache() { lastVtxFmt = GX_MAX_VTXFMT; }
 };
 extern GXState g_gxState;
+
+// The bind-pose positions of a skinned draw: the array at GX_VA_TEX7 (which the draw's own vertices
+// must not use), read with the same index as GX_VA_POS, when the backlight asks for them (its z in
+// row 2 is the height scale).
+inline bool bind_pos_active() noexcept {
+  const auto& s = g_gxState;
+  return s.pbr != 0 && s.arrays[GX_VA_TEX7].data != nullptr && s.arrays[GX_VA_TEX7].size != 0 &&
+         s.vtxDesc[GX_VA_TEX7] == GX_NONE && (s.vtxDesc[GX_VA_POS] == GX_INDEX8 || s.vtxDesc[GX_VA_POS] == GX_INDEX16) &&
+         s.pbrBacklightLights[2].z() > 0.f;
+}
 struct ShaderInfo;
 
 void initialize() noexcept;
@@ -581,7 +593,12 @@ struct ShaderConfig {
   // GX_AURORA_PORT_SHADOW_CASTER while a shadow frame is set: the draw casts into the sun's shadow
   // map (an extra vs_shadow entry) and, when PBR, receives the sun through it.
   u8 shadow : 1 = false;
-  u8 pad1 : 3 = 0;
+  // With pbr, the draw is a skinned model whose bind-pose positions (GX_VA_TEX7's array, indexed
+  // like GX_VA_POS) feed the character backlight's height fade (GXSetPBRBacklight); the array's
+  // endianness.
+  u8 pbrBindPos : 1 = false;
+  u8 pbrBindLe : 1 = false;
+  u8 pad1 : 1 = 0;
   u8 pbr = 0; // GX_AURORA_SET_PBR
   u8 sdf = 0; // GX_AURORA_SET_SDF
   u8 depthOnly = 0; // pass 1 of GX_AURORA_PORT_DEPTH_PREPASS: the colour is not written

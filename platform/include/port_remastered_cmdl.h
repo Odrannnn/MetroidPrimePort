@@ -225,6 +225,10 @@ struct Model {
   // The HEAD chunk's ANUV sub-chunk after its tag, up to the chunk's end (parsed by
   // port_remastered_anuv.h); empty when the model animates no UVs.
   std::vector<uint8_t> anuv;
+  // The HEAD chunk's WIND sub-chunk: SWindSet rows (v1 xyz, v2 xyz, rate, b, c) and one
+  // set index per material (0xff = none); both empty when the model has no wind data.
+  std::vector<std::array<float, 9>> windSets;
+  std::vector<uint8_t> windMaterialSet;
 };
 
 // Parses one extracted model resource. `size` is the length of `data`, which has to
