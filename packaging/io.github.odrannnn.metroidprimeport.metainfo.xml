@@ -55,6 +55,9 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.20.0" date="2026-10-10">
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.20.0</url>
+    </release>
     <release version="0.19.0" date="2026-10-09">
       <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.19.0</url>
     </release>

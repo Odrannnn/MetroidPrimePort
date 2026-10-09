@@ -119,7 +119,7 @@ not the debug key's `CN=Android Debug` (`edd22fdb…`), the arm64 `.so` is 29 MB
 all six third-party notices are in `assets/`, and no `.iso`, `.pak` or `.strg`
 is in the package.
 
-The port targets `versionName "0.19.0"` and `versionCode 22`. A version bump
+The port targets `versionName "0.20.0"` and `versionCode 23`. A version bump
 also adds a `<release>` entry (newest first) to
 `packaging/io.github.odrannnn.metroidprimeport.metainfo.xml`, which is the
 version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
