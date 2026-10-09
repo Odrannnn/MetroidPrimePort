@@ -17,6 +17,7 @@
 #include "port_embedded.h"
 #include "port_crash.h"
 #include "port_disc.h"
+#include "port_gci.h"
 #include "port_debug.h"
 #include "port_paths.h"
 #include "port_actor_collision_bounds.h"
@@ -1252,6 +1253,9 @@ int main(int argc, char** argv) {
     }
     std::printf("metroid_prime_port: disc mounted: %s\n", discPath);
     PortLog::Write("metroid_prime_port: disc is %s\n", PortDisc::Name(PortDisc::Current()));
+    // Saves are the disc's region's (a PAL save's worlds are laid out
+    // differently): its game code and Dolphin's card for that region.
+    PortGci::SetGameCode(PortDisc::Current() == PortDisc::Version::Pal ? "GM8P" : "GM8E");
     s_mountedDisc = discImage;
     aurora_dvd_set_read_error_callback(NoteDiscReadFailure);
     // A Remastered import finished in the last session becomes the mod now,

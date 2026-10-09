@@ -4141,7 +4141,8 @@ std::string CardImportDolphin() {
   }
   const PortGci::DolphinCard dolphin = PortGci::FindDolphinCard();
   if (!dolphin.Found()) {
-    return "No Dolphin memory card found (GC/USA/Card A or GC/MemoryCardA.USA.raw in "
+    return std::string("No Dolphin memory card found (GC/") + PortGci::CardRegion() + "/Card A or GC/MemoryCardA." +
+           PortGci::CardRegion() + ".raw in "
            "Dolphin's user folder).";
   }
   // Dolphin uses one or the other, per its settings: try the one written last.
@@ -4178,7 +4179,8 @@ std::string CardExportDolphin() {
   }
   const PortGci::DolphinCard dolphin = PortGci::FindDolphinCard();
   if (!dolphin.Found()) {
-    return "No Dolphin memory card found (GC/USA/Card A or GC/MemoryCardA.USA.raw in "
+    return std::string("No Dolphin memory card found (GC/") + PortGci::CardRegion() + "/Card A or GC/MemoryCardA." +
+           PortGci::CardRegion() + ".raw in "
            "Dolphin's user folder); start a GameCube game in Dolphin once to create it.";
   }
   std::string text;
@@ -4311,7 +4313,9 @@ void DrawMemoryCard() {
   if (ImGui::Button("Import from Dolphin")) {
     sCardStatus = CardImportDolphin();
   }
-  ItemHelp("Dolphin's card is looked for in its user folder (GC/USA/Card A, GC/MemoryCardA.USA.raw).");
+  ItemHelp((std::string("Dolphin's card is looked for in its user folder (GC/") + PortGci::CardRegion() +
+            "/Card A, GC/MemoryCardA." + PortGci::CardRegion() + ".raw).")
+               .c_str());
 #endif
   ImGui::EndDisabled();
   ImGui::BeginDisabled(busy || saves == 0);
@@ -4320,8 +4324,9 @@ void DrawMemoryCard() {
     sCardExportQueue = PortGci::GameFiles(folder);
     OpenCardDialog(kCardPick_ExportFile);
   }
-  ItemHelp("Saves each file in turn; keep Dolphin's names (01-GM8E-MetroidPrime A.gci) for its GCI "
-           "folder.");
+  ItemHelp((std::string("Saves each file in turn; keep Dolphin's names (01-") + PortGci::GameCode() +
+            "-MetroidPrime A.gci) for its GCI folder.")
+               .c_str());
 #else
   if (ImGui::Button("Export to folder...")) {
     OpenCardDialog(kCardPick_ExportFolder);

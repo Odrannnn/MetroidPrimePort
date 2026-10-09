@@ -12,6 +12,7 @@
 
 #include "Kyoto/MemoryCopy.hpp"
 #include "Kyoto/Basics/CBasics.hpp"
+#include "port_gci.h"
 #include "port_log.h"
 #include "port_paths.h"
 
@@ -277,8 +278,9 @@ void CMemoryCardSys::Initialize() {
     sDefaultCardBase = base;
     sCardBase = base;
     PortLog::Write("memory card: storing under %s\n", base);
-    // Aurora's CARDInit takes the game id and maker code.
-    CARDInit("GM8E", "01");
+    // Aurora's CARDInit takes the game id and maker code: the disc's (GM8P on
+    // PAL, whose card aurora keeps under EUR).
+    CARDInit(PortGci::GameCode(), "01");
     mIsInitialized = true;
   }
 }

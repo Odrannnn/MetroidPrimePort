@@ -26,6 +26,19 @@ namespace fs = std::filesystem;
 
 namespace PortGci {
 
+namespace {
+char sGameCode[5] = "GM8E";
+} // namespace
+
+void SetGameCode(const char* code4) {
+  if (code4 != nullptr && std::strlen(code4) >= 4)
+    std::memcpy(sGameCode, code4, 4);
+}
+
+const char* GameCode() { return sGameCode; }
+
+const char* CardRegion() { return sGameCode[3] == 'P' ? "EUR" : "USA"; }
+
 std::string PathString(const fs::path& path) {
   const auto u8 = path.u8string();
   return std::string(u8.begin(), u8.end());
@@ -174,7 +187,7 @@ bool ParseHeader(const uint8_t* data, size_t size, Header& out, std::string& err
   return true;
 }
 
-bool IsGameFile(const Header& header) { return header.game == "GM8E" && header.maker == "01"; }
+bool IsGameFile(const Header& header) { return header.game == sGameCode && header.maker == "01"; }
 
 std::string DiskName(const Header& header) {
   std::string name = header.maker + "-" + header.game + "-" + header.fileName;
@@ -323,7 +336,7 @@ Report ImportBytes(const std::vector<uint8_t>& bytes, const std::string& name, c
   }
   const std::string imagePath = PathString(image);
   std::vector<std::string> files;
-  if (!aurora_card_raw_list(imagePath.c_str(), "GM8E", "01", CollectName, &files)) {
+  if (!aurora_card_raw_list(imagePath.c_str(), sGameCode, "01", CollectName, &files)) {
     AddError(report, name + " is neither a .gci file nor a readable memory card image");
   } else if (files.empty()) {
     AddError(report, name + " holds no Metroid Prime save");
@@ -331,7 +344,7 @@ Report ImportBytes(const std::vector<uint8_t>& bytes, const std::string& name, c
   std::vector<uint8_t> gci(bytes.size());
   std::vector<std::vector<uint8_t>> set;
   for (const std::string& file : files) {
-    const size_t size = aurora_card_raw_extract(imagePath.c_str(), "GM8E", "01", file.c_str(),
+    const size_t size = aurora_card_raw_extract(imagePath.c_str(), sGameCode, "01", file.c_str(),
                                                 gci.data(), gci.size());
     if (size == 0 || size > gci.size()) {
       AddError(report, "cannot extract " + file + " from " + name);
@@ -436,11 +449,11 @@ Report ExportRaw(const fs::path& folder, const fs::path& image) {
   // As for folders: the other of A/B, if the image has it, would win when newer.
   std::vector<std::string> existing;
   if (fs::exists(image, ec)) {
-    aurora_card_raw_list(imagePath.c_str(), "GM8E", "01", CollectName, &existing);
+    aurora_card_raw_list(imagePath.c_str(), sGameCode, "01", CollectName, &existing);
   }
   for (const std::string& old : existing) {
     if (std::find(names.begin(), names.end(), old) == names.end() &&
-        !aurora_card_raw_delete(imagePath.c_str(), "GM8E", "01", old.c_str())) {
+        !aurora_card_raw_delete(imagePath.c_str(), sGameCode, "01", old.c_str())) {
       AddError(report, "cannot remove the old " + old + " from " + imagePath);
       return report;
     }
@@ -503,8 +516,8 @@ DolphinCard FindDolphinCard() {
 #endif
   std::error_code ec;
   for (const fs::path& root : roots) {
-    const fs::path folder = root / "GC" / "USA" / "Card A";
-    const fs::path raw = root / "GC" / "MemoryCardA.USA.raw";
+    const fs::path folder = root / "GC" / CardRegion() / "Card A";
+    const fs::path raw = root / "GC" / (std::string("MemoryCardA.") + CardRegion() + ".raw");
     const bool hasFolder = fs::is_directory(folder, ec);
     const bool hasRaw = fs::is_regular_file(raw, ec);
     if (hasFolder || hasRaw) {
@@ -522,7 +535,7 @@ fs::path MountedCardFolder() {
     return {};
   }
   char buffer[4096];
-  if (aurora_card_get_path("GM8E", AURORA_CARD_GCI_DIRECTORY, 0, buffer, sizeof(buffer)) == 0 ||
+  if (aurora_card_get_path(sGameCode, AURORA_CARD_GCI_DIRECTORY, 0, buffer, sizeof(buffer)) == 0 ||
       buffer[0] == '\0') {
     return {};
   }
