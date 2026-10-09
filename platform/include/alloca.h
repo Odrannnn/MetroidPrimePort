@@ -7,8 +7,9 @@
 #ifndef alloca
 #define alloca _alloca
 #endif
-#elif defined(__APPLE__)
-#include <stdlib.h> // alloca() is declared there
 #else
 #include_next <alloca.h>
+#ifndef alloca
+#define alloca __builtin_alloca
+#endif
 #endif
