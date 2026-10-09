@@ -209,6 +209,27 @@ const CMorphBall::SColorRgb CMorphBall::skBallJaggyTrailColors[9] = {
     {255, 204, 0},   // Gold
 };
 
+#ifdef TARGET_PC
+// Remastered's morph ball colours, idx 0-4 (kb topic/ball-colour-tables); idx 5-8 are port-only
+// suits and keep the port's values.
+static const CMorphBall::SColorRgb skRemasteredSwooshColors[9] = {
+    {128, 94, 15}, {66, 127, 166}, {53, 128, 69}, {52, 65, 217}, {83, 38, 38},
+    {0, 190, 220}, {223, 255, 0},  {196, 158, 255}, {255, 154, 34},
+};
+static const CMorphBall::SColorRgb skRemasteredBoostedSwooshColors[9] = {
+    {166, 83, 0}, {96, 153, 242}, {84, 204, 110}, {94, 107, 255}, {160, 25, 25},
+    {255, 230, 0}, {255, 230, 0}, {255, 230, 0}, {255, 230, 0},
+};
+static const CMorphBall::SColorRgb skRemasteredBoostedHullGlowColors[9] = {
+    {160, 25, 25}, {67, 159, 217}, {60, 150, 30}, {96, 51, 255}, {255, 60, 0},
+    {0, 157, 182}, {211, 241, 0}, {166, 134, 216}, {251, 152, 33},
+};
+static const CMorphBall::SColorRgb skRemasteredJaggyTrailColors[9] = {
+    {102, 196, 255}, {102, 196, 255}, {255, 204, 0}, {255, 204, 0}, {255, 213, 25},
+    {255, 204, 0}, {255, 204, 0}, {255, 204, 0}, {255, 204, 0},
+};
+#endif
+
 // lbl_803CEB78
 const CMorphBall::SColorRgb CMorphBall::skBallLightModulationColors[9] = {
     {194, 126, 16},  // Ochre
@@ -1441,27 +1462,36 @@ void CMorphBall::StopParticleWakes() {
 
 void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
   const CTransform4f swooshToWorld = GetSwooshToWorld();
+  float swooshOffsetX = 0.1f;
+  float swooshOffsetZ = 0.65f;
+#ifdef TARGET_PC
+  if (x19b8_slowBlueTailSwooshGen->PortIsRemastered()) {
+    // Remastered's swoosh offsets (rodata 0x1d25504/8; kb func/CMorphBallMP1-effects).
+    swooshOffsetX = 0.03f;
+    swooshOffsetZ = 0.6f;
+  }
+#endif
 
-  const CVector3f slowBlueOffset1 = swooshToWorld.Rotate(CVector3f(0.1f, 0.f, 0.f));
+  const CVector3f slowBlueOffset1 = swooshToWorld.Rotate(CVector3f(swooshOffsetX, 0.f, 0.f));
   x19b8_slowBlueTailSwooshGen->SetTranslation(swooshToWorld.GetTranslation() + slowBlueOffset1);
   x19b8_slowBlueTailSwooshGen->SetOrientation(swooshToWorld.GetRotation());
   // Retail uses zero dt: SetWarmUp forces an update without advancing elapsed time.
   x19b8_slowBlueTailSwooshGen->SetWarmUp();
   x19b8_slowBlueTailSwooshGen->Update(0.0);
 
-  const CVector3f slowBlueOffset2 = swooshToWorld.Rotate(CVector3f(-0.1f, 0.f, 0.f));
+  const CVector3f slowBlueOffset2 = swooshToWorld.Rotate(CVector3f(-swooshOffsetX, 0.f, 0.f));
   x19bc_slowBlueTailSwooshGen2->SetTranslation(swooshToWorld.GetTranslation() + slowBlueOffset2);
   x19bc_slowBlueTailSwooshGen2->SetOrientation(swooshToWorld.GetRotation());
   x19bc_slowBlueTailSwooshGen2->SetWarmUp();
   x19bc_slowBlueTailSwooshGen2->Update(0.0);
 
-  const CVector3f slowBlueOffset3 = swooshToWorld.Rotate(CVector3f(0.f, 0.f, 0.65f));
+  const CVector3f slowBlueOffset3 = swooshToWorld.Rotate(CVector3f(0.f, 0.f, swooshOffsetZ));
   x19c0_slowBlueTailSwoosh2Gen->SetTranslation(swooshToWorld.GetTranslation() + slowBlueOffset3);
   x19c0_slowBlueTailSwoosh2Gen->SetOrientation(swooshToWorld.GetRotation());
   x19c0_slowBlueTailSwoosh2Gen->SetWarmUp();
   x19c0_slowBlueTailSwoosh2Gen->Update(0.0);
 
-  const CVector3f slowBlueOffset4 = swooshToWorld.Rotate(CVector3f(0.f, 0.f, -0.65f));
+  const CVector3f slowBlueOffset4 = swooshToWorld.Rotate(CVector3f(0.f, 0.f, -swooshOffsetZ));
   x19c4_slowBlueTailSwoosh2Gen2->SetTranslation(swooshToWorld.GetTranslation() + slowBlueOffset4);
   x19c4_slowBlueTailSwoosh2Gen2->SetOrientation(swooshToWorld.GetRotation());
   x19c4_slowBlueTailSwoosh2Gen2->SetWarmUp();
@@ -1797,7 +1827,13 @@ void CMorphBall::EnterBoosting(CStateManager& mgr) {
 
   x0_player.ApplyImpulseWR(lookDir * (speedMul * incSpeed * x0_player.GetMass()),
                            CAxisAngle::Identity());
+#ifdef TARGET_PC
+  // Remastered sets the drain to ~1.19e-7 (kb func/CMorphBallMP1-effects), so the boosted swoosh
+  // and glow are already live on the entry frame.
+  x1df4_boostDrainTime = x19b8_slowBlueTailSwooshGen->PortIsRemastered() ? 1.1920929e-7f : 0.f;
+#else
   x1df4_boostDrainTime = 0.f;
+#endif
   x1de8_boostChargeTime = 0.f;
 
   x0_player.SetTransform(
@@ -2092,10 +2128,22 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
 
   {
     const float swooshAlpha = x1c20_tireFactor / x1c24_maxTireFactor;
-    const SColorRgb& swooshColor0 = skBallTailSwooshColors[x8_ballGlowColorIdx];
+    const SColorRgb* swooshTable = skBallTailSwooshColors;
+    const SColorRgb* boostedSwooshTable = skBallBoostedTailSwooshColors;
+    const SColorRgb* jaggyTable = skBallJaggyTrailColors;
+#ifdef TARGET_PC
+    if (x19b8_slowBlueTailSwooshGen->PortIsRemastered()) {
+      swooshTable = skRemasteredSwooshColors;
+      boostedSwooshTable = skRemasteredBoostedSwooshColors;
+    }
+    if (x19c8_jaggyTrailGen->PortIsRemastered()) {
+      jaggyTable = skRemasteredJaggyTrailColors;
+    }
+#endif
+    const SColorRgb& swooshColor0 = swooshTable[x8_ballGlowColorIdx];
     CColor color0 = CColor(swooshColor0.x0_r, swooshColor0.x1_g, swooshColor0.x2_b, 0xff);
     color0.SetAlpha(swooshAlpha);
-    const SColorRgb& swooshColor1 = skBallBoostedTailSwooshColors[x8_ballGlowColorIdx];
+    const SColorRgb& swooshColor1 = boostedSwooshTable[x8_ballGlowColorIdx];
     CColor color1 = CColor(swooshColor1.x0_r, swooshColor1.x1_g, swooshColor1.x2_b, 0xff);
     color1.SetAlpha(swooshAlpha);
 
@@ -2116,7 +2164,7 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
 
     if (x1df4_boostDrainTime > 0.f && speed > 23.f && static_cast< double >(swooshAlpha) > 0.5) {
       const float jaggyAlpha = CMath::Clamp(0.f, (speed - 23.f) / 17.f, t);
-      const SColorRgb& jaggyColorData = skBallJaggyTrailColors[x8_ballGlowColorIdx];
+      const SColorRgb& jaggyColorData = jaggyTable[x8_ballGlowColorIdx];
       CColor jaggyColor = CColor(jaggyColorData.x0_r, jaggyColorData.x1_g, jaggyColorData.x2_b, 0xff);
       jaggyColor.SetAlpha(jaggyAlpha);
       x19c8_jaggyTrailGen->SetModulationColor(jaggyColor);
@@ -2155,6 +2203,12 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
     particle->SetModulationColor(GetBallHullGlowColor(x8_ballGlowColorIdx));
     if (x19d0_ballInnerGlowGen->GetNumActiveChildParticles() > 1) {
       particle = x19d0_ballInnerGlowGen->GetActiveChildParticle(1);
+#ifdef TARGET_PC
+      if (x19d0_ballInnerGlowGen->PortIsRemastered()) {
+        const SColorRgb& c = skRemasteredBoostedHullGlowColors[x8_ballGlowColorIdx];
+        particle->SetModulationColor(CColor(c.x0_r, c.x1_g, c.x2_b, 0xff));
+      } else
+#endif
       particle->SetModulationColor(GetBallBoostedHullGlowColor(x8_ballGlowColorIdx));
     }
   }
