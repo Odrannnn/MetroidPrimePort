@@ -164,8 +164,9 @@ void CDolphinController::ReadDevices() {
   PortDebug::SetBeamShiftHeld(shiftHeld && inputFocused && !PortDebug::Visible());
 
   // Twin-stick: feed the right stick into the first-person aim and consume it,
-  // so it does not also drive the game's own free-look.
-  if (PortDebug::TwinStick() && x4_status[0].err == PAD_ERR_NONE) {
+  // so it does not also drive the game's own free-look. The map screen keeps
+  // the C-stick: it pans the map there.
+  if (PortDebug::TwinStick() && !PortDebug::MapScreenOpen() && x4_status[0].err == PAD_ERR_NONE) {
     const float sx = static_cast< float >(x4_status[0].substickX) / 127.f;
     const float sy = static_cast< float >(x4_status[0].substickY) / 127.f;
     PortDebug::AddStickAim(sx, sy, PortDebug::TickPeriod());
