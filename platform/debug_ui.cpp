@@ -4939,13 +4939,18 @@ void DrawUpdateToast() {
   ImGui::End();
 }
 
-// While pipelines compile in the background (the shipped seed on a first start, then new
-// shaders as they appear): after half a second, a count and a bar since the toast opened.
+// While the startup compile runs (the pipeline cache and shipped seed, queued before the first
+// frame): after half a second, a count and a bar since the toast opened. Once that queue has
+// drained, shaders met in game compile without it.
 void DrawShaderCompilationToast() {
   static double sQueuedSince = -1.0;
   static uint32_t sBase = 0; // createdPipelines when the toast opened
+  static bool sStartupDone = false;
   const AuroraStats* stats = aurora_get_stats();
-  if (!sShowShaderCompilation || stats == nullptr || stats->queuedPipelines == 0) {
+  if (stats != nullptr && stats->queuedPipelines == 0) {
+    sStartupDone = true;
+  }
+  if (!sShowShaderCompilation || stats == nullptr || sStartupDone) {
     sQueuedSince = -1.0;
     return;
   }
@@ -5860,8 +5865,8 @@ void DrawVideoQuality() {
   if (ImGui::Checkbox("Show shader compilation", &sShowShaderCompilation)) {
     MarkDirty();
   }
-  ImGui::SetItemTooltip("A small progress bar while shaders compile in the background (mostly the first start\n"
-                        "after an install or update). Draws whose shader isn't ready yet are skipped.");
+  ImGui::SetItemTooltip("A small progress bar while the shader cache compiles at startup (longest on the first\n"
+                        "start after an install or update). Draws whose shader isn't ready yet are skipped.");
   locked = BeginOriginalLocked();
   {
     int aniso = 0;
