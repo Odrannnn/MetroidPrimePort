@@ -703,7 +703,10 @@ constexpr MatchedEffect kMatchedEffects[] = {
 // elsewhere: the stub replaces them rather than the disc's being kept. Retail's
 // Artifact Temple laser hit spawns the same five PARTs as Ridley's 2D16014C
 // (which carries them now, as c3a53327), so retail draws them twice.
-const std::set<uint32_t> kStubReplaces = {0x53861B29};
+// Remastered shows no particle flash on a plasma shot: PlasmaMuzzle and
+// PlasmaAuxMuzzle are stubs and no other code draws one (kb
+// topic/nil-texture-placeholder).
+const std::set<uint32_t> kStubReplaces = {0x53861B29, 0x8D7BBFB2, 0xB0F9DBE6};
 
 // A retail PART an effect replaces, and the rule that paired them.
 struct Pairing {
@@ -1094,7 +1097,7 @@ public:
       }
     }
     // An effect drawn only by placeholder materials would replace the disc's with
-    // an invisible one (PlasmaMuzzle, PlasmaAuxMuzzle): keep the disc's.
+    // an invisible one: keep the disc's unless Remastered draws nothing there too.
     if (kStubReplaces.count(retail) == 0 && std::any_of(parts.begin(), parts.end(), [](const ConvertedPart& part) { return part.placeholder; }) &&
         std::all_of(parts.begin(), parts.end(), [](const ConvertedPart& part) { return part.drawsNothing; })) {
       ++m_result.failed;
