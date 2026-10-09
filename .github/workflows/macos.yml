@@ -54,7 +54,8 @@ jobs:
           -DOPENSSL_USE_STATIC_LIBS=TRUE
 
       - name: Build
-        run: cmake --build build-mac -j
+        # -k 0: report every failing file in one run while the port is brought up.
+        run: cmake --build build-mac -j -- -k 0
 
       - name: Test
         run: ctest --test-dir build-mac -L port --output-on-failure
