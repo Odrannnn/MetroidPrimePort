@@ -22,7 +22,10 @@ if(EXISTS "${SOURCE_DIR}/android/app/build.gradle")
         set(version "${CMAKE_MATCH_1}")
     endif()
 endif()
-set(content "#include \"port_build_info.h\"\nconst char kMpBuildRevision[] = \"${revision}\";\nconst char kMpBuildVersion[] = \"${version}\";\n")
+# extern: a namespace-scope const is otherwise internal, and the include can find a
+# stale generated port_build_info.h (the old scheme's, next to this file) instead
+# of the declaring header.
+set(content "#include \"port_build_info.h\"\nextern const char kMpBuildRevision[] = \"${revision}\";\nextern const char kMpBuildVersion[] = \"${version}\";\n")
 set(previous "")
 if(EXISTS "${OUTPUT_SOURCE}")
     file(READ "${OUTPUT_SOURCE}" previous)
