@@ -50,6 +50,11 @@ static bool sFastMorphAirCarry = false;
 // state. Retail skips the friction while a jump rises, so the speed dips at
 // takeoff and recovers at the apex (issue #46); Remastered and PrimeHack don't.
 static bool sPlanarMovement = false;
+// Set while airborne once an orbit was held (a scan dash or strafe jump): the
+// rest of that airtime moves as retail, whose rising jump keeps the dash's
+// speed (Remastered's drag took a dash from 20 to 13 u/s), so dash tricks
+// such as Space Jump early still carry. Cleared on landing.
+static bool sOrbitAirCarry = false;
 #endif
 
 static const CMaterialList BallTransitionInclude = CMaterialList(kMT_Solid);
@@ -352,7 +357,13 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
   const float jumpInput = JumpInput(input, mgr);
   const bool mouseMovement = MouseControlsAllowed(mgr) && x304_orbitState == kOS_NoOrbit;
 #ifdef TARGET_PC
-  sPlanarMovement = MouseControlsAllowed(mgr) && PortDebug::RemasteredMovement();
+  if (x258_movementState == NPlayer::kMS_OnGround) {
+    sOrbitAirCarry = false;
+  } else if (x304_orbitState != kOS_NoOrbit) {
+    sOrbitAirCarry = true;
+  }
+  sPlanarMovement =
+      MouseControlsAllowed(mgr) && PortDebug::RemasteredMovement() && !sOrbitAirCarry;
 #endif
   float turnInput = mouseMovement ? 0.f : TurnInput(input);
   float forwardInput = ForwardInput(input, turnInput);
