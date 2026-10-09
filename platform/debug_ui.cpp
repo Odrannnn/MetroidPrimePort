@@ -5045,6 +5045,46 @@ void DrawShaderCompilationToast() {
   ImGui::End();
 }
 
+// Once per launch, for 8 s, until the panel is first opened: how to open it. Top left,
+// clear of the other toasts (top and bottom centre) and Android's START/MENU buttons.
+void DrawMenuHintToast() {
+  static double sShownAt = -1.0;
+  static bool sDone = false;
+  if (sDone) {
+    return;
+  }
+  if (sVisible) {
+    sDone = true;
+    return;
+  }
+  const double now = ImGui::GetTime();
+  if (sShownAt < 0.0) {
+    sShownAt = now;
+  }
+  const double age = now - sShownAt;
+  if (age > 8.0) {
+    sDone = true;
+    return;
+  }
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + 16.f, viewport->Pos.y + 16.f), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.7f);
+  // Fades out over the last second.
+  ImGui::PushStyleVar(ImGuiStyleVar_Alpha, static_cast<float>(std::clamp(8.0 - age, 0.0, 1.0)));
+  if (ImGui::Begin("##menu-hint-toast", nullptr,
+                   ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
+                       ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
+                       ImGuiWindowFlags_AlwaysAutoResize)) {
+#if defined(__ANDROID__)
+    ImGui::TextUnformatted("Tap the cog button (F1 on a keyboard) for settings");
+#else
+    ImGui::TextUnformatted("Press F1 for settings");
+#endif
+  }
+  ImGui::End();
+  ImGui::PopStyleVar();
+}
+
 // Once per launch, for longer and in red: the last session ended on a failed disc read.
 void DrawDiscReadFailedAlert() {
   static double sShownAt = -1.0;
@@ -8754,6 +8794,7 @@ void DrawUI() {
   PortImporters::Poll();
 #endif
   FinishRemasteredImport();
+  DrawMenuHintToast();
   DrawStaleImportToast();
   DrawUpdateToast();
   DrawDiscReadFailedAlert();
