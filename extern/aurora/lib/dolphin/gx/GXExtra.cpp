@@ -175,7 +175,7 @@ void GXPortSetParticleFog(GXBool on) {
   GX_WRITE_U8(on ? 1 : 0);
 }
 
-GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[2]) {
+GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[3]) {
   if (!aurora::gfx::xray::ensure_task()) {
     return false;
   }
@@ -184,6 +184,7 @@ GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRa
   std::memcpy(params.p, p, sizeof(params.p));
   params.depth[0] = depthRange[0];
   params.depth[1] = depthRange[1];
+  params.depth[2] = depthRange[2];
   u32 words[sizeof(params) / sizeof(u32)];
   std::memcpy(words, &params, sizeof(words));
   GX_WRITE_AURORA(GX_AURORA_PORT_XRAY);

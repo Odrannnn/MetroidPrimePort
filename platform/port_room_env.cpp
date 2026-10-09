@@ -1399,6 +1399,16 @@ void SendBrdfLut() {
   GXSetPBRBrdfLut(data.empty() ? nullptr : data.data(), uint32_t(data.size()));
 }
 
+// Remastered's X-ray visor post (kb topic/xray-post-shader-00089f0.md); MP_XRAY_POST=0 keeps the
+// retail visor, as does Original experience.
+static float sXRayTime = 0.f;
+static bool sXRayActive = false;
+
+static bool XRayPostEnabled() {
+  static const bool sEnv = port::EnvFlag("MP_XRAY_POST", true);
+  return sEnv && !PortDebug::OriginalExperience();
+}
+
 void UpdateFrame(bool roomGeoDrawing) {
   if (!sBrdfSent) {
     SendBrdfLut();
@@ -1407,6 +1417,12 @@ void UpdateFrame(bool roomGeoDrawing) {
     sBombTint = port::EnvFlag("MP_REMASTERED_BOMB_TINT", true) ? 1 : 0;
   }
   PowerBombBakedLight(sBombTint != 0 ? sPowerBombTime : -1.f, sBakedLight);
+  if (sXRayActive && XRayPostEnabled()) {
+    // init_frame 0xfb34b0 sets CBakedLightingManager's modulation override (0.6, 0.6, 0.6); it
+    // replaces the colour entirely, power-bomb flash included (UpdateLightModulationColor 0x1c6f4c).
+    constexpr float kXRayShadowMod = 0.6f;
+    sBakedLight[0] = sBakedLight[1] = sBakedLight[2] = kXRayShadowMod;
+  }
   GXSetPBRBakedLightModulation(sBakedLight);
   constexpr float kGrey = 0.2158605f; // sRGB 128, linear
   constexpr uint32_t kInFlight = 3;   // readbacks Aurora may have queued
@@ -1533,12 +1549,13 @@ float GlowScale() {
   return std::isfinite(scale) && scale > 0.f ? scale : 1.f;
 }
 
-static float sXRayTime = 0.f;
-
-void XRayTick(float dt, bool xrayActive) { sXRayTime = xrayActive ? sXRayTime + dt : 0.f; }
+void XRayTick(float dt, bool xrayActive) {
+  sXRayActive = xrayActive;
+  sXRayTime = xrayActive ? sXRayTime + dt : 0.f;
+}
 
 bool XRayPass(bool distortion) {
-  if (PortDebug::OriginalExperience()) {
+  if (!XRayPostEnabled()) {
     return false;
   }
   const float exposure = FrameExposure();
@@ -1559,7 +1576,8 @@ bool XRayPass(bool distortion) {
       {0.f, 15.f, 0.f, 0.f},
   };
   // SetupViewForDraw's depth range.
-  const float depthRange[2] = {0.125f, 1.f};
+  // skXRayResolution: the scale of the target the world is drawn into (init_frame 0xfb34b0).
+  const float depthRange[3] = {0.125f, 1.f, distortion ? 0.7f : 1.f};
   return GXPortXRayPass(p, tone, depthRange);
 }
 

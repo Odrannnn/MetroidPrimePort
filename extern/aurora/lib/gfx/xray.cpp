@@ -7,6 +7,7 @@
 
 #include <aurora/gfx.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <string>
@@ -24,10 +25,19 @@
 // The EFB holds the tone-mapped colour sRGB encoded, so pass 1 works in the exposed level (the
 // EFB undone through the room's curve, as the fog does) and draws its result through the curve
 // again; the ramp pass runs on the decoded colour and re-encodes it.
+// Remastered draws the whole X-ray world into a 0.7-scale HDR target and blends it back to the
+// full-resolution frame (xray_blend_upscale 0xfb4500, a plain textured quad), tone mapping after
+// that: pass 1 here therefore writes the unclamped level E (it can go negative, the depth fade
+// subtracts) at 0.7 of the frame, sampling the full-resolution frame at each target pixel's
+// centre (the nearest of the pixels the world was rasterised to), and a second pass filters it
+// up bilinearly in that HDR domain before the curve and the sRGB encoding.
 namespace aurora::gfx::xray {
 namespace {
 Module Log("aurora::gfx::xray");
 using webgpu::g_device;
+
+// Signed, unclamped light: the depth fade subtracts, and the filtering up happens before the curve.
+constexpr wgpu::TextureFormat LevelFormat = wgpu::TextureFormat::RGBA16Float;
 
 constexpr const char* Source = R"(
 struct Params {
@@ -96,11 +106,11 @@ fn srgb_dec(c: vec3f) -> vec3f {
   return select(pow((e + 0.055) / 1.055, vec3f(2.4)), e / 12.92, e <= vec3f(0.04045));
 }
 
-// Pass 1: the distortion over the opaque world.
+// Pass 1: the distortion over the opaque world, as the level E at the low-resolution target.
 @fragment
 fn fs_distort(in: VertexOutput) -> @location(0) vec4f {
   let size = vec2i(textureDimensions(src));
-  let f = textureLoad(src, min(vec2i(floor(in.pos.xy)), size - vec2i(1)), 0);
+  let f = textureLoad(src, min(vec2i(in.uv * vec2f(size)), size - vec2i(1)), 0);
   let depthSize = vec2i(textureDimensions(depthTex));
   let at = min(vec2i(in.uv * vec2f(depthSize)), depthSize - vec2i(1));
   // Reversed Z; nearer than the world's depth range is the viewmodel (0.0097656..0.0386719).
@@ -117,7 +127,14 @@ fn fs_distort(in: VertexOutput) -> @location(0) vec4f {
   let x = vec3f(untone(y.r), untone(y.g), untone(y.b));
   let c = pow(x, vec3f(u.p[0].x));
   let sel = select(c * u.p[0].y, vec3f(1.0) - c * u.p[0].y, u.p[1].w < 0.0);
-  let e = max(sel * abs(u.p[1].w) - vec3f(a * u.p[4].y), vec3f(0.0));
+  let e = sel * abs(u.p[1].w) - vec3f(a * u.p[4].y);
+  return vec4f(e, 1.0);
+}
+
+// Pass 1b: the low-resolution level, filtered up and drawn through the curve.
+@fragment
+fn fs_upscale(in: VertexOutput) -> @location(0) vec4f {
+  let e = textureSampleLevel(src, samp, in.uv, 0.0).rgb;
   return vec4f(srgb_enc(vec3f(tone(e.r), tone(e.g), tone(e.b))), 1.0);
 }
 
@@ -150,8 +167,13 @@ fn fs_ramp(in: VertexOutput) -> @location(0) vec4f {
 
 struct State {
   EncoderTaskId task = InvalidEncoderTask;
-  wgpu::RenderPipeline distort;
+  wgpu::RenderPipeline distort; // into the low-resolution float target
+  wgpu::RenderPipeline upscale;
   wgpu::RenderPipeline ramp;
+  wgpu::Texture level;
+  wgpu::TextureView levelView;
+  uint32_t levelWidth = 0;
+  uint32_t levelHeight = 0;
   wgpu::BindGroupLayout layout;
   wgpu::TextureFormat pipelineFormat = wgpu::TextureFormat::Undefined;
   uint32_t pipelineSamples = 0;
@@ -220,19 +242,22 @@ void ensure_pipelines(wgpu::TextureFormat format, uint32_t samples) {
   };
   const auto pipelineLayout = g_device.CreatePipelineLayout(&pipelineLayoutDescriptor);
   const wgpu::ColorTargetState target{.format = format, .writeMask = wgpu::ColorWriteMask::All};
-  const auto make = [&](const char* label, const char* entry) {
-    const wgpu::FragmentState fragment{.module = module, .entryPoint = entry, .targetCount = 1, .targets = &target};
+  const wgpu::ColorTargetState levelTarget{.format = LevelFormat, .writeMask = wgpu::ColorWriteMask::All};
+  const auto make = [&](const char* label, const char* entry, bool lowRes = false) {
+    const wgpu::FragmentState fragment{
+        .module = module, .entryPoint = entry, .targetCount = 1, .targets = lowRes ? &levelTarget : &target};
     const wgpu::RenderPipelineDescriptor descriptor{
         .label = label,
         .layout = pipelineLayout,
         .vertex = {.module = module, .entryPoint = "vs_main"},
         .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
-        .multisample = {.count = samples, .mask = UINT32_MAX},
+        .multisample = {.count = lowRes ? 1u : samples, .mask = UINT32_MAX},
         .fragment = &fragment,
     };
     return g_device.CreateRenderPipeline(&descriptor);
   };
-  g_state.distort = make("X-ray Distortion", "fs_distort");
+  g_state.distort = make("X-ray Distortion", "fs_distort", true);
+  g_state.upscale = make("X-ray Upscale", "fs_upscale");
   g_state.ramp = make("X-ray Ramp", "fs_ramp");
   g_state.pipelineFormat = format;
   g_state.pipelineSamples = samples;
@@ -252,6 +277,22 @@ void ensure_pipelines(wgpu::TextureFormat format, uint32_t samples) {
     };
     g_state.sampler = g_device.CreateSampler(&samplerDescriptor);
   }
+}
+
+void ensure_level(uint32_t width, uint32_t height) {
+  if (g_state.level && g_state.levelWidth == width && g_state.levelHeight == height) {
+    return;
+  }
+  g_state.levelWidth = width;
+  g_state.levelHeight = height;
+  const wgpu::TextureDescriptor descriptor{
+      .label = "X-ray Post Level",
+      .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding,
+      .size = {width, height, 1},
+      .format = LevelFormat,
+  };
+  g_state.level = g_device.CreateTexture(&descriptor);
+  g_state.levelView = g_state.level.CreateView();
 }
 
 void ensure_frame(uint32_t width, uint32_t height, wgpu::TextureFormat format) {
@@ -302,19 +343,44 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
   const wgpu::Extent3D copySize{width, height, 1};
   cmd.CopyTextureToTexture(&copySource, &copyTarget, &copySize);
 
-  const std::array groupEntries{
-      wgpu::BindGroupEntry{.binding = 0, .buffer = g_state.uniforms, .offset = offset, .size = sizeof(Params)},
-      wgpu::BindGroupEntry{.binding = 1, .textureView = g_state.frameView},
-      wgpu::BindGroupEntry{.binding = 2, .textureView = depth.view},
-      wgpu::BindGroupEntry{.binding = 3, .sampler = g_state.sampler},
+  const auto makeGroup = [&](const char* label, const wgpu::TextureView& view) {
+    const std::array groupEntries{
+        wgpu::BindGroupEntry{.binding = 0, .buffer = g_state.uniforms, .offset = offset, .size = sizeof(Params)},
+        wgpu::BindGroupEntry{.binding = 1, .textureView = view},
+        wgpu::BindGroupEntry{.binding = 2, .textureView = depth.view},
+        wgpu::BindGroupEntry{.binding = 3, .sampler = g_state.sampler},
+    };
+    const wgpu::BindGroupDescriptor groupDescriptor{
+        .label = label,
+        .layout = g_state.layout,
+        .entryCount = groupEntries.size(),
+        .entries = groupEntries.data(),
+    };
+    return g_device.CreateBindGroup(&groupDescriptor);
   };
-  const wgpu::BindGroupDescriptor groupDescriptor{
-      .label = "X-ray Post",
-      .layout = g_state.layout,
-      .entryCount = groupEntries.size(),
-      .entries = groupEntries.data(),
-  };
-  const auto group = g_device.CreateBindGroup(&groupDescriptor);
+  if (distortion) {
+    // Pass 1a: the level at the low-resolution target.
+    const float scale = params.depth[2] > 0.f && params.depth[2] <= 1.f ? params.depth[2] : 1.f;
+    ensure_level(std::max(1u, uint32_t(float(width) * scale)), std::max(1u, uint32_t(float(height) * scale)));
+    const wgpu::RenderPassColorAttachment levelAttachment{
+        .view = g_state.levelView,
+        .loadOp = wgpu::LoadOp::Clear,
+        .storeOp = wgpu::StoreOp::Store,
+        .clearValue = {0.0, 0.0, 0.0, 0.0},
+    };
+    const wgpu::RenderPassDescriptor levelDescriptor{
+        .label = "X-ray Level",
+        .colorAttachmentCount = 1,
+        .colorAttachments = &levelAttachment,
+        .timestampWrites = webgpu::gpu_prof::pass_writes("X-ray level"),
+    };
+    const auto levelPass = cmd.BeginRenderPass(&levelDescriptor);
+    levelPass.SetPipeline(g_state.distort);
+    levelPass.SetBindGroup(0, makeGroup("X-ray Level", g_state.frameView));
+    levelPass.Draw(3);
+    levelPass.End();
+  }
+  const auto group = makeGroup("X-ray Post", distortion ? g_state.levelView : g_state.frameView);
   // Every pixel is written without blending, so the frame need not be loaded first.
   const wgpu::RenderPassColorAttachment attachment{
       .view = target.view,
@@ -330,7 +396,7 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
       .timestampWrites = webgpu::gpu_prof::pass_writes("X-ray post"),
   };
   const auto pass = cmd.BeginRenderPass(&passDescriptor);
-  pass.SetPipeline(distortion ? g_state.distort : g_state.ramp);
+  pass.SetPipeline(distortion ? g_state.upscale : g_state.ramp);
   pass.SetBindGroup(0, group);
   pass.Draw(3);
   pass.End();

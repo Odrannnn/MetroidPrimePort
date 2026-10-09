@@ -253,7 +253,7 @@ typedef struct {
   f32 viewToWorld[3][4];   // rows: world = row . (view, 1)
   f32 worldToVolume[3][4]; // rows: world -> the ambient volume's texture coordinates
   f32 frustum[4];          // left, right, bottom, top at a view depth of 1
-  f32 depth[4];            // near, far, and the GX z range the world draws in (min, max)
+  f32 depth[4];            // near, far, and the GX z range the world draws in (min, max), and the scale of the low-resolution target (pass 1)
   f32 fog[4];              // range, scatter, absorb, density
   f32 shape[4];            // height slope, height bias (over world z), noise frequency, noise strength
   f32 noise[4];            // xyz: the noise's offset, w: the light's largest channel
@@ -286,7 +286,7 @@ void GXPortSetParticleFog(GXBool on);
 // opaque world (it reads the depth, whose GX z range is depthRange), anything else the ramp and
 // vignette after the post effects. `tone` is the curve the EFB was drawn through. False if it
 // could not be recorded.
-GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[2]);
+GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[3]);
 // Stores a 33x33x33 RGBA8 colour grade LUT (red fastest) under a non-zero id.
 void GXPortColorGradeLut(u32 id, const u8* rgba);
 // The average radiance (linear rgb) of the latest frame measured by GXPortPostProcess, and a
