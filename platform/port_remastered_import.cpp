@@ -91,6 +91,8 @@ constexpr uint32_t kFMV0 = 0x464D5630;
 constexpr uint32_t kGENP = 0x47454E50;  // a particle effect
 constexpr uint32_t kSWSH = 0x53575348;  // a standalone swoosh effect
 constexpr uint32_t kMATI = 0x4D415449;  // a material instance
+constexpr uint32_t kWPSM = 0x5750534D;  // a projectile weapon (Remastered's WPSC)
+constexpr uint32_t kWPSC = 0x57505343;  // the disc's projectile weapon
 
 constexpr const char* kStagingName = ".remastered-models.importing";
 // Written last, so a staging folder without it is an import that was cut short.
@@ -613,8 +615,32 @@ public:
       if (!parsed) {
         continue;
       }
+      // The named resources (a pak's first section): the projectile weapons' names pair them
+      // with Remastered's WPSMs. Kept out of m_resources, which the fingerprint covers.
+      if (header.size() >= 12) {
+        const auto be32 = [&header](size_t at) {
+          return uint32_t(header[at]) << 24 | uint32_t(header[at + 1]) << 16 | uint32_t(header[at + 2]) << 8 |
+                 uint32_t(header[at + 3]);
+        };
+        size_t at = 12;
+        for (uint32_t n = be32(8); n > 0 && at + 12 <= header.size(); --n) {
+          const uint32_t length = be32(at + 8);
+          if (at + 12 + length > header.size()) {
+            break;
+          }
+          if (be32(at) == kWPSC) {
+            std::string name(reinterpret_cast<const char*>(header.data() + at + 12), length);
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+            m_wpscNames.emplace(std::move(name), be32(at + 4));
+          }
+          at += 12 + length;
+        }
+      }
       for (const PortMods::PakResource& res : table.resources) {
         m_ids.insert(res.id);
+        if (res.type == kWPSC) {
+          m_wpsc.emplace(Key(res.type, res.id), Where{entry, res.offset, res.size, res.compressed != 0});
+        }
         if (res.type == kCMDL || res.type == kCSKR || res.type == kANCS || res.type == kTXTR || res.type == kMLVL ||
             res.type == kMREA || res.type == kSTRG || res.type == kFRME || res.type == kMAPA || res.type == kMAPW) {
           m_resources.emplace(Key(res.type, res.id), Where{entry, res.offset, res.size, res.compressed != 0});
@@ -657,10 +683,23 @@ public:
     return sum;
   }
 
-  bool Read(uint32_t type, uint32_t id, std::vector<uint8_t>& out) {
-    const auto found = m_resources.find(Key(type, id));
-    if (found == m_resources.end()) {
+  // The id of the disc's projectile weapon (WPSC) of this name.
+  bool WpscId(const std::string& name, uint32_t& id) const {
+    const auto found = m_wpscNames.find(name);
+    if (found == m_wpscNames.end()) {
       return false;
+    }
+    id = found->second;
+    return true;
+  }
+
+  bool Read(uint32_t type, uint32_t id, std::vector<uint8_t>& out) {
+    auto found = m_resources.find(Key(type, id));
+    if (found == m_resources.end()) {
+      found = m_wpsc.find(Key(type, id));
+      if (found == m_wpsc.end()) {
+        return false;
+      }
     }
     const Where& where = found->second;
     if (!where.compressed) {
@@ -730,6 +769,8 @@ private:
   std::map<int32_t, void*> m_handles;
   std::unordered_map<uint64_t, Where> m_resources;
   std::unordered_set<uint32_t> m_ids;
+  std::unordered_map<uint64_t, Where> m_wpsc;                 // the projectile weapons, read on demand
+  std::unordered_map<std::string, uint32_t> m_wpscNames;      // WPSC id by name
 };
 
 // --- The Remastered image ------------------------------------------------------
@@ -786,8 +827,18 @@ public:
           m_movies.emplace(IdToString(assets[a].id), Where{m_paks.size(), a});
         } else if (type == kGENP) {
           m_effects.emplace(assets[a].id, Where{m_paks.size(), a});
+          for (const std::string& name : assets[a].names) {
+            m_effectNames.emplace(FrameKey(name), assets[a].id);
+          }
         } else if (type == kSWSH) {
           m_swooshes.emplace(assets[a].id, Where{m_paks.size(), a});
+          for (const std::string& name : assets[a].names) {
+            m_effectNames.emplace(FrameKey(name), assets[a].id);
+          }
+        } else if (type == kWPSM) {
+          for (const std::string& name : assets[a].names) {
+            m_projectiles.emplace(FrameKey(name), Where{m_paks.size(), a});
+          }
         } else if (type == kMATI) {
           m_materials.emplace(assets[a].id, Where{m_paks.size(), a});
         } else if (type == kGUIF) {
@@ -951,6 +1002,32 @@ public:
     std::sort(ids.begin(), ids.end());
     return ids;
   }
+  // The projectile weapons (WPSM) by lower-case name, and a GENP/SWSH by its name.
+  std::vector<std::string> ProjectileNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, where] : m_projectiles) {
+      names.push_back(name);
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+  }
+  bool ReadProjectile(const std::string& name, std::vector<uint8_t>& out, std::string& error) const {
+    const auto found = m_projectiles.find(name);
+    if (found == m_projectiles.end()) {
+      error = "not in the image";
+      return false;
+    }
+    const Pak& pak = *m_paks[found->second.pak];
+    return pak.ReadAsset(pak.Assets()[found->second.asset], out, error);
+  }
+  bool EffectByName(const std::string& name, ModelUuid& id) const {
+    const auto found = m_effectNames.find(name);
+    if (found == m_effectNames.end()) {
+      return false;
+    }
+    id = found->second;
+    return true;
+  }
   bool ReadEffectAsset(uint32_t type, const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const {
     return Read(type == kGENP   ? m_effects
                 : type == kSWSH ? m_swooshes
@@ -1040,6 +1117,8 @@ private:
   Index m_effects;
   Index m_swooshes;  // standalone SWSH effects
   Index m_materials;
+  std::unordered_map<std::string, Where> m_projectiles;  // WPSM, by FrameKey
+  std::unordered_map<std::string, ModelUuid> m_effectNames;  // the named GENP and SWSH, by FrameKey
   std::unordered_map<std::string, Where> m_frames;  // GUIF, by FrameKey
   std::unordered_map<std::string, Where> m_tweaks;  // LDTA, by FrameKey
   std::unordered_map<std::string, Where> m_textureNames;  // the named TXTR, by FrameKey
@@ -1317,6 +1396,100 @@ void RunMovies(std::string nspPath, std::string keysPath, fs::path mod) {
 // few thousand textures, and each model's converter used to decode its own
 // copy. The least recently used go past the byte budget; one decode per id runs
 // at a time, and the other workers asking for it wait.
+// The PARTs and SWHCs the projectile weapons name, as the retail ones they replace. A Remastered WPSM
+// is the disc's WPSC of the same name (both have the weapons' names: PowerBeam, WaveBall, Missile...);
+// the GENP in its APSM/APS2 and the SWSH in its ASW1-3 take the PART/SWHC the WPSC's field of that
+// name holds. Remastered's field is stored as <reversed fourcc> 00 <guid>, the disc's as the fourcc,
+// CNST and a big-endian id (CProjectileWeaponDataFactory::CreateWPSM); a guid that is zero or no
+// asset of the image is not a reference.
+EffectGuid ToStored(EffectGuid id) {
+  std::swap(id[0], id[3]);
+  std::swap(id[1], id[2]);
+  std::swap(id[4], id[5]);
+  std::swap(id[6], id[7]);
+  return id;
+}
+
+std::string HexId(uint32_t id) {
+  char text[16];
+  std::snprintf(text, sizeof(text), "%08X", id);
+  return text;
+}
+
+std::vector<EffectPairing> ProjectilePairings(const Remastered& remastered, Retail& retail,
+                                              std::vector<std::string>& lines) {
+  struct Field {
+    const char* tag;
+    uint32_t type;  // the Remastered asset a reference must be
+  };
+  static const Field kFields[] = {{"APSM", kGENP}, {"APS2", kGENP}, {"ASW1", kSWSH}, {"ASW2", kSWSH}, {"ASW3", kSWSH}};
+  std::vector<EffectPairing> pairings;
+  for (const std::string& name : remastered.ProjectileNames()) {
+    uint32_t wpsc = 0;
+    std::vector<uint8_t> weapon;
+    std::vector<uint8_t> projectile;
+    std::string ignored;
+    if (!retail.WpscId(name, wpsc)) {
+      lines.push_back("WPSM " + name + ": no disc WPSC of that name");
+      continue;
+    }
+    if (!retail.Read(kWPSC, wpsc, weapon) || !remastered.ReadProjectile(name, projectile, ignored)) {
+      lines.push_back("WPSM " + name + ": could not read it");
+      continue;
+    }
+    for (const Field& field : kFields) {
+      // The disc's id: tag, "CNST", id.
+      uint32_t discId = 0;
+      for (size_t i = 0; i + 12 <= weapon.size(); ++i) {
+        if (std::memcmp(weapon.data() + i, field.tag, 4) == 0 && std::memcmp(weapon.data() + i + 4, "CNST", 4) == 0) {
+          discId = uint32_t(weapon[i + 8]) << 24 | uint32_t(weapon[i + 9]) << 16 | uint32_t(weapon[i + 10]) << 8 |
+                   uint32_t(weapon[i + 11]);
+          break;
+        }
+      }
+      // Remastered's: the reversed tag, a zero byte, 16 bytes in an effect's order.
+      EffectGuid guid{};
+      bool found = false;
+      for (size_t i = 0; i + 21 <= projectile.size() && !found; ++i) {
+        if (projectile[i] != uint8_t(field.tag[3]) || projectile[i + 1] != uint8_t(field.tag[2]) ||
+            projectile[i + 2] != uint8_t(field.tag[1]) || projectile[i + 3] != uint8_t(field.tag[0]) ||
+            projectile[i + 4] != 0) {
+          continue;
+        }
+        std::copy_n(projectile.begin() + std::ptrdiff_t(i + 5), 16, guid.begin());
+        std::swap(guid[0], guid[3]);  // to a pak's order
+        std::swap(guid[1], guid[2]);
+        std::swap(guid[4], guid[5]);
+        std::swap(guid[6], guid[7]);
+        found = remastered.EffectAssetType(guid) == field.type;
+      }
+      if (!found || discId == 0 || discId == 0xFFFFFFFFu || !retail.HasId(discId)) {
+        if (found != (discId != 0 && discId != 0xFFFFFFFFu)) {
+          lines.push_back("WPSM " + name + " " + field.tag + (found ? ": the disc has no such field" : ": the WPSM has no such field"));
+        }
+        continue;
+      }
+      pairings.push_back({guid, discId, "wpsm " + name + " " + field.tag});
+      lines.push_back("WPSM " + name + " " + field.tag + ": " + EffectGuidString(ToStored(guid)) + " -> " + HexId(discId));
+    }
+  }
+  // Effects the disc's PARTs/SWHCs name the same (SamGunFx.pak), that no WPSC reaches.
+  struct Named {
+    const char* name;
+    uint32_t retail;
+  };
+  static const Named kNamed[] = {{"powerauxmuzzle", 0x2AED975B}, {"bustermuzzle", 0}, {"busterswoosh1", 0x869B8E14},
+                                 {"busterswoosh2", 0x804E26D9}};
+  for (const Named& named : kNamed) {
+    ModelUuid id;
+    if (named.retail != 0 && retail.HasId(named.retail) && remastered.EffectByName(named.name, id)) {
+      pairings.push_back({id, named.retail, std::string("name ") + named.name});
+      lines.push_back(std::string("name ") + named.name + ": " + EffectGuidString(ToStored(id)) + " -> " + HexId(named.retail));
+    }
+  }
+  return pairings;
+}
+
 class TextureCache {
 public:
   explicit TextureCache(size_t budget) : m_budget(budget) {}
@@ -2187,6 +2360,14 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       std::lock_guard<std::mutex> lock(reportMutex);
       effectRows.push_back(text);
     };
+    {
+      std::vector<std::string> pairLines;
+      effectIO.pairings = ProjectilePairings(remastered, retail, pairLines);
+      for (const std::string& line : pairLines) {
+        std::printf("remastered import: projectile %s\n", line.c_str());
+      }
+      AddLine("effects: " + std::to_string(effectIO.pairings.size()) + " projectile effects paired");
+    }
     const EffectImportResult effects = ImportEffects(effectIO);
     AddLine("effects: " + std::to_string(effects.written) + " of " + std::to_string(effects.candidates) + " written (" +
             std::to_string(effects.parts) + " PARTs, " + std::to_string(effects.textures) + " textures, " +
