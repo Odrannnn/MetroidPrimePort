@@ -65,8 +65,21 @@ bool SetNonBlocking(Socket s) {
 bool ConnectPending() { return errno == EINPROGRESS; }
 bool WouldBlock() { return errno == EAGAIN || errno == EWOULDBLOCK; }
 bool InitSockets() { return true; }
-// A closed peer must fail the send, not raise SIGPIPE.
+// A closed peer must fail the send, not raise SIGPIPE. macOS has no MSG_NOSIGNAL:
+// its sockets take SO_NOSIGPIPE instead (NoSigpipe, after socket()).
+#ifdef MSG_NOSIGNAL
 const int kSendFlags = MSG_NOSIGNAL;
+#else
+const int kSendFlags = 0;
+#endif
+#ifdef SO_NOSIGPIPE
+void NoSigpipe(Socket s) {
+  const int on = 1;
+  setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+}
+#else
+void NoSigpipe(Socket) {}
+#endif
 #endif
 
 const int kConnectTimeoutMs = 2000;
@@ -120,6 +133,7 @@ Socket Connect(const std::string& address, std::string& error) {
     s = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
     if (s == kNoSocket)
       continue;
+    NoSigpipe(s);
     if (!SetNonBlocking(s)) {
       CloseSocket(s);
       s = kNoSocket;

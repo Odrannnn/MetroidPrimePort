@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -612,6 +613,11 @@ void CheckTlsEndToEnd() {
       {"missing CA file", "127.0.0.1", dir + "/missing.pem", "could not load TLS CA file"},
   };
   for (const Rejection& rejection : rejections) {
+#ifdef __APPLE__
+    // macOS's lo0 only answers on 127.0.0.1, so 127.0.0.2 just times out.
+    if (std::strcmp(rejection.host, "127.0.0.2") == 0)
+      continue;
+#endif
     PortWs::TlsOptions options;
     options.caFile = rejection.caFile;
     PortWs::Client rejected;

@@ -61,7 +61,9 @@
 #include <windows.h>
 #else
 #include <sys/resource.h>
+#if !defined(__APPLE__)
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 #endif
 

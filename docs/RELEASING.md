@@ -76,6 +76,12 @@ self-contained — and it is why `MP_USER_PATH` cannot be used to move saves.
   configure line, so anyone can rebuild or replace it. Keep those three
   together with the executable in every Windows package. The Linux packages
   ship no ffmpeg and use the system's.
+- **macOS** (experimental): `macos.yml` builds `Metroid Prime Port.app` with
+  SDL3, nod, OpenSSL, zstd and xxhash linked in statically (the workflow fails
+  if `otool -L` shows anything outside `/usr/lib` and `/System/Library`), puts
+  the same LGPL `ffmpeg` as Windows in `Contents/MacOS`, and collects the
+  licences into `licenses/` beside the app. Both are ad-hoc signed, not
+  notarised.
 - **The AppImage and the APK**: `tools/make_appimage.sh` collects them into
   `usr/share/licenses/metroid-prime-port/`. It bundles no shared libraries.
   The APK's `syncLicenseNotices` task gathers the same set into `assets/`,
@@ -132,6 +138,7 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
 | Linux | `.github/workflows/linux-release.yml` | AppImage + tarball | manual trigger; builds on AlmaLinux 9 and runs `tools/make_appimage.sh`. Use these for releases, not a desktop build |
 | Linux | `tools/make_flatpak.sh` | Flatpak | manifest installs a working tree and collects notices; builds (`tools/make_flatpak.sh` writes `build/flatpak/MetroidPrimePort.flatpak`). The app id is `io.github.odrannnn.metroidprimeport`, with AppStream metainfo shipped |
 | Windows | `.github/workflows/windows.yml` | zipped `dist/` | manual trigger only for now; green when run, artifact uploaded, packaged startup checked |
+| macOS | `.github/workflows/macos.yml` | ad-hoc signed `.app` (arm64) + `licenses/` | experimental; builds, tests and packaged startup checked in CI, never run on a real Mac |
 | Android | `tools/android_apk.sh :app:assembleRelease` | APK | builds, signed with this project's own key; runs on-device (POCO F8 Ultra, 60 FPS), touch/Continue-load still unverified |
 
 The Linux binary is the only one with a test suite attached: 54 `port`-labelled
