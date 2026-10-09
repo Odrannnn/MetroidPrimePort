@@ -22,15 +22,46 @@ inline Planar ClampPlanar(Planar value, float maximum) {
   return value;
 }
 
+// The retail force law is a 60 Hz discrete map: the friction f is subtracted
+// each tick, then the force closes k = A*dt/(m*vmax) of the gap to the desired
+// speed, so both the top speed (vmax - f(1-k)/k) and the ramp up to it depend
+// on dt. Off 60 Hz (tickScale = dt*60 != 1, friction already scaled to f*tickScale),
+// this gives the 60 Hz result over tickScale ticks: the force is scaled to
+// close 1-(1-k60)^tickScale of the gap, and the desired speed is shifted so the
+// equilibrium stays the 60 Hz one (frictionApplied: the player subtracts the
+// friction this tick).
+struct ForceLaw {
+  float frictionSpeed; // replaces f*m*vmax/(dt*A)
+  float shift;         // added to the desired speed, signed like the input
+  float gain;          // scales the force
+};
+inline ForceLaw ForceLawAtRate(float tickScale, float friction, float mass, float maxSpeed,
+                               float dt, float acceleration, bool frictionApplied) {
+  const float k = acceleration * dt / (mass * maxSpeed);
+  const float kRef = acceleration / (60.f * mass * maxSpeed);
+  if (!(kRef > 0.f && kRef < 1.f && k > 0.f)) return {friction / k, 0.f, 1.f};
+  const float gain = 1.f - std::pow(1.f - kRef, tickScale);
+  const float shift =
+      frictionApplied ? friction * tickScale * (1.f - gain) / gain - friction * (1.f - kRef) / kRef : 0.f;
+  return {friction / kRef, shift, gain / k};
+}
+
 // The retail forward-force law applied to either horizontal axis. Damping and
 // collision integration remain in the player; this is not teleport movement.
 inline float AxisForce(float input, float velocity, float maxSpeed, float friction,
-                       float mass, float dt, float acceleration) {
+                       float mass, float dt, float acceleration, float tickScale = 1.f,
+                       bool frictionApplied = true) {
   if (input == 0.f || maxSpeed <= 0.f || dt <= 0.f || acceleration <= 0.f) return 0.f;
-  const float frictionSpeed = friction * mass * maxSpeed / (dt * acceleration);
-  const float desired = input * (maxSpeed - frictionSpeed) + (input > 0.f ? frictionSpeed : -frictionSpeed);
+  const float sign = input > 0.f ? 1.f : -1.f;
+  float frictionSpeed = friction * mass * maxSpeed / (dt * acceleration);
+  ForceLaw law{frictionSpeed, 0.f, 1.f};
+  if (tickScale != 1.f) {
+    law = ForceLawAtRate(tickScale, friction, mass, maxSpeed, dt, acceleration, frictionApplied);
+    frictionSpeed = law.frictionSpeed;
+  }
+  const float desired = input * (maxSpeed - frictionSpeed) + sign * (frictionSpeed + law.shift);
   const float fraction = (desired - velocity) / maxSpeed;
-  return (fraction < -1.f ? -1.f : fraction > 1.f ? 1.f : fraction) * acceleration;
+  return (fraction < -1.f ? -1.f : fraction > 1.f ? 1.f : fraction) * acceleration * law.gain;
 }
 
 struct AimState {

@@ -378,6 +378,14 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
   } else {
     turnInput = turnFraction * gpTweakPlayer->GetMaxRotationalAcceleration(GetSurfaceRestraint());
   }
+#ifdef TARGET_PC
+  // Off 60 Hz the force law is corrected to the 60 Hz one (PortMouse::ForceLawAtRate),
+  // where GetDampedClampedVelocityWR subtracts the friction (and so shifts the top speed).
+  const float tickScale = PortDebug::TickPeriod() * 60.f;
+  const bool frictionApplied =
+      (x258_movementState != NPlayer::kMS_ApplyJump || GetSurfaceRestraint() != kSR_Air) &&
+      x304_orbitState == kOS_NoOrbit;
+#endif
   float forwardForce;
   if (!close_enough(0.f, forwardInput)) {
     const float maxSpeed = gpTweakPlayer->GetPlayerTranslationMaxSpeed(GetSurfaceRestraint());
@@ -387,13 +395,27 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
         gpTweakPlayer->GetMaxTranslationalAcceleration(GetSurfaceRestraint());
     float frictionSpeed = friction * mass / (dt * acceleration);
     frictionSpeed *= maxSpeed;
+#ifdef TARGET_PC
+    PortMouse::ForceLaw law{frictionSpeed, 0.f, 1.f};
+    if (tickScale != 1.f) {
+      law = PortMouse::ForceLawAtRate(tickScale, friction, mass, maxSpeed, dt, acceleration,
+                                      frictionApplied);
+      frictionSpeed = law.frictionSpeed;
+    }
+#endif
     float desiredSpeed = forwardInput * (maxSpeed - frictionSpeed);
     desiredSpeed += frictionSpeed * (forwardInput > 0.f ? 1.f : -1.f);
+#ifdef TARGET_PC
+    desiredSpeed += law.shift * (forwardInput > 0.f ? 1.f : -1.f);
+#endif
     const float forwardFraction = CMath::Clamp(
         -1.f, (desiredSpeed - GetTransform().TransposeRotate(GetVelocityWR()).GetY()) / maxSpeed,
         1.f);
     forwardForce =
         forwardFraction * gpTweakPlayer->GetMaxTranslationalAcceleration(GetSurfaceRestraint());
+#ifdef TARGET_PC
+    forwardForce *= law.gain;
+#endif
   } else {
     forwardForce = 0.f;
   }
@@ -404,7 +426,7 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
     const float sideVelocity = GetTransform().TransposeRotate(GetVelocityWR()).GetX();
     strafeForce = PortMouse::AxisForce(strafeInput, sideVelocity, maxSpeed,
                                       gpTweakPlayer->GetPlayerTranslationFriction(GetSurfaceRestraint()),
-                                      GetMass(), dt, acceleration);
+                                      GetMass(), dt, acceleration, tickScale, frictionApplied);
     // Retail has no sideways force, so strafing the way a dash carries the
     // player must not brake its momentum back to walking speed.
     if (CMath::AbsF(sideVelocity) > maxSpeed && sideVelocity * strafeInput > 0.f) {

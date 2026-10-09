@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <initializer_list>
 #include <limits>
 
 namespace {
@@ -21,6 +22,22 @@ int main() {
   Check(PortMouse::AxisForce(1.f, 0.f, 12.f, 0.1f, 90.f, 1.f / 60.f, 1000.f) > 0.f);
   Check(PortMouse::AxisForce(-1.f, 0.f, 12.f, 0.1f, 90.f, 1.f / 60.f, 1000.f) < 0.f);
   Check(PortMouse::AxisForce(0.f, 5.f, 12.f, 0.1f, 90.f, 1.f / 60.f, 1000.f) == 0.f);
+  // The player's map per tick (friction f*s, then the force over dt) reaches
+  // the 60 Hz top speed and ramp at any tick rate.
+  const auto run = [](float rate, float seconds) {
+    const float dt = 1.f / rate;
+    const float tickScale = dt * 60.f;
+    float v = 0.f;
+    for (int tick = 0; tick < int(seconds * rate + 0.5f); ++tick) {
+      v = std::fmax(0.f, v - 0.1f * tickScale);
+      v += PortMouse::AxisForce(1.f, v, 12.f, 0.1f, 90.f, dt, 1000.f, tickScale) / 90.f * dt;
+    }
+    return v;
+  };
+  for (const float rate : {30.f, 90.f, 120.f, 240.f}) {
+    Check(std::fabs(run(rate, 20.f) - run(60.f, 20.f)) < 0.01f);
+    Check(std::fabs(run(rate, 1.f) - run(60.f, 1.f)) < 0.05f);
+  }
   const auto speed = PortMouse::ClampPlanar({20.f, 20.f}, 12.f);
   Check(std::hypot(speed.right, speed.forward) <= 12.0001f);
   PortMouse::AimState aim;
