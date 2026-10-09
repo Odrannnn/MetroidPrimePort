@@ -1,6 +1,7 @@
 #include "pipeline_cache.hpp"
 
 #include "clear.hpp"
+#include "fx_pipelines.hpp"
 #include "resources.hpp"
 #include "hash.hpp"
 #include "../gx/pipeline.hpp"
@@ -497,10 +498,12 @@ static void apply_pipeline_drop() {
 template <typename PipelineConfig>
 static PipelineRef find_pipeline_impl(ShaderType type, const PipelineConfig& config, NewPipelineCallback&& cb,
                                       PipelinePriority priority = PipelinePriority::Normal,
-                                      std::optional<uint32_t> firstFrameUsedOverride = std::nullopt) {
+                                      std::optional<uint32_t> firstFrameUsedOverride = std::nullopt,
+                                      bool renderThread = false) {
   ZoneScoped;
 
-  if (g_dropPipelines.exchange(false, std::memory_order_acq_rel)) {
+  // The pipeline drop and g_lastPipelineRef belong to the thread that records draws.
+  if (!renderThread && g_dropPipelines.exchange(false, std::memory_order_acq_rel)) {
     apply_pipeline_drop();
   }
   const PipelineRef hash = xxh3_hash(config, static_cast<HashType>(type));
@@ -508,7 +511,9 @@ static PipelineRef find_pipeline_impl(ShaderType type, const PipelineConfig& con
   if (!blocking && hash == g_lastPipelineRef) {
     return g_lastPipelineRef;
   }
-  g_lastPipelineRef = hash;
+  if (!renderThread) {
+    g_lastPipelineRef = hash;
+  }
   const uint32_t firstFrameUsed = firstFrameUsedOverride.value_or(current_frame());
   bool notifyWorker = false;
   bool persist = priority != PipelinePriority::Background;
@@ -954,8 +959,26 @@ static void prune_old_pipeline_cache_versions() {
   if (ret != SQLITE_OK) {
     Log.error("Failed to prune RmlUi pipeline cache rows: {}", sqlite3_errmsg(g_pipelineCacheDb));
     pipeline_cache_abort();
+    return;
   }
 #endif
+
+  const auto vfxDelete = fmt::format("DELETE FROM pipeline_cache WHERE type = {} AND config_version < {}",
+                                     underlying(ShaderType::Vfx), vfx::VfxPipelineConfigVersion);
+  ret = sqlite::exec(g_pipelineCacheDb, vfxDelete.c_str());
+  if (ret != SQLITE_OK) {
+    Log.error("Failed to prune VFX pipeline cache rows: {}", sqlite3_errmsg(g_pipelineCacheDb));
+    pipeline_cache_abort();
+    return;
+  }
+
+  const auto waterDelete = fmt::format("DELETE FROM pipeline_cache WHERE type = {} AND config_version < {}",
+                                       underlying(ShaderType::Water), water::WaterPipelineConfigVersion);
+  ret = sqlite::exec(g_pipelineCacheDb, waterDelete.c_str());
+  if (ret != SQLITE_OK) {
+    Log.error("Failed to prune water pipeline cache rows: {}", sqlite3_errmsg(g_pipelineCacheDb));
+    pipeline_cache_abort();
+  }
 }
 
 static bool write_pipeline_cache_record(const PipelineCacheWrite& write) {
@@ -1172,6 +1195,10 @@ static size_t load_pipeline_cache() {
       ShaderType::Clear, clear::ClearPipelineConfigVersion, clear::create_pipeline);
   acceptedRows +=
       load_pipeline_cache_entries<gx::PipelineConfig>(ShaderType::GX, gx::GXPipelineConfigVersion, gx::create_pipeline);
+  acceptedRows += load_pipeline_cache_entries<vfx::PipelineConfig>(ShaderType::Vfx, vfx::VfxPipelineConfigVersion,
+                                                                   vfx::create_pipeline);
+  acceptedRows += load_pipeline_cache_entries<water::PipelineConfig>(
+      ShaderType::Water, water::WaterPipelineConfigVersion, water::create_pipeline);
   return acceptedRows;
 }
 
@@ -1207,6 +1234,25 @@ PipelineRef find_pipeline(ShaderType type, const clear::PipelineConfig& config, 
 template <>
 PipelineRef find_pipeline(ShaderType type, const gx::PipelineConfig& config, NewPipelineCallback&& cb) {
   return find_pipeline_impl(type, config, std::move(cb));
+}
+
+template <typename Config>
+static wgpu::RenderPipeline require_pipeline_impl(ShaderType type, const Config& config, NewPipelineCallback&& cb) {
+  const PipelineRef ref =
+      find_pipeline_impl(type, config, std::move(cb), PipelinePriority::Blocking, std::nullopt, true);
+  wgpu::RenderPipeline pipeline;
+  get_pipeline(ref, pipeline);
+  return pipeline;
+}
+
+template <>
+wgpu::RenderPipeline require_pipeline(ShaderType type, const vfx::PipelineConfig& config, NewPipelineCallback&& cb) {
+  return require_pipeline_impl(type, config, std::move(cb));
+}
+
+template <>
+wgpu::RenderPipeline require_pipeline(ShaderType type, const water::PipelineConfig& config, NewPipelineCallback&& cb) {
+  return require_pipeline_impl(type, config, std::move(cb));
 }
 
 #ifdef AURORA_ENABLE_RMLUI

@@ -4,6 +4,9 @@
 #include "../gx/gx.hpp"
 #include "../gx/texture.hpp"
 #include "../logging.hpp"
+#include "../webgpu/gpu.hpp"
+#include "fx_pipelines.hpp"
+#include "pipeline_cache.hpp"
 #include "recording.hpp"
 #include "resource_cache.hpp"
 #include "texture.hpp"
@@ -482,7 +485,11 @@ wgpu::BlendState blend_state(Blend blend) {
   return {.color = c, .alpha = a};
 }
 
+// Pool threads of the pipeline cache create pipelines too.
+std::mutex g_staticMutex;
+
 void ensure_static(const wgpu::Device& device) {
+  std::scoped_lock lock{g_staticMutex};
   if (g_state.pipelineLayout) {
     return;
   }
@@ -518,7 +525,26 @@ void ensure_static(const wgpu::Device& device) {
   g_state.pipelineLayout = device.CreatePipelineLayout(&pipelineLayoutDescriptor);
 }
 
-wgpu::RenderPipeline make_pipeline(const DrawContext& ctx, const Payload& p) {
+PipelineConfig make_config(const RenderTargetLayout& layout, const Payload& p) {
+  PipelineConfig config{
+      .depthStencilFormat = layout.depthStencilFormat,
+      .colorAttachmentCount = layout.colorAttachmentCount,
+      .msaaSamples = layout.sampleCount,
+      .features = p.features & ~uint32_t(DepthSoften),
+      .slotKey = p.slotKey,
+      .blend = p.blend,
+      .compare = p.compare,
+      .depthWrite = p.depthWrite,
+  };
+  for (uint32_t i = 0; i < layout.colorAttachmentCount; ++i) {
+    config.colorFormats[i] = layout.colorAttachments[i].format;
+  }
+  return config;
+}
+
+wgpu::RenderPipeline make_pipeline(const PipelineConfig& p) {
+  const wgpu::Device& device = webgpu::g_device;
+  ensure_static(device);
   // The slot a feature reads is a pipeline constant (3 bits each, 7 = none).
   static constexpr const char* SlotNames[] = {"S_COLOR",  "S_OPACITY",   "S_RAMP",   "S_RAMP2",
                                               "S_THRESHOLD", "S_INDIRECT", "S_PALETTE"};
@@ -532,7 +558,7 @@ wgpu::RenderPipeline make_pipeline(const DrawContext& ctx, const Payload& p) {
   wgpu::ShaderSourceWGSL wgsl{};
   wgsl.code = source.c_str();
   const wgpu::ShaderModuleDescriptor moduleDescriptor{.nextInChain = &wgsl, .label = "VFX Module"};
-  const wgpu::ShaderModule module = ctx.device.CreateShaderModule(&moduleDescriptor);
+  const wgpu::ShaderModule module = device.CreateShaderModule(&moduleDescriptor);
 
   static constexpr std::array<wgpu::VertexAttribute, 10> attributes{{
       {.format = wgpu::VertexFormat::Float32x3, .offset = offsetof(Vertex, pos), .shaderLocation = 0},
@@ -555,10 +581,10 @@ wgpu::RenderPipeline make_pipeline(const DrawContext& ctx, const Payload& p) {
 
   const wgpu::BlendState blend = blend_state(static_cast<Blend>(p.blend));
   std::array<wgpu::ColorTargetState, MaxColorAttachments> targets{};
-  for (uint32_t i = 0; i < ctx.layout.colorAttachmentCount; ++i) {
+  for (uint32_t i = 0; i < p.colorAttachmentCount; ++i) {
     const bool scene = i == SceneColorAttachmentIndex;
     targets[i] = {
-        .format = ctx.layout.colorAttachments[i].format,
+        .format = p.colorFormats[i],
         .blend = scene ? &blend : nullptr,
         .writeMask = scene ? wgpu::ColorWriteMask::All : wgpu::ColorWriteMask::None,
     };
@@ -566,11 +592,11 @@ wgpu::RenderPipeline make_pipeline(const DrawContext& ctx, const Payload& p) {
   const wgpu::FragmentState fragment{
       .module = module,
       .entryPoint = "fs_main",
-      .targetCount = ctx.layout.colorAttachmentCount,
+      .targetCount = p.colorAttachmentCount,
       .targets = targets.data(),
   };
   const wgpu::DepthStencilState depth{
-      .format = ctx.layout.depthStencilFormat,
+      .format = p.depthStencilFormat,
       .depthWriteEnabled = p.depthWrite != 0,
       .depthCompare = static_cast<wgpu::CompareFunction>(p.compare),
   };
@@ -579,11 +605,11 @@ wgpu::RenderPipeline make_pipeline(const DrawContext& ctx, const Payload& p) {
       .layout = g_state.pipelineLayout,
       .vertex = {.module = module, .entryPoint = "vs_main", .bufferCount = 1, .buffers = &vertexLayout},
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList, .cullMode = wgpu::CullMode::None},
-      .depthStencil = ctx.layout.depthStencilFormat != wgpu::TextureFormat::Undefined ? &depth : nullptr,
-      .multisample = {.count = ctx.layout.sampleCount, .mask = UINT32_MAX},
+      .depthStencil = p.depthStencilFormat != wgpu::TextureFormat::Undefined ? &depth : nullptr,
+      .multisample = {.count = p.msaaSamples, .mask = UINT32_MAX},
       .fragment = &fragment,
   };
-  return ctx.device.CreateRenderPipeline(&descriptor);
+  return device.CreateRenderPipeline(&descriptor);
 }
 
 void ensure_dummy(const DrawContext& ctx) {
@@ -728,9 +754,12 @@ bool ensure_registered() {
                                                     ctx.layout.sampleCount};
           auto pipeline = g_state.pipelines.find(pipelineKey);
           if (pipeline == g_state.pipelines.end()) {
-            Payload keyed = p;
-            keyed.features = p.features & ~uint32_t(DepthSoften);
-            pipeline = g_state.pipelines.emplace(pipelineKey, make_pipeline(ctx, keyed)).first;
+            const PipelineConfig config = make_config(ctx.layout, p);
+            auto created = require_pipeline(ShaderType::Vfx, config, [config] { return make_pipeline(config); });
+            if (!created) {
+              return;
+            }
+            pipeline = g_state.pipelines.emplace(pipelineKey, std::move(created)).first;
           }
           std::array<const void*, 1 + 2 * SlotCount> groupKey{};
           for (uint32_t i = 0; i < SlotCount; ++i) {
@@ -833,6 +862,8 @@ void evict_idle() {
   }
 }
 } // namespace
+
+wgpu::RenderPipeline create_pipeline(const PipelineConfig& config) { return make_pipeline(config); }
 
 // Quads (4 vertices, 6 indices) or triangles (3 vertices, drawn in order).
 static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t vertexCount, bool quads) {

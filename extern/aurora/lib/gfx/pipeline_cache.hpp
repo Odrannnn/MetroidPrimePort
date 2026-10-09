@@ -8,6 +8,14 @@ namespace aurora::gfx::clear {
 struct PipelineConfig;
 } // namespace aurora::gfx::clear
 
+namespace aurora::gfx::vfx {
+struct PipelineConfig;
+} // namespace aurora::gfx::vfx
+
+namespace aurora::gfx::water {
+struct PipelineConfig;
+} // namespace aurora::gfx::water
+
 namespace aurora::gx {
 struct PipelineConfig;
 } // namespace aurora::gx
@@ -22,6 +30,8 @@ enum class ShaderType : uint8_t {
   Clear = 0,
   GX = 1,
   Rml = 2,
+  Vfx = 3,
+  Water = 4,
 };
 
 using NewPipelineCallback = std::function<wgpu::RenderPipeline()>;
@@ -37,5 +47,10 @@ template <typename Config>
 PipelineRef find_pipeline(ShaderType type, const Config& config, NewPipelineCallback&& cb);
 
 bool get_pipeline(PipelineRef ref, wgpu::RenderPipeline& pipeline);
+
+// Render thread (custom draw callbacks): the pipeline for `config`, waiting for it if the cache
+// hasn't built it yet (a queued one moves to the front). Null if creation failed.
+template <typename Config>
+wgpu::RenderPipeline require_pipeline(ShaderType type, const Config& config, NewPipelineCallback&& cb);
 
 } // namespace aurora::gfx
