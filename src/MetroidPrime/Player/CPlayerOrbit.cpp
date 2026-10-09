@@ -565,14 +565,27 @@ bool CPlayer::CheckOrbitDisableSourceList(const CStateManager& mgr) {
   return !x9e4_orbitDisableList.empty();
 }
 
-// Port: the orbit/lock-on zone tweaks are authored in the original 640x480
-// screen space, but the screen coordinates below are in the live viewport.
-// Scale them so the zone stays centred on the reticle in widescreen.
+// Port: the orbit/lock-on zone tweaks are authored in retail's 640x448
+// viewport, but the screen coordinates below are in the live viewport.
+// Scale them so the zone stays centred on the reticle at any size.
+static const float kOrbitZoneAuthoredWidth = 640.f;
+static const float kOrbitZoneAuthoredHeight = 448.f;
 static float OrbitZoneScaleX() {
-  return static_cast< float >(CGraphics::GetViewportWidth()) / 640.f;
+  return static_cast< float >(CGraphics::GetViewportWidth()) / kOrbitZoneAuthoredWidth;
 }
 static float OrbitZoneScaleY() {
-  return static_cast< float >(CGraphics::GetViewportHeight()) / 480.f;
+  return static_cast< float >(CGraphics::GetViewportHeight()) / kOrbitZoneAuthoredHeight;
+}
+// The zone's ideal point in [-1, 1] screen space (retail divided by the live
+// viewport, which only worked at 640x448: larger viewports pulled it to the
+// bottom left, issue #31).
+static float OrbitZoneIdealNdcX(CPlayer::EPlayerZoneInfo zone) {
+  return CCast::LtoF(gpTweakPlayer->GetOrbitZoneIdealX(zone)) / (kOrbitZoneAuthoredWidth / 2.f) -
+         1.f;
+}
+static float OrbitZoneIdealNdcY(CPlayer::EPlayerZoneInfo zone) {
+  return CCast::LtoF(gpTweakPlayer->GetOrbitZoneIdealY(zone)) / (kOrbitZoneAuthoredHeight / 2.f) -
+         1.f;
 }
 
 bool CPlayer::WithinOrbitScreenEllipse(const CVector3f& screenCoords, EPlayerZoneInfo zone) const {
@@ -671,12 +684,8 @@ TUniqueId CPlayer::FindBestOrbitableObject(const rstl::vector< TUniqueId >& ids,
   float minDistance = 10000.f;
   float minScreenDistanceSq = 10000.f;
   TUniqueId bestId = kInvalidUniqueId;
-  const int viewportHalfX = CGraphics::GetViewportWidth() / 2;
-  const int viewportHalfY = CGraphics::GetViewportHeight() / 2;
-  float boxLeft = CCast::LtoF(gpTweakPlayer->GetOrbitZoneIdealX(zone)) - CCast::LtoF(viewportHalfX);
-  boxLeft /= CCast::LtoF(viewportHalfX);
-  float boxTop = CCast::LtoF(gpTweakPlayer->GetOrbitZoneIdealY(zone)) - CCast::LtoF(viewportHalfY);
-  boxTop /= CCast::LtoF(viewportHalfY);
+  const float boxLeft = OrbitZoneIdealNdcX(zone);
+  const float boxTop = OrbitZoneIdealNdcY(zone);
   const CFirstPersonCamera* const fpCamera = mgr.GetCameraManager()->GetFirstPersonCamera();
   for (AUTO(it, ids.begin()); it != ids.end(); ++it) {
     const CActor* const act = TCastToConstPtr< CActor >(mgr.GetObjectById(*it));
@@ -839,14 +848,8 @@ TUniqueId CPlayer::CheckEnemiesAgainstOrbitZone(const rstl::reserved_vector< TUn
   float minDistance = 10000.f;
   float minScreenDistanceSq = 10000.f;
   TUniqueId bestId = kInvalidUniqueId;
-  const int viewportHalfX = CGraphics::GetViewportWidth() / 2;
-  const int idealX = gpTweakPlayer->GetOrbitZoneIdealX(zone);
-  const int viewportHalfY = CGraphics::GetViewportHeight() / 2;
-  const int idealY = gpTweakPlayer->GetOrbitZoneIdealY(zone);
-  float boxLeft = CCast::LtoF(idealX) - CCast::LtoF(viewportHalfX);
-  boxLeft /= CCast::LtoF(viewportHalfX);
-  float boxTop = CCast::LtoF(idealY) - CCast::LtoF(viewportHalfY);
-  boxTop /= CCast::LtoF(viewportHalfY);
+  const float boxLeft = OrbitZoneIdealNdcX(zone);
+  const float boxTop = OrbitZoneIdealNdcY(zone);
   const CFirstPersonCamera* const fpCamera = mgr.GetCameraManager()->GetFirstPersonCamera();
   for (AUTO(it, ids.begin()); it != ids.end(); ++it) {
     const CActor* act = static_cast< const CActor* >(mgr.GetObjectById(*it));
