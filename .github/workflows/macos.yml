@@ -69,6 +69,22 @@ jobs:
       - name: Test FIFO regressions
         run: ./build-mac/extern/aurora/tests/gx_fifo_tests --gtest_brief=1
 
+      # The Remastered import decodes that game's H.264 movies with ffmpeg, run
+      # as a separate program, and macOS has none of its own. The app carries
+      # the same small LGPL build as the Windows package (see windows.yml).
+      - uses: actions/cache@v4
+        id: ffmpeg
+        with:
+          path: ffmpeg-min/out
+          key: ffmpeg-min-macos-arm64-${{ hashFiles('tools/build_ffmpeg_min.sh') }}
+
+      - name: Build ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          bash tools/build_ffmpeg_min.sh ffmpeg-min --extra-cflags=-mmacosx-version-min=13.0 --extra-ldflags=-mmacosx-version-min=13.0
+          mkdir -p ffmpeg-min/out
+          cp ffmpeg-min/ffmpeg ffmpeg-min/COPYING.LGPLv2.1 ffmpeg-min/ffmpeg-build.txt ffmpeg-min/out/
+
       # An unsigned arm64 binary does not run at all, so the bundle is signed
       # ad hoc. Players still have to clear the quarantine flag (or right-click
       # > Open) until it is signed with a Developer ID and notarised.
@@ -77,6 +93,7 @@ jobs:
           app="dist/Metroid Prime Port.app"
           mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
           cp build-mac/metroid_prime_port "$app/Contents/MacOS/"
+          cp ffmpeg-min/out/ffmpeg "$app/Contents/MacOS/"
           version=$(sed -n 's/.*versionName "\(.*\)".*/\1/p' android/app/build.gradle)
           iconset=$(mktemp -d)/icon.iconset
           mkdir -p "$iconset"
@@ -107,8 +124,11 @@ jobs:
           EOF
           sed -i '' 's/^          //' "$app/Contents/Info.plist"
           plutil -lint "$app/Contents/Info.plist"
-          codesign --force --deep --sign - "$app"
+          codesign --force --sign - "$app/Contents/MacOS/ffmpeg"
+          codesign --force --sign - "$app"
           mkdir -p dist/licenses
+          cp ffmpeg-min/out/COPYING.LGPLv2.1 dist/licenses/ffmpeg-LGPLv2.1.txt
+          cp ffmpeg-min/out/ffmpeg-build.txt dist/licenses/ffmpeg-build.txt
           cp LICENSE dist/licenses/port-license.txt
           cp NOTICE dist/licenses/port-notice.txt
           cp extern/aurora/LICENSE dist/licenses/aurora.txt
@@ -126,10 +146,14 @@ jobs:
       # only the system's own libraries and frameworks may be referenced.
       - name: Check the executable's libraries
         run: |
-          otool -L "dist/Metroid Prime Port.app/Contents/MacOS/metroid_prime_port" | tee libs.txt
-          if tail -n +2 libs.txt | grep -vE '^\s*(/usr/lib/|/System/Library/)'; then
-            echo "Executable links libraries outside the system" >&2; exit 1
-          fi
+          for exe in metroid_prime_port ffmpeg; do
+            otool -L "dist/Metroid Prime Port.app/Contents/MacOS/$exe" | tee libs.txt
+            if tail -n +2 libs.txt | grep -vE '^\s*(/usr/lib/|/System/Library/)'; then
+              echo "$exe links libraries outside the system" >&2; exit 1
+            fi
+          done
+          "dist/Metroid Prime Port.app/Contents/MacOS/ffmpeg" -hide_banner -version | head -n 1
+          codesign --verify --deep --strict "dist/Metroid Prime Port.app"
 
       - name: Check packaged startup
         run: |
