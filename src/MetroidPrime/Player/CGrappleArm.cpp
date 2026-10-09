@@ -517,6 +517,14 @@ void CGrappleArm::DoUserAnimEvent(CStateManager& mgr, const CInt32POINode& node,
     x340_anglePhase = 0.f;
     x344_xAmplitude = kAmplitudeX;
     x348_zAmplitude = kAmplitudeZ;
+#ifdef TARGET_PC
+    // Port: CGrappleArmMP1 ignores the tweak's wave amplitudes (0.25/0.125) and uses fixed
+    // 0.098/0.024, so the Remastered segment effect follows a flatter wave.
+    if (x390_grappleSegmentGen->PortIsRemastered()) {
+      x344_xAmplitude = 0.098f;
+      x348_zAmplitude = 0.024f;
+    }
+#endif
     x398_grappleHitGen->SetParticleEmission(false);
     x394_grappleClawGen->SetParticleEmission(true);
     NWeaponTypes::play_sfx(0x5f6, false, false, 0x36);

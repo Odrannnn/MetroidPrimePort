@@ -26,6 +26,7 @@
 #include "Kyoto/Graphics/CModelFlags.hpp"
 #include "Kyoto/Math/CloseEnough.hpp"
 #include "Kyoto/Particles/CElementGen.hpp"
+#include "Kyoto/Particles/CGenDescription.hpp"
 #include "MetaRender/CCubeRenderer.hpp"
 
 const char* const CGunWeapon::skMuzzleNames[10] = {
@@ -404,6 +405,22 @@ void CGunWeapon::Fire(const bool underwater, const float dt,
 
   const uint projectileAttribs = attribs | particleChargeAttribs;
   const TToken< CWeaponDescription >& weapon = x144_weapons[chargeState];
+#ifdef TARGET_PC
+  // Remastered sizes a charged shot's effects from a per-beam floor up to 1.85 at full charge
+  // (Phazon always 1; CalculateWeaponFXScale, kb func/CGunWeaponMP1-fire-charged), when the
+  // projectile's particles are Remastered's. Damage keeps retail's factor.
+  if (chargeState != CPlayerState::kCS_Normal && weapon.IsLoaded()) {
+    const CWeaponDescription* desc = const_cast< TToken< CWeaponDescription >& >(weapon).GetT();
+    if (desc->x34_APSM && (*desc->x34_APSM)->xPortIrnd) {
+      static const float kChargedFxFloor[4] = {0.2f, 0.75f, 0.2f, 0.2f};
+      const float factor = x1c0_weaponType <= kWT_Plasma
+                               ? kChargedFxFloor[x1c0_weaponType] +
+                                     chargeFactor2 * (1.85f - kChargedFxFloor[x1c0_weaponType])
+                               : 1.f;
+      scale = factor * CVector3f(1.f, 1.f, 1.f);
+    }
+  }
+#endif
   CEnergyProjectile* proj = rs_new CEnergyProjectile(
       true, weapon, x1c0_weaponType, xf, x1c8_playerMaterial, dInfo, mgr.AllocateUniqueId(),
       kInvalidAreaId, GetPlayerId(), homingTarget, projectileAttribs, underwater, scale,

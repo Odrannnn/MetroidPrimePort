@@ -1543,6 +1543,8 @@ TEST_F(GXFifoTest, SetArray_Pos_EncodesAuroraArrayBaseAndStride) {
   gxState().arrays[GX_VA_POS].stride = 2;
   gxState().arrays[GX_VA_POS].cachedRange.offset = 4;
   gxState().arrays[GX_VA_POS].cachedRange.size = 8;
+  // Only an indexed attribute's array dirties the pipeline.
+  gxState().vtxDesc[GX_VA_POS] = GX_INDEX16;
   gxState().dirty = 0;
   decode_fifo(bytes);
 
@@ -1553,6 +1555,14 @@ TEST_F(GXFifoTest, SetArray_Pos_EncodesAuroraArrayBaseAndStride) {
   EXPECT_EQ(gxState().arrays[GX_VA_POS].cachedRange.offset, 0u);
   EXPECT_EQ(gxState().arrays[GX_VA_POS].cachedRange.size, 0u);
   EXPECT_EQ(gxState().dirty, aurora::gx::DirtyPipeline | aurora::gx::DirtyImmediates);
+
+  // A direct attribute's array isn't in the pipeline config.
+  reset_gx_state();
+  gxState().vtxDesc[GX_VA_POS] = GX_DIRECT;
+  gxState().dirty = 0;
+  decode_fifo(bytes);
+  EXPECT_EQ(gxState().arrays[GX_VA_POS].stride, 12);
+  EXPECT_EQ(gxState().dirty, aurora::gx::DirtyImmediates);
 }
 
 TEST_F(GXFifoTest, SetArray_Nbt_UsesNrmCommandSlotAndState) {
@@ -1576,6 +1586,7 @@ TEST_F(GXFifoTest, SetArray_Nbt_UsesNrmCommandSlotAndState) {
   gxState().arrays[GX_VA_NBT].data = untouchedData;
   gxState().arrays[GX_VA_NBT].size = sizeof(untouchedData);
   gxState().arrays[GX_VA_NBT].stride = 24;
+  gxState().vtxDesc[GX_VA_NRM] = GX_INDEX16;
   gxState().dirty = 0;
   decode_fifo(bytes);
 
@@ -1613,6 +1624,7 @@ TEST_F(GXFifoTest, SetArray_LittleEndianFlag_UpdatesStateAndClearsCachedRange) {
   gxState().arrays[GX_VA_CLR0].le = false;
   gxState().arrays[GX_VA_CLR0].cachedRange.offset = 3;
   gxState().arrays[GX_VA_CLR0].cachedRange.size = 9;
+  gxState().vtxDesc[GX_VA_CLR0] = GX_INDEX8;
   gxState().dirty = 0;
   decode_fifo(bytes);
 

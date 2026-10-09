@@ -563,6 +563,7 @@ void CmdHelp() {
   Out("aspect <4:3|16:9|window>   switch the rendering aspect, as the Options row does");
   Out("original [on|off]   Original experience (retail settings over the saved ones)");
   Out("keypreset classic|mouse   apply a keyboard preset (Controls page), as its button");
+  Out("padpreset gamecube|remastered|modern|southpaw   apply a controller preset to pad 1");
   Out("fov <45..90>               first-person vertical FOV, as the Options row does");
   Out("window [<w> <h>]           resize the window (leaves fullscreen); prints the size");
   Out("msaa <1|4>, aniso <1..16>  anti-aliasing and anisotropic filtering, applied next frame");
@@ -1903,6 +1904,12 @@ void RunFrame() {
     const std::string preset = sCmd.args.size() > 1 ? Lower(sCmd.args[1]) : "";
     if (!PortControls::ApplyKeyPresetNamed(preset)) {
       return Finish("usage: keypreset classic|mouse");
+    }
+    Finish();
+  } else if (name == "padpreset") {
+    const std::string preset = sCmd.args.size() > 1 ? Lower(sCmd.args[1]) : "";
+    if (!PortControls::ApplyPadPresetNamed(preset)) {
+      return Finish("usage: padpreset gamecube|remastered|modern|southpaw");
     }
     Finish();
   } else if (name == "fov") {

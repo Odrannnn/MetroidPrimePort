@@ -1129,6 +1129,21 @@ bool ApplyKeyPresetNamed(std::string_view name) {
   return true;
 }
 
+bool ApplyPadPresetNamed(std::string_view name) {
+  if (name == "gamecube") {
+    ApplyPadPreset(EPadPreset::kGameCube);
+  } else if (name == "remastered") {
+    ApplyPadPreset(EPadPreset::kRemastered);
+  } else if (name == "modern") {
+    ApplyPadPreset(EPadPreset::kModern);
+  } else if (name == "southpaw") {
+    ApplyPadPreset(EPadPreset::kSouthpaw);
+  } else {
+    return false;
+  }
+  return true;
+}
+
 bool ShiftHeld() {
   for (int slot = 0; slot < PAD_KEY_SLOT_COUNT; ++slot) {
     const SInput key = RowInput(ECapture::kShiftKey, 0, slot);

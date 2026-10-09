@@ -91,6 +91,7 @@ public:
   uint Get4CharId() const override;
 #ifdef TARGET_PC
   uint PortFxAsset() const override;
+  bool PortIsRemastered() const;
   void PortFxDescribe(PortFxInfo& out) const override;
 #endif
 

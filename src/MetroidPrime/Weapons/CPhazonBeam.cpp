@@ -217,7 +217,13 @@ void CPhazonBeam::Update(const float dt, CStateManager& mgr) {
 void CPhazonBeam::UpdateBeam(const float dt, const CTransform4f& xf, const CVector3f& localBeamPos,
                              CStateManager& mgr) {
   if (!mChargeFxGen.null()) {
+#ifdef TARGET_PC
+    // Port: CPhazonBeamMP1::UpdateBeam keeps the Remastered Phazon2nd_1 emitting the whole
+    // time the beam is up; retail's emits only while firing.
+    mChargeFxGen->SetParticleEmission(mChargeFxGen->PortIsRemastered() || IsFiring(mgr));
+#else
     mChargeFxGen->SetParticleEmission(IsFiring(mgr));
+#endif
   }
   UpdateMuzzleFx(dt, x4_scale, localBeamPos, IsFiring(mgr));
 }

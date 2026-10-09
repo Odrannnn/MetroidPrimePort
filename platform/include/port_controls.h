@@ -13,6 +13,9 @@ void ApplyDefaultKeyBindings(unsigned port);
 // The Controls page's keyboard preset button: "classic" or "mouse" (Mouse &
 // keyboard). Saves. False for any other name.
 bool ApplyKeyPresetNamed(std::string_view name);
+// The Controls page's controller preset button: "gamecube", "remastered",
+// "modern" or "southpaw". Saves. False for any other name.
+bool ApplyPadPresetNamed(std::string_view name);
 // True while the Controls tab is waiting for, or settling after, an input to
 // bind; controller navigation of the overlay should ignore the pad then.
 bool Capturing();

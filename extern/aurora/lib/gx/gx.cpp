@@ -6,6 +6,7 @@
 #include "../webgpu/gpu.hpp"
 #include "../internal.hpp"
 #include "../window.hpp"
+#include "../gfx/hash.hpp"
 #include "../gfx/resources.hpp"
 #include "../gfx/probe.hpp"
 #include "../gfx/recording.hpp"
@@ -24,7 +25,9 @@
 #include <cmath>
 #include <mutex>
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <utility>
 
 static aurora::Module Log("aurora::gx");
@@ -38,6 +41,11 @@ wgpu::BindGroup g_emptyTextureBindGroup;
 
 namespace {
 wgpu::Sampler sEmptySampler;
+// The sampler each texture slot took last, by its descriptor's value fields (build_bind_groups)
+constexpr auto kSamplerKeyOffset = offsetof(wgpu::SamplerDescriptor, addressModeU);
+constexpr auto kSamplerKeySize = offsetof(wgpu::SamplerDescriptor, maxAnisotropy) + sizeof(uint16_t) - kSamplerKeyOffset;
+std::array<std::array<u8, kSamplerKeySize>, MaxTextures> sSlotSamplerKeys{};
+std::array<wgpu::Sampler, MaxTextures> sSlotSamplers;
 wgpu::Texture sEmptyTexture;
 wgpu::TextureView sEmptyTextureView;
 std::mutex sBindGroupLayoutMutex;
@@ -556,24 +564,27 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   }
   config.shaderConfig.volFog = drawId ? VolFogNone : vol_fog_mode(depthOnly);
   config.shaderConfig.shadow = g_gxState.shadowCaster && g_gxState.shadowActive && config.shaderConfig.lineMode == 0;
-  config = {
-      .msaaSamples = gfx::get_sample_count(),
-      .shaderConfig = config.shaderConfig,
-      .depthFunc = depthEqual ? GX_EQUAL : g_gxState.depthFunc,
-      .cullMode = cullMode,
-      .blendMode = drawId ? GX_BM_NONE : g_gxState.blendMode,
-      .blendFacSrc = g_gxState.blendFacSrc,
-      .blendFacDst = g_gxState.blendFacDst,
-      .blendOp = g_gxState.blendOp,
-      .dstAlpha = g_gxState.dstAlpha,
-      .polygonOffsetBits = std::bit_cast<uint32_t>(polygonOffset),
-      .polygonOffsetScaleBits = std::bit_cast<uint32_t>(polygonOffsetScale),
-      .polygonOffsetClampBits = std::bit_cast<uint32_t>(g_gxState.clamp),
-      .depthCompare = g_gxState.depthCompare,
-      .depthUpdate = g_gxState.depthUpdate && !depthEqual,
-      .alphaUpdate = g_gxState.alphaUpdate && !depthOnly,
-      .colorUpdate = g_gxState.colorUpdate && !depthOnly,
-  };
+  // Field by field: an aggregate assignment would copy the 2.7 KB shader config twice more on
+  // every pipeline switch. Every field outside shaderConfig is written here.
+  config.version = GXPipelineConfigVersion;
+  config.msaaSamples = gfx::get_sample_count();
+  config.depthFunc = depthEqual ? GX_EQUAL : g_gxState.depthFunc;
+  config.cullMode = cullMode;
+  config.blendMode = drawId ? GX_BM_NONE : g_gxState.blendMode;
+  config.blendFacSrc = g_gxState.blendFacSrc;
+  config.blendFacDst = g_gxState.blendFacDst;
+  config.blendOp = g_gxState.blendOp;
+  config.dstAlpha = g_gxState.dstAlpha;
+  config.polygonOffsetBits = std::bit_cast<uint32_t>(polygonOffset);
+  config.polygonOffsetScaleBits = std::bit_cast<uint32_t>(polygonOffsetScale);
+  config.polygonOffsetClampBits = std::bit_cast<uint32_t>(g_gxState.clamp);
+  config.shadowPass = 0;
+  config.depthCompare = g_gxState.depthCompare;
+  config.depthUpdate = g_gxState.depthUpdate && !depthEqual;
+  config.alphaUpdate = g_gxState.alphaUpdate && !depthOnly;
+  config.colorUpdate = g_gxState.colorUpdate && !depthOnly;
+  static_assert(sizeof(PipelineConfig) == sizeof(ShaderConfig) + 13 * sizeof(uint32_t) + 4 * sizeof(bool),
+                "a new PipelineConfig field must be written above");
 }
 
 // The lightmap's slot is the last binding, left out of group 2 when the device has no room for it.
@@ -636,7 +647,14 @@ GXBindGroups build_bind_groups(const ShaderInfo& info) noexcept {
           samplerDescriptor.mipmapFilter = wgpu::MipmapFilterMode::Nearest;
         }
       }
-      samplerEntry.sampler = gfx::sampler_ref(samplerDescriptor).Get();
+      // Each slot keeps the sampler it took last: slots mostly see the same sampler state, and the cache
+      // never drops a sampler before shutdown, so this saves the hash and the lock.
+      const auto* samplerKey = reinterpret_cast<const u8*>(&samplerDescriptor) + kSamplerKeyOffset;
+      if (!sSlotSamplers[i] || std::memcmp(sSlotSamplerKeys[i].data(), samplerKey, kSamplerKeySize) != 0) {
+        sSlotSamplers[i] = gfx::sampler_ref(samplerDescriptor);
+        std::memcpy(sSlotSamplerKeys[i].data(), samplerKey, kSamplerKeySize);
+      }
+      samplerEntry.sampler = sSlotSamplers[i].Get();
     } else {
       textureEntry.textureView = sEmptyTextureView.Get();
       samplerEntry.sampler = sEmptySampler.Get();
@@ -648,8 +666,16 @@ GXBindGroups build_bind_groups(const ShaderInfo& info) noexcept {
       .entryCount = texture_binding_count(),
       .entries = textureEntries.data(),
   };
+  // Every entry holds only a texture view or a sampler at a fixed binding, so those handles and the layout
+  // identify the bind group; hashing them is far cheaper than hashing the whole entries.
+  std::array<const void*, kTextureBindings + 1> key{};
+  key[0] = textureBindGroupDescriptor.layout;
+  for (size_t i = 0; i < textureBindGroupDescriptor.entryCount; ++i) {
+    key[i + 1] = textureEntries[i].textureView ? static_cast<const void*>(textureEntries[i].textureView)
+                                               : static_cast<const void*>(textureEntries[i].sampler);
+  }
   return {
-      .textureBindGroup = gfx::bind_group_ref(textureBindGroupDescriptor),
+      .textureBindGroup = gfx::bind_group_ref(xxh3_hash(key), textureBindGroupDescriptor),
   };
 }
 
@@ -876,6 +902,7 @@ void shutdown() noexcept {
   sShadowTextureBindGroupLayout = {};
   sShadowRecvPipelineLayout = {};
   sShadowPipelineLayout = {};
+  sSlotSamplers.fill({});
   {
     std::lock_guard lock{sBindGroupLayoutMutex};
     sUniformBindGroupLayouts.clear();

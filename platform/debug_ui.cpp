@@ -181,6 +181,7 @@ bool sHudWide = true;
 bool sCinemaBars = false;
 bool sSharpScanWindow = false;
 bool sShowShaderCompilation = true;
+bool sShowMenuHint = true;
 int sHudScale = PortDebug::kHudScaleMax;
 int sCrosshairOpacity = PortDebug::kCrosshairOpacityMax;
 bool sCrosshairCustomColor = false;
@@ -222,6 +223,7 @@ bool sLogFile = true;
 bool sLockOnToggle = false;
 bool sStickyCharge = false;
 bool sRapidCharge = false;
+bool sRemasteredMovement = true;
 // The Randomizer page's options; the console's `rando gen` reads them too.
 std::mutex sRandoMutex;
 PortRandoGen::Settings sRandoSettings;
@@ -585,6 +587,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sSharpScanWindow = ParseBool(value);
   } else if (key == "show_shader_compilation") {
     sShowShaderCompilation = ParseBool(value);
+  } else if (key == "show_menu_hint") {
+    sShowMenuHint = ParseBool(value);
   } else if (key == "hud_wide") {
     sHudWide = ParseBool(value);
   } else if (key == "hud_scale") {
@@ -821,6 +825,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sStickyCharge = ParseBool(value);
   } else if (key == "rapid_charge") {
     sRapidCharge = ParseBool(value);
+  } else if (key == "remastered_movement") {
+    sRemasteredMovement = ParseBool(value);
   } else if (key == "rando_settings") {
     PortRandoGen::Settings parsed;
     if (!PortRandoGen::ParseSettings(value, parsed)) {
@@ -921,6 +927,7 @@ std::string SettingsText() {
   file << "cinema_bars=" << (sCinemaBars ? 1 : 0) << '\n';
   file << "sharp_scan_window=" << (sSharpScanWindow ? 1 : 0) << '\n';
   file << "show_shader_compilation=" << (sShowShaderCompilation ? 1 : 0) << '\n';
+  file << "show_menu_hint=" << (sShowMenuHint ? 1 : 0) << '\n';
   file << "hud_scale=" << sHudScale << '\n';
   file << "crosshair_opacity=" << sCrosshairOpacity << '\n';
   {
@@ -1008,6 +1015,7 @@ std::string SettingsText() {
   file << "lock_on_toggle=" << (sLockOnToggle ? 1 : 0) << '\n';
   file << "sticky_charge=" << (sStickyCharge ? 1 : 0) << '\n';
   file << "rapid_charge=" << (sRapidCharge ? 1 : 0) << '\n';
+  file << "remastered_movement=" << (sRemasteredMovement ? 1 : 0) << '\n';
   {
     std::lock_guard< std::mutex > lock(sRandoMutex);
     file << "rando_settings=" << PortRandoGen::SettingsText(sRandoSettings) << '\n';
@@ -1261,6 +1269,7 @@ void EnsureInitialized() {
   sCinemaBars = port::EnvFlag("MP_CINEMA_BARS", sCinemaBars);
   sSharpScanWindow = port::EnvFlag("MP_SHARP_SCAN_WINDOW", sSharpScanWindow);
   sRapidCharge = port::EnvFlag("MP_RAPID_CHARGE", sRapidCharge);
+  sRemasteredMovement = port::EnvFlag("MP_REMASTERED_MOVEMENT", sRemasteredMovement);
   if (port::EnvFlag("MP_MOUSE_AIM")) {
     sMouseAim = true;
   }
@@ -2209,6 +2218,17 @@ bool RapidCharge() {
 void SetRapidCharge(bool enabled) {
   EnsureInitialized();
   sRapidCharge = enabled;
+  MarkDirty();
+}
+
+bool RemasteredMovement() {
+  EnsureInitialized();
+  return sRemasteredMovement && !sOriginalExperience;
+}
+
+void SetRemasteredMovement(bool enabled) {
+  EnsureInitialized();
+  sRemasteredMovement = enabled;
   MarkDirty();
 }
 
@@ -5029,6 +5049,46 @@ void DrawShaderCompilationToast() {
   ImGui::End();
 }
 
+// Once per launch, for 8 s, until the panel is first opened: how to open it. Top left,
+// clear of the other toasts (top and bottom centre) and Android's START/MENU buttons.
+void DrawMenuHintToast() {
+  static double sShownAt = -1.0;
+  static bool sDone = false;
+  if (sDone || !sShowMenuHint) {
+    return;
+  }
+  if (sVisible) {
+    sDone = true;
+    return;
+  }
+  const double now = ImGui::GetTime();
+  if (sShownAt < 0.0) {
+    sShownAt = now;
+  }
+  const double age = now - sShownAt;
+  if (age > 8.0) {
+    sDone = true;
+    return;
+  }
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + 16.f, viewport->Pos.y + 16.f), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(0.7f);
+  // Fades out over the last second.
+  ImGui::PushStyleVar(ImGuiStyleVar_Alpha, static_cast<float>(std::clamp(8.0 - age, 0.0, 1.0)));
+  if (ImGui::Begin("##menu-hint-toast", nullptr,
+                   ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
+                       ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
+                       ImGuiWindowFlags_AlwaysAutoResize)) {
+#if defined(__ANDROID__)
+    ImGui::TextUnformatted("Tap the cog button (F1 on a keyboard) for settings");
+#else
+    ImGui::TextUnformatted("Press F1 for settings");
+#endif
+  }
+  ImGui::End();
+  ImGui::PopStyleVar();
+}
+
 // Once per launch, for longer and in red: the last session ended on a failed disc read.
 void DrawDiscReadFailedAlert() {
   static double sShownAt = -1.0;
@@ -5928,6 +5988,11 @@ void DrawVideoQuality() {
   }
   ImGui::SetItemTooltip("A small progress bar while the shader cache compiles at startup (longest on the first\n"
                         "start after an install or update). Draws whose shader isn't ready yet are skipped.");
+  if (ImGui::Checkbox("Show F1 hint at launch", &sShowMenuHint)) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("A note in the top left corner for the first seconds of each launch saying how to\n"
+                        "open this panel.");
   locked = BeginOriginalLocked();
   {
     int aniso = 0;
@@ -6241,6 +6306,14 @@ void DrawControlsController() {
   ItemHelp("Twin stick uses the right stick as a direct camera aim (the same path as the mouse) and "
            "consumes it, so it no longer free-looks. Fire stays on whatever is bound to A; remap it "
            "in Controls > Controller.");
+  bool remasteredMovement = sRemasteredMovement;
+  if (ImGui::Checkbox("Remastered movement (twin stick and mouse aim)", &remasteredMovement)) {
+    SetRemasteredMovement(remasteredMovement);
+  }
+  ItemHelp("Moves as Metroid Prime Remastered and PrimeHack do: diagonals as fast as straight "
+           "ahead, and a steady air drag, so a jump keeps a smooth arc. Off, jumps move as on the "
+           "GameCube, whose speed dips at takeoff and picks up again near the top. Classic "
+           "controls always move as on the GameCube.");
   // Shown only with twin stick on, as the pause menu's Stick Aim Speed row.
   if (sTwinStick) {
     float stickRate = sStickAimRate;
@@ -8730,6 +8803,7 @@ void DrawUI() {
   PortImporters::Poll();
 #endif
   FinishRemasteredImport();
+  DrawMenuHintToast();
   DrawStaleImportToast();
   DrawUpdateToast();
   DrawDiscReadFailedAlert();

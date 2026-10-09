@@ -5,6 +5,8 @@
 #include "../gfx/depth_peek.hpp"
 #include "../gfx/probe.hpp"
 #include "../gfx/shadow.hpp"
+#include "../gfx/hash.hpp"
+#include "../gfx/pipeline_cache.hpp"
 #include "../gfx/recording.hpp"
 #include "../internal.hpp"
 #include "dolphin/gd/GDGeometry.h"
@@ -16,6 +18,7 @@
 #include "shader_info.hpp"
 #include "texture.hpp"
 
+#include <absl/container/flat_hash_map.h>
 #include <tracy/Tracy.hpp>
 
 #include <algorithm>
@@ -120,6 +123,15 @@ struct FogRangeLutEntry {
 
 constexpr size_t MaxFogRangeLuts = 32;
 std::vector<FogRangeLutEntry> sFogRangeLuts;
+
+struct PipelineMemo {
+  ShaderInfo shaderInfo{};
+  gfx::PipelineRef shadowPipelineRef{};
+  bool shadowCaster = false;
+};
+// Keyed by pipeline ref (the config's hash); entries stay valid until the config's pipeline is
+// dropped, which gfx::touch_pipeline reports.
+absl::flat_hash_map<gfx::PipelineRef, PipelineMemo> sPipelineMemo;
 
 struct DrawCache {
   PipelineConfig config{};
@@ -467,22 +479,41 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
     const bool prevShadowReceive = cache.shaderInfo.shadowReceive;
     const bool prevUsesLightmap = cache.shaderInfo.usesLightmap;
     populate_pipeline_config(cache.config, prim, fmt);
-    cache.shaderInfo = build_shader_info(cache.config.shaderConfig);
-    warn_missing_uv_sets(cache.config.shaderConfig, cache.shaderInfo);
-    cache.pipelineRef = gfx::pipeline_ref(cache.config);
-    // Only an opaque surface that writes depth casts: the shadow map's vertex-only pass can't
-    // alpha-test or blend. The game draws most opaque surfaces as a ONE/ZERO blend.
-    const auto& sc = cache.config.shaderConfig;
-    const bool opaque = cache.config.blendMode == GX_BM_NONE ||
-                        (cache.config.blendMode == GX_BM_BLEND && cache.config.blendFacSrc == GX_BL_ONE &&
-                         cache.config.blendFacDst == GX_BL_ZERO);
-    cache.shadowCaster = cache.shaderInfo.usesShadow && cache.config.depthCompare && cache.config.depthUpdate &&
-                         opaque && !sc.alphaCompare && sc.depthOnly == 0;
-    if (cache.shadowCaster) {
-      PipelineConfig shadowConfig = cache.config;
-      shadowConfig.shadowPass = 1;
-      shadowConfig.msaaSamples = 1;
-      cache.shadowPipelineRef = gfx::pipeline_ref(shadowConfig);
+    // A frame switches pipelines hundreds of times between a few hundred configs. The config's
+    // hash is the pipeline's ref, so a config seen before reuses its shader info and shadow
+    // pipeline without the second lookup (shader info depends on the config alone).
+    const gfx::PipelineRef ref = xxh3_hash(cache.config, static_cast<HashType>(gfx::ShaderType::GX));
+    auto memoIt = sPipelineMemo.find(ref);
+    if (memoIt != sPipelineMemo.end() && gfx::touch_pipeline(ref) &&
+        (!memoIt->second.shadowCaster || gfx::touch_pipeline(memoIt->second.shadowPipelineRef))) {
+      const auto& memo = memoIt->second;
+      cache.shaderInfo = memo.shaderInfo;
+      cache.pipelineRef = ref;
+      cache.shadowCaster = memo.shadowCaster;
+      cache.shadowPipelineRef = memo.shadowPipelineRef;
+    } else {
+      cache.shaderInfo = build_shader_info(cache.config.shaderConfig);
+      warn_missing_uv_sets(cache.config.shaderConfig, cache.shaderInfo);
+      cache.pipelineRef = gfx::pipeline_ref(cache.config);
+      // Only an opaque surface that writes depth casts: the shadow map's vertex-only pass can't
+      // alpha-test or blend. The game draws most opaque surfaces as a ONE/ZERO blend.
+      const auto& sc = cache.config.shaderConfig;
+      const bool opaque = cache.config.blendMode == GX_BM_NONE ||
+                          (cache.config.blendMode == GX_BM_BLEND && cache.config.blendFacSrc == GX_BL_ONE &&
+                           cache.config.blendFacDst == GX_BL_ZERO);
+      cache.shadowCaster = cache.shaderInfo.usesShadow && cache.config.depthCompare && cache.config.depthUpdate &&
+                           opaque && !sc.alphaCompare && sc.depthOnly == 0;
+      if (cache.shadowCaster) {
+        PipelineConfig shadowConfig = cache.config;
+        shadowConfig.shadowPass = 1;
+        shadowConfig.msaaSamples = 1;
+        cache.shadowPipelineRef = gfx::pipeline_ref(shadowConfig);
+      }
+      sPipelineMemo.insert_or_assign(cache.pipelineRef, PipelineMemo{
+                                                            .shaderInfo = cache.shaderInfo,
+                                                            .shadowPipelineRef = cache.shadowPipelineRef,
+                                                            .shadowCaster = cache.shadowCaster,
+                                                        });
     }
     cache.fmt = fmt;
     cache.lineMode = lineMode;
