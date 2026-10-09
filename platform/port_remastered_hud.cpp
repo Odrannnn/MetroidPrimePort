@@ -37,9 +37,10 @@ enum : uint32_t {
 };
 
 constexpr uint32_t kNoModel = 0xFFFFFFFF;
-// A disc model whose fourth material is the one a HUD picture wants: the
-// texture times the widget's colour, alpha from the texture.
-constexpr uint32_t kTemplateModel = 0xE64E5DBA;
+// Disc models whose fourth material is the one a HUD picture wants: the
+// texture times the widget's colour, alpha from the texture. PAL's helmet
+// E64E5DBA has only three materials; E942F7EA has the same one on every disc.
+constexpr uint32_t kTemplateModels[] = {0xE64E5DBA, 0xE942F7EA};
 constexpr size_t kTemplateMaterial = 3;
 // The ids the output is written under start here and step past the disc's own.
 constexpr uint32_t kModelIds = 0x52480000;
@@ -247,6 +248,7 @@ void Pad32(Blob& out) { out.resize((out.size() + 31) & ~size_t(31)); }
 
 // Offsets into a text pane's type data.
 constexpr size_t kTextPaneSize = 74;
+constexpr size_t kPalTextPaneExtra = 12;
 constexpr size_t kTextPaneExtent = 66;
 constexpr size_t kTextPaneJustify = 26;
 constexpr size_t kModelSize = 12;
@@ -276,6 +278,10 @@ bool ParseFrame(const Blob& data, uint32_t header[4], std::vector<Widget>& out, 
   for (int i = 0; i < 4; ++i) {
     header[i] = in.U32();
   }
+  // PAL frames (version 1) follow each text pane with a Japanese font and
+  // extents. They're dropped, and the frame is written as version 0 (1.00's).
+  const uint32_t version = header[0];
+  header[0] = 0;
   const uint32_t count = in.U32();
   for (uint32_t k = 0; k < count && in.ok; ++k) {
     Widget w;
@@ -342,6 +348,9 @@ bool ParseFrame(const Blob& data, uint32_t header[4], std::vector<Widget>& out, 
       break;
     }
     w.typeData.assign(data.begin() + long(start), data.begin() + long(in.at));
+    if (w.type == Tag('T', 'X', 'P', 'N') && version >= 1) {
+      in.Skip(kPalTextPaneExtra);
+    }
     w.hasWorker = in.U8() != 0;
     if (w.hasWorker) {
       w.worker = in.U16();
@@ -987,13 +996,16 @@ uint32_t HudConverter::NewId(uint32_t& next) {
 }
 
 bool HudConverter::LoadMaterial(std::string& error) {
-  if (m_material.empty()) {
+  for (const uint32_t id : kTemplateModels) {
     Blob templateModel;
-    if (!m_io.retail || !m_io.retail(Tag('C', 'M', 'D', 'L'), kTemplateModel, templateModel) ||
-        !TemplateMaterial(templateModel, m_material)) {
-      error = "the disc's model " + Hex8(kTemplateModel) + " is not usable";
-      return false;
+    if (m_material.empty() && m_io.retail && m_io.retail(Tag('C', 'M', 'D', 'L'), id, templateModel)) {
+      TemplateMaterial(templateModel, m_material);
     }
+  }
+  if (m_material.empty()) {
+    error = "none of the disc's template models " + Hex8(kTemplateModels[0]) + ", " + Hex8(kTemplateModels[1]) +
+            " is usable";
+    return false;
   }
   return true;
 }

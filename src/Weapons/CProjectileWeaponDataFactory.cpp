@@ -190,6 +190,17 @@ bool CProjectileWeaponDataFactory::CreateWPSM(CWeaponDescription* desc, CInputSt
     case 'FC60':
       desc->x29_31_FC60 = CParticleDataFactory::GetBool(in);
       break;
+#elif defined(TARGET_PC)
+    // PAL's weapon flags: read and dropped, so PAL weapons load and act as
+    // 1.00's (the port runs 1.00's code on every disc).
+    case 'F60H':
+    case 'SVBD':
+    case 'NDTT':
+    case 'SPS1':
+    case 'SPS2':
+    case 'FC60':
+      CParticleDataFactory::GetBool(in);
+      break;
 #endif
     case '_END':
       done = true;

@@ -27,6 +27,25 @@ uint CSystemState::GetBitCount(uint value) {
   return count;
 }
 
+#ifdef TARGET_PC
+// The system options live in CMemoryCardDriver's 174-byte x30_systemData.
+// 1.00's worlds have few enough skippable cinematics for their bits to fit
+// after the fixed fields, but other discs (PAL) have more, and reading past the
+// buffer threw on file create. Cinematics past the cap are not remembered.
+static int CapCinematicBits(int count) {
+  // NES state, x68_, frozen fps/ball counts (2 + 2), power bomb ammo (1),
+  // log scan percent (7), five flags, auto-mapper key state (2).
+  const int fixedBits = 98 * 8 + 64 * 8 + 2 + 2 + 1 + 7 + 5 + 2;
+  const int maxBits = 174 * 8 - fixedBits;
+  static bool sReported = false;
+  if (count > maxBits && !sReported) {
+    sReported = true;
+    OSReport("CSystemState: %d cinematic bits, %d fit in the system options\n", count, maxBits);
+  }
+  return count > maxBits ? maxBits : count;
+}
+#endif
+
 CSystemState::CSystemState() : x0_nesState(static_cast< uchar >(0))
 , x68_(static_cast< uchar >(0))
 , xbc_autoMapperKeyState(0)
@@ -77,7 +96,12 @@ CSystemState::CSystemState(CInputStream& in) : x0_nesState(static_cast< uchar >(
     cinematicCount += saveWorld->GetCinematicCount();
   }
   rstl::vector< bool > cinematicStates(cinematicCount, false);
-  for (int i = 0; i < cinematicCount; ++i)
+#ifdef TARGET_PC
+  const int storedCount = CapCinematicBits(cinematicCount);
+#else
+  const int storedCount = cinematicCount;
+#endif
+  for (int i = 0; i < storedCount; ++i)
     cinematicStates[i] = in.ReadBits(1) != 0;
   int stateIdx = 0;
   for (AUTO(it, worlds.begin()); it != worlds.end(); ++it) {
@@ -127,6 +151,9 @@ void CSystemState::PutTo(COutputStream& out) {
       cinematicStates.push_back(GetCinematicState(
           rstl::pair< CAssetId, TEditorId >(worldId, world.GetCinematics()[i])));
   }
+#ifdef TARGET_PC
+  cinematicCount = CapCinematicBits(cinematicCount);
+#endif
   for (int i = 0; i < cinematicCount; ++i)
     out.WriteBits(cinematicStates[i] ? 1 : 0, 1);
 }

@@ -11,7 +11,11 @@
 #include "port_apclient.h"
 #include "port_custom_res.h"
 #include "port_debug.h"
+#include "port_disc.h"
 #include "port_hints.h"
+
+#include <Kyoto/CResFactory.hpp>
+#include <rstl/auto_ptr.hpp>
 
 #include <algorithm>
 #include <string>
@@ -162,6 +166,22 @@ const rstl::vector< rstl::vector< wchar_t > >& CStringTable::PortStrings() const
         return mPortSections[i].strings;
       }
     }
+    // A PAL disc's own sections, for a language a Remastered import doesn't
+    // add to this table.
+    static const FourCC kPalSections[][2] = {
+        {'EUFR', 'FREN'}, {'USFR', 'FREN'}, {'EUGE', 'GERM'},
+        {'EUSP', 'SPAN'}, {'USSP', 'SPAN'}, {'EUIT', 'ITAL'},
+    };
+    for (size_t k = 0; k < sizeof(kPalSections) / sizeof(kPalSections[0]); ++k) {
+      if (kPalSections[k][0] != language) {
+        continue;
+      }
+      for (size_t i = 0; i < mPortSections.size(); ++i) {
+        if (mPortSections[i].language == kPalSections[k][1]) {
+          return mPortSections[i].strings;
+        }
+      }
+    }
   }
   return mNativeStrings;
 }
@@ -226,6 +246,100 @@ void CStringTable::PortWatch(uint strgId) {
   PortRefreshWatched();
 }
 
+void CStringTable::PortRemap(const std::vector< int >& from, const CStringTable* extra) {
+  const int count = static_cast< int >(from.size());
+  struct Remapper {
+    const std::vector< int >& from;
+    const CStringTable* extra;
+    rstl::vector< rstl::vector< wchar_t > > Apply(const rstl::vector< rstl::vector< wchar_t > >& src,
+                                                  uint language) const {
+      const rstl::vector< rstl::vector< wchar_t > >* other = NULL;
+      if (extra != NULL) {
+        other = &extra->mNativeStrings;
+        for (size_t i = 0; i < extra->mPortSections.size(); ++i) {
+          if (extra->mPortSections[i].language == language) {
+            other = &extra->mPortSections[i].strings;
+          }
+        }
+      }
+      rstl::vector< rstl::vector< wchar_t > > out;
+      out.reserve(from.size());
+      for (size_t i = 0; i < from.size(); ++i) {
+        const int f = from[i];
+        if (f >= 0 && f < static_cast< int >(src.size())) {
+          out.push_back(src[f]);
+        } else if (f < 0 && other != NULL && -f - 1 < static_cast< int >(other->size())) {
+          out.push_back((*other)[-f - 1]);
+        } else {
+          out.push_back(rstl::vector< wchar_t >(1, L'\0'));
+        }
+      }
+      return out;
+    }
+  };
+  const Remapper remap = {from, extra};
+  mNativeStrings = remap.Apply(mNativeStrings, 'ENGL');
+  for (size_t i = 0; i < mPortSections.size(); ++i) {
+    mPortSections[i].strings = remap.Apply(mPortSections[i].strings, mPortSections[i].language);
+  }
+  x0_stringCount = count;
+}
+
+// A PAL disc's string tables that the 1.00 code indexes by number are laid
+// out differently (PAL added a language menu, moved the image gallery's
+// labels into STRG_SlideShow and added inventory counters), so they're put
+// back in 1.00's order.
+static void PortRemapPalTable(uint id, CStringTable& table) {
+  if (PortDisc::Current() != PortDisc::Version::Pal) {
+    return;
+  }
+  std::vector< int > from;
+  const CStringTable* extra = NULL;
+  rstl::single_ptr< CStringTable > slideShow;
+  if (id == 0x0552A456 && table.GetStringCount() == 104) {  // STRG_Main
+    const SObjectTag slideTag('STRG', 0xBD727D06);           // STRG_SlideShow
+    if (gpResourceFactory->GetResLoader().ResourceExists(slideTag)) {
+      rstl::auto_ptr< CInputStream > in =
+          gpResourceFactory->GetResLoader().LoadNewResourceSync(slideTag, NULL);
+      if (in.get() != NULL) {
+        slideShow = rs_new CStringTable(*in);
+        extra = slideShow.get();
+      }
+    }
+    for (int i = 0; i < 110; ++i) {
+      if (i <= 38) {
+        from.push_back(i);  // HUD, visors, dialogs, log book
+      } else if (i <= 54) {
+        from.push_back(i + 1);  // file select, map legend; PAL 39 = 'Select Language'
+      } else if (i <= 60) {
+        from.push_back(-(i - 55 + 4) - 1);  // gallery: Legend .. Reset View
+      } else if (i <= 62) {
+        from.push_back(56);  // Exit
+      } else {
+        from.push_back(i - 6);
+      }
+    }
+  } else if (id == 0x500EC6A0 && table.GetStringCount() == 110) {  // STRG_PauseScreen
+    for (int i = 0; i < 100; ++i) {
+      // PAL adds the item/scan counters at 9-10 and an empty string at 27.
+      from.push_back(i <= 8 ? i : i <= 24 ? i + 2 : i + 3);
+    }
+    // Kept past 1.00's end: NEXT, EXIT, BACK for PAL's instruction text panes
+    // (CPauseScreen; 1.00 draws them as a model).
+    from.push_back(105);
+    from.push_back(103);
+    from.push_back(104);
+  } else if (id == 0x19C3F7F7 && table.GetStringCount() == 29) {  // STRG_MemoryCard
+    // PAL's card-full texts for a save over an existing one are empty.
+    for (int i = 0; i < 29; ++i) {
+      from.push_back(i == 9 || i == 10 ? 6 : i);
+    }
+  } else {
+    return;
+  }
+  table.PortRemap(from, extra);
+}
+
 void CStringTable::PortRefreshWatched() {
   std::u16string text;
   // No text (yet, or after a disconnect) keeps whatever the string last said.
@@ -243,6 +357,7 @@ const CFactoryFnReturn FStringTableFactory(const SObjectTag& tag, CInputStream& 
                                      const CVParamTransfer& xfer) {
 #ifdef TARGET_PC
   CStringTable* table = rs_new CStringTable(in);
+  PortRemapPalTable(tag.GetId(), *table);
   // The Artifact Temple totems say where a randomized seed put each artifact,
   // and a randomized pickup's scan what it holds.
   if (PortHints::IsWatched(tag.GetId())) {

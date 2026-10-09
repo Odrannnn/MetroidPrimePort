@@ -3,6 +3,10 @@
 #include "Kyoto/Math/CMath.hpp"
 #include "Kyoto/Streams/CInputStream.hpp"
 
+#ifdef TARGET_PC
+#include "port_disc.h"
+#endif
+
 CTweakPlayer::CTweakPlayer(CInputStream& in)
 : mGrappleBeamSpeed(0.0)
 , mGrappleBeamXWaveAmplitude(0.0)
@@ -47,6 +51,14 @@ CTweakPlayer::CTweakPlayer(CInputStream& in)
   x104_ = in.ReadFloat();
   mMinJumpTime = in.ReadFloat();
   mMinDoubleJumpTime = in.ReadFloat();
+#ifdef TARGET_PC
+  // PAL lengthened the jump windows for 50 Hz; the port runs at 1.00's rate,
+  // so it keeps 1.00's (the only values PAL's player tweak changes).
+  if (PortDisc::Current() == PortDisc::Version::Pal) {
+    mAllowedJumpTime = mMinJumpTime = 0.235f;
+    mAllowedDoubleJumpTime = mMinDoubleJumpTime = 0.1f;
+  }
+#endif
   mAllowedLedgeTime = in.ReadFloat();
   mDoubleJumpImpulse = in.ReadFloat();
   mBackwardsForceMultiplier = in.ReadFloat();

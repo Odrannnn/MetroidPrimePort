@@ -32,6 +32,7 @@
 #include <aurora/gfx.h>
 
 #include "port_build_info.h"
+#include "port_disc.h"
 #include "port_gallery.h"
 #include "port_map_icons.h"
 #include "port_model_variant.h"
@@ -2777,13 +2778,15 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     }
     const fs::path textFolder = staging / kTextFolder;
     fs::create_directories(textFolder, ec);
+    // Remastered's indices are 1.00's; another version's tables moved or rewrote some strings.
+    const bool checkWording = PortDisc::Current() != PortDisc::Version::Usa100;
     for (const auto& [strg, strings] : tables) {
       std::vector<uint8_t> original;
       std::vector<uint8_t> merged;
       int reworded = 0;
       int translated = 0;
       if (!retail.Read(kSTRG, strg, original) ||
-          !MergeStringTable(original.data(), original.size(), strings, merged, reworded, translated)) {
+          !MergeStringTable(original.data(), original.size(), strings, checkWording, merged, reworded, translated)) {
         continue;  // not on this disc, or worded as it was
       }
       char name[16];

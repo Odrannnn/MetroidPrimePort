@@ -3002,8 +3002,15 @@ CEntity* ScriptLoader::LoadVisorFlare(CStateManager& mgr, CInputStream& in, int 
 
 CEntity* ScriptLoader::LoadWorldTeleporter(CStateManager& mgr, CInputStream& in, int propCount,
                                            const CEntityInfo& info) {
+#ifdef TARGET_PC
+  // Port: PAL elevators have 26 properties; its 5 trailing ones (two bools,
+  // three floats) are left unread and skipped by LoadScriptObject.
+  if (!(propCount >= 4 && propCount <= 26 ? true : false))
+    return nullptr;
+#else
   if (!(propCount >= 4 && propCount <= 21 ? true : false))
     return nullptr;
+#endif
 
   rstl::string name = mgr.HashInstanceName(in);
   bool active = in.Get< bool >();
@@ -3813,8 +3820,14 @@ CEntity* ScriptLoader::LoadActorContraption(CStateManager& mgr, CInputStream& in
 
 CEntity* ScriptLoader::LoadOcculus(CStateManager& mgr, CInputStream& in, int propCount,
                                    const CEntityInfo& info) {
+#ifdef TARGET_PC
+  // Port: PAL's Oculus adds a trailing float, left unread.
+  if (propCount != 15 && propCount != 16)
+    return nullptr;
+#else
   if (propCount != 15)
     return nullptr;
+#endif
 
   SScaledActorHead head(in, mgr);
 
@@ -4079,8 +4092,14 @@ CEntity* ScriptLoader::LoadIceZoomer(CStateManager& mgr, CInputStream& in, int p
 
 CEntity* ScriptLoader::LoadRidley(CStateManager& mgr, CInputStream& in, int propCount,
                                   const CEntityInfo& info) {
+#ifdef TARGET_PC
+  // Port: PAL's Ridley has 40 properties (see CRidleyData).
+  if (propCount < CRidley::GetNumProperties() && propCount != 40)
+    return nullptr;
+#else
   if (propCount < CRidley::GetNumProperties())
     return nullptr;
+#endif
 
   SScaledActorHead head(in, mgr);
 

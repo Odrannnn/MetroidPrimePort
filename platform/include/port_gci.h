@@ -14,7 +14,7 @@
 // same way or as a raw image (MemoryCardA.USA.raw); both can be read, and a
 // .gci can be written into either.
 //
-// Only Metroid Prime's own files (game GM8E, maker 01) are copied. The game
+// Only Metroid Prime's own files (game GM8E or GM8P, maker 01) are copied. The game
 // alternates its save between "MetroidPrime A" and "MetroidPrime B" and loads
 // the newer, so an import replaces the whole set: every game file already in
 // the folder is moved into a "_replaced" folder next to it first, never deleted.
@@ -36,6 +36,13 @@ struct Header {
 
 // Checks a .gci image: a whole header, whole blocks, and sizes that agree.
 bool ParseHeader(const uint8_t* data, size_t size, Header& out, std::string& error);
+// The mounted disc's game code: GM8E (the default), or GM8P on a PAL disc.
+// Only its files are copied, and Dolphin's card for its region (USA, EUR) is
+// the one looked for: a PAL save's worlds are laid out differently.
+void SetGameCode(const char* code4);
+const char* GameCode();
+// "USA" or "EUR", as Dolphin names its cards.
+const char* CardRegion();
 // Whether this is one of Metroid Prime's files.
 bool IsGameFile(const Header& header);
 // The name Dolphin and Aurora give it in a GCI folder: 01-GM8E-<name>.gci.

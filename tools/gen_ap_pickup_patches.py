@@ -45,8 +45,10 @@ MODEL_OTHER = 42  # items for other games; see CUSTOM_MODELS
 
 def read_skip_inc(path):
     text = open(path).read()
+    # Only the USA table: kSkipRoomsPal's offsets index kSkipOpsPal.
+    usa = text.split('static const SkipRoom kSkipRooms[] = {')[1].split('};')[0]
     rooms = {int(m[1], 16): (int(m[2]), int(m[3]))
-             for m in re.finditer(r'\{0x([0-9A-F]{8}), (\d+), (\d+)\}', text)}
+             for m in re.finditer(r'\{0x([0-9A-F]{8}), (\d+), (\d+)\}', usa)}
 
     def blob(name):
         body = text.split('static const unsigned char %s[] = {' % name)[1].split('};')[0]

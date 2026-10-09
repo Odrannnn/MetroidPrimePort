@@ -540,6 +540,7 @@ if(MP_BUILD_TESTS)
     add_executable(port_disc_tests tests/port_disc.cpp platform/disc.cpp)
     target_include_directories(port_disc_tests PRIVATE platform/include extern/aurora/include)
     target_compile_definitions(port_disc_tests PRIVATE TARGET_PC)
+    target_link_libraries(port_disc_tests PRIVATE ZLIB::ZLIB)
     add_executable(port_mouse_tests tests/port_mouse.cpp)
     target_include_directories(port_mouse_tests PRIVATE platform/include)
     # Drives a real SDL virtual gamepad through the touch overlay's own code.

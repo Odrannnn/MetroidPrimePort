@@ -236,6 +236,48 @@ std::u16string MessageWords(const std::u16string& text) {
 
 size_t CountBreaks(const std::u16string& text) { return size_t(std::count(text.begin(), text.end(), u'\n')); }
 
+// A text's words as tokens: lower case, letters and digits only.
+std::vector<std::u16string> Tokens(const std::u16string& words) {
+  std::vector<std::u16string> tokens(1);
+  for (const char16_t c : words) {
+    if (c == u' ') {
+      if (!tokens.back().empty()) {
+        tokens.emplace_back();
+      }
+    } else if ((c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'z') || c >= 0x80) {
+      tokens.back().push_back(c);
+    } else if (c >= u'A' && c <= u'Z') {
+      tokens.back().push_back(char16_t(c - u'A' + u'a'));
+    }
+  }
+  if (tokens.back().empty()) {
+    tokens.pop_back();
+  }
+  return tokens;
+}
+
+// Whether two strings say the same thing: the same tokens when short, else at
+// least 3/4 of them in common, in order (Remastered rewords a little, a PAL
+// disc rewrote some logs outright).
+bool SameText(const std::vector<std::u16string>& a, const std::vector<std::u16string>& b) {
+  if (a.empty() || b.empty()) {
+    return false;
+  }
+  if (a.size() < 4 || b.size() < 4) {
+    return a == b;
+  }
+  std::vector<size_t> row(b.size() + 1, 0);
+  for (size_t i = 0; i < a.size(); ++i) {
+    size_t diagonal = 0;
+    for (size_t j = 0; j < b.size(); ++j) {
+      const size_t up = row[j + 1];
+      row[j + 1] = a[i] == b[j] ? diagonal + 1 : std::max(row[j], up);
+      diagonal = up;
+    }
+  }
+  return 4 * 2 * row[b.size()] >= 3 * (a.size() + b.size());
+}
+
 constexpr uint32_t FourCc(const char* code) {
   return uint32_t(uint8_t(code[0])) << 24 | uint32_t(uint8_t(code[1])) << 16 | uint32_t(uint8_t(code[2])) << 8 |
          uint32_t(uint8_t(code[3]));
@@ -433,8 +475,8 @@ bool TranslateText(const std::u16string& remastered, const std::u16string& retai
   return true;
 }
 
-bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text, std::vector<uint8_t>& out,
-                      int& reworded, int& translated) {
+bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text, bool checkWording,
+                      std::vector<uint8_t>& out, int& reworded, int& translated) {
   reworded = 0;
   translated = 0;
   if (size < 16 || ReadBE32(retail) != kStrgMagic || ReadBE32(retail + 4) != 0) {
@@ -486,15 +528,80 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
   // without its brackets.
   std::vector<const std::map<std::string, std::u16string>*> versions(count, nullptr);
   std::vector<bool> bracketed(count, false);
-  for (const auto& [index, byLanguage] : text.byIndex) {
-    if (index < count) {
-      versions[index] = &byLanguage;
-    }
-  }
   std::vector<std::u16string> discWords;
-  if (!text.byName.empty()) {
+  if (!text.byName.empty() || checkWording) {
     for (size_t s = 0; s < count; ++s) {
       discWords.push_back(Words(disc[s], true));
+    }
+  }
+  // Remastered's indices are 1.00's. Another version keeps them unless it moved
+  // a table's strings (PAL inserted some into the pause screen's): there each
+  // string goes where its wording is, and one Remastered reworded moves as the
+  // nearest string before it does.
+  std::vector<std::pair<uint32_t, const std::map<std::string, std::u16string>*>> entries;
+  for (const auto& [index, byLanguage] : text.byIndex) {
+    entries.emplace_back(index, &byLanguage);
+  }
+  std::vector<long> placed(entries.size(), -1);
+  bool moved = false;
+  if (checkWording) {
+    std::vector<std::vector<std::u16string>> discTokens;
+    for (const std::u16string& words : discWords) {
+      discTokens.push_back(Tokens(words));
+    }
+    std::vector<std::vector<std::u16string>> tokens;
+    for (const auto& [index, byLanguage] : entries) {
+      const auto found = byLanguage->find(kRemasteredEnglish);
+      tokens.push_back(found != byLanguage->end() ? Tokens(MessageWords(found->second))
+                                                  : std::vector<std::u16string>());
+    }
+    std::vector<bool> taken(count, false);
+    for (size_t e = 0; e < entries.size(); ++e) {
+      const uint32_t index = entries[e].first;
+      if (index < count && SameText(tokens[e], discTokens[index])) {
+        placed[e] = long(index);
+        taken[index] = true;
+      }
+    }
+    for (size_t e = 0; e < entries.size(); ++e) {
+      for (size_t s = 0; s < count && placed[e] < 0; ++s) {
+        if (!taken[s] && SameText(tokens[e], discTokens[s])) {
+          placed[e] = long(s);
+          taken[s] = true;
+          moved = moved || tokens[e].size() >= 4;  // a sentence, not a word two strings share
+        }
+      }
+    }
+    for (size_t e = 0; moved && e < entries.size(); ++e) {
+      if (placed[e] >= 0) {
+        continue;
+      }
+      long shift = 0;
+      bool anchored = false;
+      for (size_t k = e; k-- > 0 && !anchored;) {
+        if (placed[k] >= 0) {
+          shift = placed[k] - long(entries[k].first);
+          anchored = true;
+        }
+      }
+      for (size_t k = e + 1; k < entries.size() && !anchored; ++k) {
+        if (placed[k] >= 0) {
+          shift = placed[k] - long(entries[k].first);
+          anchored = true;
+        }
+      }
+      const long at = long(entries[e].first) + shift;
+      if (at >= 0 && at < long(count) && !taken[at]) {
+        placed[e] = at;
+        taken[at] = true;
+      }
+    }
+  }
+  for (size_t e = 0; e < entries.size(); ++e) {
+    if (moved && placed[e] >= 0) {
+      versions[placed[e]] = entries[e].second;
+    } else if (!moved && entries[e].first < count) {
+      versions[entries[e].first] = entries[e].second;
     }
   }
   for (const auto& [name, byLanguage] : text.byName) {
@@ -525,13 +632,30 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
       ++reworded;
     }
   }
-  // A language starts as the English, so a string without a translation stays readable.
+  // A language starts as the disc's own section for it (PAL's FREN for EUFR), else
+  // the English, so a string without a translation stays readable.
+  static const struct {
+    const char* remastered;
+    uint32_t disc;
+  } kDiscSections[] = {
+      {"EUFR", FourCc("FREN")}, {"USFR", FourCc("FREN")}, {"EUGE", FourCc("GERM")},
+      {"EUSP", FourCc("SPAN")}, {"USSP", FourCc("SPAN")}, {"EUIT", FourCc("ITAL")},
+  };
   for (size_t k = 0; k < kTextLanguageCount; ++k) {
     const uint32_t code = FourCc(kTextLanguages[k].code);
     if (std::find(codes.begin(), codes.end(), code) != codes.end()) {
       continue;
     }
-    std::vector<std::u16string> strings = tables[english];
+    size_t base = english;
+    for (const auto& section : kDiscSections) {
+      if (std::strcmp(section.remastered, kTextLanguages[k].code) == 0) {
+        const auto at = std::find(codes.begin(), codes.end(), section.disc);
+        if (at != codes.end()) {
+          base = size_t(at - codes.begin());
+        }
+      }
+    }
+    std::vector<std::u16string> strings = tables[base];
     int done = 0;
     for (size_t s = 0; s < count; ++s) {
       if (versions[s] == nullptr) {

@@ -7,6 +7,8 @@
 
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
 bool CGuiTextPane::sDrawPaneRects = false;
+#elif defined(TARGET_PC)
+uint CGuiTextPane::sPortFrameVersion = 0;
 #endif
 
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
@@ -38,6 +40,12 @@ CGuiWidget* CGuiTextPane::Create(CGuiFrame* frame, CInputStream& in, CSimplePool
   CAssetId jpFontId = version >= 1 ? in.Get< CAssetId >() : fontId;
   int jpExtentX = version >= 1 ? in.Get< int >() : extentX;
   int jpExtentY = version >= 1 ? in.Get< int >() : extentY;
+#elif defined(TARGET_PC)
+  if (sPortFrameVersion >= 1) {
+    in.Get< CAssetId >();
+    in.Get< int >();
+    in.Get< int >();
+  }
 #endif
   const CGuiTextProperties props(wordWrap, horizontal, justification, vJustification, nullptr);
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
