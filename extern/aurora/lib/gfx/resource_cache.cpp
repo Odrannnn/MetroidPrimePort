@@ -82,7 +82,10 @@ void shutdown_resource_cache() {
 } // namespace detail
 
 BindGroupRef bind_group_ref(const WGPUBindGroupDescriptor& descriptor) {
-  const auto id = xxh3_hash(descriptor);
+  return bind_group_ref(xxh3_hash(descriptor), descriptor);
+}
+
+BindGroupRef bind_group_ref(BindGroupRef id, const WGPUBindGroupDescriptor& descriptor) {
   std::lock_guard lock{g_bindGroupCacheMutex};
   const auto it = g_cachedBindGroups.find(id);
   if (it == g_cachedBindGroups.end()) {
