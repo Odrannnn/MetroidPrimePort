@@ -1072,6 +1072,16 @@ public:
     }
   }
 
+  // The thermal visor's noise texture out of the executable. Never throws.
+  bool ExtractThermalNoiseBytes(std::vector<uint8_t>& out, std::string& error) const {
+    try {
+      return ExtractThermalNoise(m_nsp, out, error);
+    } catch (const std::exception& e) {
+      error = e.what();
+      return false;
+    }
+  }
+
   std::vector<RoomPak> AllPaks() const {
     std::vector<RoomPak> all;
     for (size_t i = 0; i < m_paks.size(); ++i) {
@@ -3104,8 +3114,17 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       if ((remastered.ReadTexture(kPlain, raw, lutError) || remastered.ReadTexture(kSwapped, raw, lutError)) &&
           DecodeTxtr(raw.data(), raw.size(), lut, lutError) && lut.width == 256 && lut.height == 4 &&
           lut.rgba.size() == 256 * 4 * 4) {
-        if (!makeIO(0, hudFolder).write("thermal.lut", lut.rgba)) {
-          AddLine("thermal visor gradient: cannot write");
+        // thermal.lut = the gradient (256x4 RGBA8) then the 64x64 R8 noise from the executable.
+        std::vector<uint8_t> noise;
+        std::string noiseError;
+        if (!remastered.ExtractThermalNoiseBytes(noise, noiseError)) {
+          AddLine("thermal visor noise: left out (" + noiseError + ")");
+        } else {
+          std::vector<uint8_t> file = lut.rgba;
+          file.insert(file.end(), noise.begin(), noise.end());
+          if (!makeIO(0, hudFolder).write("thermal.lut", file)) {
+            AddLine("thermal visor gradient: cannot write");
+          }
         }
       } else {
         AddLine("thermal visor gradient: " + (lutError.empty() ? std::string("unexpected size") : lutError));

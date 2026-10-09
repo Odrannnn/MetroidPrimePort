@@ -16,9 +16,9 @@
 
 // Remastered's thermal visor post (NRenderThermalVisor), run on the finished EFB:
 //  - cold (shader 7e5c16a5, after the cold actors): the frame sampled at the pixel plus a
-//    heat-haze offset from a 64x64 noise texture (uv scaled by viewport height / 64 and shifted
-//    by two CRandom16 draws per call, offset = noise.xy 0.02 - 0.01, y flipped), each channel x
-//    of the exposed colour mapped to x/(x+1) 0.5, written out as (r, b, g);
+//    heat-haze offset from a 64x64 R8 noise texture (nearest, repeat; uv scaled by viewport width
+//    / 64 and shifted by two CRandom16 draws per call, offset = (r, 0) 0.02 - 0.01, y flipped),
+//    each channel x of the exposed colour mapped to x/(x+1) 0.5;
 //  - hot (d9ee4f80, after the hot actors) into a half-resolution target (fb >> 1, in sixths while
 //    the visor ramps up for 0.5 s): the luminance L of the exposed frame goes through a 256-texel
 //    heat gradient, lut(heat + L) rescaled to luminance 2L + 0.5 clamp((heat - 0.8) / 0.2) and
@@ -37,6 +37,7 @@ using webgpu::g_device;
 
 constexpr wgpu::TextureFormat TargetFormat = wgpu::TextureFormat::RGBA16Float;
 constexpr uint32_t NoiseSize = 64;
+constexpr size_t LutBytes = 256 * 4 * 4;
 
 constexpr const char* Source = R"(
 struct Uniforms {
@@ -118,11 +119,12 @@ fn scene(uv: vec2f) -> vec3f {
 fn fs_cold(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let size = u.fb.xy;
   let uv = pos.xy / size;
-  let n = textureSampleLevel(noiseTex, repeatSamp, uv * (size.y / 64.0) + u.r.xy, 0.0);
-  let off = n.xy * 0.02 - 0.01;
+  // uv scale = viewport width / noise width (0xfb1aa0); the R8 noise reads as (r, 0).
+  let n = textureSampleLevel(noiseTex, repeatSamp, uv * (size.x / 64.0) + u.r.xy, 0.0).r;
+  let off = vec2f(n, 0.0) * 0.02 - 0.01;
   let x = scene(uv + vec2f(off.x, -off.y));
   let g = x / (x + vec3f(1.0)) * 0.5;
-  return vec4f(srgb_enc(tone3(vec3f(g.r, g.b, g.g))), 1.0);
+  return vec4f(srgb_enc(tone3(g)), 1.0);
 }
 
 fn lut(v: f32) -> vec3f {
@@ -143,6 +145,27 @@ fn fs_hot(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let m = smoothstep(0.0, 1.0, clamp((l - 0.45) * 10.0, 0.0, 1.0));
   return vec4f(mix(col, lut2, m), 1.0);
 }
+
+// Blur mode 1 (blur_instance 0x187710): a 5-tap binomial (0.0625, 0.25, 0.375, 0.25, 0.0625), one axis
+// a pass, taps a texel apart, clamped to the drawn region.
+fn blur(pos: vec2f, dir: vec2f) -> vec4f {
+  let texel = 1.0 / u.fb.zw;
+  let lo = 0.5 * texel;
+  let hi = (u.rt.xy - vec2f(0.5)) * texel;
+  let uv = pos / u.fb.zw;
+  var sum = textureSampleLevel(src, clampSamp, uv, 0.0).rgb * 0.375;
+  sum += textureSampleLevel(src, clampSamp, clamp(uv + dir * texel, lo, hi), 0.0).rgb * 0.25;
+  sum += textureSampleLevel(src, clampSamp, clamp(uv - dir * texel, lo, hi), 0.0).rgb * 0.25;
+  sum += textureSampleLevel(src, clampSamp, clamp(uv + dir * 2.0 * texel, lo, hi), 0.0).rgb * 0.0625;
+  sum += textureSampleLevel(src, clampSamp, clamp(uv - dir * 2.0 * texel, lo, hi), 0.0).rgb * 0.0625;
+  return vec4f(sum, 1.0);
+}
+
+@fragment
+fn fs_blur_h(@builtin(position) pos: vec4f) -> @location(0) vec4f { return blur(pos.xy, vec2f(1.0, 0.0)); }
+
+@fragment
+fn fs_blur_v(@builtin(position) pos: vec4f) -> @location(0) vec4f { return blur(pos.xy, vec2f(0.0, 1.0)); }
 
 fn target_uv(uvFrame: vec2f, region: vec2f) -> vec2f {
   return clamp(uvFrame * region / u.fb.zw, 0.5 / u.fb.zw, (region - vec2f(0.5)) / u.fb.zw);
@@ -178,6 +201,8 @@ struct State {
   wgpu::RenderPipeline cold;
   wgpu::RenderPipeline hot;
   wgpu::RenderPipeline ghost;
+  wgpu::RenderPipeline blurH;
+  wgpu::RenderPipeline blurV;
   wgpu::RenderPipeline upscale;
   wgpu::BindGroupLayout layout;
   wgpu::TextureFormat pipelineFormat = wgpu::TextureFormat::Undefined;
@@ -189,8 +214,8 @@ struct State {
   wgpu::TextureView lutView;
   wgpu::Texture noise;
   wgpu::TextureView noiseView;
-  std::array<wgpu::Texture, 2> targets;
-  std::array<wgpu::TextureView, 2> targetViews;
+  std::array<wgpu::Texture, 3> targets;  // the two ping-pong targets and the blur scratch
+  std::array<wgpu::TextureView, 3> targetViews;
   uint32_t targetWidth = 0;
   uint32_t targetHeight = 0;
   uint32_t current = 0;    // the target the next hot pass draws
@@ -206,6 +231,7 @@ State g_state;
 
 std::mutex g_lutMutex;
 std::vector<uint8_t> g_lutData;
+std::vector<uint8_t> g_noiseData;  // the 64x64 R8 noise
 bool g_lutUploaded = false;
 
 std::array<Params, 8> g_recorded;
@@ -282,6 +308,8 @@ void ensure_pipelines(wgpu::TextureFormat format, uint32_t samples) {
   g_state.cold = make("Thermal Cold", "fs_cold", &frameTarget, samples);
   g_state.hot = make("Thermal Hot", "fs_hot", &levelTarget, 1);
   g_state.ghost = make("Thermal Ghost", "fs_ghost", &ghostTarget, 1);
+  g_state.blurH = make("Thermal Blur H", "fs_blur_h", &levelTarget, 1);
+  g_state.blurV = make("Thermal Blur V", "fs_blur_v", &levelTarget, 1);
   g_state.upscale = make("Thermal Upscale", "fs_upscale", &frameTarget, samples);
   g_state.pipelineFormat = format;
   g_state.pipelineSamples = samples;
@@ -303,13 +331,17 @@ void ensure_pipelines(wgpu::TextureFormat format, uint32_t samples) {
     samplerDescriptor.label = "Thermal Post Repeat";
     samplerDescriptor.addressModeU = wgpu::AddressMode::Repeat;
     samplerDescriptor.addressModeV = wgpu::AddressMode::Repeat;
+    // The noise's sampler is Simple(filter 0, wrap 1): NVN nearest, repeat (0x10dc50, table 0x1d0d0dc).
+    samplerDescriptor.magFilter = wgpu::FilterMode::Nearest;
+    samplerDescriptor.minFilter = wgpu::FilterMode::Nearest;
     g_state.repeatSampler = g_device.CreateSampler(&samplerDescriptor);
   }
 }
 
 // The gradient (sRGB tagged, as Remastered's) and the noise texture (GetNoiseTexture(4), a 64x64
-// R8 table of uniform random bytes baked into the executable: a generated one stands in).
+// R8 table out of the executable); both arrive together in thermal.lut.
 void ensure_textures(const wgpu::Queue& queue) {
+  std::lock_guard lock(g_lutMutex);
   if (!g_state.noise) {
     const wgpu::TextureDescriptor descriptor{
         .label = "Thermal Noise",
@@ -319,20 +351,8 @@ void ensure_textures(const wgpu::Queue& queue) {
     };
     g_state.noise = g_device.CreateTexture(&descriptor);
     g_state.noiseView = g_state.noise.CreateView();
-    std::vector<uint8_t> bytes(NoiseSize * NoiseSize);
-    uint32_t state = 0x9E3779B9u;
-    for (uint8_t& byte : bytes) {
-      state ^= state << 13;
-      state ^= state >> 17;
-      state ^= state << 5;
-      byte = uint8_t(state >> 24);
-    }
-    const wgpu::TexelCopyTextureInfo dst{.texture = g_state.noise};
-    const wgpu::TexelCopyBufferLayout layout{.bytesPerRow = NoiseSize, .rowsPerImage = NoiseSize};
-    const wgpu::Extent3D size{NoiseSize, NoiseSize, 1};
-    queue.WriteTexture(&dst, bytes.data(), bytes.size(), &layout, &size);
+    g_lutUploaded = false;
   }
-  std::lock_guard lock(g_lutMutex);
   if (!g_state.lut) {
     const wgpu::TextureDescriptor descriptor{
         .label = "Thermal Gradient",
@@ -349,6 +369,10 @@ void ensure_textures(const wgpu::Queue& queue) {
     const wgpu::TexelCopyBufferLayout layout{.bytesPerRow = 256 * 4, .rowsPerImage = 4};
     const wgpu::Extent3D size{256, 4, 1};
     queue.WriteTexture(&dst, g_lutData.data(), g_lutData.size(), &layout, &size);
+    const wgpu::TexelCopyTextureInfo noiseDst{.texture = g_state.noise};
+    const wgpu::TexelCopyBufferLayout noiseLayout{.bytesPerRow = NoiseSize, .rowsPerImage = NoiseSize};
+    const wgpu::Extent3D noiseSize{NoiseSize, NoiseSize, 1};
+    queue.WriteTexture(&noiseDst, g_noiseData.data(), g_noiseData.size(), &noiseLayout, &noiseSize);
     g_lutUploaded = true;
   }
 }
@@ -490,9 +514,9 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
   }
   // The new target, then (past 0.1 s) the previous one over it.
   const auto drawTarget = [&](const char* label, const wgpu::RenderPipeline& pipeline, const wgpu::BindGroup& group,
-                              bool clear) {
+                              bool clear, uint32_t into) {
     const wgpu::RenderPassColorAttachment attachment{
-        .view = g_state.targetViews[cur],
+        .view = g_state.targetViews[into],
         .loadOp = clear ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load,
         .storeOp = wgpu::StoreOp::Store,
         .clearValue = {0.0, 0.0, 0.0, 0.0},
@@ -511,10 +535,13 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
     pass.Draw(3);
     pass.End();
   };
-  drawTarget("Thermal hot", g_state.hot, makeGroup("Thermal Hot", g_state.frameView, g_state.targetViews[prev]), true);
+  drawTarget("Thermal hot", g_state.hot, makeGroup("Thermal Hot", g_state.frameView, g_state.targetViews[prev]), true, cur);
+  // Blur mode 2 (LDTA +0x48 -> size index 1 -> blur mode 1, 0xfb1cf0): H into the scratch, V back.
+  drawTarget("Thermal blur H", g_state.blurH, makeGroup("Thermal Blur H", g_state.targetViews[cur], g_state.targetViews[prev]), true, 2);
+  drawTarget("Thermal blur V", g_state.blurV, makeGroup("Thermal Blur V", g_state.targetViews[2], g_state.targetViews[prev]), true, cur);
   if (params.v[3] > 0.f && g_state.prevWidth != 0) {
     drawTarget("Thermal ghost", g_state.ghost,
-               makeGroup("Thermal Ghost", g_state.frameView, g_state.targetViews[prev]), false);
+               makeGroup("Thermal Ghost", g_state.frameView, g_state.targetViews[prev]), false, cur);
   }
   drawFrame("Thermal upscale", g_state.upscale, makeGroup("Thermal Upscale", g_state.targetViews[cur], g_state.targetViews[prev]));
   g_state.prevWidth = regionWidth;
@@ -524,11 +551,12 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
 } // namespace
 
 bool set_lut(const uint8_t* rgba, uint32_t size) {
-  if (rgba == nullptr || size != 256 * 4 * 4) {
+  if (rgba == nullptr || size != LutBytes + NoiseSize * NoiseSize) {
     return false;
   }
   std::lock_guard lock(g_lutMutex);
-  g_lutData.assign(rgba, rgba + size);
+  g_lutData.assign(rgba, rgba + LutBytes);
+  g_noiseData.assign(rgba + LutBytes, rgba + size);
   g_lutUploaded = false;
   return true;
 }
