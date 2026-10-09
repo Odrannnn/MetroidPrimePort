@@ -92,6 +92,8 @@ constexpr uint32_t kFRME = 0x46524D45;
 constexpr uint32_t kFMV0 = 0x464D5630;
 constexpr uint32_t kGENP = 0x47454E50;  // a particle effect
 constexpr uint32_t kSWSH = 0x53575348;  // a standalone swoosh effect
+constexpr uint32_t kELSM = 0x454C534D;  // a standalone electric effect (retail ELSC)
+constexpr uint32_t kELC2 = 0x454C4332;  // the same, in the newer form
 constexpr uint32_t kMATI = 0x4D415449;  // a material instance
 constexpr uint32_t kWPSM = 0x5750534D;  // a projectile weapon (Remastered's WPSC)
 constexpr uint32_t kWPSC = 0x57505343;  // the disc's projectile weapon
@@ -837,6 +839,12 @@ public:
           for (const std::string& name : assets[a].names) {
             m_effectNames.emplace(FrameKey(name), assets[a].id);
           }
+        } else if (type == kELSM || type == kELC2) {
+          m_electrics.emplace(assets[a].id, Where{m_paks.size(), a});
+          m_electricTypes.emplace(assets[a].id, type);
+          for (const std::string& name : assets[a].names) {
+            m_effectNames.emplace(FrameKey(name), assets[a].id);
+          }
         } else if (type == kWPSM) {
           for (const std::string& name : assets[a].names) {
             m_projectiles.emplace(FrameKey(name), Where{m_paks.size(), a});
@@ -998,6 +1006,9 @@ public:
     for (const auto& [id, where] : m_effects) {
       ids.push_back(id);
     }
+    for (const auto& [id, where] : m_electrics) {
+      ids.push_back(id);
+    }
     for (const auto& [id, where] : m_swooshes) {
       ids.push_back(id);
     }
@@ -1033,6 +1044,7 @@ public:
   bool ReadEffectAsset(uint32_t type, const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const {
     return Read(type == kGENP   ? m_effects
                 : type == kSWSH ? m_swooshes
+                : type == kELSM || type == kELC2 ? m_electrics
                 : type == kMATI ? m_materials
                                 : m_textures,
                 id, out, error);
@@ -1042,6 +1054,7 @@ public:
            : m_materials.count(id) != 0 ? kMATI
            : m_effects.count(id) != 0   ? kGENP
            : m_swooshes.count(id) != 0  ? kSWSH
+           : m_electrics.count(id) != 0 ? m_electricTypes.at(id)
            : m_models.count(id) != 0    ? kCMDL
                                         : 0;
   }
@@ -1118,6 +1131,8 @@ private:
   Index m_fonts;
   Index m_effects;
   Index m_swooshes;  // standalone SWSH effects
+  Index m_electrics;  // standalone ELSM and ELC2 effects
+  std::unordered_map<ModelUuid, uint32_t, PakIdHash> m_electricTypes;
   Index m_materials;
   std::unordered_map<std::string, Where> m_projectiles;  // WPSM, by FrameKey
   std::unordered_map<std::string, ModelUuid> m_effectNames;  // the named GENP and SWSH, by FrameKey
@@ -1481,7 +1496,8 @@ std::vector<EffectPairing> ProjectilePairings(const Remastered& remastered, Reta
     uint32_t retail;
   };
   static const Named kNamed[] = {{"powerauxmuzzle", 0x2AED975B}, {"bustermuzzle", 0}, {"busterswoosh1", 0x869B8E14},
-                                 {"busterswoosh2", 0x804E26D9}};
+                                 {"busterswoosh2", 0x804E26D9}, {"wave2nd_1", 0x16871871},
+                                 {"wave2nd_2", 0x21D217FC}};
   for (const Named& named : kNamed) {
     ModelUuid id;
     if (named.retail != 0 && retail.HasId(named.retail) && remastered.EffectByName(named.name, id)) {
