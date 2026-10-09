@@ -238,9 +238,12 @@ f32 sPortGlow[3];
 bool sPortSky = false;
 f32 sPortSkyGain[3];
 f32 sPortChargeShell = 0.f;
+f32 sPortDisintegration = 0.f;
 } // namespace
 
 void CCubeModel::PortSetChargeShell(const f32 amount) { sPortChargeShell = amount; }
+
+void CCubeModel::PortSetDisintegration(const f32 amount) { sPortDisintegration = amount; }
 
 void CCubeModel::PortSetSky(const f32* rgb) {
   sPortSky = rgb != nullptr;
@@ -512,6 +515,11 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
     shield[21] = view.Get12();
     shield[22] = -view.Get11();
     shield[23] = view.Get13();
+  }
+  // The Phazon Beam's veins (kind 35) take DIFC.w, the "DisintegrationAmount" variable, from the
+  // beam's fade (PortSetDisintegration); the record holds only its initial value.
+  if (kind > 34.5f && kind < 35.5f) {
+    shield[31] = sPortDisintegration;
   }
   // The HoloGlass (kind 29) offsets its layers by a per-object phase: the sum of the model matrix's
   // translation, times 0.33 (row 4 x of its constants).

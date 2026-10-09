@@ -1872,6 +1872,14 @@ void RunFrame() {
   } else if (name == "quit") {
     Finish();
     sQuit = true;
+  } else if (name == "phazongun") {
+    CStateManager* const mgr = const_cast< CStateManager* >(PortDebug::StateManager());
+    if (mgr == nullptr || mgr->GetPlayer() == nullptr) {
+      return Finish("not in a game");
+    }
+    const std::string mode = sCmd.args.size() > 1 ? Lower(sCmd.args[1]) : "on";
+    const_cast< CPlayerGun* >(mgr->GetPlayer()->GetPlayerGun())->PortForcePhazonBeam(mode != "off");
+    Finish();
   } else if (name == "title") {
     CStateManager* const mgr = const_cast< CStateManager* >(PortDebug::StateManager());
     if (mgr == nullptr) {
