@@ -312,6 +312,17 @@ void CInGameGuiManager::PublishMinimapRect(bool shown, bool drawn, const CTransf
   PortDebug::SetMinimapRect(true, drawn, x0 - padX, y0 - padY, x1 + padX, y1 + padY);
 }
 
+void CInGameGuiManager::PortDrawScanZoomReticles(const CStateManager& mgr) const {
+  // What Draw draws before the visor's copy, then the visor's own part of it.
+  if (!x3c_pauseScreenBlur->IsGameDraw())
+    return;
+  x34_samusHud->GetTargetingManager().Draw(mgr, true);
+  CGraphics::SetDepthRange(1.f / 64.f, 1.f / 32.f);
+  const CTargetingManager* targeting =
+      x1e4_enableTargetingManager != 0 ? &x34_samusHud->GetTargetingManager() : nullptr;
+  x30_playerVisor->PortDrawScanOverlay(mgr, targeting);
+}
+
 void CInGameGuiManager::Draw(const CStateManager& mgr) const {
   if (!GetIsGameDraw()) {
     gpRender->SetRequestRGBA6(true);

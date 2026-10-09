@@ -22,6 +22,7 @@
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
+#include "MetroidPrime/Player/CPlayerVisor.hpp"
 #include "MetroidPrime/TCastTo.hpp"
 #include "rstl/math.hpp"
 
@@ -267,36 +268,56 @@ void CMFGame::Draw() const {
           &layers);
     }
 #endif
-    mStateManager->DrawWorld();
-    (void)mStateManager->GetPlayer()->IsPlayerDeadEnough();
 #ifdef TARGET_PC
     // Remastered's bloom and colour grade, over the world and under the visor. Thermal and
     // X-ray draw their own picture, not the room's exposed light, so they keep neither.
-    const CPlayerState::EPlayerVisor visor = mStateManager->GetPlayerState()->GetActiveVisor(*mStateManager);
-    if (visor != CPlayerState::kPV_Thermal && visor != CPlayerState::kPV_XRay) {
-      float threshold = 0.f;
-      float tints[5][3] = {};
-      float tone[3][4] = {};
-      const bool toned = PortRoomEnv::Tone(tone);
-      const bool bloom = toned && PortRoomEnv::Bloom(threshold, tints);
-      struct Layers {
-        CScriptLayerManager* layers;
-        TAreaId area;
-      } layers{mStateManager->WorldLayerState().GetPtr(), mStateManager->GetNextAreaId()};
-      uint32_t gradeA = 0;
-      uint32_t gradeB = 0;
-      float gradeWeight = 0.f;
-      PortRoomEnv::ColorGrade(
-          [](int32_t layer, void* context) {
-            const Layers& l = *static_cast< const Layers* >(context);
-            return l.layers == nullptr || l.area == kInvalidAreaId ||
-                   l.layers->IsLayerActive(l.area, TLayerId(layer));
-          },
-          &layers, gradeA, gradeB, gradeWeight);
-      // The picture is measured for the next frames' auto exposure (UpdateFrame).
-      GXPortPostProcess(bloom, threshold, tints, tone, gradeA, gradeB, gradeWeight,
-                        toned ? PortRoomEnv::MeasureExposure() : 0.f);
+    const auto postProcess = [this](bool measure) {
+      const CPlayerState::EPlayerVisor visor = mStateManager->GetPlayerState()->GetActiveVisor(*mStateManager);
+      if (visor != CPlayerState::kPV_Thermal && visor != CPlayerState::kPV_XRay) {
+        float threshold = 0.f;
+        float tints[5][3] = {};
+        float tone[3][4] = {};
+        const bool toned = PortRoomEnv::Tone(tone);
+        const bool bloom = toned && PortRoomEnv::Bloom(threshold, tints);
+        struct Layers {
+          CScriptLayerManager* layers;
+          TAreaId area;
+        } layers{mStateManager->WorldLayerState().GetPtr(), mStateManager->GetNextAreaId()};
+        uint32_t gradeA = 0;
+        uint32_t gradeB = 0;
+        float gradeWeight = 0.f;
+        PortRoomEnv::ColorGrade(
+            [](int32_t layer, void* context) {
+              const Layers& l = *static_cast< const Layers* >(context);
+              return l.layers == nullptr || l.area == kInvalidAreaId ||
+                     l.layers->IsLayerActive(l.area, TLayerId(layer));
+            },
+            &layers, gradeA, gradeB, gradeWeight);
+        // The picture is measured for the next frames' auto exposure (UpdateFrame).
+        GXPortPostProcess(bloom, threshold, tints, tone, gradeA, gradeB, gradeWeight,
+                          toned && measure ? PortRoomEnv::MeasureExposure() : 0.f);
+      }
+    };
+    // Sharp scan window: the window's picture is the world drawn again through a zoomed
+    // camera, instead of the screen's centre stretched (the copy clears the EFB after it).
+    float scanZoom = 1.f;
+    int scanWidth = 0;
+    int scanHeight = 0;
+    const CPlayerVisor* scanVisor = mGuiManager->PortPlayerVisor();
+    if (scanVisor != nullptr && !PortFreeCam::Active() &&
+        scanVisor->PortScanZoom(*mStateManager, scanZoom, scanWidth, scanHeight)) {
+      CStateManager::sPortViewZoom = scanZoom;
+      mStateManager->DrawWorld();
+      postProcess(false);
+      mGuiManager->PortDrawScanZoomReticles(*mStateManager);
+      CStateManager::sPortViewZoom = 1.f;
+      CPlayerVisor::PortCopyScanZoom(scanWidth, scanHeight, scanZoom);
     }
+#endif
+    mStateManager->DrawWorld();
+    (void)mStateManager->GetPlayer()->IsPlayerDeadEnough();
+#ifdef TARGET_PC
+    postProcess(true);
 #endif
   }
 
@@ -306,6 +327,10 @@ void CMFGame::Draw() const {
   if (!PortFreeCam::Active() || mFlowState != kGFS_InGame)
 #endif
   mGuiManager->Draw(*mStateManager);
+#ifdef TARGET_PC
+  // A zoomed copy the visor didn't draw this frame must not show on a later one.
+  CPlayerVisor::PortDropScanZoom();
+#endif
 
   if (mFlowState == kGFS_CinematicSkip) {
     const float intensity = rstl::min_val(1.f, 1.f - mCineSkipTime);

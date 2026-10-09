@@ -180,6 +180,10 @@ void SetHudWide(bool enabled);
 // below 16:9 the cinematic camera already renders the full shot, so it fills the
 // screen instead.
 bool CinemaBars();
+// The scan visor's magnifier draws the world a second time through a camera zoomed by the
+// window's magnification (CMFGame::Draw), instead of stretching a copy of the screen. Off by
+// default and under Original experience.
+bool SharpScanWindow();
 // HUD scale in percent (50-100). Compact HUD elements shrink toward the nearest
 // screen edge or corner; screen-spanning decoration keeps its size. Only the
 // combat/scan/ball HUD frames and the minimap, not the helmet or menus.

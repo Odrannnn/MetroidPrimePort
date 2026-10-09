@@ -2653,7 +2653,12 @@ CFrustumPlanes CStateManager::SetupViewForDraw(const CViewport& viewport) const 
   const int left = viewport.mLeft + (viewport.mWidth - width) / 2;
   const int top = viewport.mTop + (viewport.mHeight - height) / 2;
 
+#ifdef TARGET_PC
+  const float tangent =
+      CMath::SlowTangentR(CMath::Deg2Rad(0.5f * cam.GetRenderFov())) / sPortViewZoom;
+#else
   const float tangent = CMath::SlowTangentR(CMath::Deg2Rad(0.5f * cam.GetRenderFov()));
+#endif
   const float fov = 2.f * CMath::ArcTangentR(tangent * xf30_viewportScaleY);
 
   gpRender->SetViewport(left, top, width, height);
@@ -3168,9 +3173,24 @@ void CStateManager::PortCaptureProbeFace() const {
 }
 #endif
 
+#ifdef TARGET_PC
+float CStateManager::sPortViewZoom = 1.f;
+
+float CStateManager::PortZoomedFov(float fov) {
+  if (sPortViewZoom == 1.f)
+    return fov;
+  const float tangent = CMath::SlowTangentR(CMath::Deg2Rad(0.5f * fov)) / sPortViewZoom;
+  return 2.f * CMath::Rad2Deg(CMath::ArcTangentR(tangent));
+}
+#endif
+
 void CStateManager::DrawWorld() const {
 #ifdef TARGET_PC
-  PortCaptureProbeFace();
+  // A zoomed pass (sharp scan window) draws before the frame's own: the frame's captures and
+  // the gun belong to that one.
+  const bool portZoomed = sPortViewZoom != 1.f;
+  if (!portZoomed)
+    PortCaptureProbeFace();
 #endif
   const CTimeProvider timeProvider(xf14_curTimeMod900);
   const CViewport backupViewport = CGraphics::GetViewport();
@@ -3466,10 +3486,18 @@ void CStateManager::DrawWorld() const {
 
   x87c_fluidPlaneManager->EndFrame();
   gpRender->SetWorldFog(kRFM_None, 0.f, 1.f, CColor::Black());
+#ifdef TARGET_PC
+  if (gkWorldOnlyReflection && !portZoomed) {
+#else
   if (gkWorldOnlyReflection) {
+#endif
     const_cast< CStateManager* >(this)->CacheReflection();
   }
+#ifdef TARGET_PC
+  if (x84c_player != nullptr && !portZoomed) {
+#else
   if (x84c_player != nullptr) {
+#endif
 #ifdef TARGET_PC
     // Port: with the FOV slider off retail, draw the arm cannon at the retail
     // FOV (a view-model FOV), so a wide view doesn't shrink it or push it off
@@ -3496,7 +3524,8 @@ void CStateManager::DrawWorld() const {
 #endif
   }
 #ifdef TARGET_PC
-  PortViewModel::Draw(*this);
+  if (!portZoomed)
+    PortViewModel::Draw(*this);
 #endif
   if (!renderLast.empty()) {
     CGraphics::SetDepthRange(0.015625f, 0.03125f);

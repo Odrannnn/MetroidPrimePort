@@ -69,6 +69,9 @@ public:
   // Port: the fade-in filter (StartFadeIn) is still black or lifting; for the debug console.
   bool PortIsFading() const { return xf8_camFilter.PortIsActive(); }
   static const CInGameGuiManager* PortCurrent() { return sPortCurrent; }
+  const CPlayerVisor* PortPlayerVisor() const { return x30_playerVisor.get(); }
+  // The target reticles a scan window's screen copy holds, for the zoomed pass that replaces it.
+  void PortDrawScanZoomReticles(const CStateManager& mgr) const;
   bool IsInSaveUI() const { return x1f8_27_inSaveUI; }
 
 private:

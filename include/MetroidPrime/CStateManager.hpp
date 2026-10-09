@@ -309,6 +309,11 @@ public:
   void DrawWorld() const;
 #ifdef TARGET_PC
   void PortCaptureProbeFace() const;
+  // Port (sharp scan window): above 1, DrawWorld draws a magnified view through a camera
+  // zoomed by this much, without the gun and the frame's one-off captures.
+  static float sPortViewZoom;
+  // A vertical FOV (degrees) narrowed by sPortViewZoom.
+  static float PortZoomedFov(float fov);
 #endif
   void RenderCamerasAndAreaLights() const;
   void DrawE3DeathEffect() const;

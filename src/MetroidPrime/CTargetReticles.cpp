@@ -1351,9 +1351,15 @@ void CTargetingManager::Draw(const CStateManager& mgr, bool hideLockon) const {
   CFrustumPlanes frustum(camXf, curCam.GetRenderFov() * 0.01745329238474369f, curCam.GetAspectRatio(),
                          1.f, false, 100.f);
   gpRender->SetClippingPlanes(frustum);
+#ifdef TARGET_PC
+  gpRender->SetPerspective(CStateManager::PortZoomedFov(curCam.GetRenderFov()), static_cast< float >(CGraphics::GetViewport().mWidth),
+                           static_cast< float >(CGraphics::GetViewport().mHeight),
+                           curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#else
   gpRender->SetPerspective(curCam.GetRenderFov(), static_cast< float >(CGraphics::GetViewport().mWidth),
                            static_cast< float >(CGraphics::GetViewport().mHeight),
                            curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#endif
   x0_targetReticle.Draw(mgr, hideLockon);
 }
 
@@ -1493,10 +1499,17 @@ void COrbitPointMarker::Draw(const CStateManager& mgr) const {
         CFrustumPlanes frustum(camXf, curCam.GetRenderFov() * 0.01745329238474369f,
                                curCam.GetAspectRatio(), 1.f, false, 100.f);
         gpRender->SetClippingPlanes(frustum);
+#ifdef TARGET_PC
+        gpRender->SetPerspective(CStateManager::PortZoomedFov(curCam.GetRenderFov()),
+                                 static_cast< float >(CGraphics::GetViewport().mWidth),
+                                 static_cast< float >(CGraphics::GetViewport().mHeight),
+                                 curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#else
         gpRender->SetPerspective(curCam.GetRenderFov(),
                                  static_cast< float >(CGraphics::GetViewport().mWidth),
                                  static_cast< float >(CGraphics::GetViewport().mHeight),
                                  curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#endif
       }
 
       float scale;

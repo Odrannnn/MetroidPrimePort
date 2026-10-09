@@ -179,6 +179,7 @@ int sDynHoldFor = 30;       // the next such hold; doubles each time
 PortDebug::EAspectMode sAspectMode = PortDebug::kAspect_Window;
 bool sHudWide = true;
 bool sCinemaBars = false;
+bool sSharpScanWindow = false;
 bool sShowShaderCompilation = true;
 int sHudScale = PortDebug::kHudScaleMax;
 bool sHideHelmet = false;
@@ -577,6 +578,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
     }
   } else if (key == "cinema_bars") {
     sCinemaBars = ParseBool(value);
+  } else if (key == "sharp_scan_window") {
+    sSharpScanWindow = ParseBool(value);
   } else if (key == "show_shader_compilation") {
     sShowShaderCompilation = ParseBool(value);
   } else if (key == "hud_wide") {
@@ -898,6 +901,7 @@ std::string SettingsText() {
   file << "aspect=" << aspect << '\n';
   file << "hud_wide=" << (sHudWide ? 1 : 0) << '\n';
   file << "cinema_bars=" << (sCinemaBars ? 1 : 0) << '\n';
+  file << "sharp_scan_window=" << (sSharpScanWindow ? 1 : 0) << '\n';
   file << "show_shader_compilation=" << (sShowShaderCompilation ? 1 : 0) << '\n';
   file << "hud_scale=" << sHudScale << '\n';
   file << "hide_helmet=" << (sHideHelmet ? 1 : 0) << '\n';
@@ -1225,6 +1229,7 @@ void EnsureInitialized() {
   }
   sHudWide = port::EnvFlag("MP_HUD_WIDE", sHudWide);
   sCinemaBars = port::EnvFlag("MP_CINEMA_BARS", sCinemaBars);
+  sSharpScanWindow = port::EnvFlag("MP_SHARP_SCAN_WINDOW", sSharpScanWindow);
   sRapidCharge = port::EnvFlag("MP_RAPID_CHARGE", sRapidCharge);
   if (port::EnvFlag("MP_MOUSE_AIM")) {
     sMouseAim = true;
@@ -1607,6 +1612,11 @@ void SetHudWide(bool enabled) {
 bool CinemaBars() {
   EnsureInitialized();
   return sCinemaBars || sOriginalExperience;
+}
+
+bool SharpScanWindow() {
+  EnsureInitialized();
+  return sSharpScanWindow && !sOriginalExperience;
 }
 
 int HudScale() {
@@ -5657,6 +5667,14 @@ void DrawVideoDisplay() {
   }
   ImGui::SetItemTooltip("Off: cutscenes narrower than 16:9 fill the screen with the full shot.\n"
                         "On: the original 16:9 letterbox.");
+
+  if (ImGui::Checkbox("Sharp scan window", &sSharpScanWindow)) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("On: the scan visor's magnifier draws the world again through a zoomed\n"
+                        "camera, so it shows full detail (and HD textures) at any resolution.\n"
+                        "Costs a second world render while the scan visor is up.\n"
+                        "Off: the original magnified copy of the screen.");
 
   ImGui::SeparatorText("HUD and view");
   bool hudWide = sHudWide;

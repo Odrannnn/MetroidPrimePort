@@ -13,6 +13,7 @@
 #include "MetroidPrime/Tweaks/CTweakTargeting.hpp"
 
 #include "Kyoto/Audio/CSfxManager.hpp"
+#include "Kyoto/Graphics/CGX.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
 #include "Kyoto/Graphics/CModelFlags.hpp"
@@ -24,6 +25,10 @@
 #include <dolphin/gx/GXManage.h>
 #include <dolphin/gx/GXTexture.h>
 #include <float.h>
+
+#ifdef TARGET_PC
+#include "port_debug.h"
+#endif
 
 static const int skPixelsPerTileDimension16Bit = 4;
 
@@ -316,16 +321,9 @@ static float ScanWindowFit(int vpWidth, int vpHeight) {
   return 1.f;
 }
 
-void CPlayerVisor::DrawScanEffect(const CStateManager& mgr,
-                                  const CTargetingManager* const tgtMgr) const {
-  const bool indicatorsDrawn = DrawScanObjectIndicators(mgr);
-  if (tgtMgr != nullptr && indicatorsDrawn) {
-    CGraphics::SetDepthRange(0.125f + FLT_EPSILON, 0.125f + FLT_EPSILON);
-    tgtMgr->Draw(mgr, false);
-    CGraphics::SetDepthRange(0.015625f, 0.03125f);
-  }
-  int vpLeft, vpTop, vpWidth, vpHeight;
-  CGraphics::GetViewport(vpLeft, vpTop, vpWidth, vpHeight);
+// The magnification of the scan window and the size of the screen copy it shows.
+float CPlayerVisor::ScanWindowCopySize(const CStateManager& mgr, int vpWidth, int vpHeight,
+                                       int& width, int& height) const {
   const float transFactor = mgr.GetPlayerState()->GetVisorTransitionFactor();
   const float scanSidesStart = gpTweakGui->GetScanSidesStartTime();
   const float scanSidesDuration = gpTweakGui->GetScanSidesDuration();
@@ -342,15 +340,104 @@ void CPlayerVisor::DrawScanEffect(const CStateManager& mgr,
   const float fit = ScanWindowFit(vpWidth, vpHeight);
   const float vpW = 169.218f * fit * x48_interpWindowDims.GetX();
   const float vpH = 152.218f * fit * x48_interpWindowDims.GetY();
-  const int width =
-      CMath::Clamp(skPixelsPerTileDimension16Bit, round_up_to_tile(vpW / divisor), vpWidth);
-  const int height =
-      CMath::Clamp(skPixelsPerTileDimension16Bit, round_up_to_tile(vpH / divisor), vpHeight);
-  GXSetTexCopySrc(vpLeft + (vpWidth - width) / 2, vpTop + (vpHeight - height) / 2, width, height);
-  void* const buffer = CGraphics::GetDolphinSpareBuffer();
-  GXSetTexCopyDst(width, height, GX_TF_RGB565, GX_FALSE);
-  GXCopyTex(buffer, GX_FALSE);
+  width = CMath::Clamp(skPixelsPerTileDimension16Bit, round_up_to_tile(vpW / divisor), vpWidth);
+  height = CMath::Clamp(skPixelsPerTileDimension16Bit, round_up_to_tile(vpH / divisor), vpHeight);
+  return divisor;
+}
+
+#ifdef TARGET_PC
+// The zoomed copy (sharp scan window), keyed apart from the spare buffer; valid for the frame
+// that made it, until DrawScanEffect takes it.
+static u8 sPortScanZoomCopy[32];
+static bool sPortScanZoomCopied = false;
+static int sPortScanZoomWidth = 0;
+static int sPortScanZoomHeight = 0;
+
+bool CPlayerVisor::PortScanZoom(const CStateManager& mgr, float& zoom, int& width,
+                                int& height) const {
+  sPortScanZoomCopied = false;
+  if (!PortDebug::SharpScanWindow() ||
+      mgr.GetPlayerState()->GetActiveVisor(mgr) != CPlayerState::kPV_Scan ||
+      mgr.GetPlayerState()->GetVisorTransitionFactor() <= 0.f ||
+      x108_newScanPane.GetObject() == nullptr) {
+    return false;
+  }
+  int vpLeft, vpTop, vpWidth, vpHeight;
+  CGraphics::GetViewport(vpLeft, vpTop, vpWidth, vpHeight);
+  zoom = ScanWindowCopySize(mgr, vpWidth, vpHeight, width, height);
+  // The zoomed view shows the copy's area at `zoom` times its size; one bigger than the
+  // screen is zoomed less, so the window still shows exactly that area.
+  zoom = rstl::min_val(zoom, rstl::min_val(static_cast< float >(vpWidth) / width,
+                                           static_cast< float >(vpHeight) / height));
+  return zoom > 1.001f;
+}
+
+void CPlayerVisor::PortCopyScanZoom(int width, int height, float zoom) {
+  int vpLeft, vpTop, vpWidth, vpHeight;
+  CGraphics::GetViewport(vpLeft, vpTop, vpWidth, vpHeight);
+  // Whole tiles, as retail's copy.
+  const int zoomWidth =
+      rstl::max_val(4, rstl::min_val(vpWidth, static_cast< int >(width * zoom + 0.5f)) & ~3);
+  const int zoomHeight =
+      rstl::max_val(4, rstl::min_val(vpHeight, static_cast< int >(height * zoom + 0.5f)) & ~3);
+  GXSetTexCopySrc(vpLeft + (vpWidth - zoomWidth) / 2, vpTop + (vpHeight - zoomHeight) / 2,
+                  zoomWidth, zoomHeight);
+  GXSetTexCopyDst(zoomWidth, zoomHeight, GX_TF_RGB565, GX_FALSE);
+  // A clearing copy clears the whole EFB on aurora (the next pass's load op), not only the
+  // copied rectangle as on the GameCube: the frame's world then draws on a clean EFB.
+  CGX::SetZMode(true, GX_LEQUAL, true);
+  GXSetColorUpdate(GX_TRUE);
+  GXSetAlphaUpdate(GX_TRUE);
+  GXCopyTex(sPortScanZoomCopy, GX_TRUE);
   GXPixModeSync();
+  sPortScanZoomWidth = zoomWidth;
+  sPortScanZoomHeight = zoomHeight;
+  sPortScanZoomCopied = true;
+}
+
+void CPlayerVisor::PortDropScanZoom() { sPortScanZoomCopied = false; }
+
+void CPlayerVisor::PortDrawScanOverlay(const CStateManager& mgr,
+                                       const CTargetingManager* const tgtMgr) const {
+  const bool indicatorsDrawn = DrawScanObjectIndicators(mgr);
+  if (tgtMgr != nullptr && indicatorsDrawn) {
+    CGraphics::SetDepthRange(0.125f + FLT_EPSILON, 0.125f + FLT_EPSILON);
+    tgtMgr->Draw(mgr, false);
+    CGraphics::SetDepthRange(0.015625f, 0.03125f);
+  }
+}
+#endif
+
+void CPlayerVisor::DrawScanEffect(const CStateManager& mgr,
+                                  const CTargetingManager* const tgtMgr) const {
+  const bool indicatorsDrawn = DrawScanObjectIndicators(mgr);
+  if (tgtMgr != nullptr && indicatorsDrawn) {
+    CGraphics::SetDepthRange(0.125f + FLT_EPSILON, 0.125f + FLT_EPSILON);
+    tgtMgr->Draw(mgr, false);
+    CGraphics::SetDepthRange(0.015625f, 0.03125f);
+  }
+  int vpLeft, vpTop, vpWidth, vpHeight;
+  CGraphics::GetViewport(vpLeft, vpTop, vpWidth, vpHeight);
+  const float transFactor = mgr.GetPlayerState()->GetVisorTransitionFactor();
+  int width, height;
+  ScanWindowCopySize(mgr, vpWidth, vpHeight, width, height);
+  const float fit = ScanWindowFit(vpWidth, vpHeight);
+  void* buffer = CGraphics::GetDolphinSpareBuffer();
+#ifdef TARGET_PC
+  if (sPortScanZoomCopied) {
+    sPortScanZoomCopied = false;
+    buffer = sPortScanZoomCopy;
+    width = sPortScanZoomWidth;
+    height = sPortScanZoomHeight;
+  } else
+#endif
+  {
+    GXSetTexCopySrc(vpLeft + (vpWidth - width) / 2, vpTop + (vpHeight - height) / 2, width,
+                    height);
+    GXSetTexCopyDst(width, height, GX_TF_RGB565, GX_FALSE);
+    GXCopyTex(buffer, GX_FALSE);
+    GXPixModeSync();
+  }
   x64_scanDim.Draw();
   gpRender->SetViewportOrtho(true, -1.f, 1.f);
   const CTransform4f windowScale =
@@ -649,9 +736,17 @@ bool CPlayerVisor::DrawScanObjectIndicators(const CStateManager& mgr) const {
   CFrustumPlanes frustum(cameraXf, 0.01745329238474369f * camera.GetRenderFov(), camera.GetAspectRatio(),
                          1.f, false, 100.f);
   gpRender->SetClippingPlanes(frustum);
-  gpRender->SetPerspective(camera.GetRenderFov(), CGraphics::GetViewportWidth(),
+#ifdef TARGET_PC
+  gpRender->SetPerspective(CStateManager::PortZoomedFov(camera.GetRenderFov()),
+                           CGraphics::GetViewportWidth(),
                            CGraphics::GetViewportHeight(), camera.GetNearClipDistance(),
                            camera.GetFarClipDistance());
+#else
+  gpRender->SetPerspective(camera.GetRenderFov(),
+                           CGraphics::GetViewportWidth(),
+                           CGraphics::GetViewportHeight(), camera.GetNearClipDistance(),
+                           camera.GetFarClipDistance());
+#endif
   CMatrix3f cameraRotation = cameraXf.BuildMatrix3f();
   CVector3f cameraPosition = cameraXf.GetTranslation();
   for (int i = 0; i < x13c_scanTargets.size(); ++i) {
