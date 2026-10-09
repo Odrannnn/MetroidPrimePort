@@ -315,6 +315,23 @@ private:
   float x1c30_boostOverLightFactor;
   float x1c34_boostLightFactor;
   float x1c38_spiderLightFactor;
+#ifdef TARGET_PC
+  // Remastered binds the swoosh, inner glow and transition flash through particle variables
+  // (kb topic/particle-variable-bindings). Handles are looked up once per generator; the water
+  // factor (CMorphBallMP1 + 0x22a8) mixes the glow's dry and wet values and drives its light.
+  const void* xPortSwooshVarGen[2];
+  u16 xPortSwooshVar[2];
+  const void* xPortGlowVarGen;
+  uint xPortGlowVarIdx;
+  u16 xPortGlowVars[6];
+  const void* xPortFlashVarGen;
+  u16 xPortFlashVar;
+  float xPortWaterFactor;
+  void PortBindSwooshVars();
+  void PortUpdateWaterFactor(float dt, const CStateManager& mgr);
+  void PortBindGlowVars();
+  void PortBindFlashColor();
+#endif
   TReservedAverage< CQuaternion, 5 > x1c3c_ballOrientAvg;
   TReservedAverage< CVector3f, 5 > x1c90_ballPosAvg;
   TReservedAverage< float, 15 > x1cd0_liftSpeedAvg;
