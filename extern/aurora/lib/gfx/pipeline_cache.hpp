@@ -41,6 +41,8 @@ void shutdown_pipeline_cache();
 void begin_pipeline_frame();
 // Forgets every built and queued pipeline; the next lookup rebuilds them (shader reload).
 void drop_pipelines();
+// Holds background (cache-seed) builds while paused; pipelines a lookup needs still compile.
+void set_background_pipelines_paused(bool paused);
 void end_pipeline_frame();
 
 template <typename Config>
