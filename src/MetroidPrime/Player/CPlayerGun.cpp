@@ -997,8 +997,26 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   }
 #ifdef TARGET_PC
   // Port: the Remastered Ice Beam cannon's frost shell dissolves in with the charge, as
-  // CGunWeaponMP1::UpdateChargeEffects drives it.
-  CCubeModel::PortSetChargeShell(x340_chargeBeamFactor);
+  // CGunWeaponMP1::UpdateChargeEffects drives it. Its drive isn't the charge factor but
+  // CPlayerGunMP1::Update's own accumulator: past the charge FX start (warm-up) it rises
+  // at 1/1.45 per second, otherwise it falls at 1 per second. Ice keeps retail's timing,
+  // so the warm-up is kChargeFxStart.
+  {
+    static float sShellFactor = 0.f;
+    const bool charging = x32c_chargePhase >= kCP_AnimAndSfx && x32c_chargePhase <= kCP_FxGrown;
+    if (charging && x340_chargeBeamFactor >= kChargeFxStart) {
+      sShellFactor += advDt / 1.45f;
+      if (sShellFactor > 1.f) {
+        sShellFactor = 1.f;
+      }
+    } else {
+      sShellFactor -= advDt;
+      if (sShellFactor < 0.f) {
+        sShellFactor = 0.f;
+      }
+    }
+    CCubeModel::PortSetChargeShell(sShellFactor);
+  }
 #endif
 
   UpdateAuxWeapons(advDt, beamTargetXf, mgr);
