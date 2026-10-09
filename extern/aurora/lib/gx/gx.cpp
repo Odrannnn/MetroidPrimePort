@@ -556,24 +556,27 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   }
   config.shaderConfig.volFog = drawId ? VolFogNone : vol_fog_mode(depthOnly);
   config.shaderConfig.shadow = g_gxState.shadowCaster && g_gxState.shadowActive && config.shaderConfig.lineMode == 0;
-  config = {
-      .msaaSamples = gfx::get_sample_count(),
-      .shaderConfig = config.shaderConfig,
-      .depthFunc = depthEqual ? GX_EQUAL : g_gxState.depthFunc,
-      .cullMode = cullMode,
-      .blendMode = drawId ? GX_BM_NONE : g_gxState.blendMode,
-      .blendFacSrc = g_gxState.blendFacSrc,
-      .blendFacDst = g_gxState.blendFacDst,
-      .blendOp = g_gxState.blendOp,
-      .dstAlpha = g_gxState.dstAlpha,
-      .polygonOffsetBits = std::bit_cast<uint32_t>(polygonOffset),
-      .polygonOffsetScaleBits = std::bit_cast<uint32_t>(polygonOffsetScale),
-      .polygonOffsetClampBits = std::bit_cast<uint32_t>(g_gxState.clamp),
-      .depthCompare = g_gxState.depthCompare,
-      .depthUpdate = g_gxState.depthUpdate && !depthEqual,
-      .alphaUpdate = g_gxState.alphaUpdate && !depthOnly,
-      .colorUpdate = g_gxState.colorUpdate && !depthOnly,
-  };
+  // Field by field: an aggregate assignment would copy the 2.7 KB shader config twice more on
+  // every pipeline switch. Every field outside shaderConfig is written here.
+  config.version = GXPipelineConfigVersion;
+  config.msaaSamples = gfx::get_sample_count();
+  config.depthFunc = depthEqual ? GX_EQUAL : g_gxState.depthFunc;
+  config.cullMode = cullMode;
+  config.blendMode = drawId ? GX_BM_NONE : g_gxState.blendMode;
+  config.blendFacSrc = g_gxState.blendFacSrc;
+  config.blendFacDst = g_gxState.blendFacDst;
+  config.blendOp = g_gxState.blendOp;
+  config.dstAlpha = g_gxState.dstAlpha;
+  config.polygonOffsetBits = std::bit_cast<uint32_t>(polygonOffset);
+  config.polygonOffsetScaleBits = std::bit_cast<uint32_t>(polygonOffsetScale);
+  config.polygonOffsetClampBits = std::bit_cast<uint32_t>(g_gxState.clamp);
+  config.shadowPass = 0;
+  config.depthCompare = g_gxState.depthCompare;
+  config.depthUpdate = g_gxState.depthUpdate && !depthEqual;
+  config.alphaUpdate = g_gxState.alphaUpdate && !depthOnly;
+  config.colorUpdate = g_gxState.colorUpdate && !depthOnly;
+  static_assert(sizeof(PipelineConfig) == sizeof(ShaderConfig) + 13 * sizeof(uint32_t) + 4 * sizeof(bool),
+                "a new PipelineConfig field must be written above");
 }
 
 // The lightmap's slot is the last binding, left out of group 2 when the device has no room for it.
