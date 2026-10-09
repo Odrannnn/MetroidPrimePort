@@ -205,6 +205,8 @@ template <>
 PipelineRef pipeline_ref<gx::PipelineConfig>(const gx::PipelineConfig& config) {
   return 0;
 }
+// Never live, so the shader-info memo is rebuilt on every draw.
+bool touch_pipeline(PipelineRef ref) { return false; }
 gx::DrawData g_testLastDraw{};
 uint32_t g_testDrawCount = 0;
 std::atomic<uint32_t> g_testProcessedDrawCount{0};
