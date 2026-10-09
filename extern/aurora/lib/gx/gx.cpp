@@ -280,12 +280,15 @@ gfx::ClipRect map_logical_scissor(const gfx::ClipRect& logicalScissor) noexcept 
   const float right = static_cast<float>(logicalScissor.x + logicalScissor.width) * scaleX;
   const float bottom = static_cast<float>(logicalScissor.y + logicalScissor.height) * scaleY;
 
-  const auto mappedLeft = std::clamp(static_cast<int32_t>(std::floor(left)), 0, static_cast<int32_t>(targetWidth));
-  const auto mappedTop = std::clamp(static_cast<int32_t>(std::floor(top)), 0, static_cast<int32_t>(targetHeight));
+  // Every edge rounds the same way, so rects that share a logical edge share a target one. Flooring
+  // the left and ceiling the right overlapped them by a pixel at non-integer scales, and a model
+  // drawn in abutting scissored slices (the widescreen HUD warp) blended that column twice.
+  const auto mappedLeft = std::clamp(static_cast<int32_t>(std::lround(left)), 0, static_cast<int32_t>(targetWidth));
+  const auto mappedTop = std::clamp(static_cast<int32_t>(std::lround(top)), 0, static_cast<int32_t>(targetHeight));
   const auto mappedRight =
-      std::clamp(static_cast<int32_t>(std::ceil(right)), mappedLeft, static_cast<int32_t>(targetWidth));
+      std::clamp(static_cast<int32_t>(std::lround(right)), mappedLeft, static_cast<int32_t>(targetWidth));
   const auto mappedBottom =
-      std::clamp(static_cast<int32_t>(std::ceil(bottom)), mappedTop, static_cast<int32_t>(targetHeight));
+      std::clamp(static_cast<int32_t>(std::lround(bottom)), mappedTop, static_cast<int32_t>(targetHeight));
 
   return {
       .x = mappedLeft,
