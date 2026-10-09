@@ -128,6 +128,16 @@ constexpr size_t kMaxLine = 64 * 1024;
 constexpr size_t kMaxQueued = 256;
 #endif
 
+#ifndef _WIN32
+// macOS has no MSG_NOSIGNAL; SO_NOSIGPIPE is set on the client socket instead.
+#ifdef MSG_NOSIGNAL
+constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+constexpr int kSendFlags = 0;
+#endif
+
+#endif
+
 void SendRaw(unsigned generation, const std::string& text) {
 #ifndef _WIN32
   std::lock_guard< std::mutex > lock(sClientMutex);
@@ -138,7 +148,7 @@ void SendRaw(unsigned generation, const std::string& text) {
   int budget = kSendBudgetMs;
   while (done < text.size()) {
     const ssize_t n =
-        send(sClient, text.data() + done, text.size() - done, MSG_NOSIGNAL | MSG_DONTWAIT);
+        send(sClient, text.data() + done, text.size() - done, kSendFlags | MSG_DONTWAIT);
     if (n > 0) {
       done += static_cast< size_t >(n);
       budget = kSendBudgetMs; // still reading, just slowly
@@ -173,6 +183,12 @@ void ListenThread(int listener) {
   std::string buffer;
   for (;;) {
     const int client = accept(listener, nullptr, nullptr);
+#ifdef SO_NOSIGPIPE
+    if (client >= 0) {
+      const int on = 1;
+      setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+    }
+#endif
     if (client < 0) {
       // Out of descriptors and the like do not clear up at once; do not spin.
       if (errno != EINTR) {

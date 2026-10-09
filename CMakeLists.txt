@@ -93,6 +93,13 @@ if(MP_ANDROID_NOD_STUB)
     add_library(nod::nod ALIAS mp_android_nod_stub)
 endif()
 
+# Apple's libc++ still marks std::jthread/std::stop_token (used by aurora's
+# threads) experimental; the flag unlocks them and links libc++experimental.
+if(APPLE)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-fexperimental-library>)
+    add_link_options(-fexperimental-library)
+endif()
+
 # Aurora provides the GameCube/Wii compatibility layer (MIT): GX, OS, PAD, DVD,
 # CARD, VI, SI, THP, mtx, plus the SDL3/WebGPU application layer.
 add_subdirectory(extern/aurora EXCLUDE_FROM_ALL)

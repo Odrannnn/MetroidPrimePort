@@ -14,7 +14,7 @@ namespace PortCrash {
 
 void Install();
 
-// Linux and Android: asks the thread with kernel id `threadId` (gettid) to write its
+// Linux and Android: asks the thread with kernel id `threadId` (gettid; macOS: its pthread_t) to write its
 // current stack into the log as "watchdog:" lines (needs Install), then carry on.
 // False when the request could not be sent, and always on Windows.
 bool RequestStack(long threadId);
