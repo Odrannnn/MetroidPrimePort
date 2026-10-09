@@ -35,7 +35,8 @@ jobs:
           key: deps-macos-${{ hashFiles('CMakeLists.txt', 'extern/aurora/**/CMakeLists.txt', 'extern/aurora/**/*.cmake') }}
 
       # SDL3, nod, OpenSSL and the bundled libraries are linked in statically,
-      # so the app needs nothing from Homebrew on a player's Mac.
+      # so the app needs nothing from Homebrew on a player's Mac. The runner's
+      # Homebrew xxhash/zstd would otherwise be found and linked dynamically.
       - name: Configure
         run: >
           cmake -S . -B build-mac -G Ninja
@@ -52,6 +53,9 @@ jobs:
           -DAURORA_NOD_LINKAGE=static
           -DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)
           -DOPENSSL_USE_STATIC_LIBS=TRUE
+          -DCMAKE_DISABLE_FIND_PACKAGE_xxHash=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_zstd=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=ON
 
       - name: Build
         # -k 0: report every failing file in one run while the port is brought up.
