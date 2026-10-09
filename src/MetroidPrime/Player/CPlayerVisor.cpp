@@ -29,6 +29,30 @@
 #ifdef TARGET_PC
 #include "port_debug.h"
 #include "port_room_env.h"
+
+#include "Kyoto/Graphics/CCubeMaterial.hpp"
+#include "Kyoto/Graphics/CCubeModel.hpp"
+
+// Port: the Remastered scan indicators (kb func/CPlayerVisorMP1-DrawScanObjectIndicators) apply
+// when the scan icon's CMDL is the converted one (the Remastered models mod puts
+// CMDL_ScanIconNoncritical through the PBR path: kStateFlag_PortPBR). The critical icon is not
+// converted, so the noncritical one stands for the pair.
+static bool PortScanIconsRemastered(const CModel* model) {
+  if (model == nullptr)
+    return false;
+  const CCubeModel* cube = model->GetCubeModel();
+  if (cube == nullptr)
+    return false;
+  const uint count = cube->PortMaterialCount();
+  for (uint i = 0; i < count; ++i) {
+    if (cube->GetMaterialByIndex(static_cast< int >(i)).IsFlagSet(kStateFlag_PortPBR))
+      return true;
+  }
+  return false;
+}
+
+// Remastered's smoothstep of the pop-in t (0xe62e74).
+static float PortScanSmooth(float t) { return t * t * (3.f - 2.f * t); }
 #endif
 
 static const int skPixelsPerTileDimension16Bit = 4;
@@ -685,13 +709,27 @@ void CPlayerVisor::UpdateScanObjectIndicators(const CStateManager& mgr, float dt
       target.x8_inRangeTimer = rstl::min_val(1.f, target.x8_inRangeTimer + dt2);
     if (const CActor* actor = TCastToConstPtr< CActor >(mgr.GetObjectById(target.x0_objId))) {
       const CGameCamera& camera = mgr.GetCameraManager()->GetCurrentCamera(mgr);
+#ifdef TARGET_PC
+      const bool portRem = PortScanIconsRemastered(x124_scanIconNoncritical.GetObject());
+      // Remastered boxes the scan indicator position, not the orbit position (0xe632c4).
+      CVector3f orbitPos = camera.ConvertToScreenSpace(portRem ? actor->GetScanObjectIndicatorPosition(mgr)
+                                                              : actor->GetOrbitPosition(mgr));
+#else
       CVector3f orbitPos = camera.ConvertToScreenSpace(actor->GetOrbitPosition(mgr));
+#endif
       orbitPos.SetX(0.5f * (orbitPos.GetX() * CGraphics::GetViewportWidth()) +
                     0.5f * CGraphics::GetViewportWidth());
       orbitPos.SetY(0.5f * (orbitPos.GetY() * CGraphics::GetViewportHeight()) +
                     0.5f * CGraphics::GetViewportHeight());
       bool inBox = mgr.GetPlayer()->WithinOrbitScreenBox(
           orbitPos, mgr.GetPlayer()->GetOrbitZoneMode(), mgr.GetPlayer()->GetOrbitZoneType());
+#ifdef TARGET_PC
+      if (portRem) {
+        // t eases 3/s toward in the box and out of it (the line-of-sight term Remastered
+        // ANDs in, IsScanOrGrapplePointVisibleToRender, is not reproduced).
+        target.xPort_t = CMath::Clamp(0.f, target.xPort_t + (inBox ? 3.f : -3.f) * dt, 1.f);
+      }
+#endif
       if (inBox != target.xc_inBox) {
         target.xc_inBox = inBox;
         if (inBox)
@@ -779,9 +817,27 @@ bool CPlayerVisor::DrawScanObjectIndicators(const CStateManager& mgr) const {
                                    ? gpTweakGuiColors->GetScanIconCriticalDimColor()
                                    : gpTweakGuiColors->GetScanIconNoncriticalDimColor();
       CVector3f scanPosition = actor->GetScanObjectIndicatorPosition(mgr);
+#ifdef TARGET_PC
+      const bool portRem = PortScanIconsRemastered(x124_scanIconNoncritical.GetObject());
+      float portSmooth = 1.f;
+      if (portRem) {
+        // 0xe62e74: placed at the shake-offset camera translation too, drawn only inside the
+        // max target distance and while t > 0.
+        scanPosition += mgr.GetCameraManager()->GetGlobalCameraTranslation(mgr);
+        if ((scanPosition - cameraPosition).Magnitude() >= gpTweakPlayer->GetScanMaxTargetDistance())
+          continue;
+        portSmooth = PortScanSmooth(target.xPort_t);
+        if (portSmooth == 0.f)
+          continue;
+      }
+#endif
       float scale = CCompoundTargetReticle::CalculateClampedScale(
           scanPosition, 1.f, gpTweakTargeting->x21c_scanTargetClampMin,
           gpTweakTargeting->x220_scanTargetClampMax, mgr);
+#ifdef TARGET_PC
+      if (portRem)
+        scale *= portSmooth * 0.19999999f + 0.8f;
+#endif
       CTransform4f xf(CMatrix3f::Scale(scale) * cameraRotation, scanPosition);
       float distance = (scanPosition - cameraPosition).Magnitude();
       float scanRange = gpTweakPlayer->GetScanningRange();
@@ -802,6 +858,13 @@ bool CPlayerVisor::DrawScanObjectIndicators(const CStateManager& mgr) const {
         iconAlpha *= alphaScale;
       }
       gpRender->SetModelMatrix(xf);
+#ifdef TARGET_PC
+      if (portRem) {
+        model->Draw(CModelFlags::AlphaBlended(iconColor.WithAlphaModulatedBy(iconAlpha * farT * portSmooth))
+                        .DepthCompareUpdate(false, false));
+        continue;
+      }
+#endif
       model->Draw(CModelFlags::Additive(iconColor.WithAlphaModulatedBy(iconAlpha * farT))
                       .DepthCompareUpdate(true, false));
     }
