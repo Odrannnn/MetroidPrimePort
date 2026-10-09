@@ -714,7 +714,8 @@ static sqlite3* open_pipeline_cache_seed_db(const std::string& path) {
 }
 
 static void seed_pipeline_cache() {
-  if (g_pipelineCacheBroken || g_pipelineCacheDb == nullptr || g_pipelineCacheUpsertStmt == nullptr) {
+  if (g_config.pipelineCacheNoSeed || g_pipelineCacheBroken || g_pipelineCacheDb == nullptr ||
+      g_pipelineCacheUpsertStmt == nullptr) {
     return;
   }
 

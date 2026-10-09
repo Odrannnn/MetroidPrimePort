@@ -1047,6 +1047,8 @@ int main(int argc, char** argv) {
         // An embedded seed wins over a stale initial_pipeline_cache.db beside the executable.
         .pipelineCacheSeedData = embeddedSeed.data(),
         .pipelineCacheSeedSize = embeddedSeed.size(),
+        // MP_PIPELINE_SEED=0: start from an empty cache (tools/pipeline_seed.py tour records with it).
+        .pipelineCacheNoSeed = !port::EnvFlag("MP_PIPELINE_SEED", true),
         // Set below when a custom Vulkan driver (port_gpu_driver.h) is loaded.
         .vulkanLibraryDir = nullptr,
         // Aurora's Null backend draws nothing: the game would play its sound behind

@@ -138,6 +138,8 @@ typedef struct {
    */
   const uint8_t* pipelineCacheSeedData;
   size_t pipelineCacheSeedSize;
+  /* Merge no initial pipeline cache at all (recording a new seed from an empty cache). */
+  bool pipelineCacheNoSeed;
 
   /*
    * A directory (with a trailing slash) Dawn searches first for the Vulkan library, e.g. a shim

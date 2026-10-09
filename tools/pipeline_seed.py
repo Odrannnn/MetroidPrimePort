@@ -224,9 +224,26 @@ def room_actions(first):
     return c
 
 
+def settle(name, tries=30):
+    """Press A until the game ticks. Some spawns open a modal message (Missile Station Mines spawns
+    on its pickup; Ruined Fountain's drop shows one) that pauses the world, so console commands fail."""
+    for _ in range(tries):
+        rig("cmd", name, "press a 10", check=False, timeout=60)
+        if rig("cmd", name, "status", check=False, timeout=60).returncode == 0:
+            return
+        time.sleep(2)
+    raise RuntimeError("the game never started ticking")
+
+
 def start(name, cache, room, build):
-    rig("start", name, "--room", room, "--mods", "none", "--settings", "none", "--replace",
-        "--env", f"MP_CACHE_PATH={cache}", *(["--build", build] if build else []), timeout=600)
+    # Detached with --wait: mprig's readiness check needs a ticking game and kills it otherwise.
+    subprocess.Popen(MPRIG + ["start", name, "--room", room, "--mods", "none", "--settings", "none",
+                              "--replace", "--wait", "3000", "--env", f"MP_CACHE_PATH={cache}",
+                              "--env", "MP_PIPELINE_SEED=0"]
+                     + (["--build", build] if build else []),
+                     cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(45)
+    settle(name)
 
 
 def cmd_tour(a):
@@ -271,7 +288,7 @@ def cmd_tour(a):
         say("front end")
         p = subprocess.Popen(MPRIG + ["start", name, "--mods", "none", "--settings", "none", "--replace",
                                       "--wait", "3000", "--env", "MP_FAST_BOOT=0", "--env",
-                                      f"MP_CACHE_PATH={cache}"] + (["--build", a.build] if a.build else []),
+                                      f"MP_CACHE_PATH={cache}", "--env", "MP_PIPELINE_SEED=0"] + (["--build", a.build] if a.build else []),
                              cwd=ROOT,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(45)
@@ -300,6 +317,7 @@ def cmd_tour(a):
                 running = True
             else:
                 rig("cmd", name, f"warp {mlvl} {mrea}", timeout=600)
+                settle(name)
             rig("cmd", name, *room_actions(i == 0), timeout=900)
             status = "ok"
         except (RuntimeError, subprocess.TimeoutExpired) as e:
