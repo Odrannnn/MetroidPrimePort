@@ -116,7 +116,7 @@ void CMainFlow::SetGameState(EClientFlowStates state, CArchitectureQueue& queue)
       break;
     }
     // Port: MP_BOOT_WORLD skips the front end once, starting a new game in that
-    // world like CFrontEndUI's new game does (defaults, then the world id).
+    // world like CFrontEndUI's new game does (the world id, options kept).
     static bool sBootWorldUsed = false;
     uint32_t bootWorld, bootArea;
     if (!sBootWorldUsed && PortDebug::BootWorld(bootWorld, bootArea)) {
@@ -126,7 +126,6 @@ void CMainFlow::SetGameState(EClientFlowStates state, CArchitectureQueue& queue)
       worldState.SetAreaId(TAreaId(0));
       worldState.SetDesiredAreaAssetId(bootArea != 0 ? static_cast< CAssetId >(bootArea)
                                                      : kInvalidAssetId);
-      gpGameState->GameOptions().ResetToDefaults();
       gpGameState->WriteBackupBuf();
       fprintf(stderr, "[boot-world] new game in world %08X area %08X\n", bootWorld, bootArea);
       SetGameState(kCFS_Game, queue);

@@ -1643,7 +1643,10 @@ CFrontEndUI::CFrontEndUI()
 , xf4_curAudio(nullptr) {
   gpMain->ResetGameState();
   gpGameState->SetCurrentWorldId(skDefaultWorld.GetId());
+#ifndef TARGET_PC
+  // Port: the options persist across launches and save files (issue #45).
   gpGameState->GameOptions().ResetToDefaults();
+#endif
   gpGameState->WriteBackupBuf();
   gpResourceFactory->CanBuild(skDefaultWorld);
   x20_depsGroup.Lock();

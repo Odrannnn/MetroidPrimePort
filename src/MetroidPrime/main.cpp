@@ -880,6 +880,8 @@ int CMain::RsMain(int argc, const char* const* argv) {
       gpGameState->GameOptions().EnsureOptions();
       lbl_805A6BC0 = stream.ReadBits(1);
     }
+    // Port: there is no save region across launches; the settings file keeps the options.
+    PortDebug::RestoreGameOptions();
 
     double dt = 1.0 / 60.0;
     constexpr uint64_t framePeriodNs = 1000000000ull / 60;
@@ -1409,10 +1411,18 @@ void CMain::PortLoadGameState(CInputStream& in) {
 
 void CMain::StreamNewGameState(CInputStream& in, int saveIdx) {
   bool hasFusion = gpGameState->SystemState().GetHasFusion();
+#ifdef TARGET_PC
+  // Port: the options are global (the settings file), not the save file's.
+  CGameOptions gameOptions = gpGameState->GameOptions();
+#endif
   x128_gameGlobalObjects->GameState() = nullptr;
   gpGameState = nullptr;
   x128_gameGlobalObjects->GameState() = rs_new CGameState(in, saveIdx);
   gpGameState = x128_gameGlobalObjects->GameState().get();
+#ifdef TARGET_PC
+  gpGameState->GameOptions() = gameOptions;
+  gpGameState->GameOptions().EnsureOptions();
+#endif
   gpGameState->SystemState().SetHasFusion(hasFusion);
   gpGameState->PlayerState()->SetIsFusionEnabled(gpGameState->SystemState().GetHasFusion());
   gpGameState->HintOptions().SetHintNextTime();

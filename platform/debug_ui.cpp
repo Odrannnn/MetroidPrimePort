@@ -57,9 +57,12 @@
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/CScriptLayerManager.hpp"
+#include "MetroidPrime/Player/CGameOptions.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
 #include "Kyoto/CResFactory.hpp"
+#include "Kyoto/Streams/CMemoryInStream.hpp"
+#include "Kyoto/Streams/CMemoryStreamOut.hpp"
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "MetroidPrime/SFX/UI.h"
 
@@ -321,6 +324,12 @@ bool sMouseCaptured = false;
 bool sMouseGameplayActive = false;
 bool sMouseInvertX = false;
 bool sMouseInvertY = false;
+// The game's CGameOptions as hex of its PutTo bits. Retail keeps them only in each
+// save file and resets them on the title screen, so a change made without saving
+// at a station was gone on the next launch (issue #45). The port keeps one global
+// copy, like Remastered.
+std::string sGameOptions;
+bool sGameOptionsRestored = false;
 bool sMouseButtons = true;
 // What each mouse button does under mouse aim (PortInputMap::EMouseAction).
 int sMouseActions[PortInputMap::kMouseButtonCount] = {
@@ -703,6 +712,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sMouseInvertX = ParseBool(value);
   } else if (key == "mouse_invert_y") {
     sMouseInvertY = ParseBool(value);
+  } else if (key == "game_options") {
+    sGameOptions = value;
   } else if (key == "mouse_buttons") {
     sMouseButtons = ParseBool(value);
   } else if (key == "mouse_crosshair") {
@@ -997,6 +1008,9 @@ std::string SettingsText() {
   file << "mouse_crosshair=" << (sMouseCrosshair ? 1 : 0) << '\n';
   file << "crosshair_size=" << sCrosshairSize << '\n';
   file << "mouse_sensitivity=" << sMouseSensitivity << '\n';
+  if (!sGameOptions.empty()) {
+    file << "game_options=" << sGameOptions << '\n';
+  }
   if (!sDiscPath.empty()) {
     file << "disc_path=" << sDiscPath << '\n';
   }
@@ -3459,6 +3473,60 @@ bool TakeTouchEditRequested() { return sTouchEditRequested.exchange(false, std::
 void SaveSettingsNow() {
   EnsureInitialized();
   SaveSettings();
+}
+
+namespace {
+// CGameOptions::PutTo: x0_'s 64 bytes, then 58 bits of options.
+constexpr size_t kGameOptionsBytes = 72;
+
+std::string GameOptionsHex(CGameOptions& options) {
+  uchar bytes[128] = {};
+  {
+    CMemoryStreamOut out(bytes, sizeof(bytes));
+    options.PutTo(out);
+    out.Flush();
+  }
+  static const char kDigits[] = "0123456789abcdef";
+  std::string hex;
+  for (size_t i = 0; i < kGameOptionsBytes; ++i) {
+    hex += kDigits[bytes[i] >> 4];
+    hex += kDigits[bytes[i] & 0xF];
+  }
+  return hex;
+}
+
+// Records the game's options whenever they change, wherever from (pause menu,
+// front-end options, F1, a loaded save state).
+void SyncGameOptions() {
+  if (!sGameOptionsRestored || gpGameState == nullptr) {
+    return;
+  }
+  std::string hex = GameOptionsHex(gpGameState->GameOptions());
+  if (hex != sGameOptions) {
+    sGameOptions = std::move(hex);
+    MarkDirty();
+    // A dragged F1 slider is saved when it's let go.
+    if (!sVisible || !ImGui::IsAnyItemActive()) {
+      SaveSettings();
+    }
+  }
+}
+} // namespace
+
+void RestoreGameOptions() {
+  EnsureInitialized();
+  sGameOptionsRestored = true;
+  if (gpGameState == nullptr || sGameOptions.size() != kGameOptionsBytes * 2) {
+    return;
+  }
+  uchar bytes[128] = {};
+  for (size_t i = 0; i < kGameOptionsBytes; ++i) {
+    const unsigned long value = std::strtoul(sGameOptions.substr(i * 2, 2).c_str(), nullptr, 16);
+    bytes[i] = static_cast< uchar >(value);
+  }
+  CMemoryInStream in(bytes, sizeof(bytes));
+  gpGameState->GameOptions() = CGameOptions(in);
+  gpGameState->GameOptions().EnsureOptions();
 }
 
 void LogSettings() {
@@ -8559,6 +8627,7 @@ void DrawUI() {
     MarkDirty();
     SaveSettings();
   }
+  SyncGameOptions();
   if (!sVisible) {
     // Changes from the pause menu or the console are saved at exit; log them when
     // they're made, at most once a second.

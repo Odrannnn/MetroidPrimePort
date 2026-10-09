@@ -555,6 +555,9 @@ bool Visible();
 // Writes the settings file now instead of waiting for the next overlay frame,
 // so a disc chosen during startup is remembered even if no frame is drawn yet.
 void SaveSettingsNow();
+// Puts the game's own options (Reverse Y Axis, rumble, volumes...) saved in the
+// settings file back into the game state. Until it runs, they aren't recorded.
+void RestoreGameOptions();
 // Copies every setting and any MP_* variable into the log; settings changed
 // later in the session are logged as they're saved.
 void LogSettings();
