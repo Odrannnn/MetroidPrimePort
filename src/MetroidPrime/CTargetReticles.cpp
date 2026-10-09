@@ -1199,13 +1199,13 @@ void CCompoundTargetReticle::DrawOrbitZoneGroup(const CMatrix3f& rot,
 #endif
     CVector3f targetPos = xf4_targetPos;
 #ifdef TARGET_PC
-    // The idle crosshair sits on the tick's aim ray; keep it on the view's
-    // centre while per-frame look turns the view ahead of the tick.
-    CTransform4f look = CTransform4f::Identity();
-    if (mgr.GetCameraManager()->GetPresentedLookRotation(mgr, look)) {
-      const CVector3f eye = mgr.GetCameraManager()->GetCurrentCameraTransform(mgr).GetTranslation();
-      targetPos = eye + look.Rotate(targetPos - eye);
-    }
+    // The idle crosshair sits on the tick's aim ray, placed against the
+    // simulation camera. Keep it where it is relative to the view while
+    // smooth frames blend the camera between ticks or per-frame look turns it
+    // ahead, else it slides off-centre and snaps back every tick (issue #24).
+    const CCameraManager* camMgr = mgr.GetCameraManager();
+    targetPos = camMgr->GetCurrentCameraTransform(mgr) *
+                (camMgr->GetSimulationCameraTransform(mgr).GetInverse() * targetPos);
 #endif
     gpRender->SetModelMatrix(CTransform4f(rot, targetPos) * CTransform4f::Scale(scale));
 
