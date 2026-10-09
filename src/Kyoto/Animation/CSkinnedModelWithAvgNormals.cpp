@@ -9,6 +9,27 @@
 #include "rstl/pair.hpp"
 #include "rstl/vector.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/Basics/CBasics.hpp"
+
+#include <rstl/math.hpp>
+
+#include <vector>
+
+// The model's vertex arrays stay big-endian on PC (the skinning loads swap them).
+// Entries past the array's `bytes` read as zero.
+static std::vector< CVector3f > NativeVectors(const float* in, uint bytes, uint count,
+                                              uint stride) {
+  std::vector< CVector3f > out(count, CVector3f(0.f, 0.f, 0.f));
+  const uint avail = rstl::min_val(count, bytes / (stride * 12));
+  for (uint i = 0; i < avail; ++i) {
+    const float* v = in + i * stride * 3;
+    out[i] = CVector3f(CBasics::SwapBytes(v[0]), CBasics::SwapBytes(v[1]), CBasics::SwapBytes(v[2]));
+  }
+  return out;
+}
+#endif
+
 typedef rstl::pair< CVector3f, rstl::list< uint > > TPosToVertListPair;
 
 CSkinnedModelWithAvgNormals::CSkinnedModelWithAvgNormals(const CSkinnedModel& skinnedModel)
@@ -18,8 +39,16 @@ CSkinnedModelWithAvgNormals::CSkinnedModelWithAvgNormals(const CSkinnedModel& sk
 #else
   int vertexCount = skinnedModel.GetNumPoints();
 #endif
+#ifdef TARGET_PC
+  const std::vector< CVector3f > nativePositions =
+      NativeVectors(skinnedModel.GetModel()->GetPositions(),
+                    skinnedModel.GetModel()->GetCubeModel()->GetModelInstance().GetVertexSize(),
+                    vertexCount, 1);
+  const CVector3f* modelPositions = nativePositions.data();
+#else
   const CVector3f* modelPositions =
       reinterpret_cast< const CVector3f* >(skinnedModel.GetModel()->GetPositions());
+#endif
 
   rstl::vector< TPosToVertListPair > vertMap;
   vertMap.reserve(vertexCount);
@@ -45,12 +74,18 @@ CSkinnedModelWithAvgNormals::CSkinnedModelWithAvgNormals(const CSkinnedModel& sk
     }
   }
 
-  const CVector3f* normals =
-      reinterpret_cast< const CVector3f* >(skinnedModel.GetModel()->GetNormals());
 #ifdef TARGET_PC
   // NBT normals are nine (N, B, T) or fifteen floats per vertex; N is the first.
-  const uint normalStride = skinnedModel.GetModel()->GetCubeModel()->NormalVecs();
+  const std::vector< CVector3f > nativeNormals =
+      NativeVectors(skinnedModel.GetModel()->GetNormals(),
+                    skinnedModel.GetModel()->GetCubeModel()->GetModelInstance().GetNormalSize(),
+                    vertexCount,
+                    skinnedModel.GetModel()->GetCubeModel()->NormalVecs());
+  const CVector3f* normals = nativeNormals.data();
+  const uint normalStride = 1;
 #else
+  const CVector3f* normals =
+      reinterpret_cast< const CVector3f* >(skinnedModel.GetModel()->GetNormals());
   const uint normalStride = 1;
 #endif
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
