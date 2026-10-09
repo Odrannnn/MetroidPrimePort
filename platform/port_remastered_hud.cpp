@@ -636,10 +636,10 @@ bool InterferenceRows(const ModelMaterial& material, uint32_t& index) {
 uint32_t SampleFlags(const ModelMaterial& material) {
   uint32_t index = 0;
   if (SquaresAlpha(material)) {
-    return 1u << 16;
+    return 1u << 24;
   }
   if (InterferenceRows(material, index)) {
-    return 1u << 17 | index << 18;
+    return 1u << 25 | index << 26;
   }
   return 0;
 }

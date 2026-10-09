@@ -27,13 +27,14 @@ enum EStateFlags {
   // Drawn once, with the widget's own blend, and TEV stage 0 as T + T*c (clamped at 1, as the
   // shader output is into the HUD's UNORM target after tone mapping).
   kStateFlag_PortHudGlow = (1 << 15),
-  // Port: unused by retail data. A converted HUD picture whose Remastered shader squares the
-  // filtered alpha it samples (ca1106b0 with unk1&1, 3853595c, 2d606234).
-  kStateFlag_PortHudSquare = (1 << 16),
-  // Port: unused by retail data. A converted HUD picture drawn with Remastered's
-  // UI_Interference (ad2c208c); bits 18..20 index PortRemastered::kHudInterferenceRows.
-  kStateFlag_PortHudInterference = (1 << 17),
-  kStateFlag_PortHudInterferenceShift = 18,
+  // Port: above the texture slot mask (bits 16..23, one per GX texmap), unused by retail and
+  // converted data. A converted HUD picture whose Remastered shader squares the filtered
+  // alpha it samples (ca1106b0 with unk1&1, 3853595c, 2d606234).
+  kStateFlag_PortHudSquare = (1 << 24),
+  // Port: as kStateFlag_PortHudSquare. A converted HUD picture drawn with Remastered's
+  // UI_Interference (ad2c208c); bits 26..28 index PortRemastered::kHudInterferenceRows.
+  kStateFlag_PortHudInterference = (1 << 25),
+  kStateFlag_PortHudInterferenceShift = 26,
 #endif
   kStateFlag_TextureSlotMask = static_cast< uint >(~kStateFlag_LightmapUvArray),
 };
