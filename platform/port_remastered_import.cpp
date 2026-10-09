@@ -2886,7 +2886,11 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       }
     };
     workers.clear();
-    for (int i = 1; i < threads; ++i) {
+    // A worker here holds one model, not a world's, so the phone's two-worker cap (debug_ui's
+    // StartRemasteredImport) doesn't apply: 16 workers add ~1.3 GB on desktop, the most of it the
+    // shared texture cache.
+    const int geometryThreads = std::max(threads, DefaultThreads());
+    for (int i = 1; i < geometryThreads; ++i) {
       workers.emplace_back(geometryWork, i);
     }
     geometryWork(0);
