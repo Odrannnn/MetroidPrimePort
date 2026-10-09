@@ -1,6 +1,6 @@
 # Metroid Prime — native port
 
-A native build of **Metroid Prime** (GameCube, USA v1.00 `GM8E01_00` or PAL `GM8P01`) for Linux,
+A native build of **Metroid Prime** (GameCube, USA v1.00 `GM8E01_00`, or PAL `GM8P01` as experimental) for Linux,
 Windows and Android. The game is compiled natively from the
 [PrimeDecomp](https://github.com/PrimeDecomp/prime) decompiled source and renders
 through Aurora (SDL3 and WebGPU), with no emulator involved.
@@ -124,7 +124,7 @@ succeeds but links a stub that cannot open a disc — see
 The disc can also be set with `MP_DISC`, kept beside the executable, or picked
 through a file dialog the first time you launch without one — the choice is
 remembered in the settings. The image must be `GM8E01`, disc 0, revision 0 (USA 1.00), or
-`GM8P01` (PAL, which also brings its French, German, Spanish and Italian text;
+`GM8P01` (PAL, experimental, which also brings its French, German, Spanish and Italian text;
 a USA player can add those from a PAL image in F1 > Game > Language). If a
 remembered disc stops opening — the file moved, or on Android the system revoked
 its access grant — the port asks again rather than exiting.

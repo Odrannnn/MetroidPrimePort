@@ -82,7 +82,7 @@ remembers the answer as `disc_path` in the settings file. There is no prompt
 when the port has no window to show one on, or with `MP_NO_DISC_DIALOG=1`
 (for scripted runs that do have a window, as on a build runner). The disc must
 identify as **GM8E01, disc 0, revision 0** (USA 1.00) or **GM8P01** (PAL).
-A PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port
+PAL support is experimental: a PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port
 feature (Remastered import, randomizer, Archipelago, cutscene skips) and its
 languages; its saves are kept apart from USA ones. USA 1.01 and 1.02 are only
 taken with `MP_DISC_ANY_VERSION=1` (untested); Japanese, Korean and Wii discs

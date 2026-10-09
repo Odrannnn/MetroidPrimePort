@@ -7141,6 +7141,9 @@ void DrawRemasteredWarning() {
 // The PAL disc's languages for a USA one (port_pal_languages.h).
 void DrawPalLanguages() {
   if (PortDisc::Current() == PortDisc::Version::Pal) {
+    ImGui::TextDisabled("PAL disc: support is experimental.");
+    ItemHelp("The port runs the USA 1.00 code on the PAL disc's data. It has been checked on every "
+             "room, but less played than a USA disc: please report anything that differs.");
     return;
   }
   std::string picked;

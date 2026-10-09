@@ -363,10 +363,10 @@ std::string FindUnreadableDiscFile() {
 }
 
 constexpr const char* kSupportedDisc =
-    "Metroid Prime for the GameCube is supported: USA 1.00\n(GM8E01, revision 0) and PAL (GM8P01).";
+    "Metroid Prime for the GameCube is supported: USA 1.00\n(GM8E01, revision 0), and PAL (GM8P01, experimental).";
 // Shown instead while other releases are opted into (MP_DISC_ANY_VERSION).
 constexpr const char* kSupportedDiscAny =
-    "Metroid Prime for the GameCube is supported: USA 1.00, 1.01\nand 1.02 (GM8E01) and PAL (GM8P01).";
+    "Metroid Prime for the GameCube is supported: USA 1.00, 1.01\nand 1.02 (GM8E01), and PAL (GM8P01, experimental).";
 
 const char* SupportedDiscText() {
     return PortDisc::IsAccepted(PortDisc::Version::Usa101) ? kSupportedDiscAny : kSupportedDisc;
@@ -698,7 +698,7 @@ std::string AskForDiscImage(bool* cancelled = nullptr) {
     SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 2);
     SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
     SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING,
-                          "Select your Metroid Prime disc image (GameCube, USA v1.00 or PAL)");
+                          "Select your Metroid Prime disc image (GameCube, USA v1.00, or PAL: experimental)");
     SDL_ShowFileDialogWithProperties(
         SDL_FILEDIALOG_OPENFILE,
         [](void*, const char* const* files, int) {
@@ -1217,7 +1217,7 @@ int main(int argc, char** argv) {
     if (discImage.empty()) {
         PortLog::Write(
                      "metroid_prime_port: no disc image given.\n"
-                     "  usage: %s <path to Metroid Prime (USA v1.00 or PAL).iso>\n"
+                     "  usage: %s <path to Metroid Prime (USA v1.00, or PAL: experimental).iso>\n"
                      "  or set MP_DISC, or place the image next to the executable.\n", argv[0]);
         aurora_shutdown();
         return 1;
@@ -1271,7 +1271,8 @@ int main(int argc, char** argv) {
         discPath = discImage.c_str();
     }
     std::printf("metroid_prime_port: disc mounted: %s\n", discPath);
-    PortLog::Write("metroid_prime_port: disc is %s\n", PortDisc::Name(PortDisc::Current()));
+    PortLog::Write("metroid_prime_port: disc is %s%s\n", PortDisc::Name(PortDisc::Current()),
+                   PortDisc::Current() == PortDisc::Version::Pal ? " (experimental support)" : "");
     // Saves are the disc's region's (a PAL save's worlds are laid out
     // differently): its game code and Dolphin's card for that region.
     PortGci::SetGameCode(PortDisc::Current() == PortDisc::Version::Pal ? "GM8P" : "GM8E");
