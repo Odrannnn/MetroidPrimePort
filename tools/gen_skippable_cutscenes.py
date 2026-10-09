@@ -19,6 +19,23 @@ objects it copies from the disc (Flaahgra's clones) are CLONE ops.
 It also emits kLandingOps, randomprime's Landing Site intro skip, which the
 port applies on top in Archipelago games.
 
+PAL (GM8P01): randomprime merges extra, PAL-specific edits and PAL lays some
+connections out differently. Give the script the PAL disc and its two ISOs
+as three more arguments and it appends kSkipRoomsPal/kSkipOpsPal, the PAL
+streams for the rooms where the USA stream misses, differs or is absent
+(everything else uses the USA one):
+
+    randomprime_patcher ... --input-iso <pal disc> --output-iso pal-original.iso ...
+    tools/gen_skippable_cutscenes.py <usa disc> original.iso skippable.iso \\
+        <jsonc> platform/port_skip_cutscenes_data.inc \\
+        <pal disc> pal-original.iso pal-skippable.iso
+
+The patched PAL files outgrow a disc (about 30 MB past GC_DISC_LENGTH, 1_459_978_240, which PAL's
+packing fills exactly): build randomprime with `GC_DISC_LENGTH` in
+structs/src/gc_disc.rs raised to 1_600_000_000. The output is only read back
+here, so the oversized ISO doesn't matter. Passing only the USA arguments
+drops the PAL tables.
+
 The script replays the ops on randomprime's original SCLYs (must match the
 skippable ones byte for byte) and on the retail disc (every op must find its
 target, apart from the objects randomprime itself added in other patches).
@@ -435,13 +452,12 @@ def landing_ops(scly):
     return blob
 
 
-def main():
-    disc, orig_iso, skip_iso, jsonc, out = sys.argv[1:6]
-    d, o, s = load_sclys(disc), load_sclys(orig_iso), load_sclys(skip_iso)
-    cut = cutscene_ids(jsonc)
-    rooms = sorted(k for k in s if o[k] != s[k])
+def build_table(d, o, s, cut):
+    """[(mrea, ops)] for one disc version: randomprime's skippable patch
+    replayed on its own original (must equal its skippable SCLY), checked
+    against the retail disc `d`."""
     table = []
-    for r in rooms:
+    for r in sorted(k for k in s if o[k] != s[k]):
         ops = diff_room(o[r], s[r], d[r])
         replay, misses = apply_ops(o[r], b''.join(op[3] for op in ops))
         assert replay == s[r], 'replay mismatch in %08X' % r
@@ -450,30 +466,79 @@ def main():
         check_result(r, d[r], o[r], s[r], kept, known)
         if kept:
             table.append((r, kept))
+    return table
+
+
+def pal_table(usa_table, pal_disc, pal_orig, pal_skip, cut):
+    """Streams for the rooms where the USA one doesn't do on the PAL disc
+    what randomprime's PAL patch does (misses, other result, or no USA
+    stream). Returns (table, report lines)."""
+    table, lines = [], []
+    usa = dict(usa_table)
+    for r, ops in build_table(pal_disc, pal_orig, pal_skip, cut):
+        if r in usa:
+            result, misses = apply_ops(pal_disc[r], usa[r])
+            want = apply_ops(pal_disc[r], ops)[0]
+            if not misses and result == want:
+                continue
+            lines.append('%08X: USA stream %s' % (r, 'misses %d' % len(misses) if misses
+                                                  else 'applies but differs'))
+        else:
+            lines.append('%08X: no USA stream' % r)
+        table.append((r, ops))
+    return table, lines
+
+
+def write_tables(f, rooms_name, ops_name, table):
+    blob = bytearray()
+    f.write('static const SkipRoom %s[] = {\n' % rooms_name)
+    for r, ops in table:
+        f.write('    {0x%08X, %d, %d},\n' % (r, len(blob), len(ops)))
+        blob += ops
+    f.write('};\n\nstatic const unsigned char %s[] = {\n' % ops_name)
+    for i in range(0, len(blob), 24):
+        f.write('    ' + ','.join('0x%02X' % b for b in blob[i:i + 24]) + ',\n')
+    f.write('};\n')
+    return len(blob)
+
+
+def main():
+    disc, orig_iso, skip_iso, jsonc, out = sys.argv[1:6]
+    pal = sys.argv[6:9]  # optional: PAL disc, its original and skippable ISOs
+    d, o, s = load_sclys(disc), load_sclys(orig_iso), load_sclys(skip_iso)
+    cut = cutscene_ids(jsonc)
+    table = build_table(d, o, s, cut)
 
     base = apply_ops(d[LANDING_SITE], dict(table).get(LANDING_SITE, b''))[0]
     landing = landing_ops(base)
 
-    blob = bytearray()
-    index = []
-    for r, ops in table:
-        index.append((r, len(blob), len(ops)))
-        blob += ops
+    pal_rooms, pal_lines = [], []
+    if pal:
+        pd, po, ps = (load_sclys(x) for x in pal)
+        pal_rooms, pal_lines = pal_table(table, pd, po, ps, cut)
+        # The Landing Site intro skip must replay on whichever stream PAL uses.
+        stream = dict(pal_rooms).get(LANDING_SITE, dict(table).get(LANDING_SITE, b''))
+        res, misses = apply_ops(pd[LANDING_SITE], stream)
+        assert not misses, 'PAL Landing Site skip misses'
+        res, misses = apply_ops(res, landing)
+        assert not misses, 'PAL kLandingOps misses %s' % misses
+        print('PAL: %d rooms differ from the USA streams' % len(pal_rooms))
+        for line in pal_lines:
+            print('  ' + line)
+
     with open(out, 'w') as f:
         f.write('// Generated by tools/gen_skippable_cutscenes.py from randomprime\'s\n'
                 '// skippable_cutscenes.jsonc (MIT, see NOTICE). Do not edit.\n')
-        f.write('static const SkipRoom kSkipRooms[] = {\n')
-        for r, off, ln in index:
-            f.write('    {0x%08X, %d, %d},\n' % (r, off, ln))
-        f.write('};\n\nstatic const unsigned char kSkipOps[] = {\n')
-        for i in range(0, len(blob), 24):
-            f.write('    ' + ','.join('0x%02X' % b for b in blob[i:i + 24]) + ',\n')
-        f.write('};\n\n// Landing Site intro skip, applied after kSkipRooms\' entry.\n'
+        n = write_tables(f, 'kSkipRooms', 'kSkipOps', table)
+        f.write('\n// Landing Site intro skip, applied after kSkipRooms\' entry.\n'
                 'static const unsigned char kLandingOps[] = {\n')
         for i in range(0, len(landing), 24):
             f.write('    ' + ','.join('0x%02X' % b for b in landing[i:i + 24]) + ',\n')
         f.write('};\n')
-    print('%d rooms, %d bytes of ops, %d landing' % (len(table), len(blob), len(landing)))
+        if pal_rooms:
+            f.write('\n// GM8P01: the rooms whose USA stream above misses or differs there.\n')
+            write_tables(f, 'kSkipRoomsPal', 'kSkipOpsPal', pal_rooms)
+    print('%d rooms, %d bytes of ops, %d landing' % (len(table), n, len(landing)))
 
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@
 
 #include "port_apclient.h"
 #include "port_debug.h"
+#include "port_disc.h"
 #include "port_log.h"
 #include "port_randomizer.h"
 
@@ -113,22 +114,35 @@ bool PatchArea(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< u
   out.clear();
   if (!Active())
     return false;
-  const SkipRoom* room =
-      FindRoom(kSkipRooms, kSkipRooms + sizeof(kSkipRooms) / sizeof(kSkipRooms[0]), mreaId);
+  // PAL lays some rooms out differently: its own streams, where the USA one
+  // doesn't do the same there.
+  const SkipRoom* room = nullptr;
+  const uint8_t* skipOps = kSkipOps;
+  if (PortDisc::Current() == PortDisc::Version::Pal) {
+    room = FindRoom(kSkipRoomsPal, kSkipRoomsPal + sizeof(kSkipRoomsPal) / sizeof(kSkipRoomsPal[0]),
+                    mreaId);
+    skipOps = kSkipOpsPal;
+  }
+  if (room == nullptr) {
+    room = FindRoom(kSkipRooms, kSkipRooms + sizeof(kSkipRooms) / sizeof(kSkipRooms[0]), mreaId);
+    skipOps = kSkipOps;
+  }
+  bool skipped = false;
   if (room != nullptr) {
-    const int misses = ApplyOps(scly, size, kSkipOps + room->offset, room->size, out);
+    const int misses = ApplyOps(scly, size, skipOps + room->offset, room->size, out);
     if (misses != 0) {
-      // A mod replaced the room, or the disc isn't GM8E01 v1.00: the patch
-      // could leave the script half-edited, so keep the room as it is. The
-      // pickup patch below assumes this one ran, so it is left off too.
+      // A mod replaced the room, or the disc isn't one the streams were made
+      // from: the patch could leave the script half-edited, so keep the room
+      // as it is. Only the skip is dropped; the patches below still apply.
       PortLog::Write("skippable cutscenes: room %08X doesn't match (%d), left unpatched\n",
                      mreaId, misses);
       out.clear();
-      return false;
+    } else {
+      skipped = true;
     }
   }
   const bool apGame = PortAp::RandomizedGame();
-  if (room != nullptr && mreaId == kLandingSite && apGame) {
+  if (skipped && mreaId == kLandingSite && apGame) {
     // Archipelago games start with Samus already out of the ship, as
     // randomprime's patch_landing_site_cutscene_triggers does.
     std::vector< uint8_t > landed;
@@ -139,7 +153,7 @@ bool PatchArea(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< u
   }
   if (apGame) {
     std::vector< uint8_t > pickups;
-    if (room != nullptr)
+    if (skipped)
       PatchPickups(mreaId, out.data(), out.size(), pickups);
     else
       PatchPickups(mreaId, scly, size, pickups);
