@@ -4,6 +4,7 @@
 #include "Kyoto/CToken.hpp"
 #include "types.h"
 
+#include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "Kyoto/Particles/CSpawnSystemKeyframeData.hpp"
 #include "Kyoto/Particles/IElement.hpp"
 #include "Kyoto/TToken.hpp"
@@ -135,6 +136,8 @@ public:
   u8 xPortXfmd = kPortXfmdRetail;
   // port-only PIRN: a converted Remastered effect, whose nested IRND elements are stable per particle
   bool xPortIrnd = false;
+  // port-only PVRT: Remastered particle variables (names, types, defaults)
+  std::unique_ptr< CPortVarTable > xPortVars;
   // port-only PFCM: each model particle is turned to face the camera before PMRT
   bool xPortFaceCamera = false;
 #endif
