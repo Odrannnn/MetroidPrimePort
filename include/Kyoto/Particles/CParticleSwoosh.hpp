@@ -12,6 +12,7 @@
 #include "dolphin/gx/GXEnum.h"
 
 #ifdef TARGET_PC
+#include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "port_tick_pair.h"
 #include <vector>
 #endif
@@ -93,6 +94,25 @@ public:
   uint PortFxAsset() const override;
   bool PortIsRemastered() const;
   void PortFxDescribe(PortFxInfo& out) const override;
+  // Remastered particle variables (PVRT), as CElementGen's.
+  u16 PortGetRealHandle(const PortGuid& g) const { return xPortVars.Find(g, EPortVarType::Real); }
+  u16 PortGetIntHandle(const PortGuid& g) const { return xPortVars.Find(g, EPortVarType::Int); }
+  u16 PortGetColorHandle(const PortGuid& g) const { return xPortVars.Find(g, EPortVarType::Color); }
+  u16 PortGetVectorHandle(const PortGuid& g) const {
+    return xPortVars.Find(g, EPortVarType::Vector);
+  }
+  void PortBindReal(u16 h, float v) { xPortVars.BindReal(h, v); }
+  void PortBindInt(u16 h, int v) { xPortVars.BindInt(h, v); }
+  void PortBindColor(u16 h, const CColor& v) { xPortVars.BindColor(h, v); }
+  void PortBindVector(u16 h, const CVector3f& v) { xPortVars.BindVector(h, v); }
+  void PortBindReal(const PortGuid& g, float v) { xPortVars.BindReal(PortGetRealHandle(g), v); }
+  void PortBindInt(const PortGuid& g, int v) { xPortVars.BindInt(PortGetIntHandle(g), v); }
+  void PortBindColor(const PortGuid& g, const CColor& v) {
+    xPortVars.BindColor(PortGetColorHandle(g), v);
+  }
+  void PortBindVector(const PortGuid& g, const CVector3f& v) {
+    xPortVars.BindVector(PortGetVectorHandle(g), v);
+  }
 #endif
 
   static int GetAliveParticleSystemCount();
@@ -167,6 +187,7 @@ private:
   CColor x20c_moduColor;
 
 #ifdef TARGET_PC
+  CPortVarMemory xPortVars; // PVRT variables, initialised from the description's defaults
   // Presentation smoothing (particle_interpolation): what the last two ticks
   // drew, recorded at draw time, since grapple and Wave Beam swooshes are
   // written directly by their owners rather than stepped by Update.

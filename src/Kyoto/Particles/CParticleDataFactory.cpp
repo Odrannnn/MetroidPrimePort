@@ -13,6 +13,7 @@
 #include "Kyoto/Particles/CIntElement.hpp"
 #include "Kyoto/Particles/CModVectorElement.hpp"
 #include "Kyoto/Particles/CParticleGen.hpp"
+#include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "Kyoto/Particles/CRealElement.hpp"
 #include "Kyoto/Particles/CSpawnSystemKeyframeData.hpp"
 #include "Kyoto/Particles/CSwooshDescription.hpp"
@@ -523,6 +524,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
                             ? static_cast< u8 >(mode)
                             : static_cast< u8 >(kPortXfmdRetail);
     } break;
+    // Port-only Remastered particle variables (PVRT); a malformed table leaves none.
+    case SBIG('PVRT'):
+      GetClassID(in);
+      desc->xPortVars.reset(PortReadVarTable(in));
+      break;
     // Port-only marker of a converted Remastered PART (xPortIrnd).
     case SBIG('PIRN'):
       GetClassID(in);
@@ -735,6 +741,11 @@ float CParticleDataFactory::GetReal(CInputStream& in) { return in.ReadFloat(); }
 CIntElement* CParticleDataFactory::GetIntElement(CInputStream& in) {
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  // Port-only VARI: a Remastered particle variable of the system being evaluated (PVRT index).
+  case SBIG('VARI'):
+    return rs_new CIEPortVar(in.ReadLong());
+#endif
   case SBIG('CNST'): {
     return rs_new CIEConstant(GetInt(in));
   }
@@ -835,6 +846,11 @@ CIntElement* CParticleDataFactory::GetIntElement(CInputStream& in) {
 CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  // Port-only VARF: a Remastered particle variable of the system being evaluated (PVRT index).
+  case SBIG('VARF'):
+    return rs_new CREPortVar(in.ReadLong());
+#endif
   case SBIG('CNST'): {
     return rs_new CREConstant(GetReal(in));
   }
@@ -1029,6 +1045,11 @@ CVectorElement* CParticleDataFactory::GetVectorElement(CInputStream& in) {
   CVectorElement* ret;
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  case SBIG('VARV'):
+    ret = rs_new CVEPortVar(in.ReadLong());
+    break;
+#endif
   case SBIG('NONE'):
     ret = nullptr;
     break;
@@ -1354,6 +1375,11 @@ CColorElement* CParticleDataFactory::GetColorElement(CInputStream& in) {
   CColorElement* ret;
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  case SBIG('VARC'):
+    ret = rs_new CCEPortVar(in.ReadLong());
+    break;
+#endif
   case SBIG('CNST'): {
     CElementAllocationChunk* allocationContext = IElement::CElementAllocator::GetCurrentChunk();
     uint initialSize = IElement::CElementAllocator::GetCurrentAllocatedSize();

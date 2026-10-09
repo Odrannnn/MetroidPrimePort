@@ -67,6 +67,10 @@ CParticleSwoosh::CParticleSwoosh(const TToken< CSwooshDescription > desc, const 
 , x208_maxRadius(0.f)
 , x20c_moduColor(0xffffffff) {
   int i = 0;
+#ifdef TARGET_PC
+  xPortVars.Init(x1c_desc->xPortVars.get());
+  CPortVarScope portVarScope(&xPortVars);
+#endif
   CGlobalRandom _(x1c0_rand);
   mSwooshAliveCount++;
 
@@ -145,6 +149,7 @@ const bool CParticleSwoosh::Update(double dt) {
     return false;
   }
   dt = fxScope.dt;
+  CPortVarScope portVarScope(&xPortVars);
 #endif
   if (!IsLargeEnough()) {
     return false;
@@ -354,6 +359,7 @@ void CParticleSwoosh::Render() {
   const CVector3f portGlobalTranslation = xa4_globalTranslation;
   const CTransform4f portGlobalOrientation = xb0_globalOrientation;
   const bool portPresenting = PortBeginPresent();
+  CPortVarScope portVarScope(&xPortVars);
 #endif
   if (x1b4_LENG >= 2 && x1ac_particleCount > 1) {
     CStopwatch timer;

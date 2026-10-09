@@ -198,7 +198,14 @@ Type TypeOfLetter(char letter) {
 }
 
 using port::AppendBE32;
+using port::ReadLE16;
 using port::ReadLE32;
+
+float FloatFromBits(uint32_t bits) {
+  float value;
+  std::memcpy(&value, &bits, 4);
+  return value;
+}
 
 uint32_t FloatBits(float value) {
   uint32_t bits;
@@ -696,6 +703,18 @@ bool ParseMati(const std::vector<uint8_t>& d, Mati& out) {
 // [I] the default taken as repeat.
 uint32_t WrapOf(int32_t wrap) { return wrap == 0 ? 0 : wrap == 2 ? 2 : 1; }
 
+// PVAR variable kinds, in the table's own order (reals, ints, colours, vectors, rotations).
+// The numbers are what PVRT stores (EPortVarType).
+struct PvarEntry {
+  EffectGuid guid;
+  uint32_t type;
+  float def[4];
+};
+
+uint32_t VarTypeOf(uint32_t fourcc) {
+  return fourcc == F("VARF") ? 0 : fourcc == F("VARI") ? 1 : fourcc == F("VARC") ? 2 : 3;
+}
+
 class Writer {
 public:
   Writer(const uint8_t* data, const EffectConvertIO& io) : m_data(data), m_io(io) {}
@@ -855,6 +874,26 @@ public:
     if (value.args.size() == 2 && IsParameterRead(value.fourcc)) {
       m_approximated.push_back(EffectFourCCString(value.fourcc) + " taken as its default");
       return Element(value.args[1], type, out, why);
+    }
+    // VARF/VARI/VARV/VARC(guid): the generator's own variable. Port-only elements, written as
+    // the fourcc and the variable's index in the PVRT table (PVAR guid order).
+    if (value.args.size() == 1 && value.args[0].kind == EffectValue::Kind::Guid) {
+      const bool ours = (value.fourcc == F("VARF") && type == Type::Real) ||
+                        (value.fourcc == F("VARI") && type == Type::Int) ||
+                        (value.fourcc == F("VARV") && type == Type::Vector) ||
+                        (value.fourcc == F("VARC") && type == Type::Color);
+      if (ours) {
+        for (size_t i = 0; i < m_vars.size(); ++i) {
+          if (m_vars[i].guid == value.args[0].guid && m_vars[i].type == VarTypeOf(value.fourcc)) {
+            AppendBE32(out, value.fourcc);
+            AppendBE32(out, uint32_t(i));
+            return true;
+          }
+        }
+        why = EffectFourCCString(value.fourcc) + " " + EffectGuidString(value.args[0].guid) +
+              " is not in the effect's PVAR";
+        return false;
+      }
     }
     const Signatures& elements = ElementsOf(type);
     const auto found = elements.find(value.fourcc);
@@ -1928,6 +1967,62 @@ public:
   }
 
   // One generator, swoosh or electric description, as the retail asset `type`.
+  // PVAR (value.offset = the u16 id count, then 5 u16 per-kind counts, the u16 data size, the
+  // 16-byte ids, then the defaults: real f32, int i32, colour 4 half, vector 3 f32, rotation 4 f32).
+  void ReadVariables(const EffectValue& raw) const {
+    if (raw.size < 14) {
+      return;
+    }
+    const uint8_t* p = m_data + raw.offset;
+    const size_t total = ReadLE16(p);
+    size_t counts[5];
+    for (int i = 0; i < 5; ++i) {
+      counts[i] = ReadLE16(p + 2 + 2 * i);
+    }
+    const size_t dataSize = ReadLE16(p + 12);
+    if (14 + 16 * total + dataSize > raw.size ||
+        counts[0] + counts[1] + counts[2] + counts[3] + counts[4] != total) {
+      return;
+    }
+    const uint8_t* id = p + 14;
+    const uint8_t* data = id + 16 * total;
+    const uint8_t* end = data + dataSize;
+    // kind index in table order -> PVRT type (real 0, int 1, colour 2, vector 3, rotation 4)
+    static constexpr size_t kSizes[5] = {4, 4, 8, 12, 16};
+    for (int kind = 0; kind < 5; ++kind) {
+      for (size_t i = 0; i < counts[kind]; ++i) {
+        if (data + kSizes[kind] > end) {
+          m_vars.clear();
+          return;
+        }
+        PvarEntry var{};
+        std::memcpy(var.guid.data(), id, 16);
+        id += 16;
+        var.type = uint32_t(kind);
+        switch (kind) {
+        case 0:
+          var.def[0] = FloatFromBits(ReadLE32(data));
+          break;
+        case 1:
+          var.def[0] = float(int32_t(ReadLE32(data)));
+          break;
+        case 2:
+          for (int c = 0; c < 4; ++c) {
+            var.def[c] = HalfToFloat(ReadLE16(data + 2 * c));
+          }
+          break;
+        default:
+          for (int c = 0; c < int(kSizes[kind] / 4); ++c) {
+            var.def[c] = FloatFromBits(ReadLE32(data + 4 * c));
+          }
+          break;
+        }
+        data += kSizes[kind];
+        m_vars.push_back(var);
+      }
+    }
+  }
+
   ConvertedPart Generator(const EffectNode& node, uint32_t type) const {
     ConvertedPart result;
     result.id = node.id;
@@ -1952,6 +2047,13 @@ public:
           IsElement(property.value[0], F("CNST")) && property.value[0].args.size() == 1 &&
           property.value[0].args[0].kind == EffectValue::Kind::Word) {
         m_lifetime = int32_t(property.value[0].args[0].word);
+      }
+    }
+    m_vars.clear();
+    for (const EffectProperty& property : node.properties) {
+      if (property.fourcc == F("PVAR") && property.value.size() == 1 &&
+          property.value[0].kind == EffectValue::Kind::Raw) {
+        ReadVariables(property.value[0]);
       }
     }
     bool texture = false;
@@ -2212,6 +2314,19 @@ public:
       AppendBE32(out, F("CNST"));
       AppendBE32(out, 1);
     }
+    if ((part || swoosh) && !m_vars.empty()) {
+      // Port-only: the effect's PVAR table (names, kinds, defaults) for VARF/VARI/VARV/VARC.
+      AppendBE32(out, F("PVRT"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, uint32_t(m_vars.size()));
+      for (const PvarEntry& var : m_vars) {
+        out.insert(out.end(), var.guid.begin(), var.guid.end());
+        AppendBE32(out, var.type);
+        for (float f : var.def) {
+          AppendBE32(out, FloatBits(f));
+        }
+      }
+    }
     if (part || swoosh) {
       // Port-only: nested IRND elements are evaluated once per particle and element, not at frame 0
       // only (xPortIrnd). Marks every converted PART; retail's own PARTs do not have it.
@@ -2242,6 +2357,7 @@ public:
 private:
   const uint8_t* m_data;
   const EffectConvertIO& m_io;
+  mutable std::vector<PvarEntry> m_vars;            // the PVAR of the generator being written
   mutable std::vector<std::string> m_approximated;  // for the generator being written
   mutable int32_t m_lifetime = 0;                   // its constant lifetime in frames, or 0
 };
@@ -2292,6 +2408,11 @@ public:
     if (type == Type::Emitter && fourcc == F("SETR")) {
       uint32_t name;
       return Word(name) && Element(Type::Vector) && Word(name) && Element(Type::Vector);
+    }
+    // Port-only VARF/VARI/VARV/VARC: a PVRT index.
+    if ((fourcc == F("VARF") && type == Type::Real) || (fourcc == F("VARI") && type == Type::Int) ||
+        (fourcc == F("VARV") && type == Type::Vector) || (fourcc == F("VARC") && type == Type::Color)) {
+      return Skip(4);
     }
     const Signatures& elements = ElementsOf(type);
     const auto found = elements.find(fourcc);
@@ -2451,6 +2572,12 @@ public:
     return Word(fourcc) && fourcc == F("CNST") && Skip(4);
   }
 
+  // The port-only PVRT property: CNST, a count, then 36 bytes a variable.
+  bool PortVariables() {
+    uint32_t fourcc, count;
+    return Word(fourcc) && fourcc == F("CNST") && Word(count) && count <= 4096 && Skip(size_t(count) * 36);
+  }
+
   const std::string& Error() const { return m_error; }
 
 private:
@@ -2516,6 +2643,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") || fourcc == F("PFCM"))) ||
                (vfx && fourcc == F("PIRN"))) {
       ok = reader.PortWord();
+    } else if (vfx && fourcc == F("PVRT")) {
+      ok = reader.PortVariables();
     } else if (const auto found = retail.find(fourcc); found == retail.end()) {
       error = "property " + EffectFourCCString(fourcc) + " retail does not read";
       return false;

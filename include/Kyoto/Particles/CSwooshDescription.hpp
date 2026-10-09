@@ -8,6 +8,7 @@ class CRealElement;
 class CUVElement;
 class CVectorElement;
 #ifdef TARGET_PC
+#include "Kyoto/Particles/CPortParticleVars.hpp"
 #include <memory>
 struct CPortVfxData;
 #endif
@@ -49,6 +50,8 @@ public:
   std::unique_ptr< CPortVfxData > xPortVfx;
   // port-only PIRN: a converted Remastered swoosh, whose COLR runs over the live points
   bool xPortIrnd = false;
+  // port-only PVRT: Remastered particle variables (names, types, defaults)
+  std::unique_ptr< CPortVarTable > xPortVars;
 #endif
 };
 
