@@ -27,13 +27,16 @@
 #include "thread.hpp"
 #include "window.hpp"
 
+#include <SDL3/SDL_init.h>
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_messagebox.h>
 #include <SDL3/SDL_surface.h>
 #include <magic_enum.hpp>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 
 #include "system_info.hpp"
@@ -224,13 +227,21 @@ AuroraInfo initialize(int argc, char* argv[], const AuroraConfig& config) noexce
     }
   }
 
-  if (!windowCreated) {
+  // Without a usable GPU (a virtual machine without 3D acceleration, a broken driver), a software
+  // adapter such as llvmpipe or WARP still draws a picture, slowly; the Null backend draws nothing.
+  // So unless CPU adapters are allowed from the start, a second pass takes them before Null.
+  const int passes = config.allowCpuAdapter ? 1 : 2;
+  for (int pass = 0; pass < passes && !windowCreated; ++pass) {
+    const bool allowCpu = config.allowCpuAdapter || pass == 1;
     for (const auto backendType : PreferredBackendOrder) {
+      if (pass + 1 < passes && backendType == BACKEND_NULL) {
+        continue;
+      }
       selectedBackend = backendType;
       if (!window::create_window(selectedBackend)) {
         continue;
       }
-      if (webgpu::initialize(selectedBackend, config.allowCpuAdapter)) {
+      if (webgpu::initialize(selectedBackend, allowCpu)) {
         windowCreated = true;
         break;
       } else {
@@ -240,6 +251,15 @@ AuroraInfo initialize(int argc, char* argv[], const AuroraConfig& config) noexce
   }
 
   AURORA_ASSERT(windowCreated, "Error creating window: {}", SDL_GetError());
+
+  if (webgpu::g_backendType == wgpu::BackendType::Null && config.noGraphicsMessage != nullptr) {
+    Log.error("No graphics device could be started; exiting");
+    // No parent: the window isn't shown yet, and a box owned by a hidden window may not show either.
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, config.appName, config.noGraphicsMessage, nullptr);
+    window::destroy_window();
+    SDL_Quit();
+    std::exit(1);
+  }
 
   // Initialize SDL_Renderer for ImGui when we can't use a Dawn backend
   if (webgpu::g_backendType == wgpu::BackendType::Null) {

@@ -144,6 +144,12 @@ typedef struct {
    * for a custom driver. Null searches the usual places only.
    */
   const char* vulkanLibraryDir;
+
+  /*
+   * When set and only the Null backend started (no GPU and no software adapter), this message is
+   * shown in an error box and the process exits with status 1, instead of running with no picture.
+   */
+  const char* noGraphicsMessage;
 } AuroraConfig;
 
 typedef struct {

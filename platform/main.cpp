@@ -1030,6 +1030,14 @@ int main(int argc, char** argv) {
         .pipelineCacheSeedSize = embeddedSeed.size(),
         // Set below when a custom Vulkan driver (port_gpu_driver.h) is loaded.
         .vulkanLibraryDir = nullptr,
+        // Aurora's Null backend draws nothing: the game would play its sound behind
+        // a black window (issue #33). Scripted runs, which can't answer a box, keep it.
+        .noGraphicsMessage = port::EnvFlag("MP_NO_DISC_DIALOG")
+                                 ? nullptr
+                                 : "No graphics device could be started, so the game can't show a picture.\n\n"
+                                   "Update your graphics driver. In a virtual machine, turn on 3D acceleration "
+                                   "or run the game on the host instead.\n\n"
+                                   "The log file in the user folder has the details.",
     };
 
 #if defined(__ANDROID__)
