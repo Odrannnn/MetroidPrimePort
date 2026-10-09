@@ -1832,6 +1832,14 @@ std::vector< uint8_t > DoorOps(const std::vector< DoorChange >& doors,
   return ops;
 }
 
+bool IsElevatorRoom(uint32_t mrea) {
+  for (const Elevator& elevator : kElevators) {
+    if (elevator.mrea == mrea)
+      return true;
+  }
+  return false;
+}
+
 bool IsDoorDependency(uint32_t id) {
   static const uint32_t kIds[] = {
       // shields, their rims, and the force field's textures

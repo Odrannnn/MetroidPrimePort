@@ -206,6 +206,10 @@ std::vector< uint8_t > DoorOps(const std::vector< DoorChange >& doors,
                                const ScanMaker& scan,
                                std::vector< PlacedShield >* placed = nullptr);
 
+// Whether area `mrea` holds one of the elevators (randomprime's auto-enabled
+// elevators touch only these rooms).
+bool IsElevatorRoom(uint32_t mrea);
+
 // Whether a door type needs this resource. Like a pickup's, it may sit in
 // another world's PAK (plasma doors exist in four worlds only).
 bool IsDoorDependency(uint32_t id);
