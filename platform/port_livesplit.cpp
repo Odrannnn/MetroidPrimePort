@@ -53,6 +53,7 @@ bool InitSockets() {
   return ok;
 }
 const int kSendFlags = 0;
+void NoSigpipe(Socket) {}
 #else
 using Socket = int;
 const Socket kNoSocket = -1;
