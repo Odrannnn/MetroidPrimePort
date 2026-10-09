@@ -8238,12 +8238,31 @@ void DrawRandomizerTab() {
                        sMessage.c_str());
   }
 
+  static constexpr const char* kPlayHelp = "Plays this seed with its own save card. A running Archipelago session "
+                                           "is replaced. Seeds are switched at the title screen.";
+  static constexpr const char* kDeleteHelp = kInlineHelp
+      ? "Delete removes the seed, its progress and its save card (not the seed being played)."
+      : "Deletes the seed, its progress and its save card.";
   ImGui::SeparatorText("Seeds");
   if (sRows.empty()) {
     ImGui::TextDisabled("No seeds yet.");
   } else if (inGame) {
     ImGui::TextDisabled("Quit to the title screen to switch seeds.");
   }
+  if (kInlineHelp && !sRows.empty()) {
+    // Inline help under each button would push the rest of the row off the right edge.
+    ItemHelp(kPlayHelp);
+    ItemHelp(kDeleteHelp);
+  }
+  // Keeps the row's next button on this line only if it fits, else wraps it.
+  const auto sameLineIfFits = [](const char* label) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float width = ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.f;
+    const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    if (ImGui::GetItemRectMax().x + style.ItemSpacing.x + width <= right) {
+      ImGui::SameLine();
+    }
+  };
   bool deleted = false;
   for (const RandoSeedRow& row : sRows) {
     const bool current = !inPlay.empty() && PortAp::SameSoloSeed(inPlay, row.name);
@@ -8253,7 +8272,9 @@ void DrawRandomizerTab() {
     } else {
       ImGui::TextUnformatted(row.name.c_str());
     }
-    ImGui::TextDisabled("%s", row.summary.c_str());
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("%s", row.summary.c_str());
+    ImGui::PopStyleColor();
     ImGui::BeginDisabled(inGame && !current);
     if (ImGui::Button("Play")) {
       std::string error;
@@ -8261,9 +8282,10 @@ void DrawRandomizerTab() {
       sMessage = sMessageError ? error : "Playing seed " + row.name;
     }
     ImGui::EndDisabled();
-    ItemHelp("Plays this seed with its own save card. A running Archipelago session is replaced. "
-             "Seeds are switched at the title screen.");
-    ImGui::SameLine();
+    if (!kInlineHelp) {
+      ItemHelp(kPlayHelp);
+    }
+    sameLineIfFits("Spoiler");
     if (ImGui::Button("Spoiler")) {
       PortRandoGen::Seed seed;
       std::string error;
@@ -8272,7 +8294,7 @@ void DrawRandomizerTab() {
       sSpoilerText = PortRandoGen::Load(PortRandoGen::SeedPath(row.name), seed, error) ? seed.spoiler
                                                                                        : "Could not read: " + error;
     }
-    ImGui::SameLine();
+    sameLineIfFits("Write spoiler file");
     if (ImGui::Button("Write spoiler file")) {
       PortRandoGen::Seed seed;
       std::string error;
@@ -8286,14 +8308,15 @@ void DrawRandomizerTab() {
         sSpoilerNote = out.good() ? "Wrote " + path : "Could not write " + path;
       }
     }
-    ImGui::SameLine();
+    sameLineIfFits("Delete");
     ImGui::BeginDisabled(current);
     if (ImGui::Button("Delete")) {
       ImGui::OpenPopup("Delete seed?");
     }
     ImGui::EndDisabled();
-    ItemHelp(current ? "This seed is being played. Play another seed or disconnect first."
-                     : "Deletes the seed, its progress and its save card.");
+    if (!kInlineHelp) {
+      ItemHelp(current ? "This seed is being played. Play another seed or disconnect first." : kDeleteHelp);
+    }
     if (ImGui::BeginPopupModal("Delete seed?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
       ImGui::Text("Delete seed %s, its progress and its save card?", row.name.c_str());
       ImGui::TextUnformatted("This can't be undone.");
