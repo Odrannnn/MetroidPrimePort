@@ -115,6 +115,20 @@ void CPauseScreen::InitializeFrameGlue() {
   x44_textpane_b->TextSupport().SetFontColor(gpTweakGuiColors->GetPauseItemAmberColor());
   x40_textpane_a->SetColor(CColor(0u));
   x44_textpane_b->SetColor(CColor(0u));
+#ifdef TARGET_PC
+  // A PAL frame labels the buttons with text panes (strings put after 1.00's
+  // by the PAL string remap) instead of 1.00's model.
+  static const char* const kPalLabels[] = {"textpane_nexttext", "textpane_exittext",
+                                           "textpane_backtext"};
+  const CStringTable& pauseStrings = *x14_strgPauseScreen.GetObject();
+  for (int i = 0; i < 3; ++i) {
+    CGuiWidget* label = x34_loadedPauseScreenInstructions->FindWidget(kPalLabels[i]);
+    if (label != nullptr && pauseStrings.GetStringCount() > 100 + i) {
+      static_cast< CGuiTextPane* >(label)->TextSupport().SetText(
+          pauseStrings.GetString(100 + i));
+    }
+  }
+#endif
   CGuiWidget* deco = x34_loadedPauseScreenInstructions->FindWidget("basewidget_deco");
   if (deco != nullptr) {
     deco->SetColor(gpTweakGuiColors->GetPauseItemAmberColor().WithAlphaModulatedBy(0.75f));

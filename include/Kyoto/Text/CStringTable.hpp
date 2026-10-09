@@ -52,6 +52,9 @@ public:
   void PortSetCount(int count);
   // Makes this table the watched STRG strgId (see mPortWatchedId).
   void PortWatch(uint strgId);
+  // Rebuilds the table so string i is old string from[i] in every language;
+  // a negative entry -(k + 1) takes string k of `extra` (same language).
+  void PortRemap(const std::vector< int >& from, const CStringTable* extra);
 #endif
   int GetStringCount() const { return x0_stringCount; }
 };
