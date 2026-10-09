@@ -362,12 +362,12 @@ mp_signed_char(metroid_prime_port)
 add_custom_target(port_build_info
     COMMAND ${CMAKE_COMMAND}
         "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
-        "-DOUTPUT_HEADER=${CMAKE_CURRENT_BINARY_DIR}/generated/port_build_info.h"
+        "-DOUTPUT_SOURCE=${CMAKE_CURRENT_BINARY_DIR}/generated/port_build_info.cpp"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildRevision.cmake"
-    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/generated/port_build_info.h"
+    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/generated/port_build_info.cpp"
     VERBATIM)
 add_dependencies(metroid_prime_port port_build_info)
-target_include_directories(metroid_prime_port PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_sources(metroid_prime_port PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/port_build_info.cpp")
 if(MP_EMBED_RESOURCES)
     # The glyph textures and the pipeline cache seed live inside the executable, so
     # a packaged folder needs no loose copies, and a new executable dropped into an
