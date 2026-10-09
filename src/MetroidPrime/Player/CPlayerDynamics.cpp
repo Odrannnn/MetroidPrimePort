@@ -98,14 +98,11 @@ CVector3f CPlayer::GetDampedClampedVelocityWR() const {
       localVelocity.SetX(CMath::Min(0.f, localVelocity.GetX() + friction));
     }
   }
+  // Only forward speed is capped, as retail, under mouse aim too: sideways
+  // momentum past walking speed (a scan dash whose lock broke mid-air) must
+  // carry (issue #30). Free strafing stays within the cap through its force law.
   const float maxSpeed = gpTweakPlayer->GetPlayerTranslationMaxSpeed(GetSurfaceRestraint());
-  if (PortDebug::MouseAim() && PortDebug::MouseGameplayActive() && x304_orbitState == kOS_NoOrbit) {
-    const auto planar = PortMouse::ClampPlanar({localVelocity.GetX(), localVelocity.GetY()}, maxSpeed);
-    localVelocity.SetX(planar.right);
-    localVelocity.SetY(planar.forward);
-  } else {
-    localVelocity.SetY(CMath::Limit(localVelocity.GetY(), maxSpeed));
-  }
+  localVelocity.SetY(CMath::Limit(localVelocity.GetY(), maxSpeed));
   if (x258_movementState == NPlayer::kMS_OnGround) {
     localVelocity.SetZ(0.f);
   }
@@ -403,10 +400,16 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
   float strafeForce = 0.f;
   if (mouseMovement) {
     const float acceleration = gpTweakPlayer->GetMaxTranslationalAcceleration(GetSurfaceRestraint());
-    strafeForce = PortMouse::AxisForce(strafeInput, GetTransform().TransposeRotate(GetVelocityWR()).GetX(),
-                                      gpTweakPlayer->GetPlayerTranslationMaxSpeed(GetSurfaceRestraint()),
+    const float maxSpeed = gpTweakPlayer->GetPlayerTranslationMaxSpeed(GetSurfaceRestraint());
+    const float sideVelocity = GetTransform().TransposeRotate(GetVelocityWR()).GetX();
+    strafeForce = PortMouse::AxisForce(strafeInput, sideVelocity, maxSpeed,
                                       gpTweakPlayer->GetPlayerTranslationFriction(GetSurfaceRestraint()),
                                       GetMass(), dt, acceleration);
+    // Retail has no sideways force, so strafing the way a dash carries the
+    // player must not brake its momentum back to walking speed.
+    if (CMath::AbsF(sideVelocity) > maxSpeed && sideVelocity * strafeInput > 0.f) {
+      strafeForce = 0.f;
+    }
     const auto force = PortMouse::ClampPlanar({strafeForce, forwardForce}, acceleration);
     strafeForce = force.right;
     forwardForce = force.forward;
