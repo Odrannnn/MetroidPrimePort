@@ -974,9 +974,10 @@ unpacks to a temporary directory instead of mounting.
   the transition flash while the camera eases out, and an unmorph cuts to first
   person behind the transition filter.
 - Toggle Lock-On (Controls > Options and pause Options > Controller, persisted as
-  `lock_on_toggle`, off by default): a press of L latches it held (lock-on,
-  scan, strafe, grapple) and the next press lets go. The latch also lets go by
-  itself when a lock the player had ends (target dead or out of range). Sticky
+  `lock_on_toggle`, off by default): a press of L that locks on (target, scan
+  point, grapple point) latches it held and the next press lets go. With nothing
+  to lock on, L is a plain hold (strafe while held). The latch also lets go by
+  itself when its lock ends (target dead or out of range). Sticky
   Charge (`sticky_charge`, off by default, needs the Charge Beam): holding fire
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while

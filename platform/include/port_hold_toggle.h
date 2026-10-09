@@ -13,10 +13,12 @@ struct Output {
   bool pressed; // the press edge (CFinalInput's P* flags)
 };
 
-// Toggle lock-on: a press latches L as held until the next press, so lock-on,
-// scanning, strafing and the grapple beam work without holding the trigger. The
-// latch also lets go by itself when a lock the player had ends (target killed or
-// out of range), since a latched L would otherwise keep Samus strafing.
+// Toggle lock-on: a press that locks on (or scans, or grapples) latches L as
+// held until the next press, so those work without holding the trigger. A press
+// with nothing to lock on is a plain hold (strafe while held), and only latches
+// if a lock comes during that hold. The latch also lets go by itself when its
+// lock ends (target killed or out of range), since a latched L would otherwise
+// keep Samus strafing.
 class Toggle {
 public:
   // active: gameplay has control and the option applies (unmorphed, input not
@@ -30,6 +32,10 @@ public:
     if (mLatched && mWasLocked && !locked) {
       mLatched = false;
       mSwallow = held; // the finger may still be on the button
+    }
+    if (mPending && held && !pressed && locked) {
+      mPending = false;
+      mLatched = true;
     }
     mWasLocked = mLatched && locked;
     if (mSwallow) {
@@ -46,16 +52,15 @@ public:
       }
       return {true, false};
     }
-    if (pressed) {
-      mLatched = true;
-      return {true, true};
-    }
-    return {false, false};
+    // Not latched: the button passes through, and a press waits for its lock.
+    mPending = held && (pressed || mPending);
+    return {held, pressed};
   }
   void Reset() {
     mLatched = false;
     mSwallow = false;
     mWasLocked = false;
+    mPending = false;
   }
   bool Latched() const { return mLatched; }
 
@@ -63,6 +68,7 @@ private:
   bool mLatched = false;
   bool mSwallow = false; // a press that ended the latch, hidden until released
   bool mWasLocked = false;
+  bool mPending = false; // held since a press, no lock yet
 };
 
 // Sticky charge: taps fire as usual, but letting go of a button held for at

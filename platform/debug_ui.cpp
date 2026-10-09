@@ -6134,8 +6134,9 @@ void DrawControlsOptions() {
   if (ImGui::Checkbox("Toggle Lock-On", &lockOnToggle)) {
     SetLockOnToggle(lockOnToggle);
   }
-  ItemHelp("Press L once to lock on, scan, strafe or grapple, and again to let go. The lock also "
-           "lets go by itself when its target is gone.");
+  ItemHelp("Press L once to lock on, scan or grapple, and again to let go. With nothing to lock "
+           "on, L works as usual (strafe while held). The lock also lets go by itself when its "
+           "target is gone.");
   bool stickyCharge = sStickyCharge;
   if (ImGui::Checkbox("Sticky Charge", &stickyCharge)) {
     SetStickyCharge(stickyCharge);

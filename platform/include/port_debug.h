@@ -390,8 +390,9 @@ void SetLogFile(bool enabled);
 // momentum (capped at walking speed when unmorphing on the ground).
 bool FastMorph();
 void SetFastMorph(bool enabled);
-// Toggle Lock-On: L latches until pressed again (lock-on, scan, strafe,
-// grapple), and a lock that ends lets go by itself. Sticky Charge: letting go
+// Toggle Lock-On: an L press that locks on (target, scan, grapple) latches
+// until pressed again, a press without a lock is a plain hold, and a lock that
+// ends lets go by itself. Sticky Charge: letting go
 // of a long A hold keeps the beam charging until the next press fires it. Both
 // apply only unmorphed, in gameplay (port_hold_toggle.h).
 bool LockOnToggle();

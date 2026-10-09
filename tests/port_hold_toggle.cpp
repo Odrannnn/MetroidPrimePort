@@ -24,36 +24,49 @@ constexpr float kDt = 1.f / 60.f;
 } // namespace
 
 int main() {
-  // Toggle: press latches, release keeps it, the next press lets go and is
-  // hidden until the button is released.
+  // Toggle: a press that locks on latches, release keeps it, the next press lets
+  // go and is hidden until the button is released.
   {
     PortHoldToggle::Toggle t;
     CHECK(Is(t.Update(true, false, false, false), false, false));
     CHECK(Is(t.Update(true, true, true, false), true, true));
-    CHECK(Is(t.Update(true, true, false, false), true, false));
-    CHECK(Is(t.Update(true, false, false, false), true, false));
-    CHECK(Is(t.Update(true, false, false, false), true, false));
-    CHECK(Is(t.Update(true, true, true, false), false, false));
-    CHECK(Is(t.Update(true, true, false, false), false, false));
+    CHECK(Is(t.Update(true, true, false, true), true, false));
+    CHECK(t.Latched());
+    CHECK(Is(t.Update(true, false, false, true), true, false));
+    CHECK(Is(t.Update(true, false, false, true), true, false));
+    CHECK(Is(t.Update(true, true, true, true), false, false));
+    CHECK(Is(t.Update(true, true, false, true), false, false));
     CHECK(Is(t.Update(true, false, false, false), false, false));
     CHECK(!t.Latched());
     // And it can latch again.
     CHECK(Is(t.Update(true, true, true, false), true, true));
+    CHECK(Is(t.Update(true, true, false, true), true, false));
     CHECK(t.Latched());
   }
-  // Toggle: losing a lock the player had releases the latch; strafing without a
-  // lock (never locked) does not.
+  // Toggle: a press with nothing to lock on is a plain hold (strafe), and a lock
+  // that comes later in the same hold latches.
+  {
+    PortHoldToggle::Toggle t;
+    CHECK(Is(t.Update(true, true, true, false), true, true));
+    CHECK(Is(t.Update(true, true, false, false), true, false));
+    CHECK(!t.Latched());
+    CHECK(Is(t.Update(true, false, false, false), false, false));
+    CHECK(Is(t.Update(true, false, false, true), false, false));
+    CHECK(!t.Latched());
+    t.Update(true, true, true, false);
+    t.Update(true, true, false, false);
+    CHECK(Is(t.Update(true, true, false, true), true, false));
+    CHECK(Is(t.Update(true, false, false, true), true, false));
+    CHECK(t.Latched());
+  }
+  // Toggle: losing the lock releases the latch.
   {
     PortHoldToggle::Toggle t;
     t.Update(true, true, true, false);
-    t.Update(true, false, false, true);
+    t.Update(true, true, false, true);
     CHECK(Is(t.Update(true, false, false, true), true, false));
     CHECK(Is(t.Update(true, false, false, false), false, false));
     CHECK(!t.Latched());
-    t.Update(true, true, true, false);
-    t.Update(true, false, false, false);
-    CHECK(Is(t.Update(true, false, false, false), true, false));
-    CHECK(t.Latched());
   }
   // Toggle: lock lost while the finger is still down does not re-latch on that
   // same hold.
@@ -62,7 +75,7 @@ int main() {
     t.Update(true, true, true, false);
     t.Update(true, true, false, true);
     CHECK(Is(t.Update(true, true, false, false), false, false));
-    CHECK(Is(t.Update(true, true, false, false), false, false));
+    CHECK(Is(t.Update(true, true, false, true), false, false));
     CHECK(Is(t.Update(true, false, false, false), false, false));
     CHECK(Is(t.Update(true, true, true, false), true, true));
   }
@@ -70,6 +83,7 @@ int main() {
   {
     PortHoldToggle::Toggle t;
     t.Update(true, true, true, false);
+    t.Update(true, true, false, true);
     CHECK(Is(t.Update(false, true, false, false), true, false));
     CHECK(!t.Latched());
     CHECK(Is(t.Update(true, false, false, false), false, false));
