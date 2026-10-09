@@ -564,7 +564,7 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   }
   // Only the boundary shield, the pickup, the holograms (16-18) and the Phazon3 stone (21) have constants;
   // every other material clears the last one's.
-  GXSetPBRShield(wind || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
+  GXSetPBRShield(wind || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) || (kind > 34.5f && kind < 35.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
   // World up as the shader sees it: view space is right, up, -forward.
   const f32 up[3] = {view.Get20(), view.Get22(), -view.Get21()};
   GXSetPBRMaterial(values, values + 3, values[6], values[7], values + 8, values + 13, up);

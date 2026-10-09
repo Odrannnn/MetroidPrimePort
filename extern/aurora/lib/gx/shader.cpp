@@ -1449,6 +1449,29 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
           pbr_kglow = ubuf.pbr_layer_height.xyz * (pbr_dt * ubuf.pbr_layer.z);
       }})""",
                          base, mapStage[4]);
+    // Kind 35, Remastered's Phazon_Veins_Mat (d61ae63a, the Phazon Beam's veins), permutation 002_0. Constants are
+    // GXSetPBRShield's rows: CCH0 (glow gain, ramp gain, amount scale, vertex alpha weight), ICMC in row 6 and DIFC
+    // in row 7, whose w is the "DisintegrationAmount" variable. Map 5 is TCH2, a mask the amount eats into: m =
+    // clamp(mask + vtx.a CCH0.w - amount CCH0.z (CCH0.w + 2) + 1, 0, 1). What the base alpha squared plus m doesn't
+    // lift over 0.25 through the smoothstep of (1 - m) 9.99999809 is discarded. Map 4 is TCH1, the edge ramp, read at
+    // (1 - m, 0); its colour times m CCH0.y is the glow (times the exposure, as every glow here); ICMC is added with
+    // none. The albedo is the base map times DIFC.rgb.
+    if (config.pbrKind == 35 && mapStage[4] != -1 && mapStage[5] != -1) {
+      kinds += fmt::format(R"""(
+      if (pbr_kind > 34.5 && pbr_kind < 35.5) {{
+          let pbr_vc0 = ubuf.pbr_shield[0];
+          let pbr_vdf = ubuf.pbr_shield[7];
+          let pbr_vm = clamp(sampled{1}.x + pbr_vraw.a * pbr_vc0.w - pbr_vdf.w * pbr_vc0.z * (pbr_vc0.w + 2.0) + 1.0,
+                             0.0, 1.0);
+          let pbr_vs = clamp((1.0 - pbr_vm) * 9.99999809, 0.0, 1.0);
+          if (({0}.a * {0}.a + pbr_vm) * (pbr_vs * pbr_vs * (3.0 - 2.0 * pbr_vs)) < 0.25) {{
+              discard;
+          }}
+          pbr_base = pbr_base * pbr_vdf.rgb;
+          pbr_kglow = textureSampleLevel(tex{2}, tex{2}_samp, vec2f(1.0 - pbr_vm, 0.0), 0.0).rgb * (pbr_vm * pbr_vc0.y);
+      }})""",
+                         base, mapStage[5], underlying(config.tevStages[mapStage[4]].texMapId));
+    }
     // Kind 13, a Metroid's dome (Remastered's c83e6fcd, a matcap shell): map 4 is the matcap,
     // read where the normal map's tilt (pbr_param.z, CCH1.x, scaling the map's xy, which are
     // rescaled by 255/128 as in the shader) turns the view-space normal, at 0.5 + 0.5 xy with
@@ -1781,6 +1804,12 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     if (config.pbrKind == 32 && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
       liquid += R"""(
       pbr_glow += pbr_pramp * pbr_pc0.w;
+      pbr_glow += ubuf.pbr_shield[6].rgb /
+                  select(1.0, ubuf.pbr_tone[0].w, ubuf.pbr_tone[1].x > 0.0 && ubuf.pbr_tone[0].w > 0.0);)""";
+    }
+    // Kind 35's ICMC, with no exposure (undone here where the generic scaling applies).
+    if (config.pbrKind == 35 && mapStage[4] != -1 && mapStage[5] != -1) {
+      liquid += R"""(
       pbr_glow += ubuf.pbr_shield[6].rgb /
                   select(1.0, ubuf.pbr_tone[0].w, ubuf.pbr_tone[1].x > 0.0 && ubuf.pbr_tone[0].w > 0.0);)""";
     }
