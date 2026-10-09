@@ -73,7 +73,9 @@ struct TableText {
 // A copy of the disc's STRG with the English strings Remastered reworded
 // (ConvertText) and a section for each of kTextLanguages it has translations
 // for. False when the table cannot be read or nothing in it changed.
-bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text, std::vector<uint8_t>& out,
-                      int& reworded, int& translated);
+// `checkWording` (a disc other than 1.00, whose tables Remastered's indices
+// don't fit) matches each indexed string by its English instead.
+bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text, bool checkWording,
+                      std::vector<uint8_t>& out, int& reworded, int& translated);
 
 }  // namespace PortRemastered
