@@ -497,6 +497,7 @@ void CmdHelp() {
   Out("items                      the player's inventory");
   Out("visor <combat|xray|scan|thermal|0-3>, beam <power|ice|wave|plasma|0-3>  switch like the touch wheels");
   Out("heal                       refill health");
+  Out("kill <id>                  kill an actor as with a last Power Beam shot (bosses too)");
   Out("god [on|off]               the player takes no damage (no argument: show)");
   Out("memo <text>                show text as a HUD message");
   Out("strg <id> [index]          a string table as the game loads it (mods included)");
@@ -1058,6 +1059,26 @@ void CmdLook(CStateManager& mgr) {
   }
   const CVector3f from = mgr.GetPlayer()->GetTranslation();
   TeleportPlayer(mgr, from, actor->GetTranslation() - from);
+  Finish();
+}
+
+// Deals an actor its remaining health as Power Beam damage, past its
+// vulnerability, so it dies as from a last shot (bosses run their death scripts).
+void CmdKill(CStateManager& mgr) {
+  if (sCmd.args.size() < 2) {
+    return Finish("usage: kill <id>");
+  }
+  CActor* actor = TCastToPtr< CActor >(FindObject(mgr, sCmd.args[1]));
+  if (actor == nullptr) {
+    return Finish("no such actor");
+  }
+  const CHealthInfo* health = actor->GetHealthInfo(mgr);
+  if (health == nullptr) {
+    return Finish("that actor has no health");
+  }
+  const CVector3f dir = actor->GetTransform().GetForward();
+  mgr.ApplyLocalDamage(actor->GetTranslation(), dir, *actor, health->GetHP() + 1.f,
+                       CWeaponMode::Power());
   Finish();
 }
 
@@ -1731,7 +1752,7 @@ bool IsTickCommand(const std::string& name) {
     }
   }
   static const char* const names[] = {"status", "areas", "objs", "obj", "send", "give",
-                                      "take", "items", "heal", "god", "memo", "strg", "language", "tp", "room", "fx", "face", "look", "warp",
+                                      "take", "items", "heal", "kill", "god", "memo", "strg", "language", "tp", "room", "fx", "face", "look", "warp",
                                       "tracker", "enter", "visor", "beam"};
   for (const char* n : names) {
     if (name == n) {
@@ -1762,6 +1783,8 @@ void RunTick(CStateManager& mgr) {
     CmdItems(mgr);
   } else if (name == "heal") {
     CmdHeal(mgr);
+  } else if (name == "kill") {
+    CmdKill(mgr);
   } else if (name == "god") {
     CmdGod();
   } else if (name == "visor") {
