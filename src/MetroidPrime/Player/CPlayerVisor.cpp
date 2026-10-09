@@ -750,9 +750,12 @@ void CPlayerVisor::UpdateScanObjectIndicators(const CStateManager& mgr, float dt
             TEntityList nearList;
             TUniqueId hitId = kInvalidUniqueId;
             CStateManager& smgr = const_cast< CStateManager& >(mgr);
-            smgr.BuildNearList(nearList, camPos, dir, len, kPortScanOccluderFilter, nullptr);
+            // As retail's orbit LOS (CPlayerOrbit.cpp): the target itself is excluded from the
+            // near list and the ray runs the full distance to the orbit position.
+            smgr.BuildNearList(nearList, camPos, dir, len, kPortScanOccluderFilter, actor);
             clear = smgr.RayWorldIntersection(hitId, camPos, dir, len, kPortScanLosFilter, nearList)
-                        .IsInvalid();
+                        .IsInvalid() ||
+                    hitId == target.x0_objId;
           }
           target.xPort_visible = clear;
         }
