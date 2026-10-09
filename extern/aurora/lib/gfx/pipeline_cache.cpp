@@ -1237,6 +1237,24 @@ PipelineRef find_pipeline(ShaderType type, const gx::PipelineConfig& config, New
   return find_pipeline_impl(type, config, std::move(cb));
 }
 
+bool touch_pipeline(PipelineRef ref) {
+  if (g_dropPipelines.exchange(false, std::memory_order_acq_rel)) {
+    apply_pipeline_drop();
+  }
+  if (ref == g_lastPipelineRef) {
+    return true;
+  }
+  std::scoped_lock guard{g_pipelineMutex};
+  if (!g_pipelines.contains(ref)) {
+    if (!g_pendingPipelines.contains(ref)) {
+      return false;
+    }
+    touch_pending_pipeline(ref, PipelinePriority::Normal);
+  }
+  g_lastPipelineRef = ref;
+  return true;
+}
+
 template <typename Config>
 static wgpu::RenderPipeline require_pipeline_impl(ShaderType type, const Config& config, NewPipelineCallback&& cb) {
   const PipelineRef ref =

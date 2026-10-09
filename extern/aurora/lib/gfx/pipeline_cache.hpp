@@ -48,6 +48,11 @@ PipelineRef find_pipeline(ShaderType type, const Config& config, NewPipelineCall
 
 bool get_pipeline(PipelineRef ref, wgpu::RenderPipeline& pipeline);
 
+// Draw thread: whether `ref`, returned by an earlier find_pipeline, is still built or queued (a
+// queued background build moves up, as a lookup would). False after drop_pipelines(), so the
+// caller looks the config up again.
+bool touch_pipeline(PipelineRef ref);
+
 // Render thread (custom draw callbacks): the pipeline for `config`, waiting for it if the cache
 // hasn't built it yet (a queued one moves to the front). Null if creation failed.
 template <typename Config>
