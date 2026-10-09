@@ -323,6 +323,11 @@ void CInGameGuiManager::PortDrawScanZoomReticles(const CStateManager& mgr) const
   x30_playerVisor->PortDrawScanOverlay(mgr, targeting);
 }
 
+bool CInGameGuiManager::PortPlayerVisorDrawn(const CStateManager& mgr) const {
+  return x3c_pauseScreenBlur->IsGameDraw() && !mgr.GetCameraManager()->IsInCinematicCamera() &&
+         IsInOrTransitioningToOrFromState(kIGGS_InGame) && x1f0_enablePlayerVisor != 0;
+}
+
 void CInGameGuiManager::Draw(const CStateManager& mgr) const {
   if (!GetIsGameDraw()) {
     gpRender->SetRequestRGBA6(true);

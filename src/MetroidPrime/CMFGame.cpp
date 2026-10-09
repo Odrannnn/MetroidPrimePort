@@ -305,6 +305,7 @@ void CMFGame::Draw() const {
     int scanHeight = 0;
     const CPlayerVisor* scanVisor = mGuiManager->PortPlayerVisor();
     if (scanVisor != nullptr && !PortFreeCam::Active() &&
+        mGuiManager->PortPlayerVisorDrawn(*mStateManager) &&
         scanVisor->PortScanZoom(*mStateManager, scanZoom, scanWidth, scanHeight)) {
       CStateManager::sPortViewZoom = scanZoom;
       mStateManager->DrawWorld();

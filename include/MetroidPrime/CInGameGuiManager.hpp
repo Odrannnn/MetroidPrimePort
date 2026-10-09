@@ -72,6 +72,8 @@ public:
   const CPlayerVisor* PortPlayerVisor() const { return x30_playerVisor.get(); }
   // The target reticles a scan window's screen copy holds, for the zoomed pass that replaces it.
   void PortDrawScanZoomReticles(const CStateManager& mgr) const;
+  // Whether Draw would draw the player visor this frame (same prerequisites).
+  bool PortPlayerVisorDrawn(const CStateManager& mgr) const;
   bool IsInSaveUI() const { return x1f8_27_inSaveUI; }
 
 private:
