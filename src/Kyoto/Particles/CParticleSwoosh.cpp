@@ -1480,6 +1480,8 @@ const CVector3f& CParticleSwoosh::GetGlobalTranslation() const { return xa4_glob
 const CVector3f& CParticleSwoosh::GetTranslation() const { return x38_translation; }
 
 #ifdef TARGET_PC
+bool CParticleSwoosh::PortIsRemastered() const { return x1c_desc->xPortIrnd; }
+
 uint CParticleSwoosh::PortFxAsset() const { return CToken(x1c_desc).GetTag().GetId(); }
 
 void CParticleSwoosh::PortFxDescribe(PortFxInfo& out) const {
