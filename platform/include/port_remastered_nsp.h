@@ -1,15 +1,18 @@
 #pragma once
 
-// Reads the RomFS of Metroid Prime Remastered straight out of the user's .nsp.
+// Reads the RomFS of Metroid Prime Remastered straight out of the user's .nsp
+// or gamecard image (.xci).
 //
-// Nothing is extracted: Open() parses the PFS0, the ticket, the NCA header and
-// the RomFS tables (a few MB), and Read() decrypts only the ranges asked for.
-// The keys come from the user's own key file (hactool's "name = hex" format);
-// the port embeds none and never prints them; only the one content key that
-// Read() needs stays in memory, and it is wiped on Close().
+// Nothing is extracted: Open() parses the PFS0 (or the gamecard's HFS0
+// partitions), the ticket, the NCA header and the RomFS tables (a few MB), and
+// Read() decrypts only the ranges asked for. The keys come from the user's own
+// key file (hactool's "name = hex" format); the port embeds none and never
+// prints them; only the one content key that Read() needs stays in memory, and
+// it is wiped on Close().
 //
-// Supported: NCA3, title-key crypto with a common ticket, an AES-CTR section
-// holding a RomFS behind IVFC. Anything else (BKTR patch sections, NCA0/NCA2,
+// Supported: NCA3, title-key crypto with a common ticket or key-area crypto
+// (gamecards, and .nsp files converted from them), an AES-CTR section holding
+// a RomFS behind IVFC. Anything else (BKTR patch sections, NCA0/NCA2,
 // compressed NCZ, personalized tickets) fails Open() with a clear error.
 // Hashes are not verified.
 

@@ -616,8 +616,11 @@ game back.
 
 The port can build a model mod from your own copy of Metroid Prime Remastered;
 nothing of it ships. F1 > Remastered > Import > "Metroid Prime Remastered models"
-takes the game's `.nsp` and your console's key file (`~/.switch/prod.keys` is
-filled in when it exists). The panel remembers both files once they are picked
+takes the game's `.nsp` or gamecard dump (`.xci`) and your console's key file
+(`prod.keys`, not `title.keys`; `~/.switch/prod.keys` is filled in when it
+exists). An `.xci`, or an `.nsp` converted from one, needs the key file's
+`key_area_key_application_XX` keys; compressed `.nsz`/`.xcz` must be
+decompressed first. The panel remembers both files once they are picked
 or used, as `remastered_nsp` and `remastered_keys` in the settings file (on
 Android, the picked documents). Import converts in the background while the game
 runs, on all but two cores. The result is staged in `mods/.remastered-models.importing`
@@ -626,7 +629,7 @@ import ends (a mod reload then loads it; the pending install also applies at
 the next start). A cancelled or interrupted import leaves nothing behind.
 Once it has ended, "Load it again" in the same panel reloads the mods by hand.
 From a terminal,
-`metroid_prime_port --import-remastered <image.nsp> [key file]` does the same
+`metroid_prime_port --import-remastered <image.nsp|image.xci> [key file]` does the same
 on every core without starting the game and installs at once (the disc comes
 from `MP_DISC`, the remembered path, or a copy beside the executable).
 
@@ -749,7 +752,7 @@ seconds on 16 threads, 2.3 GB of memory at the peak, 1.1 GB on disk (half of it
 the room environments).
 
 On Android the panel has two buttons that open the system's file picker, one
-for the `.nsp` and one for the key file. Neither file is copied: the import
+for the `.nsp`/`.xci` and one for the key file. Neither file is copied: the import
 reads them where they are. It runs on two threads there to keep its memory
 down. Not yet run on a device.
 

@@ -4408,7 +4408,7 @@ void OpenRemasteredDialog(int which) {
       sRemasteredPicks.emplace_back(int(reinterpret_cast< intptr_t >(userdata)), files[0]);
     }
   };
-  static const SDL_DialogFileFilter imageFilters[] = {{"Switch images (.nsp)", "nsp"}, {"All files", "*"}};
+  static const SDL_DialogFileFilter imageFilters[] = {{"Switch images (.nsp, .xci)", "nsp;xci"}, {"All files", "*"}};
   static const SDL_DialogFileFilter keyFilters[] = {{"Key files (.keys)", "keys"}, {"All files", "*"}};
   SDL_ShowOpenFileDialog(done, reinterpret_cast< void* >(static_cast< intptr_t >(which)), window,
                          which == 0 ? imageFilters : keyFilters, 2, nullptr, false);
@@ -4886,7 +4886,7 @@ void DrawRemasteredImport() {
   }
   const PortRemastered::ImportState state = PortRemastered::ImportStatus();
   ImGui::TextWrapped("Converts the models of your own copy of Metroid Prime Remastered into a mod. It needs the "
-                     "game's .nsp and your console's key file (prod.keys), and takes a few minutes.");
+                     "game's .nsp or .xci and your console's key file (prod.keys), and takes a few minutes.");
   if (PortMods::StaleRemasteredImport() != nullptr) {
     ImGui::TextColored(ThemeWarnColor(),
                        "Re-import needed: the installed models were made by an older version.");
@@ -4898,11 +4898,11 @@ void DrawRemasteredImport() {
   ImGui::BeginDisabled(state.running);
 #if defined(__ANDROID__)
   // No path to type here: the files are picked, and shown by name.
-  if (ImGui::Button("Pick the .nsp...##remastered-image")) {
+  if (ImGui::Button("Pick the .nsp/.xci...##remastered-image")) {
     OpenRemasteredDialog(0);
   }
   ImGui::SameLine();
-  ImGui::TextUnformatted(sPickNames[0].empty() ? "Metroid Prime Remastered .nsp" : sPickNames[0].c_str());
+  ImGui::TextUnformatted(sPickNames[0].empty() ? "Metroid Prime Remastered .nsp or .xci" : sPickNames[0].c_str());
   if (ImGui::Button("Pick the keys...##remastered-keys")) {
     OpenRemasteredDialog(1);
   }
@@ -4913,7 +4913,7 @@ void DrawRemasteredImport() {
   ImGui::PopStyleColor();
 #else
   ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
-  ImGui::InputTextWithHint("##remastered-image", "Metroid Prime Remastered .nsp", sImage, sizeof(sImage));
+  ImGui::InputTextWithHint("##remastered-image", "Metroid Prime Remastered .nsp or .xci", sImage, sizeof(sImage));
   ImGui::SameLine();
   if (ImGui::Button("Browse...##remastered-image")) {
     OpenRemasteredDialog(0);

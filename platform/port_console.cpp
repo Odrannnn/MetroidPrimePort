@@ -1958,7 +1958,7 @@ void RunFrame() {
     Out("%s", PortSaveState::LastMessage().c_str());
     Finish();
   } else if (name == "remastered") {
-    // remastered [start <image.nsp> [key file] | cancel]: the import of
+    // remastered [start <image.nsp|xci> [key file] | cancel]: the import of
     // port_remastered_import.h, and how far it is.
     const std::string verb = sCmd.args.size() > 1 ? Lower(sCmd.args[1]) : "";
     if (verb == "start" && sCmd.args.size() > 2) {
@@ -1969,7 +1969,7 @@ void RunFrame() {
     } else if (verb == "cancel") {
       PortRemastered::CancelImport();
     } else if (!verb.empty()) {
-      return Finish("usage: remastered [start <image.nsp> [key file] | cancel]");
+      return Finish("usage: remastered [start <image.nsp|xci> [key file] | cancel]");
     }
     const PortRemastered::ImportState state = PortRemastered::ImportStatus();
     Out("%s %d/%d failed %d: %s",

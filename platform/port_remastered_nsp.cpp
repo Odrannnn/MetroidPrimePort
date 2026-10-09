@@ -1,4 +1,4 @@
-// Reads the RomFS of a Switch title straight out of the user's .nsp with the
+// Reads the RomFS of a Switch title straight out of the user's .nsp or .xci with the
 // user's own key file (port_remastered_nsp.h). The container layout and key
 // derivation follow hactool (ISC licence), which is the reference for both.
 
@@ -112,16 +112,26 @@ struct Wipe {
   ~Wipe() { OPENSSL_cleanse(data, size); }
 };
 
-// Only the keys this title needs: the header key and one title KEK per master
-// key generation. Parsing keeps nothing else from the file.
+// The NCA header's key-area-key index: which family of keys wraps its key area.
+const char* const kKeyAreaNames[3] = {"key_area_key_application_", "key_area_key_ocean_", "key_area_key_system_"};
+
+// Only the keys this title needs: the header key, and per master key
+// generation a title KEK (eShop titles) and the key area keys (gamecard ones).
+// Parsing keeps nothing else from the file.
 struct KeySet {
   uint8_t headerKey[32] = {};
   bool hasHeader = false;
   std::map<std::string, std::vector<uint8_t>> titleKeks;
+  std::map<std::string, std::vector<uint8_t>> keyAreaKeys[3];
   ~KeySet() {
     OPENSSL_cleanse(headerKey, sizeof(headerKey));
     for (auto& entry : titleKeks) {
       OPENSSL_cleanse(entry.second.data(), entry.second.size());
+    }
+    for (auto& family : keyAreaKeys) {
+      for (auto& entry : family) {
+        OPENSSL_cleanse(entry.second.data(), entry.second.size());
+      }
     }
   }
 };
@@ -138,23 +148,45 @@ bool LoadKeys(const std::string& path, KeySet& keys, std::string& error) {
     text.resize(file.ReadSome(0, text.data(), text.size()));
   }
   Wipe wipe{text.data(), text.size()};
+  // A key file re-saved as UTF-16 (some Windows editors do) has a NUL after or
+  // before every character; the names and hex digits are ASCII, so dropping
+  // the NULs gives the text back.
+  if (text.find('\0') != std::string::npos) {
+    text.erase(std::remove(text.begin(), text.end(), '\0'), text.end());
+  }
   std::istringstream f(text);
   std::string line;
+  // Lines named by 32 hex digits are rights id = title key: a title.keys file.
+  bool sawTitleKeys = false;
   while (std::getline(f, line)) {
     size_t eq = line.find('=');
     if (eq == std::string::npos) {
       continue;
     }
+    // Only name characters are kept, which also drops spaces and byte order marks.
     std::string name;
     for (size_t i = 0; i < eq; ++i) {
       char c = line[i];
-      if (c != ' ' && c != '\t' && c != '\r') {
-        name.push_back(char(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c));
+      if (c >= 'A' && c <= 'Z') {
+        c = char(c - 'A' + 'a');
+      }
+      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+        name.push_back(c);
       }
     }
     bool wantHeader = name == "header_key";
     bool wantKek = name.rfind("titlekek_", 0) == 0 && name.size() == 11;
-    if (!wantHeader && !wantKek) {
+    int keyArea = -1;
+    for (int i = 0; i < 3; ++i) {
+      const size_t prefix = std::strlen(kKeyAreaNames[i]);
+      if (name.size() == prefix + 2 && name.compare(0, prefix, kKeyAreaNames[i]) == 0) {
+        keyArea = i;
+      }
+    }
+    if (name.size() == 32 && std::all_of(name.begin(), name.end(), [](char c) { return HexDigit(c) >= 0; })) {
+      sawTitleKeys = true;
+    }
+    if (!wantHeader && !wantKek && keyArea < 0) {
       continue;
     }
     std::vector<uint8_t> value;
@@ -176,14 +208,103 @@ bool LoadKeys(const std::string& path, KeySet& keys, std::string& error) {
       keys.hasHeader = true;
     } else if (wantKek && value.size() == 16) {
       keys.titleKeks[name.substr(9)] = value;
+    } else if (keyArea >= 0 && value.size() == 16) {
+      keys.keyAreaKeys[keyArea][name.substr(name.size() - 2)] = value;
     }
     OPENSSL_cleanse(value.data(), value.size());
   }
   if (!keys.hasHeader) {
-    error = "key file has no valid header_key";
+    error = sawTitleKeys ? "this is a title.keys file; pick prod.keys (the one with header_key) instead"
+                         : "key file has no valid header_key (pick your console's prod.keys)";
     return false;
   }
   return true;
+}
+
+struct PackedFile {
+  std::string name;
+  uint64_t offset; // absolute, in the image
+  uint64_t size;
+};
+
+// PFS0 (an .nsp, 0x18-byte entries) and HFS0 (a gamecard partition, 0x40-byte
+// entries) share a layout: magic, file count, string table size, a reserved
+// word, the entries ({offset, size, name offset, ...}), then the names. Entry
+// offsets count from the end of the names.
+bool ReadFileTable(SourceFile& file, uint64_t at, const char* magic, size_t entrySize, std::vector<PackedFile>& out,
+                   std::string& error) {
+  uint8_t head[16];
+  if (!file.ReadAt(at, head, sizeof(head)) || std::memcmp(head, magic, 4) != 0) {
+    error = std::string("no ") + magic + " header";
+    return false;
+  }
+  uint32_t numFiles = ReadLE32(head + 4);
+  uint32_t stringSize = ReadLE32(head + 8);
+  if (numFiles == 0 || numFiles > kMaxPfs0Files || stringSize > kMaxPfs0Strings) {
+    error = std::string("implausible ") + magic + " header";
+    return false;
+  }
+  size_t tableSize = size_t(numFiles) * entrySize + stringSize;
+  std::vector<uint8_t> table(tableSize);
+  if (!file.ReadAt(at + 16, table.data(), tableSize)) {
+    error = std::string("truncated ") + magic + " table";
+    return false;
+  }
+  const uint64_t dataStart = at + 16 + tableSize;
+  const char* strings = reinterpret_cast<const char*>(table.data() + size_t(numFiles) * entrySize);
+  out.clear();
+  for (uint32_t i = 0; i < numFiles; ++i) {
+    const uint8_t* e = table.data() + size_t(i) * entrySize;
+    uint32_t nameOffset = ReadLE32(e + 16);
+    if (nameOffset >= stringSize) {
+      error = std::string("bad ") + magic + " name offset";
+      return false;
+    }
+    size_t len = strnlen(strings + nameOffset, stringSize - nameOffset);
+    out.push_back({std::string(strings + nameOffset, len), dataStart + ReadLE64(e), ReadLE64(e + 8)});
+  }
+  return true;
+}
+
+// The files of a gamecard image's secure partition, where the game's NCAs are.
+// A plain dump starts with the card header ("HEAD" at 0x100); some dumpers put
+// the card's 0x1000-byte key area in front of it, which shifts everything.
+bool ReadXciSecure(SourceFile& file, std::vector<PackedFile>& out, std::string& error) {
+  for (uint64_t base : {uint64_t(0), uint64_t(0x1000)}) {
+    uint8_t head[0x200];
+    if (!file.ReadAt(base, head, sizeof(head)) || std::memcmp(head + 0x100, "HEAD", 4) != 0) {
+      continue;
+    }
+    std::vector<PackedFile> root;
+    if (!ReadFileTable(file, base + ReadLE64(head + 0x130), "HFS0", 0x40, root, error)) {
+      error = "gamecard root partition: " + error;
+      return false;
+    }
+    for (const PackedFile& partition : root) {
+      if (partition.name == "secure") {
+        if (!ReadFileTable(file, partition.offset, "HFS0", 0x40, out, error)) {
+          error = "gamecard secure partition: " + error;
+          return false;
+        }
+        return true;
+      }
+    }
+    error = "the .xci has no secure partition";
+    return false;
+  }
+  error = "not an .nsp or .xci (no PFS0 or gamecard header)";
+  return false;
+}
+
+// Whether the NCA's RomFS is a BKTR patch (an update) rather than a whole RomFS.
+bool HasPatchRomfs(const uint8_t* hdr) {
+  for (int i = 0; i < 4; ++i) {
+    const uint8_t* fs = hdr + 0x400 + i * 0x200;
+    if (ReadLE32(hdr + 0x240 + i * 0x10) != 0 && fs[2] == 0 && fs[3] == 3 && fs[4] == 4) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Nintendo's XTS sector tweak is the sector number big-endian, where the
@@ -264,117 +385,69 @@ bool Nsp::Open(const std::string& nspPath, const std::string& keysPath, std::str
     return false;
   }
 
-  // --- PFS0: the .nsp container ---------------------------------------------
-  uint8_t pfsHeader[16];
-  if (!m_file.ReadAt(0, pfsHeader, sizeof(pfsHeader)) || std::memcmp(pfsHeader, "PFS0", 4) != 0) {
-    error = "not an .nsp (no PFS0 header)";
+  // --- The container: an .nsp (PFS0) or a gamecard image (.xci) --------------
+  uint8_t magic[4];
+  if (!m_file.ReadAt(0, magic, sizeof(magic))) {
+    error = "cannot read " + nspPath;
     return false;
   }
-  uint32_t numFiles = ReadLE32(pfsHeader + 4);
-  uint32_t stringSize = ReadLE32(pfsHeader + 8);
-  if (numFiles == 0 || numFiles > kMaxPfs0Files || stringSize > kMaxPfs0Strings) {
-    error = "implausible PFS0 header";
+  std::vector<PackedFile> entries;
+  if (std::memcmp(magic, "PFS0", 4) == 0 ? !ReadFileTable(m_file, 0, "PFS0", 24, entries, error)
+                                         : !ReadXciSecure(m_file, entries, error)) {
     return false;
-  }
-  size_t tableSize = size_t(numFiles) * 24 + stringSize;
-  std::vector<uint8_t> table(tableSize);
-  if (!m_file.ReadAt(16, table.data(), tableSize)) {
-    error = "truncated PFS0 table";
-    return false;
-  }
-  const uint64_t dataStart = 16 + tableSize;
-
-  struct Entry {
-    std::string name;
-    uint64_t offset;
-    uint64_t size;
-  };
-  std::vector<Entry> entries;
-  for (uint32_t i = 0; i < numFiles; ++i) {
-    const uint8_t* e = table.data() + size_t(i) * 24;
-    uint32_t nameOffset = ReadLE32(e + 16);
-    if (nameOffset >= stringSize) {
-      error = "bad PFS0 name offset";
-      return false;
-    }
-    const char* strings = reinterpret_cast<const char*>(table.data() + size_t(numFiles) * 24);
-    size_t len = strnlen(strings + nameOffset, stringSize - nameOffset);
-    entries.push_back({std::string(strings + nameOffset, len), dataStart + ReadLE64(e), ReadLE64(e + 8)});
   }
 
-  // The game is the largest .nca; the small ones are metadata and the icon.
-  const Entry* nca = nullptr;
-  const Entry* ticket = nullptr;
-  for (const Entry& entry : entries) {
+  // The game is the largest program NCA; the small ones are metadata, the icon
+  // and the manual, and a gamecard may also carry an update (a BKTR patch).
+  std::vector<const PackedFile*> ncas;
+  std::vector<const PackedFile*> tickets;
+  for (const PackedFile& entry : entries) {
     auto ends = [&](const char* suffix) {
       size_t n = std::strlen(suffix);
       return entry.name.size() >= n && entry.name.compare(entry.name.size() - n, n, suffix) == 0;
     };
-    if (ends(".nca") && !ends(".cnmt.nca") && (!nca || entry.size > nca->size)) {
-      nca = &entry;
-    } else if (ends(".tik") && !ticket) {
-      ticket = &entry;
+    if (ends(".nca") && !ends(".cnmt.nca")) {
+      ncas.push_back(&entry);
+    } else if (ends(".tik")) {
+      tickets.push_back(&entry);
+    }
+  }
+  if (ncas.empty()) {
+    const bool compressed = std::any_of(entries.begin(), entries.end(), [](const PackedFile& e) {
+      return e.name.size() > 4 && e.name.compare(e.name.size() - 4, 4, ".ncz") == 0;
+    });
+    error = compressed ? "compressed images (.nsz/.xcz) are not supported; decompress it first" : "no .nca in the image";
+    return false;
+  }
+  std::stable_sort(ncas.begin(), ncas.end(), [](const PackedFile* a, const PackedFile* b) { return a->size > b->size; });
+
+  std::vector<uint8_t> hdr(kNcaHeaderSize);
+  const PackedFile* nca = nullptr;
+  std::string firstError;
+  for (const PackedFile* candidate : ncas) {
+    std::string why;
+    if (candidate->size < kNcaHeaderSize || !m_file.ReadAt(candidate->offset, hdr.data(), kNcaHeaderSize)) {
+      why = "cannot read the NCA header";
+    } else if (!DecryptHeader(keys.headerKey, hdr.data(), kNcaHeaderSize)) {
+      why = "header decryption failed";
+    } else if (std::memcmp(hdr.data() + 0x200, "NCA3", 4) != 0) {
+      why = std::memcmp(hdr.data() + 0x200, "NCA2", 4) == 0 || std::memcmp(hdr.data() + 0x200, "NCA0", 4) == 0
+                ? "NCA0/NCA2 is not supported"
+                : "NCA header is not valid; wrong keys?";
+    } else if (hdr[0x205] != 0) {
+      continue; // not a program: control, manual, data
+    } else if (HasPatchRomfs(hdr.data())) {
+      why = "BKTR (patch) section: only a base-game RomFS is supported";
+    } else {
+      nca = candidate;
+      break;
+    }
+    if (firstError.empty()) {
+      firstError = why;
     }
   }
   if (!nca) {
-    error = "no .nca in the .nsp";
-    return false;
-  }
-  if (!ticket) {
-    error = "no .tik in the .nsp (title-key crypto needs the ticket)";
-    return false;
-  }
-  if (nca->size < kNcaHeaderSize) {
-    error = "NCA too small";
-    return false;
-  }
-
-  // --- Ticket -----------------------------------------------------------------
-  uint8_t tik[0x2C0];
-  if (ticket->size < sizeof(tik) || !m_file.ReadAt(ticket->offset, tik, sizeof(tik))) {
-    error = "truncated ticket";
-    return false;
-  }
-  // 0x10004 is RSA-2048 + SHA-256, the layout the offsets below assume.
-  if (ReadLE32(tik) != 0x10004) {
-    error = "unsupported ticket signature type";
-    return false;
-  }
-  if (tik[0x281] != 0) {
-    error = "personalized ticket (the title key is console-encrypted); only common tickets are supported";
-    return false;
-  }
-  Wipe wipeTik{tik, sizeof(tik)};
-
-  // --- NCA header ----------------------------------------------------------------
-  std::vector<uint8_t> hdr(kNcaHeaderSize);
-  if (!m_file.ReadAt(nca->offset, hdr.data(), kNcaHeaderSize)) {
-    error = "cannot read the NCA header";
-    return false;
-  }
-  if (!DecryptHeader(keys.headerKey, hdr.data(), kNcaHeaderSize)) {
-    error = "header decryption failed";
-    return false;
-  }
-  if (std::memcmp(hdr.data() + 0x200, "NCA3", 4) != 0) {
-    if (std::memcmp(hdr.data() + 0x200, "NCA2", 4) == 0 || std::memcmp(hdr.data() + 0x200, "NCA0", 4) == 0) {
-      error = "NCA0/NCA2 is not supported";
-    } else {
-      error = "NCA header is not valid; wrong keys?";
-    }
-    return false;
-  }
-  const uint8_t* rightsId = hdr.data() + 0x230;
-  bool hasRights = false;
-  for (int i = 0; i < 16; ++i) {
-    hasRights = hasRights || rightsId[i] != 0;
-  }
-  if (!hasRights) {
-    error = "NCA has no rights id (key-area crypto is not supported)";
-    return false;
-  }
-  if (std::memcmp(rightsId, tik + 0x2A0, 16) != 0) {
-    error = "the ticket is not for this NCA's rights id";
+    error = firstError.empty() ? "no program NCA in the image" : firstError;
     return false;
   }
 
@@ -384,14 +457,64 @@ bool Nsp::Open(const std::string& nspPath, const std::string& keysPath, std::str
   }
   static const char kHex[] = "0123456789abcdef";
   std::string kekName = std::string(1, kHex[cryptoType >> 4]) + kHex[cryptoType & 15];
-  auto kek = keys.titleKeks.find(kekName);
-  if (kek == keys.titleKeks.end()) {
-    error = "key file lacks the title KEK for master key generation " + kekName;
-    return false;
+
+  const uint8_t* rightsId = hdr.data() + 0x230;
+  bool hasRights = false;
+  for (int i = 0; i < 16; ++i) {
+    hasRights = hasRights || rightsId[i] != 0;
   }
-  if (!DecryptEcb(kek->second.data(), tik + 0x180, m_contentKey)) {
-    error = "title key decryption failed";
-    return false;
+  if (hasRights) {
+    // --- Title-key crypto (eShop): the key is in the ticket ----------------------
+    uint8_t tik[0x2C0];
+    Wipe wipeTik{tik, sizeof(tik)};
+    bool found = false;
+    for (const PackedFile* ticket : tickets) {
+      if (ticket->size >= sizeof(tik) && m_file.ReadAt(ticket->offset, tik, sizeof(tik)) &&
+          std::memcmp(rightsId, tik + 0x2A0, 16) == 0) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      error = tickets.empty() ? "no .tik in the image (title-key crypto needs the ticket)"
+                              : "no ticket for this NCA's rights id";
+      return false;
+    }
+    // 0x10004 is RSA-2048 + SHA-256, the layout the offsets below assume.
+    if (ReadLE32(tik) != 0x10004) {
+      error = "unsupported ticket signature type";
+      return false;
+    }
+    if (tik[0x281] != 0) {
+      error = "personalized ticket (the title key is console-encrypted); only common tickets are supported";
+      return false;
+    }
+    auto kek = keys.titleKeks.find(kekName);
+    if (kek == keys.titleKeks.end()) {
+      error = "key file lacks the title KEK for master key generation " + kekName;
+      return false;
+    }
+    if (!DecryptEcb(kek->second.data(), tik + 0x180, m_contentKey)) {
+      error = "title key decryption failed";
+      return false;
+    }
+  } else {
+    // --- Key-area crypto (gamecards, and .nsp files made from them) ---------------
+    // The header's key area holds four wrapped keys; AES-CTR sections use the third.
+    uint8_t keyIndex = hdr[0x207];
+    if (keyIndex > 2) {
+      error = "unknown NCA key area key index";
+      return false;
+    }
+    auto kak = keys.keyAreaKeys[keyIndex].find(kekName);
+    if (kak == keys.keyAreaKeys[keyIndex].end()) {
+      error = std::string("key file lacks ") + kKeyAreaNames[keyIndex] + kekName;
+      return false;
+    }
+    if (!DecryptEcb(kak->second.data(), hdr.data() + 0x300 + 2 * 16, m_contentKey)) {
+      error = "key area decryption failed";
+      return false;
+    }
   }
 
   // --- The RomFS section -------------------------------------------------------
@@ -600,7 +723,7 @@ bool Nsp::ReadFrom(const Section& section, uint64_t offset, void* out, size_t si
     // CTR is a stream cipher, so only the start has to sit on a 16-byte boundary.
     scratch.resize(head + take);
     if (!m_file.ReadAt(section.base + aligned, scratch.data(), head + take)) {
-      error = "short read from the .nsp";
+      error = "short read from the image";
       return false;
     }
     if (!DecryptCtr(ctx.get(), m_contentKey, section.ctrHigh, section.inNca + aligned, scratch.data(), head + take)) {

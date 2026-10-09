@@ -36,7 +36,7 @@ public final class MetroidPrimeActivity extends SDLActivity {
     // Distinct from SDL's own dialog request codes, which count up from 0.
     private static final int REQUEST_TEXTURE_PACK = 0x7e57;
     private static final int REQUEST_STORAGE = 0x7e58;
-    // The Remastered import's .nsp (+0) and prod.keys (+1).
+    // The Remastered import's .nsp/.xci (+0) and prod.keys (+1).
     private static final int REQUEST_REMASTERED = 0x7e59;
     private TouchControlsView touchControls;
     private final AtomicBoolean texturePackCopying = new AtomicBoolean();
@@ -203,7 +203,7 @@ public final class MetroidPrimeActivity extends SDLActivity {
     }
 
     // Called from the debug overlay, on the SDL thread: picks the Remastered
-    // .nsp (which 0) or prod.keys (which 1). Neither has a MIME type of its own.
+    // .nsp/.xci (which 0) or prod.keys (which 1). Neither has a MIME type of its own.
     public void pickRemasteredFile(int which) {
         runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
