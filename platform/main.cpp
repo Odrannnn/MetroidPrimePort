@@ -1314,6 +1314,7 @@ int main(int argc, char** argv) {
                        PortDebug::SmoothFrames() ? "on" : "off", PortDebug::FrameInterpolation() ? "on" : "off",
                        PortDebug::VsyncEnabled() ? "on" : "off", PortDebug::FrameLimitEnabled() ? "60" : "off",
                        remastered ? "on" : "off");
+        PortDebug::LogSettings();
     }
     // The index that gives solid actors their disc model's collision box reads
     // the base disc, so it belongs to the disc's lifecycle rather than to a

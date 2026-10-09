@@ -95,6 +95,9 @@
 #include <cctype>
 #include <unistd.h>
 #endif
+#if !defined(_WIN32)
+extern char** environ;
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -107,8 +110,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -871,16 +876,9 @@ void LoadSettings() {
   }
 }
 
-void SaveSettings() {
-  if (!sInitialized || !sSettingsDirty) {
-    return;
-  }
-  const std::string path = SettingsFilePath();
-  std::ofstream file(path, std::ios::trunc);
-  if (!file.is_open()) {
-    std::fprintf(stderr, "metroid_prime_port: could not write settings to %s\n", path.c_str());
-    return;
-  }
+// The settings file's text, as written by SaveSettings and copied into the log.
+std::string SettingsText() {
+  std::ostringstream file;
   const char* aspect = sAspectMode == PortDebug::kAspect_16_9  ? "16:9"
                        : sAspectMode == PortDebug::kAspect_Window ? "window"
                                                                   : "4:3";
@@ -1019,6 +1017,69 @@ void SaveSettings() {
     }
     file << '\n';
   }
+  return file.str();
+}
+
+// key=value lines of a settings text, comments skipped.
+std::map< std::string, std::string > SettingsValues(const std::string& text) {
+  std::map< std::string, std::string > values;
+  std::istringstream lines(text);
+  std::string line;
+  while (std::getline(lines, line)) {
+    const size_t separator = line.find('=');
+    if (!line.empty() && line[0] != '#' && separator != std::string::npos) {
+      values[line.substr(0, separator)] = line.substr(separator + 1);
+    }
+  }
+  return values;
+}
+
+// Paths in the log keep only their file name: the folders say nothing about a bug.
+std::string LoggedSettingValue(const std::string& key, const std::string& value) {
+  if (key == "disc_path" || key == "remastered_nsp" || key == "remastered_keys") {
+    const size_t slash = value.find_last_of("/\\");
+    return slash == std::string::npos ? value : value.substr(slash + 1);
+  }
+  return value;
+}
+
+// The settings last copied into the log; SaveSettings logs what changed since.
+std::map< std::string, std::string > sLoggedSettings;
+bool sSettingsLogged = false;
+
+void LogSettingChanges(const std::string& text) {
+  std::map< std::string, std::string > values = SettingsValues(text);
+  if (sSettingsLogged) {
+    for (const auto& [key, value] : values) {
+      const auto old = sLoggedSettings.find(key);
+      const std::string before = old == sLoggedSettings.end() ? "(unset)" : LoggedSettingValue(key, old->second);
+      if (old == sLoggedSettings.end() || old->second != value) {
+        PortLog::Write("port: setting %s: %s -> %s\n", key.c_str(), before.c_str(),
+                       LoggedSettingValue(key, value).c_str());
+      }
+    }
+    for (const auto& [key, value] : sLoggedSettings) {
+      if (values.find(key) == values.end()) {
+        PortLog::Write("port: setting %s: %s -> (unset)\n", key.c_str(), LoggedSettingValue(key, value).c_str());
+      }
+    }
+  }
+  sLoggedSettings = std::move(values);
+}
+
+void SaveSettings() {
+  if (!sInitialized || !sSettingsDirty) {
+    return;
+  }
+  const std::string text = SettingsText();
+  LogSettingChanges(text);
+  const std::string path = SettingsFilePath();
+  std::ofstream file(path, std::ios::trunc);
+  if (!file.is_open()) {
+    std::fprintf(stderr, "metroid_prime_port: could not write settings to %s\n", path.c_str());
+    return;
+  }
+  file << text;
   file.flush();
   std::fprintf(stderr, "metroid_prime_port: saved settings to %s\n", path.c_str());
   sSettingsDirty = false;
@@ -3398,6 +3459,42 @@ bool TakeTouchEditRequested() { return sTouchEditRequested.exchange(false, std::
 void SaveSettingsNow() {
   EnsureInitialized();
   SaveSettings();
+}
+
+void LogSettings() {
+  EnsureInitialized();
+  LogSettingChanges(SettingsText());
+  sSettingsLogged = true;
+  // Wrapped into lines of a readable length; keys in alphabetical order.
+  std::string line;
+  const auto flush = [&line] {
+    if (!line.empty()) {
+      PortLog::Write("port: settings:%s\n", line.c_str());
+      line.clear();
+    }
+  };
+  for (const auto& [key, value] : sLoggedSettings) {
+    const std::string entry = " " + key + "=" + LoggedSettingValue(key, value);
+    if (line.size() + entry.size() > 160) {
+      flush();
+    }
+    line += entry;
+  }
+  flush();
+  // MP_* variables override the file for one run (already in the values above).
+#if defined(_WIN32)
+  char** env = _environ;
+#else
+  char** env = environ;
+#endif
+  for (; env != nullptr && *env != nullptr; ++env) {
+    if (std::strncmp(*env, "MP_", 3) == 0) {
+      PortLog::Write("port: env: %s\n", *env);
+    }
+  }
+  if (sOriginalExperience) {
+    PortLog::Write("port: original experience on: the getters return retail values, not the ones above\n");
+  }
 }
 
 // Set while the disc is mounted, before the first frame.
@@ -8463,6 +8560,13 @@ void DrawUI() {
     SaveSettings();
   }
   if (!sVisible) {
+    // Changes from the pause menu or the console are saved at exit; log them when
+    // they're made, at most once a second.
+    static auto sLastChangeLog = std::chrono::steady_clock::now();
+    if (sSettingsDirty && sSettingsLogged && std::chrono::steady_clock::now() - sLastChangeLog > std::chrono::seconds(1)) {
+      sLastChangeLog = std::chrono::steady_clock::now();
+      LogSettingChanges(SettingsText());
+    }
     UpdateMenuSounds(false);
     sTouchScroll = TouchScroll{};
     if (sGalleryOpen) {

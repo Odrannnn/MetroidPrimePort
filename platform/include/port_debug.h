@@ -555,6 +555,9 @@ bool Visible();
 // Writes the settings file now instead of waiting for the next overlay frame,
 // so a disc chosen during startup is remembered even if no frame is drawn yet.
 void SaveSettingsNow();
+// Copies every setting and any MP_* variable into the log; settings changed
+// later in the session are logged as they're saved.
+void LogSettings();
 // The last session ended because a read of the disc image failed: the overlay
 // shows a red alert for a while once the game runs.
 void NoteDiscReadFailedLastSession();
