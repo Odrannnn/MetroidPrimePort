@@ -1025,8 +1025,9 @@ unpacks to a temporary directory instead of mounting.
   profile, including saved profiles. Actions are grouped (game buttons,
   move and aim, beams, visors, Morph Ball, port, layers) with the GameCube button's game function
   beside it; default inputs are greyed out. Click an input to edit it, or **+** to open a new
-  binding editor beneath that action. The action is fixed to the row: use **Record**, then
-  **Save** (or **Cancel**). Record accepts keyboard, mouse or controller input; repeated identical
+  binding editor beneath that action and start recording. The action is fixed to the row:
+  press an input and release it, then **Save** (or **Cancel**); **Record** captures again.
+  Record accepts keyboard, mouse or controller input; repeated identical
   mappings are ignored. Editing a default makes it yours, and "Revert" gives the default back. Keyboard &
   mouse, Touch and Controllers are the Default profile restricted to that family of input;
   a kind or model is its own profile on top. "Reset..." restores a preset (after a confirmation).

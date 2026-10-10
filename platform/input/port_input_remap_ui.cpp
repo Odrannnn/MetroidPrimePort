@@ -1154,9 +1154,10 @@ void DrawTable(const SViews& views, bool editorDrawn) {
       ImGui::TableNextColumn();
       if (ImGui::SmallButton("+")) {
         BeginEdit(kEditNew, Binding{action}, Family::Keyboard);
+        StartCapture();
       }
-      ImGui::SetItemTooltip("Add a binding for this action. Use Record to capture any key, mouse button or "
-                            "controller input, then Save.");
+      ImGui::SetItemTooltip("Add a binding for this action and start recording any key, mouse button or "
+                            "controller input. Release it, then Save.");
       if (overridden != 0) {
         ImGui::SameLine();
         if (ImGui::SmallButton("Revert")) {
