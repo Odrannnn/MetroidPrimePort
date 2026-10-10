@@ -24,6 +24,37 @@
 #include "port_synthetic_effect.h"
 #endif
 
+#ifdef TARGET_PC
+namespace {
+PortGuid PortBusterGuid(const char* uuid) {
+  // Textual UUID -> bytes_le, as the PVRT stores them (as CMorphBall.cpp's PortBallGuid).
+  u8 raw[16];
+  int n = 0;
+  for (const char* p = uuid; *p != '\0' && n < 16; ++p) {
+    if (*p == '-') {
+      continue;
+    }
+    auto nib = [](char c) { return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10; };
+    raw[n++] = static_cast< u8 >(nib(p[0]) << 4 | nib(p[1]));
+    ++p;
+  }
+  PortGuid g;
+  static const int order[16] = {3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15};
+  for (int i = 0; i < 16; ++i) {
+    g.bytes[i] = raw[order[i]];
+  }
+  return g;
+}
+
+// The distance variable of BusterSwoosh1 / BusterSwoosh2 (CWaveBusterMP1 ctor 0x1025080).
+const PortGuid& PortBusterGuid(int i) {
+  static const PortGuid g[2] = {PortBusterGuid("44874012-58ff-4f3e-b6d3-99b34c1c0ba4"),
+                                PortBusterGuid("bd478bca-850e-4813-8d44-44499a014c13")};
+  return g[i];
+}
+} // namespace
+#endif
+
 static const CVector3f kTargetNodePosition(0.f, -3.f, -1.5f);
 static const CVector3f kSourceNodePosition(0.f, 2.f, 1.5f);
 
@@ -84,6 +115,8 @@ CWaveBuster::CWaveBuster(const TToken< CWeaponDescription >& desc, EWeaponType t
 #endif
 #ifdef TARGET_PC
   PortSetOwnPresentation();
+  xPortBusterVar[0] = x384_busterSwoosh1Gen->PortGetRealHandle(PortBusterGuid(0));
+  xPortBusterVar[1] = x388_busterSwoosh2Gen->PortGetRealHandle(PortBusterGuid(1));
 #endif
   const rstl::vector< CParticleSwoosh::SSwooshData >& swooshes =
       x384_busterSwoosh1Gen->GetSwooshes();
@@ -502,6 +535,15 @@ void CWaveBuster::RenderSwooshes() const {
   xPortSwooshGeneration = gen;
 #else
   const bool advance = true;
+#endif
+#ifdef TARGET_PC
+  {
+    // Remastered binds both swooshes to the distance between the actor and the beam's origin
+    // every update (UpdateSwooshesAndSparks 0x1026dac: |GetTransform().translation - xf@0x3fc.translation|).
+    const float distance = (GetTranslation() - origin).Magnitude();
+    x384_busterSwoosh1Gen->PortBindReal(xPortBusterVar[0], distance);
+    x388_busterSwoosh2Gen->PortBindReal(xPortBusterVar[1], distance);
+  }
 #endif
   float t = 0.f;
   float previousRot1 = swooshes1[swooshes1.size() - 1].mInitialRot;
