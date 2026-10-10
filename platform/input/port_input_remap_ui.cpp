@@ -483,7 +483,7 @@ std::string PadAxisName(const Input& in) {
 }
 
 // Names without the text form's kind prefix, as the device labels them.
-std::string InputName(const Input& in) {
+std::string InputName(const Input& in, bool includeMouseMode = false) {
   const std::string text = PortInput::InputToText(in);
   const size_t at = text.find('@');
   const std::string threshold = at == std::string::npos ? std::string() : " " + text.substr(at + 1) + "%";
@@ -499,7 +499,10 @@ std::string InputName(const Input& in) {
     static constexpr std::pair<const char*, const char*> kWhen[] = {
         {"aim:", " (aiming)"}, {"menu:", " (menus)"}, {"held:", " (held)"}};
     for (const auto& [prefix, suffix] : kWhen) {
-      if (name.starts_with(prefix)) name = name.substr(std::strlen(prefix)) + suffix;
+      if (name.starts_with(prefix)) {
+        name = name.substr(std::strlen(prefix));
+        if (includeMouseMode) name += suffix;
+      }
     }
     break;
   }
@@ -584,7 +587,7 @@ std::string ChipTooltip(const Binding& b) {
   std::string out;
   for (int i = 0; i < b.count; ++i) {
     if (i != 0) out += " + ";
-    out += std::string(IconName(IconOf(b.inputs[size_t(i)].device))) + " " + InputName(b.inputs[size_t(i)]);
+    out += std::string(IconName(IconOf(b.inputs[size_t(i)].device))) + " " + InputName(b.inputs[size_t(i)], true);
   }
   return out;
 }
