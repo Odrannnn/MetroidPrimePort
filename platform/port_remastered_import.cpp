@@ -1506,8 +1506,15 @@ std::vector<EffectPairing> ProjectilePairings(const Remastered& remastered, Reta
     const char* name;
     uint32_t retail;
   };
-  static const Named kNamed[] = {{"powerauxmuzzle", 0x2AED975B}, {"bustermuzzle", 0}, {"busterswoosh1", 0x869B8E14},
-                                 {"busterswoosh2", 0x804E26D9}, {"wave2nd_1", 0x16871871},
+  static const Named kNamed[] = {{"powerauxmuzzle", 0x2AED975B},
+                                 {"bustermuzzle", 0},
+                                 {"busterswoosh1", 0x869B8E14},
+                                 {"busterswoosh2", 0x804E26D9},
+                                 {"slowbluetailswoosh", 0x841ED1D0},
+                                 {"slowbluetailswoosh2", 0x699EA052},
+                                 {"jaggytrail", 0x5E11D659},
+                                 {"spiderelectric", 0x4735D6E1},
+                                 {"wave2nd_1", 0x16871871},
                                  {"wave2nd_2", 0x21D217FC}};
   for (const Named& named : kNamed) {
     ModelUuid id;

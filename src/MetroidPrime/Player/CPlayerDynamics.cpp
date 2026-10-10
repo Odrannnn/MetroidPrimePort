@@ -1108,6 +1108,9 @@ void CPlayer::BombJump(const CVector3f& position, CStateManager& mgr) {
       SetVelocityWR(newVelocity);
       x768_morphball->SetDamageTimer(0.1f);
       x768_morphball->CancelBoosting();
+#ifdef TARGET_PC
+      x768_morphball->PortResetTimeSinceBombJump();
+#endif
       if (x9d0_bombJumpCount > 0) {
         if (x9d0_bombJumpCount > 2) {
           x9d0_bombJumpCount = 0;

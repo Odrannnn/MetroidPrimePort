@@ -42,6 +42,7 @@
 #include "port_debug.h"
 #include "port_model_variant.h"
 #include "port_remastered_ball_light.h"
+#include "port_synthetic_effect.h"
 #include "Kyoto/Math/CPlane.hpp"
 #include "Kyoto/Math/CRelAngle.hpp"
 #include "Kyoto/Math/CTransform4f.hpp"
@@ -432,7 +433,29 @@ CMorphBall::CMorphBall(CPlayer& player, float radius)
   LoadAnimationTokens(rstl::string_l(skSamusBall));
   InitializeWakeEffects();
 #ifdef TARGET_PC
-  PortRemasteredBallLight::Reset();
+  xPortSwooshVarGen[0] = xPortSwooshVarGen[1] = nullptr;
+  xPortGlowVarGen = nullptr;
+  xPortGlowVarIdx = 0;
+  {
+    static const char* const kGlowNames[5] = {
+        "ballinnerglow_power", "ballinnerglow_varia", "ballinnerglow_variawithspiderball",
+        "ballinnerglow_gravity", "ballinnerglow_phazon"};
+    bool all = true;
+    for (const char* name : kGlowNames) {
+      all = all && gpResourceFactory->CanBuild(
+                       SObjectTag('PART', PortRemastered::SyntheticEffectId(name)));
+    }
+    if (all) {
+      for (int i = 0; i < 5; ++i) {
+        TToken< CGenDescription > token = gpSimplePool->GetObj(
+            SObjectTag('PART', PortRemastered::SyntheticEffectId(kGlowNames[i])));
+        xPortGlowSet[i] = rs_new CElementGen(token, CElementGen::kMOT_Normal, CElementGen::kOSF_One);
+      }
+    }
+  }
+  xPortFlashVarGen = nullptr;
+  xPortWaterFactor = 0.f;
+  xPortTimeSinceBombJump = 0.f;
 #endif
 }
 
@@ -1230,6 +1253,9 @@ template class TReservedAverage< CQuaternion, 5 >;
 template class TReservedAverage< CVector3f, 5 >;
 
 void CMorphBall::UpdateBallDynamics(CStateManager& mgr, float dt) {
+#ifdef TARGET_PC
+  xPortTimeSinceBombJump = rstl::min_val(100.f, xPortTimeSinceBombJump + dt);
+#endif
   CVector3f ballContactNormal(0.f, 0.f, 0.f);
   CVector3f ballContactPoint(0.f, 0.f, 0.f);
   CTransform4f ballToWorldXf(CTransform4f::Identity());
@@ -1386,12 +1412,12 @@ void CMorphBall::Update(float dt, CStateManager& mgr) {
 void CMorphBall::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid, CStateManager& mgr) {
   switch (msg) {
   case kSM_Registered:
-    if (x19d0_ballInnerGlowGen.get() != nullptr && x19d0_ballInnerGlowGen->SystemHasLight()) {
+    if (PortGlowGen() != nullptr && PortGlowGen()->SystemHasLight()) {
       x1c10_ballInnerGlowLight = mgr.AllocateUniqueId();
       const int sourceId = x1988_ballInnerGlow.GetTag().GetId();
       mgr.AddObject(rs_new CGameLight(x1c10_ballInnerGlowLight, kInvalidAreaId, false,
                                       rstl::string_l("BallLight"), GetBallToWorld(),
-                                      x0_player.GetUniqueId(), x19d0_ballInnerGlowGen->GetLight(),
+                                      x0_player.GetUniqueId(), PortGlowGen()->GetLight(),
                                       sourceId, 0, 0.f));
     }
     break;
@@ -1461,7 +1487,238 @@ void CMorphBall::StopParticleWakes() {
   }
 }
 
+#ifdef TARGET_PC
+// Remastered's particle variable bindings of the ball (CMorphBallMP1::UpdateEffects, kb
+// topic/particle-variable-bindings). Its tables hold the five original suits (idx 0-4); the
+// port-only suits leave the variables at their defaults.
+namespace {
+PortGuid PortBallGuid(const char* uuid) {
+  // Textual UUID -> bytes_le, as the PVRT stores them.
+  u8 raw[16];
+  int n = 0;
+  for (const char* p = uuid; *p != '\0' && n < 16; ++p) {
+    if (*p == '-') {
+      continue;
+    }
+    auto nib = [](char c) { return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10; };
+    raw[n++] = static_cast< u8 >(nib(p[0]) << 4 | nib(p[1]));
+    ++p;
+  }
+  PortGuid g;
+  static const int order[16] = {3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15};
+  for (int i = 0; i < 16; ++i) {
+    g.bytes[i] = raw[order[i]];
+  }
+  return g;
+}
+
+const PortGuid& PortSwooshVarGuid() {
+  static const PortGuid g = PortBallGuid("8f30e325-09bb-4e64-8359-2127d3b65e75");
+  return g;
+}
+
+const PortGuid& PortFlashColorGuid() {
+  static const PortGuid g = PortBallGuid("256a3183-6c29-4058-be0c-2edcc99ebc25");
+  return g;
+}
+
+// The glow generator's variables per suit, in the slot order IntensityPrimary, LightIntensity,
+// LightRadius, LightInnerRadius, LightInnerAngle, LightOuterAngle. Suits 2-4 share the first three.
+const PortGuid& PortGlowVarGuid(uint suit, int slot) {
+  static const char* const kGuids[5][6] = {
+      {"723297df-8127-4b72-863e-66e539a4dbd2", "96e76d63-4e1f-43a3-8656-1b39ac7a8d91",
+       "fb99334f-7db3-4a15-b22b-b6a5470b99ea", "119c5e85-80ef-477e-a972-75f743fdc08c",
+       "020dab60-3038-4d31-81fd-4cd1e215e6d6", "cb9d9df9-975a-4729-aecb-2bc52def7cf4"},
+      {"534dd796-f123-4733-b3b8-df5f6bc3b85a", "8cd1e310-51b2-45d4-a2d2-4bf3e642e894",
+       "c141076b-aab4-4b09-843c-5650632c1b25", "d183ecaf-ac35-4a04-89d3-13c9d9957547",
+       "842f038a-f6e1-45a0-b009-c35dc5f4abf3", "c7ffed01-49f6-45a9-b686-5f68d64085e5"},
+      {"723297df-8127-4b72-863e-66e539a4dbd2", "96e76d63-4e1f-43a3-8656-1b39ac7a8d91",
+       "fb99334f-7db3-4a15-b22b-b6a5470b99ea", "d9771a86-0bdb-43ca-80d0-4129875282f6",
+       "279c68c0-5004-4b14-bab4-a54ed6200fa1", "ecb7a357-19c1-4cdb-9ca2-f8f4c66d5da3"},
+      {"723297df-8127-4b72-863e-66e539a4dbd2", "96e76d63-4e1f-43a3-8656-1b39ac7a8d91",
+       "fb99334f-7db3-4a15-b22b-b6a5470b99ea", "4cfa5130-4b1a-4fb4-8df7-eb0cddd9d3aa",
+       "65e4e98e-5ffd-4563-ad61-81a53f178f81", "ac3e2c85-40ad-4217-b009-00fdbb57cb43"},
+      {"723297df-8127-4b72-863e-66e539a4dbd2", "96e76d63-4e1f-43a3-8656-1b39ac7a8d91",
+       "fb99334f-7db3-4a15-b22b-b6a5470b99ea", "1b0fc716-944f-47f9-a549-65ff19847542",
+       "31615223-8bd0-4799-9fbc-3faed583c1d3", "7a75e448-5b7d-4907-8bc5-560980ce0a61"},
+  };
+  static PortGuid cache[5][6];
+  static bool init = false;
+  if (!init) {
+    for (int s = 0; s < 5; ++s) {
+      for (int k = 0; k < 6; ++k) {
+        cache[s][k] = PortBallGuid(kGuids[s][k]);
+      }
+    }
+    init = true;
+  }
+  return cache[suit][slot];
+}
+
+// Remastered's rodata (skBallNormalSwooshIntensity 0x1d252d4 ... skInnerGlowBoostedLightOuterAngle
+// 0x1d254b4): per suit { first value, second value } = { dry, in water }.
+constexpr float kSwooshNormal[5] = {1.5f, 1.5f, 1.5f, 1.5f, 1.5f};
+constexpr float kSwooshBoosted[5] = {13.f, 13.f, 13.f, 13.f, 40.f};
+constexpr float kGlowNormal[6][10] = {
+    {15.f, 15.f, 15.f, 15.f, 15.f, 15.f, 15.f, 15.f, 15.f, 15.f},
+    {30.f, 60.f, 30.f, 60.f, 30.f, 60.f, 30.f, 60.f, 30.f, 90.f},
+    {2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f},
+    {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f},
+    {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f},
+    {90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f},
+};
+constexpr float kGlowBoosted[6][10] = {
+    {300.f, 300.f, 600.f, 600.f, 300.f, 300.f, 300.f, 300.f, 300.f, 300.f},
+    {450.f, 450.f, 450.f, 450.f, 450.f, 450.f, 450.f, 450.f, 450.f, 450.f},
+    {2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f, 2.3f},
+    {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f},
+    {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f},
+    {90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f, 90.f},
+};
+} // namespace
+
+void CMorphBall::PortBindSwooshVars() {
+  CParticleSwoosh* gens[2] = {x19b8_slowBlueTailSwooshGen.get(), x19bc_slowBlueTailSwooshGen2.get()};
+  if (x8_ballGlowColorIdx > 4) {
+    return;
+  }
+  // Boost drain only, scaled by the player's speed 25..40.
+  float s = 0.f;
+  if (x1df4_boostDrainTime > 0.f) {
+    s = rstl::min_val(1.f, rstl::max_val(0.f, (x0_player.GetVelocityWR().Magnitude() - 25.f) / 15.f));
+  }
+  const float n = kSwooshNormal[x8_ballGlowColorIdx];
+  const float value = n + (kSwooshBoosted[x8_ballGlowColorIdx] - n) * s;
+  for (int i = 0; i < 2; ++i) {
+    if (gens[i] == nullptr) {
+      continue;
+    }
+    if (xPortSwooshVarGen[i] != gens[i]) {
+      xPortSwooshVarGen[i] = gens[i];
+      xPortSwooshVar[i] = gens[i]->PortGetRealHandle(PortSwooshVarGuid());
+    }
+    gens[i]->PortBindReal(xPortSwooshVar[i], value);
+  }
+}
+
+void CMorphBall::PortUpdateWaterFactor(float dt, const CStateManager& mgr) {
+  const float radius = GetBallRadius();
+  float depth = 0.f;
+  if (x0_player.IsInsideFluid()) {
+    depth = 2.f * radius;
+  } else if (x0_player.IsInFluid()) {
+    if (const CScriptWater* water =
+            TCastToConstPtr< CScriptWater >(mgr.GetObjectById(x0_player.InFluidId()))) {
+      if (water->GetFluidPlane().GetFluidType() == CFluidPlane::kFT_NormalWater) {
+        depth = x0_player.GetDistanceUnderWater();
+      }
+    }
+  }
+  if (depth <= 0.f) {
+    xPortWaterFactor = rstl::min_val(1.f, rstl::max_val(0.f, xPortWaterFactor - 4.f * dt));
+  } else {
+    const float rise = rstl::min_val(1.f, rstl::max_val(0.f, xPortWaterFactor + 2.f * dt));
+    const float target = rstl::min_val(1.f, rstl::max_val(0.f, depth * 0.5f / radius));
+    xPortWaterFactor = rstl::min_val(rise, target);
+  }
+}
+
+void CMorphBall::PortBindGlowVars() {
+  CElementGen* gen = PortGlowGen();
+  if (gen == nullptr || x8_ballGlowColorIdx > 4) {
+    return;
+  }
+  const uint idx = x8_ballGlowColorIdx;
+  if (xPortGlowVarGen != gen || xPortGlowVarIdx != idx) {
+    xPortGlowVarGen = gen;
+    xPortGlowVarIdx = idx;
+    for (int k = 0; k < 6; ++k) {
+      xPortGlowVars[k] = gen->PortGetRealHandle(PortGlowVarGuid(idx, k));
+    }
+  }
+  float boost = 0.f;
+  if (x1df4_boostDrainTime != 0.f) {
+    boost = 1.f - x1df4_boostDrainTime / gpTweakBall->GetBoostBallDrainTime();
+  } else if (x1de8_boostChargeTime != 0.f) {
+    boost = x1de8_boostChargeTime / gpTweakBall->GetBoostBallMaxChargeTime();
+  }
+  for (int k = 0; k < 6; ++k) {
+    const float n0 = kGlowNormal[k][idx * 2];
+    const float n1 = kGlowNormal[k][idx * 2 + 1];
+    const float a = n0 + boost * (kGlowBoosted[k][idx * 2] - n0);
+    const float b = n1 + boost * (kGlowBoosted[k][idx * 2 + 1] - n1);
+    gen->PortBindReal(xPortGlowVars[k], a + xPortWaterFactor * (b - a));
+  }
+}
+
+// Remastered's CMorphBallMP1::Render (0xcea524) draws the hull with a model colour-add: the
+// damage flash (dmg,0,0)*Damaged[idx] plus the boost glow lerp(0, Glow[idx]*Intensity[idx], t).
+// The glow table is stored linear (SRGB_To_Linear of the bytes) in Remastered.
+CModelFlags CMorphBall::PortHullFlashFlags() const {
+  static const float kBoostedHullGlowIntensities[5] = {0.8f, 0.9f, 0.35f, 0.8f, 0.15f};
+  static const float kDamagedHullFlashIntensities[5] = {1.f, 1.f, 1.f, 1.f, 1.f};
+  static const float kBoostedHullGlow[5][3] = {{160.f, 25.f, 25.f},
+                                               {67.f, 159.f, 217.f},
+                                               {60.f, 150.f, 30.f},
+                                               {96.f, 51.f, 255.f},
+                                               {255.f, 60.f, 0.f}};
+  const float damage = x1e44_damageEffect;
+  const float charge = x1de8_boostChargeTime;
+  const float drain = x1df4_boostDrainTime;
+  if (damage <= 0.f && charge <= 0.f && drain <= 0.f) {
+    return CModelFlags::Normal();
+  }
+  const uint idx = rstl::min_val(4u, static_cast< uint >(x8_ballGlowColorIdx));
+  float add[3] = {0.f, 0.f, 0.f};
+  if (damage > 0.f) {
+    add[0] += damage * kDamagedHullFlashIntensities[idx];
+  }
+  if (charge > 0.f || drain > 0.f) {
+    const float t = drain == 0.f ? charge / gpTweakBall->GetBoostBallMaxChargeTime()
+                                 : 1.f - drain / gpTweakBall->GetBoostBallDrainTime();
+    for (int i = 0; i < 3; ++i) {
+      const float c = kBoostedHullGlow[idx][i] / 255.f;
+      const float lin = c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+      add[i] += lin * kBoostedHullGlowIntensities[idx] * t;
+    }
+  }
+  return CModelFlags(CModelFlags::kT_Two, CColor(rstl::min_val(1.f, add[0]), rstl::min_val(1.f, add[1]),
+                                                 rstl::min_val(1.f, add[2]), 1.f));
+}
+
+void CMorphBall::PortBindFlashColor() {
+  CElementGen* gen = x19dc_morphBallTransitionFlashGen.get();
+  if (gen == nullptr) {
+    return;
+  }
+  if (xPortFlashVarGen != gen) {
+    xPortFlashVarGen = gen;
+    xPortFlashVar = gen->PortGetColorHandle(PortFlashColorGuid());
+  }
+  const SColorRgb& c = skBallLightModulationColors[x8_ballGlowColorIdx];
+  const CColor base(c.x0_r / 255.f, c.x1_g / 255.f, c.x2_b / 255.f, 1.f);
+  const CColor black(0.f, 0.f, 0.f, 1.f);
+  const CColor white(1.f, 1.f, 1.f, 1.f);
+  const CPlayer::EPlayerMorphBallState state = x0_player.GetMorphballTransitionState();
+  const float t = rstl::min_val(1.f, rstl::max_val(0.f, x0_player.GetMorphBallTransitionFactor()));
+  CColor value = base;
+  if (state == CPlayer::kMS_Morphing) {
+    if (t < 0.5f) {
+      value = CColor::Lerp(black, base, rstl::min_val(2.f * t, 1.f));
+    }
+  } else if (state == CPlayer::kMS_Unmorphing) {
+    value = CColor::Lerp(base, black, t);
+  } else {
+    value = CColor::Lerp(base, white, x1c34_boostLightFactor);
+  }
+  gen->PortBindColor(xPortFlashVar, value);
+}
+#endif
+
 void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
+#ifdef TARGET_PC
+  PortBindSwooshVars();
+#endif
   const CTransform4f swooshToWorld = GetSwooshToWorld();
   float swooshOffsetX = 0.1f;
   float swooshOffsetZ = 0.65f;
@@ -1541,8 +1798,8 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
     }
   }
 
-  x19d0_ballInnerGlowGen->SetGlobalTranslation(swooshToWorld.GetTranslation());
-  x19d0_ballInnerGlowGen->Update(dt);
+  PortGlowGen()->SetGlobalTranslation(swooshToWorld.GetTranslation());
+  PortGlowGen()->Update(dt);
 
   if (x1de8_boostChargeTime == 0.f && x1df4_boostDrainTime == 0.f) {
     const CColor clear(0);
@@ -1581,6 +1838,16 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
   UpdateMorphBallTransitionFlash(dt);
   UpdateIceBreakEffect(dt);
 
+#ifdef TARGET_PC
+  // As Remastered: a flash with a light is bound its colour; otherwise the glow is bound.
+  if (IsMorphBallTransitionFlashValid() && x19dc_morphBallTransitionFlashGen->SystemHasLight()) {
+    PortBindFlashColor();
+  } else {
+    PortUpdateWaterFactor(dt, mgr);
+    PortBindGlowVars();
+  }
+#endif
+
   if (x1c10_ballInnerGlowLight != kInvalidUniqueId) {
     if (CGameLight* ballLight =
             TCastToPtr< CGameLight >(mgr.ObjectById(x1c10_ballInnerGlowLight))) {
@@ -1594,9 +1861,9 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
       if (IsMorphBallTransitionFlashValid() &&
           x19dc_morphBallTransitionFlashGen->SystemHasLight()) {
         light = x19dc_morphBallTransitionFlashGen->GetLight();
-      } else if (x19d0_ballInnerGlowGen.get() != nullptr &&
-                 x19d0_ballInnerGlowGen->SystemHasLight()) {
-        light = x19d0_ballInnerGlowGen->GetLight();
+      } else if (PortGlowGen() != nullptr &&
+                 PortGlowGen()->SystemHasLight()) {
+        light = PortGlowGen()->GetLight();
 #ifdef TARGET_PC
         innerGlowLight = true;
 #endif
@@ -1639,14 +1906,6 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
           } else if (x1de8_boostChargeTime != 0.f) {
             boost = x1de8_boostChargeTime / gpTweakBall->GetBoostBallMaxChargeTime();
           }
-          bool normalWater = false;
-          if (x0_player.IsInFluid()) {
-            if (const CScriptWater* water =
-                    TCastToConstPtr< CScriptWater >(mgr.GetObjectById(x0_player.InFluidId()))) {
-              normalWater =
-                  water->GetFluidPlane().GetFluidType() == CFluidPlane::kFT_NormalWater;
-            }
-          }
           const uint idx = rstl::min_val< uint >(x8_ballGlowColorIdx, 4);
           const SColorRgb& rgb = skBallLightModulationColors[idx];
           const float srgb[3] = {rgb.x0_r / 255.f, rgb.x1_g / 255.f, rgb.x2_b / 255.f};
@@ -1654,10 +1913,7 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
           in.glowIndex = static_cast< int >(idx);
           in.srgb = srgb;
           in.boost = boost;
-          in.submerged = x0_player.IsInsideFluid();
-          in.inNormalWater = normalWater;
-          in.depthUnderWater = x0_player.GetDistanceUnderWater();
-          in.ballRadius = ballRadius;
+          in.water = xPortWaterFactor;
           in.fade = fade;
           in.dt = dt;
           float color[3];
@@ -2080,6 +2336,11 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
     const float fade = 1.f - x1e44_damageEffect;
     ballFlags = CModelFlags(CModelFlags::kT_One, CColor(1.f, fade, fade, 1.f));
   }
+#ifdef TARGET_PC
+  if (x19b8_slowBlueTailSwooshGen->PortIsRemastered()) {
+    ballFlags = PortHullFlashFlags();
+  }
+#endif
 
   if (x1c1c_rainSplashGen.get() != nullptr && x1c1c_rainSplashGen->IsRaining()) {
     CSkinnedModel::SetPointGeneratorFunc(x1c1c_rainSplashGen.get(), &CMorphBall::PointGenerator);
@@ -2198,14 +2459,14 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
     x1bc8_wakeEffectGens[x1c0c_wakeEffectIdx]->Render();
   }
 
-  x19d0_ballInnerGlowGen->SetModulationColor(GetBallInnerGlowColor(x8_ballGlowColorIdx));
-  if (x19d0_ballInnerGlowGen->GetNumActiveChildParticles() > 0) {
-    CParticleGen* particle = x19d0_ballInnerGlowGen->GetActiveChildParticle(0);
+  PortGlowGen()->SetModulationColor(GetBallInnerGlowColor(x8_ballGlowColorIdx));
+  if (PortGlowGen()->GetNumActiveChildParticles() > 0) {
+    CParticleGen* particle = PortGlowGen()->GetActiveChildParticle(0);
     particle->SetModulationColor(GetBallHullGlowColor(x8_ballGlowColorIdx));
-    if (x19d0_ballInnerGlowGen->GetNumActiveChildParticles() > 1) {
-      particle = x19d0_ballInnerGlowGen->GetActiveChildParticle(1);
+    if (PortGlowGen()->GetNumActiveChildParticles() > 1) {
+      particle = PortGlowGen()->GetActiveChildParticle(1);
 #ifdef TARGET_PC
-      if (x19d0_ballInnerGlowGen->PortIsRemastered()) {
+      if (PortGlowGen()->PortIsRemastered()) {
         const SColorRgb& c = skRemasteredBoostedHullGlowColors[x8_ballGlowColorIdx];
         particle->SetModulationColor(CColor(c.x0_r, c.x1_g, c.x2_b, 0xff));
       } else
@@ -2214,7 +2475,7 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
     }
   }
 
-  x19d0_ballInnerGlowGen->Render();
+  PortGlowGen()->Render();
   x19d4_spiderBallMagnetEffectGen->Render();
   RenderEnergyDrainEffects(mgr);
   if (x19d8_boostBallGlowGen->GetModulationColor().GetColor_u32() != 0) {
@@ -2741,6 +3002,44 @@ void CMorphBall::FluidFXThink(CActor::EFluidState state, CScriptWater& water, CS
   const float flatMoveSpeed = x0_player.x4fc_flatMoveSpeed;
   const CVector3f splashPos(x0_player.GetTranslation().GetX(), x0_player.GetTranslation().GetY(),
                             water.GetTriggerBoundsWR().GetMaxPoint().GetZ());
+#ifdef TARGET_PC
+  // Remastered (CMorphBallMP1::FluidFXThink 0xcecb64; kb func/CMorphBallMP1-fluidfx).
+  if (x19b8_slowBlueTailSwooshGen->PortIsRemastered()) {
+    const float maxVel = x0_player.GetBallMaxVelocity();
+    const float threshold = rstl::min_val(8.f, maxVel - 0.1f);
+    // The 8th CreateSplash argument: no splash particles on lava.
+    const CFluidPlane::EFluidType type = water.GetFluidPlane().GetFluidType();
+    const bool effect = type != CFluidPlane::kFT_Lava && type != CFluidPlane::kFT_ThickLava;
+    CFluidPlaneManager* fluidMgr = mgr.FluidPlaneManager();
+    if (flatMoveSpeed >= threshold &&
+        fluidMgr->GetLastSplashDeltaTime(x0_player.GetUniqueId()) >=
+            0.1f * ((maxVel - flatMoveSpeed) / (maxVel - threshold))) {
+      fluidMgr->CreateSplash(x0_player.GetUniqueId(), mgr, water, splashPos, 0.3f,
+                             fluidState == CActor::kFS_EnteredFluid, effect);
+    }
+    if (flatMoveSpeed >= 0.2f) {
+      const float rippleDt = fluidMgr->GetLastRippleDeltaTime(x0_player.GetUniqueId());
+      float minRippleDt = 0.13f;
+      if (flatMoveSpeed > 15.f) {
+        minRippleDt = rstl::max_val(0.1f, 0.13f - (0.029999994f * (flatMoveSpeed - 15.f)) /
+                                                      (maxVel - flatMoveSpeed));
+      }
+      if (rippleDt >= minRippleDt) {
+        water.FluidPlane().AddRipple(flatMoveSpeed * 0.07f / maxVel, x0_player.GetUniqueId(),
+                                     splashPos, water, mgr);
+      }
+    }
+    if (fluidMgr->GetLastSplashDeltaTime(x0_player.GetUniqueId()) >= 0.2f) {
+      if (fluidState == CActor::kFS_EnteredFluid) {
+        fluidMgr->CreateSplash(x0_player.GetUniqueId(), mgr, water, splashPos, 0.3f, true, effect);
+      } else if (fluidState == CActor::kFS_LeftFluid && xPortTimeSinceBombJump >= 0.2f) {
+        fluidMgr->CreateSplash(x0_player.GetUniqueId(), mgr, water, splashPos, 0.15f, true,
+                               effect);
+      }
+    }
+    return;
+  }
+#endif
 
   if (flatMoveSpeed >= 8.f) {
     const float maxVel = x0_player.GetBallMaxVelocity();

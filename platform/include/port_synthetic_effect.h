@@ -38,6 +38,11 @@ inline constexpr const char* kSyntheticEffectNames[] = {
     "plasmachargemuzzleflash",
     "phazonchargemuzzleflash",
     "icecombomuzzleflash",
+    "ballinnerglow_power",
+    "ballinnerglow_varia",
+    "ballinnerglow_variawithspiderball",
+    "ballinnerglow_gravity",
+    "ballinnerglow_phazon",
 };
 
 }  // namespace PortRemastered

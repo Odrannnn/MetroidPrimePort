@@ -46,6 +46,7 @@ CParticleSwoosh::CParticleSwoosh(const TToken< CSwooshDescription > desc, const 
 , x158_curParticle(0)
 , x1ac_particleCount(0)
 , x1b0_SPLN(0)
+, x1b8_SIDE(2) // Remastered's CSwooshDescription ctor defaults SIDE (desc+0x208) to 2
 , x1c0_rand(x1c_desc->x45_26_CRND ? CCast::ToInt16(CStopwatch::GetGlobalMicros())
                                   : CCast::ToInt16(99))
 , x1c4_(0.f)

@@ -201,7 +201,12 @@ public:
   void EndFrame() const;
 
   void CreateSplash(TUniqueId splasher, CStateManager& mgr, const CScriptWater& water,
-                    const CVector3f& pos, float factor, bool sfx);
+                    const CVector3f& pos, float factor, bool sfx
+#ifdef TARGET_PC
+                    ,
+                    bool effect = true // Remastered's 8th argument: false skips the splash particles
+#endif
+  );
 
   CRippleManager& RippleManager() { return x0_rippleManager; }
   const CRippleManager& GetRippleManager() const { return x0_rippleManager; }

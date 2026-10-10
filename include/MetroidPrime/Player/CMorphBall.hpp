@@ -198,6 +198,9 @@ public:
   void DisableBallShadow();
   void PreRenderBallShadow(CStateManager&);
   void SetDisableSpiderBallTime(float time);
+#ifdef TARGET_PC
+  void PortResetTimeSinceBombJump() { xPortTimeSinceBombJump = 0.f; }
+#endif
 
   u32 GetMorphballModelShader() const { return x5c_ballModelShader; } // name?
 
@@ -315,6 +318,35 @@ private:
   float x1c30_boostOverLightFactor;
   float x1c34_boostLightFactor;
   float x1c38_spiderLightFactor;
+#ifdef TARGET_PC
+  // Remastered binds the swoosh, inner glow and transition flash through particle variables
+  // (kb topic/particle-variable-bindings). Handles are looked up once per generator; the water
+  // factor (CMorphBallMP1 + 0x22a8) mixes the glow's dry and wet values and drives its light.
+  const void* xPortSwooshVarGen[2];
+  u16 xPortSwooshVar[2];
+  // Remastered builds one BallInnerGlow gen per colour index (CMorphBallMP1 ctor 0xcdf494:
+  // Power, Varia, VariaWithSpiderBall, Gravity, Phazon at +0x2100) and updates/renders only the
+  // one at +0xc; empty without the imported assets (retail glow then).
+  rstl::single_ptr< CElementGen > xPortGlowSet[5];
+  CElementGen* PortGlowGen() const {
+    if (x8_ballGlowColorIdx < 5 && xPortGlowSet[x8_ballGlowColorIdx].get() != nullptr) {
+      return xPortGlowSet[x8_ballGlowColorIdx].get();
+    }
+    return x19d0_ballInnerGlowGen.get();
+  }
+  const void* xPortGlowVarGen;
+  uint xPortGlowVarIdx;
+  u16 xPortGlowVars[6];
+  const void* xPortFlashVarGen;
+  u16 xPortFlashVar;
+  float xPortWaterFactor;
+  float xPortTimeSinceBombJump; // CMorphBallMP1 + 0x1f64, capped at 100
+  void PortBindSwooshVars();
+  void PortUpdateWaterFactor(float dt, const CStateManager& mgr);
+  void PortBindGlowVars();
+  void PortBindFlashColor();
+  CModelFlags PortHullFlashFlags() const;
+#endif
   TReservedAverage< CQuaternion, 5 > x1c3c_ballOrientAvg;
   TReservedAverage< CVector3f, 5 > x1c90_ballPosAvg;
   TReservedAverage< float, 15 > x1cd0_liftSpeedAvg;
