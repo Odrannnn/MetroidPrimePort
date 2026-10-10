@@ -262,8 +262,12 @@ public:
   bool PortPresentedView(const CTransform4f& view, CTransform4f& out) const;
   // Rigid blend of two transforms at t, with the snap rule above (over 4
   // units or 45 degrees apart = false). `cur` gets the rigid form of `to`.
+  // A non-zero `pivot` (world offset to the visual centre, the morph ball's
+  // radius) makes that centre lerp and the turn happen about it; then only a
+  // teleport cuts, a big roll keeps the translation (port_presentation_rules.h).
   static bool PortBlendRigid(const CTransform4f& from, const CTransform4f& to, float t,
-                             CTransform4f& blend, CTransform4f& cur);
+                             CTransform4f& blend, CTransform4f& cur,
+                             const CVector3f& pivot = CVector3f::Zero());
 #endif
 
 protected:

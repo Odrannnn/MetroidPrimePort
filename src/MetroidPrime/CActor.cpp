@@ -13,6 +13,8 @@
 #include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
+#include "MetroidPrime/Player/CMorphBall.hpp"
+#include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
 
 #include "Kyoto/Audio/CAudioSys.hpp"
@@ -27,6 +29,7 @@
 
 #ifdef TARGET_PC
 #include "port_debug.h"
+#include "port_presentation_rules.h"
 #include "Kyoto/Math/CQuaternion.hpp"
 #endif
 
@@ -931,7 +934,16 @@ bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out) cons
     return false;
   CTransform4f blend = CTransform4f::Identity();
   CTransform4f cur = CTransform4f::Identity();
-  if (!PortBlendRigid(xPortPrevTransform, x34_transform, t, blend, cur))
+  // A fully morphed player is drawn as the ball at the origin lifted by its
+  // radius (GetBallToWorld); the blend turns about that centre. Transitions
+  // draw the biped at the origin and keep the zero pivot.
+  CVector3f pivot = CVector3f::Zero();
+  if (const CPlayer* player = TCastToConstPtr< CPlayer >(this)) {
+    if (player->GetMorphballTransitionState() == CPlayer::kMS_Morphed &&
+        player->GetMorphBall() != nullptr)
+      pivot = CVector3f(0.f, 0.f, player->GetMorphBall()->GetBallRadius());
+  }
+  if (!PortBlendRigid(xPortPrevTransform, x34_transform, t, blend, cur, pivot))
     return false;
   // Drawn eye position = view^-1 * blend * cur^-1 * world, so the model lands
   // at the blend while everything else about the draw stays the same.
@@ -939,22 +951,27 @@ bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out) cons
   return true;
 }
 
+namespace {
+struct PortRigidOps {
+  CTransform4f Rigid(const CTransform4f& xf, CQuaternion& rot) const { return PortRigid(xf, rot); }
+  CVector3f Translation(const CTransform4f& xf) const { return xf.GetTranslation(); }
+  void SetTranslation(CTransform4f& xf, const CVector3f& v) const { xf.SetTranslation(v); }
+  float AbsDot(const CQuaternion& a, const CQuaternion& b) const {
+    return fabsf(CQuaternion::Dot(a, b));
+  }
+  CQuaternion Slerp(const CQuaternion& a, const CQuaternion& b, float t) const {
+    return CQuaternion::SlerpLocal(a, b, t);
+  }
+  CTransform4f Build(const CQuaternion& q, const CVector3f& centre) const {
+    return q.BuildTransform4f(centre);
+  }
+};
+} // namespace
+
 bool CActor::PortBlendRigid(const CTransform4f& from, const CTransform4f& to, float t,
-                            CTransform4f& blend, CTransform4f& cur) {
-  const CVector3f prevPos = from.GetTranslation();
-  const CVector3f curPos = to.GetTranslation();
-  // Same snap rule as the camera snapshot: teleports and big turns cut.
-  if ((curPos - prevPos).MagSquared() > 16.f)
-    return false;
-  CQuaternion prevRot = CQuaternion::NoRotation();
-  CQuaternion curRot = CQuaternion::NoRotation();
-  PortRigid(from, prevRot);
-  cur = PortRigid(to, curRot);
-  if (fabsf(CQuaternion::Dot(prevRot, curRot)) < 0.9238795f)
-    return false;
-  blend =
-      CQuaternion::SlerpLocal(prevRot, curRot, t).BuildTransform4f(prevPos + (curPos - prevPos) * t);
-  return true;
+                            CTransform4f& blend, CTransform4f& cur, const CVector3f& pivot) {
+  return PortBlendRigidGeneric< CTransform4f, CVector3f, CQuaternion >(
+      PortRigidOps(), from, to, t, blend, cur, pivot, pivot.MagSquared() > 0.f);
 }
 
 CPortActorRenderScope::CPortActorRenderScope(const CActor& actor)
