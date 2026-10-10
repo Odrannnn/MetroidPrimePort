@@ -331,6 +331,10 @@ void CHudDecoInterfaceScan::InitializeFlatFrame() {
   parms.perspective.fov = x244_camera->GetParms().perspective.fov;
   camera->SetParms(parms);
   camera->SetO2WTransform(CTransform4f::Translate(x20c_camPos));
+  // Port: the text box and scan bar keep their 4:3 shape at wider aspects, centred like the
+  // selected HUD's scan box around them (unmatched, the frame stretched across the window).
+  camera->SetAspectMatch(true, false);
+  camera->SetHudScaled(true);
   x258_flat_basewidget_scanguage = x10_loadedScanHudFlat->FindWidget(skScanGroupName);
   x258_flat_basewidget_scanguage->SetVisibility(false, kTM_Children);
   x254_flat_textpane_scanning =
