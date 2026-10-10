@@ -1015,8 +1015,8 @@ unpacks to a temporary directory instead of mounting.
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
   input is disabled. The console's `status` prints the game's L/A and the charge.
 - The overlay's **Controls** page keeps settings only: "Mouse settings" (inversion,
-  crosshair) and "Controller settings" (active controller, stick aim and dead
-  zones). **Controller settings > Controller** selects any detected gamepad, including
+  crosshair) and "Controller settings" (stick aim and dead
+  zones). **Remap > Active controller** selects any detected gamepad, including
   one assigned to player 2 or later; the choice is saved and restored on reconnect.
   Select it here before recording its bindings in Remap. Remap's "Controller bindings for" selects
   binding profiles, not the controller used to play. Every binding is on **Controls > Remap**, below.

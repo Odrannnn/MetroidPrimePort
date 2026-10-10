@@ -6155,39 +6155,6 @@ void DrawControlsKeyboardMouse() {
 }
 
 void DrawControlsController() {
-  ImGui::SeparatorText("Active controller");
-  const s32 activeIndex = PADGetIndexForPort(PAD_CHAN0);
-  const char* activeName = activeIndex >= 0 ? PADGetNameForControllerIndex(static_cast< u32 >(activeIndex)) : nullptr;
-  if (ImGui::BeginCombo("Controller", activeName != nullptr ? activeName : "No controller assigned")) {
-    const u32 count = PADCount();
-    if (count == 0) {
-      ImGui::TextDisabled("No controllers detected.");
-    }
-    for (u32 index = 0; index < count; ++index) {
-      SDL_Gamepad* pad = PADGetSDLGamepadForIndex(index);
-      const char* name = PADGetNameForControllerIndex(index);
-      ImGui::PushID(static_cast< int >(index));
-      const bool selected = static_cast< s32 >(index) == activeIndex;
-      const std::string label = std::string(name != nullptr ? name : "Unknown controller") + " (" +
-                                std::to_string(index + 1) + ")";
-      if (ImGui::Selectable(label.c_str(), selected)) {
-        PADSetPortForIndex(index, PAD_CHAN0);
-      }
-      if (selected) {
-        ImGui::SetItemDefaultFocus();
-      }
-      if (pad != nullptr) {
-        ImGui::SetItemTooltip("SDL device %u%s", SDL_GetGamepadID(pad),
-                              SDL_IsJoystickVirtual(SDL_GetGamepadID(pad)) ? " (virtual/touch)" : "");
-      }
-      ImGui::PopID();
-    }
-    ImGui::EndCombo();
-  }
-  ItemHelp("Select the controller used to play and record bindings. All detected gamepads are listed, "
-           "including controllers assigned to player 2 or later. The choice is saved and restored "
-           "when that controller reconnects. Keyboard and touch controls remain available.");
-
   ImGui::SeparatorText("Stick aim");
   bool twinStick = sInput.twinStick;
   if (ImGui::Checkbox("Twin stick (right stick aims)", &twinStick)) {

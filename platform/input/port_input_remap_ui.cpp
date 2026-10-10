@@ -7,6 +7,7 @@
 #include <dolphin/pad.h>
 #include <imgui.h>
 #include <SDL3/SDL_gamepad.h>
+#include <SDL3/SDL_joystick.h>
 #include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_timer.h>
 
@@ -1302,6 +1303,39 @@ void DrawProfileOptions(const SView& v) {
   }
 }
 
+void DrawActiveController() {
+  const s32 activeIndex = PADGetIndexForPort(PAD_CHAN0);
+  const char* activeName = activeIndex >= 0 ? PADGetNameForControllerIndex(static_cast<u32>(activeIndex)) : nullptr;
+  ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18.f);
+  if (ImGui::BeginCombo("Active controller", activeName != nullptr ? activeName : "No controller assigned")) {
+    const u32 count = PADCount();
+    if (count == 0) ImGui::TextDisabled("No controllers detected.");
+    for (u32 index = 0; index < count; ++index) {
+      SDL_Gamepad* pad = PADGetSDLGamepadForIndex(index);
+      const char* name = PADGetNameForControllerIndex(index);
+      ImGui::PushID(static_cast<int>(index));
+      const bool selected = static_cast<s32>(index) == activeIndex;
+      const std::string label = std::string(name != nullptr ? name : "Unknown controller") + " (" +
+                                std::to_string(index + 1) + ")";
+      if (ImGui::Selectable(label.c_str(), selected) && !selected) {
+        EndCapture();
+        sEditing = kEditNone;
+        PADSetPortForIndex(index, PAD_CHAN0);
+      }
+      if (selected) ImGui::SetItemDefaultFocus();
+      if (pad != nullptr) {
+        ImGui::SetItemTooltip("SDL device %u%s", SDL_GetGamepadID(pad),
+                             SDL_IsJoystickVirtual(SDL_GetGamepadID(pad)) ? " (virtual/touch)" : "");
+      }
+      ImGui::PopID();
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::SetItemTooltip("Controller used to play and record bindings. The choice is saved and restored on "
+                        "reconnect. Keyboard and touch remain available. 'Controller bindings for' selects "
+                        "the profile to edit, independently.");
+}
+
 } // namespace
 
 bool Capturing() {
@@ -1328,7 +1362,11 @@ void Draw() {
                      "the defaults; Revert brings them back.");
   if (!sError.empty()) ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", sError.c_str());
 
-  // The Controller column shows every controller's bindings, or one kind's or model's on top of them.
+  const float selectorWidth = ImGui::GetContentRegionAvail().x;
+  DrawActiveController();
+  if (selectorWidth >= ImGui::GetFontSize() * 70.f) ImGui::SameLine();
+
+  // The profile selector changes which controller bindings are edited, not the active pad.
   const std::vector<SDeviceEntry> pads = PadEntries();
   if (std::none_of(pads.begin(), pads.end(), [](const SDeviceEntry& e) { return e.key == sPadDevice; })) {
     sPadDevice = "pads";
