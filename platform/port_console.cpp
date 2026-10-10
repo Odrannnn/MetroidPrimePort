@@ -514,6 +514,7 @@ void CmdHelp() {
   Out("visor <combat|xray|scan|thermal|0-3>, beam <power|ice|wave|plasma|0-3>  switch like the touch wheels");
   Out("heal                       refill health");
   Out("kill <id>                  kill an actor as with a last Power Beam shot (bosses too)");
+  Out("hurt [n] | die             hit the player for n (default 10) with the HUD flash | empty the health");
   Out("god [on|off]               the player takes no damage (no argument: show)");
   Out("memo <text>                show text as a HUD message");
   Out("strg <id> [index]          a string table as the game loads it (mods included)");
@@ -1151,6 +1152,20 @@ void CmdBeam(CStateManager& mgr) {
   Finish();
 }
 
+// Hurts the player as an enemy hit would (HUD flash, damage sfx) and takes the health off;
+// `hurt 0` is a hit that costs nothing... `die` empties the health (death sequence).
+float sPendingHurt = 0.f;
+
+void CmdHurt(const std::string& arg) {
+  sPendingHurt = arg.empty() ? 10.f : static_cast<float>(atof(arg.c_str()));
+  Finish();
+}
+
+void CmdDie(CStateManager& mgr) {
+  mgr.PlayerState()->HealthInfo()->SetHP(0.f);
+  Finish();
+}
+
 void CmdGod() {
   if (sCmd.args.size() > 1) {
     const std::string arg = Lower(sCmd.args[1]);
@@ -1769,7 +1784,7 @@ bool IsTickCommand(const std::string& name) {
     }
   }
   static const char* const names[] = {"status", "areas", "objs", "obj", "send", "give",
-                                      "take", "items", "heal", "kill", "god", "memo", "strg", "language", "tp", "room", "fx", "face", "look", "warp",
+                                      "take", "items", "heal", "kill", "hurt", "die", "god", "memo", "strg", "language", "tp", "room", "fx", "face", "look", "warp",
                                       "tracker", "enter", "visor", "beam"};
   for (const char* n : names) {
     if (name == n) {
@@ -1802,6 +1817,10 @@ void RunTick(CStateManager& mgr) {
     CmdHeal(mgr);
   } else if (name == "kill") {
     CmdKill(mgr);
+  } else if (name == "hurt") {
+    CmdHurt(sCmd.args.size() > 1 ? sCmd.args[1] : std::string());
+  } else if (name == "die") {
+    CmdDie(mgr);
   } else if (name == "god") {
     CmdGod();
   } else if (name == "visor") {
@@ -2950,6 +2969,12 @@ bool PortConsoleFrame(unsigned frame) {
     }
   }
   return sQuit;
+}
+
+float PortConsoleTakePendingHurt() {
+  const float amount = sPendingHurt;
+  sPendingHurt = 0.f;
+  return amount;
 }
 
 void PortConsoleTick(CStateManager& mgr) {
