@@ -359,7 +359,9 @@ void CMoviePlayer::InitializeTextures() {
 
 void CMoviePlayer::PostDVDReadRequestIfNeeded() {
   if (xc0_curLoadFrame < x28_header.mNumFrames) {
-    x90_requestBuffer = rstl::auto_ptr< uchar[] >(rs_new uchar[(xb0_nextReadSize + 31) & ~31]);
+    // Port: 32 spare bytes, since the THP decoder's bit reader reads a few bytes past the scan data.
+    x90_requestBuffer =
+        rstl::auto_ptr< uchar[] >(rs_new uchar[((xb0_nextReadSize + 31) & ~31) + 32]);
     x98_request = x0_dvdFile.AsyncSeekRead(x90_requestBuffer.get(), xb0_nextReadSize, kSO_Begin,
                                            xb4_nextReadOff);
   }
