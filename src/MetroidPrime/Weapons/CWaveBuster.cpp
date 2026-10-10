@@ -21,6 +21,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "port_debug.h"
+#include "port_synthetic_effect.h"
 #endif
 
 static const CVector3f kTargetNodePosition(0.f, -3.f, -1.5f);
@@ -72,6 +73,15 @@ CWaveBuster::CWaveBuster(const TToken< CWeaponDescription >& desc, EWeaponType t
 , xPortSwooshGeneration(0)
 #endif
 {
+#ifdef TARGET_PC
+  {
+    const SObjectTag impactTag('PART', PortRemastered::SyntheticEffectId("busterimpact"));
+    if (gpResourceFactory->CanBuild(impactTag)) {
+      xPortImpactGen = rs_new CElementGen(gpSimplePool->GetObj(impactTag));
+      xPortImpactGen->SetParticleEmission(false);
+    }
+  }
+#endif
 #ifdef TARGET_PC
   PortSetOwnPresentation();
 #endif
@@ -251,8 +261,30 @@ void CWaveBuster::Think(float dt, CStateManager& mgr) {
         x3d0_28_collidedWithWorld = true;
       }
       x3d0_27_collided = true;
+#ifdef TARGET_PC
+      if (!xPortImpactGen.null()) {
+        // T = n x d (n x forearm column when parallel), columns (T, n, n x T), at the hit point.
+        const CVector3f n = result.GetPlane().GetNormal();
+        CVector3f t = CVector3f::Cross(n, forward);
+        if (t.MagSquared() == 0.f) {
+          t = CVector3f::Cross(n, GetTransform().GetForward());
+        }
+        if (t.MagSquared() != 0.f) {
+          t.Normalize();
+        }
+        const CVector3f bRaw = CVector3f::Cross(n, t);
+        const CVector3f b = bRaw.MagSquared() != 0.f ? bRaw.AsNormalized() : bRaw;
+        xPortImpactGen->SetGlobalOrientAndTrans(
+            CTransform4f::FromColumns(t, n, b, result.GetPoint()));
+      }
+#endif
     }
   }
+#ifdef TARGET_PC
+  if (!xPortImpactGen.null()) {
+    xPortImpactGen->SetParticleEmission(x3d0_27_collided);
+  }
+#endif
   if (GetHomingTargetId() != kInvalidUniqueId && x3d0_26_trackingTarget) {
     UpdateTargetDamage(dt, mgr);
   } else {
@@ -303,6 +335,11 @@ void CWaveBuster::Think(float dt, CStateManager& mgr) {
     x3c8_innerSwooshColorT = 0.f;
   }
   x38c_busterSparksGen->Update(dt);
+#ifdef TARGET_PC
+  if (!xPortImpactGen.null()) {
+    xPortImpactGen->Update(dt);
+  }
+#endif
 }
 
 void CWaveBuster::UpdateFx(const CTransform4f& xf, float dt, CStateManager& mgr) {
@@ -323,6 +360,11 @@ void CWaveBuster::AddToRenderer(const CFrustumPlanes& planes, const CStateManage
 void CWaveBuster::Render(const CStateManager& mgr) const {
   RenderSwooshes();
   RenderElectricSpiral();
+#ifdef TARGET_PC
+  if (!xPortImpactGen.null()) {
+    xPortImpactGen->Render();
+  }
+#endif
   CWeapon::Render(mgr);
 }
 
@@ -331,6 +373,11 @@ void CWaveBuster::ResetBeam(bool deactivate) {
     SetActive(false);
     x3d0_24_firing = false;
     x38c_busterSparksGen->SetParticleEmission(false);
+#ifdef TARGET_PC
+    if (!xPortImpactGen.null()) {
+      xPortImpactGen->SetParticleEmission(false);
+    }
+#endif
     x398_spiralOffset = 2.f * M_PIF;
   } else {
     x38c_busterSparksGen->SetParticleEmission(false);

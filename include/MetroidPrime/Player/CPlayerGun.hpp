@@ -472,6 +472,18 @@ private:
   bool mPortRapidCharge;
   int mPortRapidShots;
   float mPortRapidTimer;
+
+  // Port: Remastered's muzzle flashes with no retail counterpart (missile, super missile, ice
+  // combo, the per-beam charged-shot flashes), imported as synthetic PARTs. Slot 0 missile,
+  // 1 super missile, 2 ice combo, 3..7 charged shot of beam 0..4; absent = not imported.
+  enum { kPortFlashCount = 8 };
+  void PortInitFlashes();
+  void PortStartFlash(int slot);
+  void PortUpdateFlashes(float dt, const CVector3f& scale);
+  void PortRenderFlashes() const;
+  rstl::reserved_vector< TLockedToken< CGenDescription >, kPortFlashCount > mPortFlashTokens;
+  int mPortFlashToken[kPortFlashCount];
+  rstl::auto_ptr< CElementGen > mPortFlashGens[kPortFlashCount];
 #endif
 };
 CHECK_SIZEOF(CPlayerGun, 0x838)
