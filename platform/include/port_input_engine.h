@@ -136,7 +136,6 @@ enum class ActionKind : uint8_t {
   X(AimRight, HalfAxis, "aim_right", "Aim right")                                                  \
   X(LookX, Delta, "look_x", "Mouse look X")                                                        \
   X(LookY, Delta, "look_y", "Mouse look Y")                                                        \
-  X(BeamShift, Digital, "beam_shift", "Beam shift (hold)")                                         \
   X(BeamPower, Digital, "beam_power", "Power Beam")                                                \
   X(BeamWave, Digital, "beam_wave", "Wave Beam")                                                   \
   X(BeamIce, Digital, "beam_ice", "Ice Beam")                                                      \

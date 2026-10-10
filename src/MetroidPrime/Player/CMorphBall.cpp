@@ -480,7 +480,6 @@ namespace {
 // Time left before the next Spring Ball: randomprime's 40 frames. Seconds, as
 // the port's tick rate varies. There is one morph ball, so a static will do.
 float sSpringBallCooldown = 0.f;
-bool sSpringShiftHeld = true;
 
 bool SpringBallUnlocked(const CStateManager& mgr) {
   const bool bombs = mgr.GetPlayerState()->HasPowerUp(CPlayerState::kIT_MorphBallBombs);
@@ -501,18 +500,13 @@ void CMorphBall::ComputeBallMovement(const CFinalInput& input, CStateManager& mg
   // Twin stick consumes the C-stick, so its raw right stick counts too, but not
   // in the frozen-controls calls, whose blank input has no time. (It is the
   // clamped pad value over 127, so full tilt reads about 0.46.) A gyro flick,
-  // when that option is on, counts as well. So does pressing the beam shift
-  // (beams don't change in morph ball), as the same button, X, does in
-  // Remastered's Dual Sticks layout. Jump stays the Boost Ball's alone.
-  bool shiftSpring = false;
-  if (input.Time() > 0.f) {
-    const bool shiftHeld = PortDebug::BeamShiftHeld();
-    shiftSpring = shiftHeld && !sSpringShiftHeld;
-    sSpringShiftHeld = shiftHeld;
-  }
+  // when that option is on, counts as well. So does the Spring Ball input action,
+  // which the beam shifts are bound to in morph ball (beams don't change there), as
+  // the same button, X, does in Remastered's Dual Sticks layout. Jump stays the
+  // Boost Ball's alone.
   if (sSpringBallCooldown > 0.f) {
     sSpringBallCooldown -= dt;
-  } else if ((input.ARAUp() > 0.f || shiftSpring ||
+  } else if ((input.ARAUp() > 0.f ||
               (input.Time() > 0.f && (PortDebug::TwinStickRightY() > 0.25f ||
                                       PortDebug::SpringBallFlickPending() ||
                                       PortDebug::SpringBallRequested()))) &&
@@ -1463,8 +1457,6 @@ void CMorphBall::EnterMorphBallState(CStateManager& mgr) {
   x2c_tireLeanAngle = 0.f;
 #ifdef TARGET_PC
   sSpringBallCooldown = 0.f;
-  // A shift still held from before needs a fresh press.
-  sSpringShiftHeld = true;
 #endif
 }
 

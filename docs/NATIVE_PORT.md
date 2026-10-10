@@ -887,8 +887,7 @@ unpacks to a temporary directory instead of mounting.
   on, go up to 8100)
   and is consumed, so it no longer drives the game's free-look. Under mouse aim
   a C-stick held from the keyboard is not consumed, so keyboard beam keys still
-  pick beams, and an L from a key or mouse button stays lock-on (not a beam
-  modifier). Fire
+  pick beams, and an L from a key or mouse button stays lock-on. Fire
   stays on whatever is bound to A; remap it in Controls > Remap.
 - Spring Ball (Controls > Options, persisted as `spring_ball`, off by default): C-stick
   up in morph ball jumps, as in Metroid Prime Trilogy and the randomprime discs
@@ -941,15 +940,19 @@ unpacks to a temporary directory instead of mounting.
   stick). Console: `mappan <dx> <dy> [hold s]` (dp, view height taken as 400 dp; the finger counts as down for `hold` seconds, which stops the map drifting back to its area; ignored
   while the map is closed). A second finger pinches to zoom (finger spread doubles: camera distance halves, same clamp as L/R) while the midpoint pans; when one finger lifts the other carries on panning. Twisting the two fingers rotates the map's yaw with them (a clockwise twist turns the content clockwise; pitch is left alone). Console: `mapzoom <ratio>`, `maprotate <degrees>` (positive turns the content clockwise, as the stick's right does; both ignored while the map is closed).
   A press of the beam shift springs too (beams don't change in morph ball), as
-  X does in Remastered; jump (B) stays the Boost Ball's alone. A shift held from
-  before the ball formed has to be let go first.
-- Beam shift (Controls > Options): while it is held, the D-pad picks beams the way the
-  C-stick does, and visors stay on the plain D-pad, so both are reachable without
-  a C-stick. It has two key slots (`shift_key`, `shift_key_alt`; default left
-  shift, which already did this under twin stick), a pad slot (`shift_pad`, a
-  button or trigger, default none, because Aurora maps LB on many pads to L), and
-  it can go on a mouse button. Twin stick keeps left shift as its own modifier,
-  and L and LB too while `shift_pad` is unbound.
+  X does in Remastered; jump (B) stays the Boost Ball's alone: every shift input is
+  bound to the Spring Ball action alone in the Morph Ball context.
+- Beam shift (Controls > Options): there is no hidden modifier. Each shift input
+  forms default chords with the D-pad inputs of its own family (shift + up = Power,
+  down = Ice, left = Plasma, right = Wave), which fire the direct beam actions
+  (not the visor) and show in Controls > Remap; the plain D-pad still picks visors.
+  Shifts: two key slots (`shift_key`, `shift_key_alt`; default left shift under
+  twin stick), a pad slot (`shift_pad`, a button or trigger, default none, because
+  Aurora maps LB on many pads to L; under twin stick LB is the shift while
+  `shift_pad` is unbound and LB presses no other pad button), a mouse button, and the
+  touch Beam button (`touch:beam_shift`, with the touch D-pad). The L trigger is no
+  longer a shift. A saved `controls.toml` row for the retired `beam_shift`
+  action is skipped (and logged) when loaded.
 - Turbo fire (Controls > Options, "Turbo fire (hold)"): while it is held, A is
   pressed and released on alternate ticks, as if fire were mashed, so each beam
   shoots as fast as its own shot delay allows (it doesn't charge). Two key slots
@@ -971,8 +974,7 @@ unpacks to a temporary directory instead of mounting.
   (Remastered's Dual Sticks: RT or right face button fire, LT lock on, bottom
   face button or LB jump, left
   morph, RB missile, Start map, Back pause, right stick click free look, top
-  face button as the pad beam shift (which springs in morph ball, as any bound
-  beam shift does), Scan and X-Ray swapped; twin stick on),
+  face button as the pad beam shift (which springs in morph ball), Scan and X-Ray swapped; twin stick on),
   **Modern** and **Southpaw**. Only Remastered sets `shift_pad`, `pad_alt` and
   `swap_scan_xray`; the others clear them. Remastered and Modern are off for a
   GameCube adapter.
@@ -1014,7 +1016,7 @@ unpacks to a temporary directory instead of mounting.
   gameplay, morph ball, map, menus, scan visor, or one of four layers: a layer is active while
   its "Layer n (hold)" binding is held, like a shift key, and its bindings win over the same
   input's normal ones). Actions are the pad's buttons and stick halves, plus beam and
-  visor picks (direct or next/previous), Spring Ball, beam shift, the port menu, save/load state,
+  visor picks (direct or next/previous), Spring Ball, the port menu, save/load state,
   screenshot and Original experience. Bindings are layered over the other pages:
   binding an action from one kind of device (keyboard & mouse, controller,
   touch) replaces what the other pages bind to it from that kind only, and
@@ -1257,7 +1259,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
 - In mouse mode the five mouse buttons act as pad buttons, set in the Controls > Mouse settings
   sub-tab's "Mouse buttons" list (`mouse_left`, `mouse_middle`, `mouse_right`,
   `mouse_x1`, `mouse_x2`: none, a pad button, a D-pad direction or the beam
-  shift). By default **left-click fires / holds a charge / releases a charged
+  shift, which springs in the ball). By default **left-click fires / holds a charge / releases a charged
   shot** (A), **right-click holds lock-on** (L) and **middle-click fires
   missiles** (Y); the side buttons are unset. Either keyboard
   preset restores them too. They feed the normal PAD/gun input path, preserving charge

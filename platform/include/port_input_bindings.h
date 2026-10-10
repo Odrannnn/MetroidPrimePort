@@ -112,7 +112,9 @@ std::string ContextsToText(uint16_t contexts); // e.g. "gameplay,map"; "all" for
 bool ContextFromText(std::string_view text, uint16_t& out);
 
 // error (optional) gets "line N: what". On failure out is left unchanged.
-bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* error = nullptr);
+// Rows for the retired beam_shift action (now default chords) are skipped;
+// dropped (optional) gets how many.
+bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* error = nullptr, int* dropped = nullptr);
 std::string SerializeUserBindings(const UserBindings& bindings);
 
 // The profiles that apply for a pad (guid: 32 lowercase hex digits, type: SDL's

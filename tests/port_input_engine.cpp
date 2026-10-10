@@ -24,7 +24,7 @@ void Check(bool condition) {
 bool Near(float a, float b) { return std::fabs(a - b) < 1e-4f; }
 
 // SDL_GamepadButton / SDL_GamepadAxis numbering.
-constexpr uint16_t kA = 0, kB = 1, kX = 2, kY = 3, kLB = 9, kRB = 10;
+constexpr uint16_t kA = 0, kB = 1, kX = 2, kY = 3, kLB = 9, kRB = 10, kDUp = 11;
 constexpr uint16_t kLeftX = 0, kRightX = 2;
 
 Input Btn(uint16_t code) { return {Device::PadButton, 0, 50, code}; }
@@ -95,20 +95,20 @@ int main() {
   // LB consumed until it is released. LB + B shares the held modifier.
   {
     Rig r;
-    r.profile.bindings = {Bind(Action::BeamShift, {Btn(kLB)}), Bind(Action::PadA, {Btn(kA)}),
+    r.profile.bindings = {Bind(Action::SpringBall, {Btn(kLB)}), Bind(Action::PadA, {Btn(kA)}),
                           Bind(Action::VisorScan, {Btn(kLB), Btn(kA)}),
                           Bind(Action::VisorThermal, {Btn(kLB), Btn(kB)}),
                           Bind(Action::PadB, {Btn(kB)})};
     r.Start();
     r.Set(kLB, true);
-    CHECK(!r.Step().Held(Action::BeamShift)); // waits the chord window
-    CHECK(!r.Step(16).Held(Action::BeamShift));
-    CHECK(r.Step(24).Held(Action::BeamShift)); // 40 ms after the press: fires
+    CHECK(!r.Step().Held(Action::SpringBall)); // waits the chord window
+    CHECK(!r.Step(16).Held(Action::SpringBall));
+    CHECK(r.Step(24).Held(Action::SpringBall)); // 40 ms after the press: fires
     r.Set(kA, true);
     const Output& o = r.Step();
-    CHECK(o.Held(Action::VisorScan) && !o.Held(Action::PadA) && !o.Held(Action::BeamShift));
+    CHECK(o.Held(Action::VisorScan) && !o.Held(Action::PadA) && !o.Held(Action::SpringBall));
     r.Set(kA, false);
-    CHECK(!r.Step().Held(Action::VisorScan) && !r.runtime.Last().Held(Action::BeamShift));
+    CHECK(!r.Step().Held(Action::VisorScan) && !r.runtime.Last().Held(Action::SpringBall));
     r.Set(kB, true);
     CHECK(r.Step().Held(Action::VisorThermal) && !r.runtime.Last().Held(Action::PadB));
     r.Set(kB, false);
@@ -120,21 +120,39 @@ int main() {
     r.Set(kA, false);
     r.Step();
     r.Set(kLB, true);
-    CHECK(!r.Step().Held(Action::BeamShift));
+    CHECK(!r.Step().Held(Action::SpringBall));
     r.Set(kA, true);
     CHECK(r.Step().Held(Action::VisorScan));
     for (int i = 0; i < 5; ++i) {
-      CHECK(!r.Step().Held(Action::BeamShift) && r.runtime.Last().Held(Action::VisorScan));
+      CHECK(!r.Step().Held(Action::SpringBall) && r.runtime.Last().Held(Action::VisorScan));
     }
     r.Set(kA, false);
     r.Set(kLB, false);
     r.Step();
     // LB tapped inside the window fires for one poll on release.
     r.Set(kLB, true);
-    CHECK(!r.Step().Held(Action::BeamShift));
+    CHECK(!r.Step().Held(Action::SpringBall));
     r.Set(kLB, false);
-    CHECK(r.Step().Pressed(Action::BeamShift));
-    CHECK(r.Step().Released(Action::BeamShift));
+    CHECK(r.Step().Pressed(Action::SpringBall));
+    CHECK(r.Step().Released(Action::SpringBall));
+  }
+
+  // The default beam chords: shift + D-pad up picks the beam and leaves the visor
+  // alone; the D-pad alone still picks the visor.
+  {
+    Rig r;
+    r.profile.bindings = {Bind(Action::VisorCombat, {Btn(kDUp)}), Bind(Action::BeamPower, {Btn(kLB), Btn(kDUp)})};
+    r.Start();
+    r.Set(kDUp, true);
+    CHECK(r.Step().Pressed(Action::VisorCombat) && !r.runtime.Last().Held(Action::BeamPower)); // no lag
+    r.Set(kDUp, false);
+    r.Step();
+    r.Set(kLB, true);
+    r.Step();
+    r.Set(kDUp, true);
+    const Output& o = r.Step();
+    CHECK(o.Pressed(Action::BeamPower) && !o.Held(Action::VisorCombat));
+    CHECK(!r.Step(60).Held(Action::VisorCombat));
   }
 
   // Any-order chord X + Y: within the window it wins over both; outside it the

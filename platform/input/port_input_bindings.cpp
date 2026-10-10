@@ -522,12 +522,14 @@ bool ContextFromText(std::string_view text, uint16_t& out) {
   return true;
 }
 
-bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* error) {
+bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* error, int* dropped) {
   UserBindings result;
   enum class Table { None, Profile, Bind } table = Table::None;
   // Per bind: whether inputs was given (required).
   bool bindHasInputs = false;
   bool bindHasAction = false;
+  bool bindLegacy = false; // beam_shift: dropped when the bind closes
+  int legacyDropped = 0;
   int bindLine = 0;
   int lineNo = 0;
   std::string err;
@@ -539,6 +541,12 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
   auto closeBind = [&]() {
     if (table != Table::Bind)
       return true;
+    if (bindLegacy) {
+      result.profiles.back().bindings.pop_back();
+      bindLegacy = false;
+      ++legacyDropped;
+      return true;
+    }
     if (!bindHasAction)
       return fail(bindLine, "bind without an action");
     if (!bindHasInputs)
@@ -573,7 +581,7 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
             return fail(lineNo, "[[profile.bind]] before any [[profile]]");
           result.profiles.back().bindings.emplace_back();
           table = Table::Bind;
-          bindHasInputs = bindHasAction = false;
+          bindHasInputs = bindHasAction = bindLegacy = false;
           bindLine = lineNo;
         } else {
           return fail(lineNo, "unknown table " + std::string(header));
@@ -633,6 +641,10 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
           p.unbind.clear();
           for (const std::string& item : v.array) {
             Unbind u;
+            if (item.rfind("beam_shift@", 0) == 0) {
+              ++legacyDropped;
+              continue;
+            }
             if (!UnbindFromText(item, u))
               return fail(lineNo, "bad unbind " + item);
             p.unbind.push_back(u);
@@ -648,8 +660,11 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
         if (!wantKind(Value::String))
           return false;
         Action a = ActionFromKey(v.str);
-        if (a == Action::None)
+        if (a == Action::None && v.str == "beam_shift") {
+          bindLegacy = true;
+        } else if (a == Action::None) {
           return fail(lineNo, "unknown action " + v.str);
+        }
         b.action = a;
         bindHasAction = true;
       } else if (key == "inputs") {
@@ -727,6 +742,8 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
     return false;
   }
   out = std::move(result);
+  if (dropped)
+    *dropped = legacyDropped;
   return true;
 }
 

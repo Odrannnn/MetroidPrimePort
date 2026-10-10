@@ -220,7 +220,6 @@ std::string sTextLanguage;
 int sElevatorRide = PortDebug::kElevatorRide_Original;
 bool sSaveStateHotkeys = true;
 float sTwinStickRightY = 0.f;
-bool sBeamShiftHeld = false;
 std::atomic<bool> sTouchBeamShift{false}; // the touch twin layout's held Beam button
 std::atomic<bool> sTouchTurboFire{false}; // the touch Turbo button, held
 bool sInvulnerable = false;
@@ -1710,15 +1709,11 @@ float TwinStickRightY() { return sTwinStickRightY; }
 
 void SetTwinStickRightY(float y) { sTwinStickRightY = y; }
 
-bool BeamShiftHeld() { return sBeamShiftHeld; }
-
-bool TouchBeamShift() { return sTouchBeamShift.load(std::memory_order_acquire) && TouchActive(); }
+bool TouchBeamShift() { return sTouchBeamShift.load(std::memory_order_acquire); }
 
 bool TouchTurboFire() {
   return sTouchTurboFire.load(std::memory_order_acquire) && TouchActive() && !sOriginalExperience;
 }
-
-void SetBeamShiftHeld(bool held) { sBeamShiftHeld = held; }
 
 bool SpringBall() {
   EnsureInitialized();

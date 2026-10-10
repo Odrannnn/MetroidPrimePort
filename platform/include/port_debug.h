@@ -310,12 +310,8 @@ void SetTwinStick(bool enabled);
 // 0 when twin-stick is off (the game input still carries it then).
 float TwinStickRightY();
 void SetTwinStickRightY(float y);
-// The bound beam shift is held in game this poll (no overlay, window focused),
-// which springs the Spring Ball in morph ball, as X does in Remastered.
-bool BeamShiftHeld();
-// The touch twin layout's Beam button is held: the D-pad picks beams (false off Android / without touch).
+// The touch overlay's Beam button is held: the input engine's touch:beam_shift.
 bool TouchBeamShift();
-void SetBeamShiftHeld(bool held);
 // The touch overlay's Turbo button is held (false off Android / without touch).
 bool TouchTurboFire();
 // Spring Ball (C-stick up in morph ball, as in Metroid Prime Trilogy) once the
@@ -326,7 +322,8 @@ void SetSpringBall(bool enabled);
 // layout), off by default.
 bool SwapScanXray();
 void SetSwapScanXray(bool enabled);
-// The beam shift's bindings (read by PortInputDevices): slots 0 and 1 are keys
+// The beam shift's bindings (read by PortInputDevices, which pairs each with the D-pad
+// into the beam chords): slots 0 and 1 are keys
 // or mouse buttons (scancode or PAD_KEY_MOUSE_*), slot 2 a controller button
 // (SDL gamepad button or PAD_NATIVE_BUTTON_TRIGGER_*); -1 for none.
 int ShiftBinding(int slot);

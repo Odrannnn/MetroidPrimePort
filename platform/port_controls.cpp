@@ -393,22 +393,6 @@ bool ApplyPadPresetNamed(std::string_view name) {
   return true;
 }
 
-bool PadButtonBoundBesidesL(s32 native) {
-  u32 count = 0;
-  const PADButtonMapping* list = PADGetButtonMappings(kControlPort, &count);
-  for (u32 i = 0; list != nullptr && i < count; ++i) {
-    if (list[i].nativeButton == static_cast< u32 >(native) && list[i].padButton != PAD_TRIGGER_L) {
-      return true;
-    }
-  }
-  for (const SControlPadButton& row : kControlPadButtons) {
-    if (row.button != PAD_TRIGGER_L && PortDebug::PadAltButton(PadBit(row.button)) == native) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void DrawDeadZones() {
   if (PADDeadZones* zones = PADGetDeadZones(kControlPort)) {
     DrawDeadZoneSliders(*zones);

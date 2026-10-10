@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -147,6 +148,16 @@ void Bind(Profile& p, Action action, const Input& in, uint16_t turboHz = 0) {
   p.bindings.push_back(b);
 }
 
+void BindIn(Profile& p, Action action, const Input& in, uint16_t contexts) {
+  if (action == Action::None || !in.Valid()) return;
+  Binding b;
+  b.action = action;
+  b.inputs[0] = in;
+  b.count = 1;
+  b.contexts = contexts;
+  p.bindings.push_back(b);
+}
+
 // A key slot's scancode: a key, or a mouse button read the way `mouseBase` says.
 Input KeySlotInput(s32 scancode, int mouseBase) {
   if (scancode >= 0 && scancode < PortInput::kKeyCount) return Make(Device::Key, scancode);
@@ -256,16 +267,97 @@ void BindKeyboard(Profile& p) {
   }
 }
 
+// LB (Remastered's layout locks on with L and jumps with LB) is the pad's beam shift
+// under twin stick, unless it presses another PAD button (a visor's D-pad row):
+// held as the shift, it would turn that D-pad press into a beam.
+bool PadButtonBoundBesidesL(s32 native) {
+  u32 count = 0;
+  const PADButtonMapping* list = PADGetButtonMappings(kPort, &count);
+  for (u32 i = 0; list != nullptr && i < count; ++i) {
+    if (list[i].nativeButton == static_cast< u32 >(native) && list[i].padButton != PAD_TRIGGER_L) return true;
+  }
+  for (int bit = 0; bit < PortDebug::kPadAltCount; ++bit) {
+    if (bit != std::countr_zero(static_cast< unsigned >(PAD_TRIGGER_L)) && PortDebug::PadAltButton(bit) == native) return true;
+  }
+  return false;
+}
+
+bool IsKeyboardFamily(const Input& in) { return in.device == Device::Key || in.device == Device::MouseButton; }
+
+bool IsPadFamily(const Input& in) { return in.device == Device::PadButton || in.device == Device::PadAxis; }
+
+// The beams' chords: a shift plus a D-pad direction, the direction the retail
+// C-stick picks them with (Power up, Ice down, Plasma left, Wave right; the beam
+// hint prompts). A shift pairs with the D-pad inputs of its own family: the
+// keyboard's shift keys and mouse buttons with the keyboard's D-pad keys, the pad's
+// shift and the touch overlay's Beam button with the pad's D-pad (the touch D-pad
+// is a virtual pad). The shifts also spring the ball, alone, in morph ball, where
+// beams don't change. D-pad inputs left single still pick visors.
+void BindBeamChords(Profile& p) {
+  std::vector< Input > keyShifts;
+  std::vector< Input > padShifts;
+  for (int slot = 0; slot < PAD_KEY_SLOT_COUNT; ++slot) {
+    keyShifts.push_back(KeySlotInput(PortDebug::ShiftBinding(slot), kMouseHeld));
+  }
+  for (int i = 0; i < PortInputMap::kMouseButtonCount; ++i) {
+    if (PortDebug::MouseAction(i) == PortInputMap::kMA_Shift) {
+      keyShifts.push_back(Make(Device::MouseButton, kMouseGameplay + i));
+    }
+  }
+  padShifts.push_back(NativeInput(PortDebug::ShiftBinding(PAD_KEY_SLOT_COUNT)));
+  padShifts.push_back(Make(Device::Touch, kTouchBeamShift));
+
+  if (PortDebug::TwinStick()) {
+    // Twin stick consumes the C-stick, so the shifts that are always there under
+    // it: Left Shift unless a key takes it, and LB.
+    bool anyKey = false;
+    bool lshiftTaken = false;
+    for (const Input& in : keyShifts) anyKey = anyKey || in.Valid();
+    for (const Binding& b : p.bindings) {
+      if (b.count == 1 && b.inputs[0].device == Device::Key && b.inputs[0].code == SDL_SCANCODE_LSHIFT) {
+        lshiftTaken = true;
+      }
+    }
+    if (!anyKey && !lshiftTaken) keyShifts.push_back(Make(Device::Key, SDL_SCANCODE_LSHIFT));
+    bool anyPad = false;
+    for (const Input& in : padShifts) anyPad = anyPad || (in.Valid() && in.device == Device::PadButton);
+    if (!anyPad && !PortDebug::TouchActive() && !PadButtonBoundBesidesL(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) {
+      padShifts.push_back(NativeInput(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
+    }
+  }
+
+  // EBeamId order of the direction: Up, Down, Left, Right.
+  static constexpr Action kDirs[4] = {Action::PadUp, Action::PadDown, Action::PadLeft, Action::PadRight};
+  static constexpr Action kBeams[4] = {Action::BeamPower, Action::BeamIce, Action::BeamPlasma, Action::BeamWave};
+  const std::vector< Binding > base = p.bindings;
+  const uint16_t noBall = static_cast< uint16_t >(PortInput::kCtxAll & ~PortInput::kCtxMorphBall);
+  for (int d = 0; d < 4; ++d) {
+    for (const Binding& dir : base) {
+      if (dir.action != kDirs[d] || dir.count != 1) continue;
+      const bool keyboard = IsKeyboardFamily(dir.inputs[0]);
+      if (!keyboard && !IsPadFamily(dir.inputs[0])) continue;
+      for (const Input& shift : keyboard ? keyShifts : padShifts) {
+        if (!shift.Valid() || shift == dir.inputs[0]) continue;
+        Binding b;
+        b.action = kBeams[d];
+        b.inputs[0] = shift;
+        b.inputs[1] = dir.inputs[0];
+        b.count = 2;
+        b.contexts = noBall;
+        p.bindings.push_back(b);
+      }
+    }
+  }
+  for (const Input& shift : keyShifts) BindIn(p, Action::SpringBall, shift, PortInput::kCtxMorphBall);
+  for (const Input& shift : padShifts) BindIn(p, Action::SpringBall, shift, PortInput::kCtxMorphBall);
+}
+
 void BindPortControls(Profile& p) {
   for (int bit = 0; bit < PortDebug::kPadAltCount; ++bit) {
     Bind(p, PadBitAction(1u << bit), NativeInput(PortDebug::PadAltButton(bit)));
   }
 
-  for (int slot = 0; slot < PAD_KEY_SLOT_COUNT; ++slot) {
-    Bind(p, Action::BeamShift, KeySlotInput(PortDebug::ShiftBinding(slot), kMouseHeld));
-  }
-  Bind(p, Action::BeamShift, NativeInput(PortDebug::ShiftBinding(PAD_KEY_SLOT_COUNT)));
-  Bind(p, Action::BeamShift, Make(Device::Touch, kTouchBeamShift));
+  BindBeamChords(p);
 
   // Turbo: A on one poll and off the next, so the gun sees a press edge every
   // other tick. Retail has no turbo; the touch button has its own setting.
@@ -290,10 +382,7 @@ void BindPortControls(Profile& p) {
   // out of it the ones on A and B still press them (bombs, boosts, text boxes).
   for (int i = 0; i < PortInputMap::kMouseButtonCount; ++i) {
     const int action = PortDebug::MouseAction(i);
-    if (action == PortInputMap::kMA_Shift) {
-      Bind(p, Action::BeamShift, Make(Device::MouseButton, kMouseGameplay + i));
-      continue;
-    }
+    if (action == PortInputMap::kMA_Shift) continue; // a beam chord's shift, bound above
     const unsigned pad = PortInputMap::MouseActionInfo(action).padButton;
     const Action a = PadBitAction(pad);
     Bind(p, a, Make(Device::MouseButton, kMouseGameplay + i));
@@ -543,8 +632,11 @@ void RefreshLocked() {
   text << file.rdbuf();
   PortInput::UserBindings parsed;
   std::string error;
-  if (PortInput::ParseUserBindings(text.str(), parsed, &error)) {
+  int dropped = 0;
+  if (PortInput::ParseUserBindings(text.str(), parsed, &error, &dropped)) {
     PortLog::Write("port: controls.toml loaded (%zu profiles)\n", parsed.profiles.size());
+    if (dropped > 0)
+      PortLog::Write("port: controls.toml: skipped %d beam_shift row(s); beams are now default shift+D-pad chords\n", dropped);
     PublishLocked(std::move(parsed));
   } else {
     // A half-finished hand edit keeps the bindings that were loaded before it.
@@ -745,14 +837,6 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   RouteDirectActions(out);
 
   r.status = Synthesize(out);
-  r.beamShift = out.Held(Action::BeamShift);
-  for (int i = 0; i < PortInputMap::kMouseButtonCount; ++i) {
-    if ((raw.mouseButtons >> (kMouseGameplay + i) & 1u) != 0 &&
-        PortDebug::MouseAction(i) != PortInputMap::kMA_Shift &&
-        (PortInputMap::MouseActionInfo(PortDebug::MouseAction(i)).padButton & PAD_TRIGGER_L) != 0) {
-      r.mouseL = true;
-    }
-  }
   return r;
 }
 

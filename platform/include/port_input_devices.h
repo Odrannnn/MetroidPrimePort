@@ -33,8 +33,6 @@ constexpr int kTouchMapTap = 34; // one poll of Z after a minimap tap
 
 struct SPoll {
   PADStatus status{};
-  bool beamShift = false; // the beam shift binding is held
-  bool mouseL = false;    // a gameplay mouse button presses L
 };
 
 // One poll of port 0: reads the devices, rebuilds the profile when the settings

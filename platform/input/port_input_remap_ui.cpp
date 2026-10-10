@@ -668,7 +668,7 @@ const std::vector<SGroup>& Groups() {
         // Direct picks work in every scheme; the GameCube inputs behind them are listed above.
         {"Beams",
          {Action::BeamPower, Action::BeamWave, Action::BeamIce, Action::BeamPlasma, Action::BeamNext,
-          Action::BeamPrev, Action::BeamShift},
+          Action::BeamPrev},
          true},
         {"Visors",
          {Action::VisorCombat, Action::VisorScan, Action::VisorThermal, Action::VisorXray, Action::VisorNext,

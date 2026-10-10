@@ -16,9 +16,6 @@ bool ApplyKeyPresetNamed(std::string_view name);
 // The Controls page's controller preset button: "gamecube", "remastered",
 // "modern" or "southpaw". Saves. False for any other name.
 bool ApplyPadPresetNamed(std::string_view name);
-// True if the native controller button (SDL_GamepadButton) presses a PAD button
-// other than L, as its main or alt binding.
-bool PadButtonBoundBesidesL(int native);
 // The stick deadzone and trigger click-point sliders of the Controller settings
 // page (nothing when no controller is on pad 1).
 void DrawDeadZones();
