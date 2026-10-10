@@ -898,10 +898,10 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   }
 
   if (x32c_chargePhase != kCP_NotCharging && !player.GetFrozenState()) {
-    x34c_shakeX =
-        chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * x340_chargeBeamFactor;
-    x350_shakeZ =
-        chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * x340_chargeBeamFactor;
+    // Remastered (0xc93950): the factor is 0 unless the charging flag is set.
+    const float shakeFactor = (sPortRemasteredGun && !x834_24_charging) ? 0.f : x340_chargeBeamFactor;
+    x34c_shakeX = chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * shakeFactor;
+    x350_shakeZ = chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * shakeFactor;
   }
 
   if (!x72c_currentBeam->IsLoaded()) {
@@ -1547,6 +1547,13 @@ void CPlayerGun::UpdateChargeState(float dt, CStateManager& mgr) {
     chargeSpeed = 60.f / float(beam->full);
   }
 #endif
+#ifdef TARGET_PC
+  // Remastered (UpdateChargeRumbleTriggered 0xc9b41c): one rumble once the charge time passes warmUp.
+  if (sPortRemasteredGun && x834_24_charging && x830_chargeRumbleHandle == -1 &&
+      x340_chargeBeamFactor > fxStart) {
+    x830_chargeRumbleHandle = mgr.GetRumbleManager()->Rumble(mgr, kRFX_PlayerGunCharge, 1.f, kRP_Three);
+  }
+#endif
   switch (x32c_chargePhase) {
   case kCP_ChargeRequested:
 #ifdef TARGET_PC
@@ -1572,7 +1579,7 @@ void CPlayerGun::UpdateChargeState(float dt, CStateManager& mgr) {
           x2e0_chargeSfx = NWeaponTypes::play_sfx(sBeamChargeUpSound[x310_currentBeam],
                                                   x834_27_underwater, true, 0x4a);
         }
-        if (x830_chargeRumbleHandle == -1) {
+        if (x830_chargeRumbleHandle == -1 && !sPortRemasteredGun) {
           x830_chargeRumbleHandle =
               mgr.GetRumbleManager()->Rumble(mgr, kRFX_PlayerGunCharge, 1.f, kRP_Three);
         }
