@@ -316,8 +316,14 @@ def cmd_tour(a):
                 start(name, cache, room, a.build)
                 running = True
             else:
-                rig("cmd", name, f"warp {mlvl} {mrea}", timeout=600)
-                settle(name)
+                try:
+                    rig("cmd", name, f"warp {mlvl} {mrea}", timeout=600)
+                    settle(name)
+                except (RuntimeError, subprocess.TimeoutExpired):
+                    # Some rooms (Ruined Fountain: Samus spawns falling) time out a warp but load
+                    # fine from a fresh start.
+                    rig("stop", name, check=False)
+                    start(name, cache, room, a.build)
             rig("cmd", name, *room_actions(i == 0), timeout=900)
             status = "ok"
         except (RuntimeError, subprocess.TimeoutExpired) as e:
