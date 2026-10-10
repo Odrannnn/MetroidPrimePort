@@ -300,9 +300,9 @@ void CMFGame::Draw() const {
       }
     };
     // The world draws into the HDR scene frame (exposed linear light) that postProcess turns into the
-    // EFB; thermal and X-ray draw straight to it. MP_HDR_SCENE=0 keeps the LDR frame.
+    // EFB; thermal and X-ray draw straight to it. Opt in until the water/VFX paths are HDR-ready.
     const auto beginSceneHdr = [this]() {
-      static const bool enabled = port::EnvFlag("MP_HDR_SCENE", true);
+      static const bool enabled = port::EnvFlag("MP_HDR_SCENE", false);
       const CPlayerState::EPlayerVisor visor = mStateManager->GetPlayerState()->GetActiveVisor(*mStateManager);
       float tone[3][4] = {};
       if (enabled && visor != CPlayerState::kPV_Thermal && visor != CPlayerState::kPV_XRay &&

@@ -631,6 +631,11 @@ alone, so a script should pass it on to its children. Desktop only.
 
 #### Metroid Prime Remastered models
 
+Experimental HDR scene rendering is available with `MP_HDR_SCENE=1`, but is off by
+default until the water and particle paths are migrated. Phase 1 has known water
+artifacts and overly bright rain. Leave it unset (or use `MP_HDR_SCENE=0`) for the
+normal rendering path. The imported ice-effect changes require a re-import.
+
 **Very experimental and currently unsupported.** The import, the room
 environments and above all room geometry are work in progress: expect wrong
 or missing models, lighting that is off, crashes and heavy memory use, and a
