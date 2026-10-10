@@ -1076,8 +1076,9 @@ int main(int argc, char** argv) {
     // process spins at 100% before the first frame is ever presented. Nothing in
     // the port can fix that, so whenever an X display is available ask for the X11
     // backend instead. SDL_VIDEODRIVER still wins, which is also how anyone who
-    // wants Wayland opts back in.
-#if !defined(_WIN32) && !defined(__ANDROID__)
+    // wants Wayland opts back in. macOS has neither backend (its SDL build has
+    // no x11 driver, and XQuartz sets DISPLAY), so it is left to SDL's default.
+#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__APPLE__)
     {
         const char* requested = SDL_GetHint(SDL_HINT_VIDEO_DRIVER);
         const char* x11 = std::getenv("DISPLAY");
