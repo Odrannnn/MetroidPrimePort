@@ -504,6 +504,11 @@ std::string InputName(const Input& in, bool includeMouseMode = false) {
         if (includeMouseMode) name += suffix;
       }
     }
+    if (!includeMouseMode) {
+      if (name == "left") name = "LMB";
+      else if (name == "right") name = "RMB";
+      else if (name == "middle") name = "MMB";
+    }
     break;
   }
   case Device::MouseWheel: name = "wheel " + name; break;
