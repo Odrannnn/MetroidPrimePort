@@ -59,6 +59,8 @@ public:
   // this one's order) that this table lacks, and fills the strings a
   // Remastered language section left in English from the matching one.
   void PortAddLanguages(const CStringTable& other);
+  // Rewrites imported PAL-only TXTR ids in every decoded language section.
+  void PortRemapImportedImageTextureIds();
 #endif
   int GetStringCount() const { return x0_stringCount; }
 };

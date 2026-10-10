@@ -9,6 +9,23 @@ namespace {
 
 constexpr uint32_t kSTRG = 0x53545247;  // 'STRG'
 
+bool IsTokenCharacter(wchar_t c) {
+  return (c >= L'0' && c <= L'9') || (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || c == L'_';
+}
+
+bool IsHexDigit(wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= L'A' && c <= L'F') || (c >= L'a' && c <= L'f'); }
+
+wchar_t UpperAscii(wchar_t c) { return c >= L'a' && c <= L'z' ? c - (L'a' - L'A') : c; }
+
+bool MatchesId(const std::wstring& text, size_t at, const wchar_t* id) {
+  for (size_t i = 0; i < 8; ++i) {
+    if (UpperAscii(text[at + i]) != id[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 uint32_t Be32(const uint8_t* p) { return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | p[3]; }
 
 std::string TypeName(uint32_t type) {
@@ -17,6 +34,50 @@ std::string TypeName(uint32_t type) {
 }
 
 }  // namespace
+
+bool RemapImportedImageTextureIds(std::wstring& text) {
+  // The PAL map legend names three textures absent from the USA PAK. These
+  // same icons are present there under the corresponding USA ids.
+  static const wchar_t* const kPalIds[] = {L"FAB0528D", L"DE6901DE", L"E7B56235"};
+  static const wchar_t* const kUsaIds[] = {L"8A78A5BF", L"39C0091E", L"C6FA23D1"};
+  bool changed = false;
+  for (size_t tag = text.find(L"&image="); tag != std::wstring::npos;) {
+    const size_t value = tag + 7;
+    const size_t end = text.find(L';', value);
+    if (end == std::wstring::npos) {
+      break;  // A partial tag is not a reference.
+    }
+    const size_t nestedTag = text.find(L'&', value);
+    if (nestedTag != std::wstring::npos && nestedTag < end) {
+      // Don't interpret an unterminated tag's contents as another image tag.
+      tag = text.find(L"&image=", end + 1);
+      continue;
+    }
+
+    for (size_t at = value; at + 8 <= end;) {
+      bool isHex = true;
+      for (size_t i = 0; i < 8; ++i) {
+        isHex = isHex && IsHexDigit(text[at + i]);
+      }
+      const bool leftBoundary = at == value || !IsTokenCharacter(text[at - 1]);
+      const bool rightBoundary = at + 8 == end || !IsTokenCharacter(text[at + 8]);
+      if (isHex && leftBoundary && rightBoundary) {
+        for (size_t i = 0; i < 3; ++i) {
+          if (MatchesId(text, at, kPalIds[i])) {
+            text.replace(at, 8, kUsaIds[i]);
+            changed = true;
+            break;
+          }
+        }
+        at += 8;
+      } else {
+        ++at;
+      }
+    }
+    tag = text.find(L"&image=", end + 1);
+  }
+  return changed;
+}
 
 bool ReadPakStrgs(const ReadAt& read, std::map<uint32_t, std::vector<uint8_t>>& out, std::string& error) {
   std::map<ResourceKey, std::vector<uint8_t>> found;
