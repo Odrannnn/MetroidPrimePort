@@ -85,9 +85,10 @@ self-contained — and it is why `MP_USER_PATH` cannot be used to move saves.
 - **The AppImage and the APK**: `tools/make_appimage.sh` collects them into
   `usr/share/licenses/metroid-prime-port/`. It bundles no shared libraries.
   The APK's `syncLicenseNotices` task gathers the same set into `assets/`,
-  verified present in a built package: `port-license.txt`, `port-notice.txt`,
-  `aurora.txt`, `musyx.txt`, `sdl-src.txt`, `imgui-src.txt`, `fmt-src.txt` and
-  `zstd-src.txt`.
+  verified present in a built package (0.21.0, twelve files): `port-license.txt`,
+  `port-notice.txt`, `aurora.txt`, `musyx.txt`, `astcenc.txt`, `adrenotools.txt`,
+  `linkernsbypass.txt`, `sdl-src.txt`, `imgui-src.txt`, `fmt-src.txt`,
+  `zstd-src.txt` and `openssl-license.txt`.
 - **The Flatpak** collects them in the manifest's `post-install`: the two
   vendored snapshots out of the tree, and the four fetched packages by glob,
   because the fetched ones only exist once `cmake-ninja` has run.
@@ -120,10 +121,13 @@ into a refusal. The rule itself is Gradle's, not the script's: calling Gradle
 directly with no key stops the build.
 
 Verified on a release build: the package's signer is
-`CN=Metroid Prime Port, OU=Port, O=Metroid Prime Port` (SHA-256 `d8814c79…`),
-not the debug key's `CN=Android Debug` (`edd22fdb…`), the arm64 `.so` is 29 MB,
-all six third-party notices are in `assets/`, and no `.iso`, `.pak` or `.strg`
-is in the package.
+`CN=Metroid Prime Port, OU=Port, O=Metroid Prime Port` (SHA-256
+`87ea78eb…2b16`, the key in `android/metroid-prime-port-release.jks` and the one
+every release since 0.19.0 carries), not the debug key's `CN=Android Debug`
+(`edd22fdb…`), the arm64 `.so` is about 39 MB, all twelve third-party notices are
+in `assets/`, and no `.iso`, `.pak` or `.strg` is in the package. An earlier
+revision of this section recorded the signer as `d8814c79…` and six notices; both
+were wrong.
 
 The port targets `versionName "0.21.0"` and `versionCode 24`. A version bump
 also adds a `<release>` entry (newest first) to
