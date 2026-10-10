@@ -998,8 +998,8 @@ unpacks to a temporary directory instead of mounting.
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
   input is disabled. The console's `status` prints the game's L/A and the charge.
-- The overlay's **Controls** page keeps settings only: "Mouse settings" (mouse
-  buttons as pad buttons, inversion, crosshair) and "Controller settings" (dead
+- The overlay's **Controls** page keeps settings only: "Mouse settings" (inversion,
+  crosshair) and "Controller settings" (dead
   zones). Every binding is on **Controls > Remap**, below.
 - **Controls > Remap** binds any action, per device (the Device list: Keyboard & mouse, Touch,
   Controllers, plus saved controller kind/model profiles; Advanced > "Separate bindings per
@@ -1256,10 +1256,10 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   Mouse aim replaces the R-button free look, so switching it on in F1 also
   switches on twin stick (still its own setting): the mouse and a pad's right
   stick then add into the same aim.
-- In mouse mode the five mouse buttons act as pad buttons, set in the Controls > Mouse settings
-  sub-tab's "Mouse buttons" list (`mouse_left`, `mouse_middle`, `mouse_right`,
-  `mouse_x1`, `mouse_x2`: none, a pad button, a D-pad direction or the beam
-  shift, which springs in the ball). By default **left-click fires / holds a charge / releases a charged
+- In mouse mode the five mouse buttons act as pad buttons. They're bound on
+  Controls > Remap (Keyboard & mouse); the saved `mouse_left`, `mouse_middle`,
+  `mouse_right`, `mouse_x1`, `mouse_x2` lines (none, a pad button, a D-pad
+  direction or the beam shift) are only its default rows. By default **left-click fires / holds a charge / releases a charged
   shot** (A), **right-click holds lock-on** (L) and **middle-click fires
   missiles** (Y); the side buttons are unset. Either keyboard
   preset restores them too. They feed the normal PAD/gun input path, preserving charge

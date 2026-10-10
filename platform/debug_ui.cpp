@@ -6089,27 +6089,7 @@ void DrawControlsKeyboardMouse() {
   ImGui::SetItemTooltip("Applies under mouse aim and twin stick.");
 
   ImGui::SeparatorText("Mouse buttons");
-  ImGui::TextDisabled("The pad button or beam shift each mouse button presses under mouse aim; out of it "
-                      "only A and B work (bombs, menus). Chords, taps and holds: Controls > Remap.");
-  static const char* const kMouseActionNames[PortInputMap::kMA_Count] = {
-      "None", "A", "B", "X", "Y", "L", "R", "Z", "Start", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right",
-      "Beam shift"};
-  static const char* const kMouseNames[PortInputMap::kMouseButtonCount] = {"Left", "Middle", "Right", "X1 (back)",
-                                                                           "X2 (forward)"};
-  for (int button = 0; button < PortInputMap::kMouseButtonCount; ++button) {
-    ImGui::PushID(button);
-    const int current = PortDebug::MouseAction(button);
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.f);
-    if (ImGui::BeginCombo(kMouseNames[button], kMouseActionNames[current])) {
-      for (int action = 0; action < PortInputMap::kMA_Count; ++action) {
-        if (ImGui::Selectable(kMouseActionNames[action], action == current)) {
-          PortDebug::SetMouseAction(button, action);
-        }
-      }
-      ImGui::EndCombo();
-    }
-    ImGui::PopID();
-  }
+  ImGui::TextDisabled("Mouse buttons are bound in Controls > Remap (Keyboard & mouse).");
 }
 
 void DrawControlsController() {
