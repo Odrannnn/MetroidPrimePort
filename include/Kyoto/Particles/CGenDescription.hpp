@@ -140,6 +140,8 @@ public:
   std::unique_ptr< CPortVarTable > xPortVars;
   // port-only PFCM: each model particle is turned to face the camera before PMRT
   bool xPortFaceCamera = false;
+  // port-only PSHP: Remastered SSHP sprite mesh (0 quad; 3 triangle, 4 pentagon, 5 hexagon, 6 octagon)
+  u8 xPortSpriteShape = 0;
   // port-only PSWX: swooshes started beyond SSWH's one, each with its start frame
   struct PortExtraSwoosh {
     TCachedToken< CSwooshDescription > swoosh;

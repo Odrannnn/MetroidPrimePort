@@ -556,6 +556,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       }
       break;
     }
+    // Port-only: Remastered's sprite polygon (SSHP 3-6; xPortSpriteShape).
+    case SBIG('PSHP'):
+      GetClassID(in);
+      desc->xPortSpriteShape = u8(in.ReadLong());
+      break;
     // Port-only: converted Remastered model particles that face the camera (xPortFaceCamera).
     case SBIG('PFCM'):
       GetClassID(in);

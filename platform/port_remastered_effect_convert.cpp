@@ -2068,6 +2068,7 @@ public:
     const EffectProperty* material = nullptr;
     const EffectProperty* xfmd = nullptr;
     bool faceCamera = false;
+    uint32_t spriteShape = 0;
     const EffectProperty* mover = nullptr;
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
     const bool textured = retail.count(F("TEXR")) != 0;
@@ -2111,24 +2112,6 @@ public:
       uint32_t fourcc = property.fourcc;
       if (placeholder && fourcc == F("MTIN")) {
         result.dropped.push_back("MTIN: its colour texture is nil (the generator draws nothing)");
-        continue;
-      }
-      if (modelsOnly && fourcc == F("SIZE") && !has(F("PMSC")) && retail.count(F("PMSC")) != 0 &&
-          property.value.size() == 1) {
-        // Remastered scales a model by SIZE (uniformly); retail's model scale is PMSC, a vector.
-        EffectValue scale;
-        scale.kind = EffectValue::Kind::Element;
-        scale.fourcc = F("RTOV");
-        scale.args.push_back(property.value[0]);
-        std::vector<uint8_t> bytes;
-        std::string why;
-        if (Property(F("PMSC"), retail.at(F("PMSC")), {scale}, bytes, why)) {
-          written.insert(F("PMSC"));
-          AppendBE32(out, F("PMSC"));
-          out.insert(out.end(), bytes.begin(), bytes.end());
-          continue;
-        }
-        result.dropped.push_back("SIZE: as PMSC, " + why);
         continue;
       }
       if ((drawsNothing || modelsOnly) && fourcc == F("SIZE")) {
@@ -2229,6 +2212,17 @@ public:
           continue;
         }
         result.dropped.push_back("POFS: " + why);
+        continue;
+      }
+      if (part && fourcc == F("SSHP") && property.value.size() == 1 && property.value[0].kind == EffectValue::Kind::Byte) {
+        // Remastered's sprite mesh slot (desc+0x394 in RenderSpriteEntries): 0-2 are quad grids, 3-6 polygons.
+        // Port-only PSHP carries the polygon shapes (kb format/SSHP.md).
+        const uint32_t shape = property.value[0].word;
+        if (shape >= 3 && shape <= 6) {
+          spriteShape = shape;
+        } else if (shape > 6) {
+          result.dropped.push_back("SSHP: shape " + std::to_string(shape) + " is past Remastered's 7 meshes");
+        }
         continue;
       }
       const auto found = retail.find(fourcc);
@@ -2360,6 +2354,11 @@ public:
         AppendBE32(out, id);
         AppendBE32(out, frame);
       }
+    }
+    if (spriteShape != 0) {
+      AppendBE32(out, F("PSHP"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, spriteShape);
     }
     if (faceCamera) {
       // Port-only: the model particles face the camera (xPortFaceCamera; see FacingRotation).
@@ -2699,7 +2698,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PerParticle(fourcc == F("VSMT"));
     } else if ((part && fourcc == F("SSZE")) || (vfx && fourcc == F("ITEN"))) {
       ok = reader.Element(Type::Real);
-    } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") || fourcc == F("PFCM"))) ||
+    } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") || fourcc == F("PFCM") || fourcc == F("PSHP"))) ||
                (vfx && fourcc == F("PIRN"))) {
       ok = reader.PortWord();
     } else if (vfx && fourcc == F("PVRT")) {

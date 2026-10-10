@@ -29,6 +29,26 @@ constexpr float kPivot[9][4] = {
 // Quad corners in draw_quads order; (qx, qy) is the corner's position in the unit quad.
 constexpr float kCorner[4][2] = {{0.f, 0.f}, {1.f, 0.f}, {1.f, 1.f}, {0.f, 1.f}};
 
+// Remastered's sprite meshes for SSHP 3-6 (CGraphicsUtilCache::BuildParticleInstancingBuffers; kb
+// format/SSHP.md): the corner (qx, qy) is both the position in the unit quad and the UV. Each
+// triangle goes out as a degenerate quad (a, b, c, c). Shapes 0-2 are plain quad grids.
+struct PortSpriteShape {
+  const float (*pts)[2];
+  const uint8_t* idx;
+  int triangles;
+};
+constexpr float kTriPts[3][2] = {{0.f, 1.f}, {1.f, 1.f}, {.5f, 0.f}};
+constexpr uint8_t kTriIdx[] = {0, 1, 2};
+constexpr float kPentPts[5][2] = {{.2f, 0.f}, {.8f, 0.f}, {1.f, .6f}, {.5f, 1.f}, {0.f, .6f}};
+constexpr uint8_t kPentIdx[] = {0, 3, 4, 0, 1, 3, 1, 2, 3};
+constexpr float kHexPts[6][2] = {{.24f, 0.f}, {.76f, 0.f}, {1.f, .5f}, {.76f, 1.f}, {.24f, 1.f}, {0.f, .5f}};
+constexpr uint8_t kHexIdx[] = {0, 1, 5, 1, 2, 3, 3, 4, 5, 1, 3, 5};
+constexpr float kOctPts[8][2] = {{0.2928932f, 0.f}, {0.7071068f, 0.f}, {1.f, 0.2928932f}, {1.f, 0.7071068f},
+                                 {0.7071068f, 1.f}, {0.2928932f, 1.f}, {0.f, 0.7071068f}, {0.f, 0.2928932f}};
+constexpr uint8_t kOctIdx[] = {0, 1, 7, 1, 2, 3, 1, 3, 4, 1, 4, 7, 7, 4, 5, 7, 5, 6};
+constexpr PortSpriteShape kShapes[4] = {
+    {kTriPts, kTriIdx, 1}, {kPentPts, kPentIdx, 3}, {kHexPts, kHexIdx, 4}, {kOctPts, kOctIdx, 6}};
+
 // One VTMT row's evaluated terms.
 struct Tm {
   float a = 0.f, b = 0.f, c = 1.f, d = 1.f, cosE = 1.f, sinE = 0.f, f = 0.f;
@@ -405,9 +425,20 @@ void CElementGen::PortRenderParticlesVfx() {
       vec[2] = n.GetY();
     }
 
-    for (int k = 0; k < 4; ++k) {
-      const float qx = kCorner[k][0];
-      const float qy = kCorner[k][1];
+    const u8 shapeId = x28_loadedGenDesc->xPortSpriteShape;
+    const PortSpriteShape* const shape = shapeId >= 3 && shapeId <= 6 ? &kShapes[shapeId - 3] : nullptr;
+    const int polyQuads = shape != nullptr ? shape->triangles : 1;
+    for (int pq = 0; pq < polyQuads * 4; ++pq) {
+      float qx, qy;
+      if (shape != nullptr) {
+        const uint8_t* tri = shape->idx + (pq / 4) * 3;
+        const float* pt = shape->pts[tri[std::min(pq % 4, 2)]];
+        qx = pt[0];
+        qy = pt[1];
+      } else {
+        qx = kCorner[pq][0];
+        qy = kCorner[pq][1];
+      }
       const float ex = pivot[0] + (pivot[2] - pivot[0]) * qx;
       const float ey = pivot[1] + (pivot[3] - pivot[1]) * qy;
       const float ox = ex * sx;
@@ -439,7 +470,7 @@ void CElementGen::PortRenderParticlesVfx() {
       v.vec[2] = vec[2];
       verts.push_back(v);
     }
-    if (verts.size() >= static_cast< size_t >(kMaxQuadsPerDraw) * 4) {
+    if (verts.size() >= static_cast< size_t >(kMaxQuadsPerDraw - 8) * 4) {
       flush();
     }
   }
