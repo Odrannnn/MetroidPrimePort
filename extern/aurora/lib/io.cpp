@@ -34,7 +34,11 @@ bool copy_stream(SDL_IOStream* src, SDL_IOStream* dst) noexcept {
   }
 }
 
+std::atomic_bool g_configPersistenceDisabled{false};
 } // namespace
+
+void disable_config_persistence() noexcept { g_configPersistenceDisabled.store(true, std::memory_order_release); }
+bool config_persistence_disabled() noexcept { return g_configPersistenceDisabled.load(std::memory_order_acquire); }
 
 std::string fs_path_to_string(const std::filesystem::path& path) {
   const auto utf8 = path.u8string();

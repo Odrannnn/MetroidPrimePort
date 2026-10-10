@@ -192,6 +192,12 @@ void aurora_set_timescale(float scale);
  */
 void aurora_set_background_pipelines_paused(bool paused);
 
+/**
+ * Stops aurora writing the controller mapping, keyboard binding and controller port files for the
+ * rest of the process. For an app that has just moved them away (a configuration reset).
+ */
+void aurora_disable_config_persistence();
+
 AuroraBackend aurora_get_backend();
 // The driver's description from the graphics adapter (e.g. "Turnip Mesa driver 25.1.0"); "" before init.
 const char* aurora_get_gpu_driver();

@@ -189,6 +189,38 @@ int main(int argc, char** argv) {
     const auto retry = PortConfigReset::Reset(dir);
     Check(retry.ok && retry.moved, "a retry after the failure works");
   }
+  // Rollback that itself fails: the stuck file stays in the kept backup folder.
+  {
+    const fs::path dir = root / "stuck";
+    Populate(dir);
+    int moves = 0;
+    const auto r = PortConfigReset::Reset(
+        dir, [&](const std::string&) { return ++moves < 4; },
+        [](const std::string& name) { return name != "controls.toml"; });
+    Check(!r.ok && !r.moved && !r.backupDir.empty(), "incomplete rollback keeps the backup path");
+    Check(r.files.size() == 1 && r.files[0] == "controls.toml", "stuck file reported");
+    Check(r.error.find("could not restore controls.toml") != std::string::npos, "stuck file in the error");
+    Check(Read(fs::path(r.backupDir) / "controls.toml") == "toml", "stuck file is in the backup");
+    Check(Read(dir / "imgui.ini") == "imgui", "the others are restored");
+  }
+
+  // Unreadable settings (skipped when permissions don't apply, e.g. running as root).
+  {
+    const fs::path dir = root / "unreadable";
+    Populate(dir);
+    fs::permissions(dir / "port_settings.ini", fs::perms::none);
+    std::ifstream probe(dir / "port_settings.ini");
+    if (!probe) {
+      const auto r = PortConfigReset::Reset(dir);
+      fs::permissions(dir / "port_settings.ini", fs::perms::owner_read | fs::perms::owner_write);
+      Check(!r.ok && !r.moved && r.backupDir.empty(), "unreadable settings: reset fails");
+      Check(Read(dir / "port_settings.ini").find("disc_path") != std::string::npos &&
+                Read(dir / "controls.toml") == "toml",
+            "unreadable settings: everything restored");
+    } else {
+      fs::permissions(dir / "port_settings.ini", fs::perms::owner_read | fs::perms::owner_write);
+    }
+  }
 #endif
 
   if (sFailures == 0) {

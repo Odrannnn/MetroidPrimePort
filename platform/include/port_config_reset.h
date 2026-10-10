@@ -32,7 +32,7 @@ namespace fs = std::filesystem;
 struct Result {
   bool ok = false;
   bool moved = false;      // something was moved (false: no configuration existed)
-  std::string backupDir;   // empty when nothing was moved
+  std::string backupDir;   // the backup folder; kept on a failed reset only if the rollback left files in it
   std::string error;       // set when !ok
   std::vector<std::string> files; // names moved into the backup
 };
@@ -109,9 +109,12 @@ inline fs::path MakeBackupDir(const fs::path& dir, std::string& error) {
   return {};
 }
 
-inline std::string PreservedSettings(const fs::path& backup) {
+inline bool PreservedSettings(const fs::path& backup, std::string& out) {
   std::ifstream in(backup, std::ios::binary);
-  std::string out;
+  if (!in) {
+    return false;
+  }
+  out.clear();
   std::string line;
   while (std::getline(in, line)) {
     if (!line.empty() && line.back() == '\r') {
@@ -122,7 +125,7 @@ inline std::string PreservedSettings(const fs::path& backup) {
       out += line + '\n';
     }
   }
-  return out;
+  return in.eof() && !in.bad();
 }
 
 } // namespace detail
@@ -130,8 +133,10 @@ inline std::string PreservedSettings(const fs::path& backup) {
 // Moves the configuration in `dir` into a new backup folder. `dir` may itself be
 // a symlink; entries inside it may not.
 // `beforeMove`, when set, is asked before each file is moved; returning false makes
-// that move fail (the tests use it to exercise the rollback).
-inline Result Reset(const fs::path& dir, const std::function< bool(const std::string&) >& beforeMove = {}) {
+// that move fail; `beforeRestore` does the same for the rollback's moves back (the
+// tests use both).
+inline Result Reset(const fs::path& dir, const std::function< bool(const std::string&) >& beforeMove = {},
+                    const std::function< bool(const std::string&) >& beforeRestore = {}) {
   Result result;
   std::error_code ec;
   if (!fs::is_directory(dir, ec)) {
@@ -161,8 +166,12 @@ inline Result Reset(const fs::path& dir, const std::function< bool(const std::st
     const fs::path path = dir / fs::path(std::u8string(name.begin(), name.end()));
     std::error_code e;
     const fs::file_status status = fs::symlink_status(path, e);
-    if (!fs::exists(status)) {
+    if (status.type() == fs::file_type::not_found) {
       continue;
+    }
+    if (e || status.type() == fs::file_type::none) {
+      result.error = "could not inspect " + name + (e ? ": " + e.message() : "") + "; nothing was changed";
+      return result;
     }
     if (fs::is_symlink(status)) {
       result.error = name + " is a symbolic link; nothing was changed";
@@ -191,20 +200,33 @@ inline Result Reset(const fs::path& dir, const std::function< bool(const std::st
     if (!freshSettings.empty()) {
       fs::remove(freshSettings, e);
     }
+    std::vector<std::string> stuck;
+    std::string detail;
     for (auto it = moved.rbegin(); it != moved.rend(); ++it) {
       const fs::path name(std::u8string(it->begin(), it->end()));
       std::error_code back;
-      fs::rename(backup / name, dir / name, back);
+      if (beforeRestore && !beforeRestore(*it)) {
+        back = std::make_error_code(std::errc::io_error);
+      } else {
+        fs::rename(backup / name, dir / name, back);
+      }
       if (back) {
-        result.error += " (could not restore " + *it + ": " + back.message() + ")";
+        stuck.push_back(*it);
+        detail += " (could not restore " + *it + ": " + back.message() + ")";
       }
     }
-    fs::remove(backup, e); // only succeeds when empty
-    result.error = why + result.error;
     result.ok = false;
     result.moved = false;
-    result.backupDir.clear();
-    result.files.clear();
+    result.files = stuck;
+    result.error = why + detail;
+    // The backup folder goes only when empty; with files stuck in it, its path is
+    // kept so the caller can say where they are.
+    std::error_code rm;
+    if (stuck.empty() && fs::remove(backup, rm)) {
+      result.backupDir.clear();
+    } else {
+      result.backupDir = detail::Utf8(backup);
+    }
     return result;
   };
 
@@ -221,9 +243,11 @@ inline Result Reset(const fs::path& dir, const std::function< bool(const std::st
     moved.push_back(name);
   }
 
-  const std::string keep = std::find(moved.begin(), moved.end(), "port_settings.ini") != moved.end()
-                               ? detail::PreservedSettings(backup / "port_settings.ini")
-                               : std::string();
+  std::string keep;
+  if (std::find(moved.begin(), moved.end(), "port_settings.ini") != moved.end() &&
+      !detail::PreservedSettings(backup / "port_settings.ini", keep)) {
+    return rollback("could not read the settings to keep the disc paths");
+  }
   if (!keep.empty()) {
     freshSettings = dir / "port_settings.ini";
     std::ofstream out(freshSettings, std::ios::binary | std::ios::trunc);

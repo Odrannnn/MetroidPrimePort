@@ -902,6 +902,15 @@ void SaveSettings() {
   }
   file << text;
   file.flush();
+  if (!file) {
+    std::fprintf(stderr, "metroid_prime_port: could not write settings to %s (write failed)\n", path.c_str());
+    return;
+  }
+  file.close();
+  if (file.fail()) {
+    std::fprintf(stderr, "metroid_prime_port: could not write settings to %s (close failed)\n", path.c_str());
+    return;
+  }
   std::fprintf(stderr, "metroid_prime_port: saved settings to %s\n", path.c_str());
   sSettingsDirty = false;
 }
@@ -6665,7 +6674,7 @@ void DrawSettingsSection() {
                            "get the defaults.");
     if (!sResetError.empty()) {
       ImGui::PushStyleColor(ImGuiCol_Text, ThemeBadColor());
-      ImGui::TextWrapped("Reset failed, nothing was changed: %s", sResetError.c_str());
+      ImGui::TextWrapped("Reset failed: %s", sResetError.c_str());
       ImGui::PopStyleColor();
     }
     ImGui::PopTextWrapPos();
@@ -6674,19 +6683,25 @@ void DrawSettingsSection() {
       sSettingsDirty = true;
       SaveSettings();
       if (sSettingsDirty) {
-        sResetError = "could not save the current settings first.";
+        sResetError = "could not save the current settings first, so nothing was moved.";
       } else {
         const std::string& folder = PortPaths::UserFolder();
         const PortConfigReset::Result result =
             PortConfigReset::Reset(PortConfigReset::detail::FromUtf8Path(folder.empty() ? "./" : folder));
         if (!result.ok) {
           sResetError = result.error;
+          if (!result.backupDir.empty()) {
+            sResetError += " Files that could not be restored are in " + result.backupDir + ".";
+          } else {
+            sResetError += " Your configuration files were not moved.";
+          }
           PortLog::Write("port: reset configuration failed: %s\n", result.error.c_str());
         } else {
           PortLog::Write("port: reset configuration: %s\n",
                          result.moved ? ("backup in " + result.backupDir).c_str() : "no files to move");
           // From here no code path may write the configuration again.
           sConfigReset = true;
+          aurora_disable_config_persistence();
           if (ImGui::GetCurrentContext() != nullptr) {
             ImGui::GetIO().IniFilename = nullptr;
           }

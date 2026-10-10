@@ -866,7 +866,7 @@ unpacks to a temporary directory instead of mounting.
   (older backups are never reused), and exits; the next launch starts from
   defaults (`platform/include/port_config_reset.h`, test `port_config_reset_tests`).
   Only those names are touched, a symlink among them makes it refuse, and a failed
-  move restores everything and shows the error without quitting. A fresh
+  move is rolled back and the error shown without quitting (if the rollback itself fails, the message names the files left in the backup folder). After a successful reset every later config write (settings, `imgui.ini`, Aurora's controller/keyboard files) is blocked for the process (`aurora_disable_config_persistence`). A fresh
   `port_settings.ini` keeps just `disc_path`, `remastered_nsp` and `remastered_keys`,
   so the disc isn't asked for again. Saves, save states, mods, caches, the disc and
   the data folder location are not touched. Game options that retail keeps inside

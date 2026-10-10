@@ -72,6 +72,11 @@ private:
   std::string m_targetPath;
 };
 
+// Once set, the controller mapping, keyboard binding and controller port files
+// are no longer written (the app has moved them away on purpose). One way.
+void disable_config_persistence() noexcept;
+bool config_persistence_disabled() noexcept;
+
 AtomicFileWriter open_atomic_file(const std::filesystem::path& path,
                                   AtomicFileMode mode = AtomicFileMode::Truncate) noexcept;
 bool write_file_atomic(const std::filesystem::path& path, std::span<const uint8_t> data) noexcept;
