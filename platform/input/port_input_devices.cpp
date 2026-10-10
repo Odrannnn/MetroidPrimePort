@@ -180,8 +180,16 @@ void BindController(Profile& p) {
   const PADButtonMapping* buttons = PADGetButtonMappings(kPort, &buttonCount);
   const PADAxisMapping* axes = PADGetAxisMappings(kPort, &axisCount);
   const PADDeadZones* dz = PADGetDeadZones(kPort);
-  if (buttons == nullptr) buttonCount = 0;
-  if (axes == nullptr) axisCount = 0;
+  // No controller on the port: bind the standard defaults anyway, so the Remap
+  // page shows what a pad would get (nothing reads them until one connects).
+  PADDefaultMapping fallback;
+  if (buttons == nullptr || axes == nullptr) {
+    PADGetDefaultMapping(&fallback, PAD_TYPE_STANDARD);
+    buttons = fallback.buttons;
+    axes = fallback.axes;
+    buttonCount = PAD_BUTTON_COUNT;
+    axisCount = PAD_AXIS_COUNT;
+  }
 
   bool lSet = false;
   bool rSet = false;
@@ -204,7 +212,7 @@ void BindController(Profile& p) {
     }
     // Aurora's emulated trigger click: a pulled L/R analog presses L/R when no
     // button is mapped to them.
-    if (trigger && dz != nullptr && dz->emulateTriggers) {
+    if (trigger && (dz == nullptr || dz->emulateTriggers)) {
       const bool left = m.padAxis == PAD_AXIS_TRIGGER_L;
       if (!(left ? lSet : rSet)) {
         Bind(p, left ? Action::PadL : Action::PadR,

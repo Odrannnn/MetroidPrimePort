@@ -280,6 +280,8 @@ typedef enum {
 } PADControllerType;
 
 void PADSetDefaultMapping(const PADDefaultMapping* mapping, PADControllerType type);
+/* The default mapping a newly connected controller of that type starts with. */
+void PADGetDefaultMapping(PADDefaultMapping* mapping, PADControllerType type);
 
 BOOL PADSetColor(u32 port, u8 red, u8 green, u8 blue);
 BOOL PADGetColor(u32 port, u8* red, u8* green, u8* blue);

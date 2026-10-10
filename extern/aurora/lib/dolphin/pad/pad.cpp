@@ -511,6 +511,19 @@ void __PADSetDefaultMapping(aurora::input::GameController* controller) /*  NOLIN
     break;
   case SDL_GAMEPAD_TYPE_GAMECUBE:
     controller->m_buttonMapping = g_defaultButtonsGamecube;
+    // SDL also types pads as GameCube by VID/PID alone (PowerA's 20d6:a711 is shared with a Switch-style
+    // pad), and those have no full-pull click on MISC3/MISC4. Bound to it, L and R could never press, and
+    // the analog fallback in PADRead is skipped; unbound, the trigger past its click point presses them.
+    if (!SDL_GamepadHasButton(controller->m_controller, SDL_GAMEPAD_BUTTON_MISC3)) {
+      for (auto& mapping : controller->m_buttonMapping) {
+        if ((mapping.padButton == PAD_TRIGGER_L || mapping.padButton == PAD_TRIGGER_R) &&
+            (mapping.nativeButton == SDL_GAMEPAD_BUTTON_MISC3 || mapping.nativeButton == SDL_GAMEPAD_BUTTON_MISC4)) {
+          mapping.nativeButton = PAD_NATIVE_BUTTON_INVALID;
+        }
+      }
+      Log.info("{} has no trigger click: L and R follow the analog triggers",
+               SDL_GetGamepadName(controller->m_controller));
+    }
     break;
   default:
     controller->m_buttonMapping = g_defaultButtonsStandard;
@@ -1836,6 +1849,26 @@ void PADSetDefaultMapping(const PADDefaultMapping* mapping, const PADControllerT
     break;
   }
   g_defaultAxes = toStdArray(mapping->axes);
+}
+
+void PADGetDefaultMapping(PADDefaultMapping* mapping, const PADControllerType type) {
+  const std::array<PADButtonMapping, PAD_BUTTON_COUNT>* buttons = &g_defaultButtonsStandard;
+  switch (type) {
+  case PAD_TYPE_XBOX360: buttons = &g_defaultButtonsXBox360; break;
+  case PAD_TYPE_XBOXONE: buttons = &g_defaultButtonsXBoxOne; break;
+  case PAD_TYPE_PS3: buttons = &g_defaultButtonsPS3; break;
+  case PAD_TYPE_PS4: buttons = &g_defaultButtonsPS4; break;
+  case PAD_TYPE_PS5: buttons = &g_defaultButtonsPS5; break;
+  case PAD_TYPE_SWITCH_PROCON: buttons = &g_defaultButtonsProCon; break;
+  case PAD_TYPE_JOYCON_LEFT: buttons = &g_defaultButtonsJoyConLeft; break;
+  case PAD_TYPE_JOYCON_RIGHT: buttons = &g_defaultButtonsJoyConRight; break;
+  case PAD_TYPE_JOYCON_PAIR: buttons = &g_defaultButtonsJoyPair; break;
+  case PAD_TYPE_GAMECUBE: buttons = &g_defaultButtonsGamecube; break;
+  case PAD_TYPE_NSO_GAMECUBE: buttons = &g_defaultButtonsNSOGamecube; break;
+  default: break;
+  }
+  std::copy(buttons->begin(), buttons->end(), mapping->buttons);
+  std::copy(g_defaultAxes.begin(), g_defaultAxes.end(), mapping->axes);
 }
 
 BOOL PADSetColor(const u32 port, const u8 red, const u8 green, const u8 blue) {
