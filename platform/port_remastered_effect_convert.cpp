@@ -128,6 +128,8 @@ const Signatures& ElementsOf(Type type) {
       {F("IMPL"), "i"},  {F("ILPT"), "i"},  {F("SPAH"), "iii"}, {F("IRND"), "ii"}, {F("CLMP"), "iii"},
       {F("PULS"), "iiii"}, {F("NONE"), ""}, {F("RTOI"), "rr"},  {F("SUB_"), "ii"}, {F("GTCP"), ""},
       {F("GAPC"), ""},   {F("GEMT"), ""},
+      // Port-only (CParticleDataFactory under TARGET_PC): FIAT start, count, divisor, loop.
+      {F("FIAT"), "iiiB"},
   };
   static const Signatures realElements = {
       {F("CNST"), "#"},   {F("NONE"), ""},    {F("KEYE"), "k"},    {F("KEYP"), "k"},   {F("SCAL"), "r"},
@@ -2066,6 +2068,7 @@ public:
     const EffectProperty* material = nullptr;
     const EffectProperty* xfmd = nullptr;
     bool faceCamera = false;
+    uint32_t spriteShape = 0;
     const EffectProperty* mover = nullptr;
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
     const bool textured = retail.count(F("TEXR")) != 0;
@@ -2193,6 +2196,35 @@ public:
         portOnly.push_back(fourcc);
         continue;
       }
+      // Port-only PSRO: a swoosh's POFS of ROTV(v, EXTR) is v turned by the swoosh's orientation.
+      if (swoosh && fourcc == F("POFS") && retail.count(fourcc) != 0 && property.value.size() == 1 &&
+          IsElement(property.value[0], F("ROTV")) && property.value[0].args.size() == 2 &&
+          IsElement(property.value[0].args[1], F("EXTR"))) {
+        std::vector<uint8_t> bytes;
+        std::string why;
+        if (Property(fourcc, retail.at(fourcc), {property.value[0].args[0]}, bytes, why)) {
+          written.insert(fourcc);
+          AppendBE32(out, fourcc);
+          out.insert(out.end(), bytes.begin(), bytes.end());
+          AppendBE32(out, F("PSRO"));
+          AppendBE32(out, F("CNST"));
+          AppendBE32(out, 1);
+          continue;
+        }
+        result.dropped.push_back("POFS: " + why);
+        continue;
+      }
+      if (part && fourcc == F("SSHP") && property.value.size() == 1 && property.value[0].kind == EffectValue::Kind::Byte) {
+        // Remastered's sprite mesh slot (desc+0x394 in RenderSpriteEntries): 0-2 are quad grids, 3-6 polygons.
+        // Port-only PSHP carries the polygon shapes (kb format/SSHP.md).
+        const uint32_t shape = property.value[0].word;
+        if (shape >= 3 && shape <= 6) {
+          spriteShape = shape;
+        } else if (shape > 6) {
+          result.dropped.push_back("SSHP: shape " + std::to_string(shape) + " is past Remastered's 7 meshes");
+        }
+        continue;
+      }
       const auto found = retail.find(fourcc);
       if (found == retail.end()) {
         result.dropped.push_back(EffectFourCCString(property.fourcc) + ": Remastered only");
@@ -2285,6 +2317,7 @@ public:
     }
     // The first swoosh and electric child the spawn table starts, where the
     // generator has none of its own.
+    std::vector<std::pair<uint32_t, uint32_t>> extraSwooshes;  // (id, frame), port-only PSWX
     for (const auto& [type, child, frame] : {std::tuple(F("SWHC"), F("SSWH"), F("SSSD")),
                                               std::tuple(F("ELSC"), F("SELC"), F("SESD"))}) {
       size_t count = 0;
@@ -2304,11 +2337,28 @@ public:
             m_approximated.push_back("KSSM: " + EffectFourCCString(child) + " frame kept from " +
                                      EffectFourCCString(frame));
           }
+        } else if (type == F("SWHC")) {
+          // Port-only PSWX: retail's generator spawns one swoosh, Remastered's every one it starts.
+          extraSwooshes.emplace_back(each.id, each.frame);
         } else {
           result.dropped.push_back("KSSM: a spawned " + EffectFourCCString(type) + " beyond retail's one");
           ++result.droppedRetail;
         }
       }
+    }
+    if (!extraSwooshes.empty()) {
+      AppendBE32(out, F("PSWX"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, uint32_t(extraSwooshes.size()));
+      for (const auto& [id, frame] : extraSwooshes) {
+        AppendBE32(out, id);
+        AppendBE32(out, frame);
+      }
+    }
+    if (spriteShape != 0) {
+      AppendBE32(out, F("PSHP"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, spriteShape);
     }
     if (faceCamera) {
       // Port-only: the model particles face the camera (xPortFaceCamera; see FacingRotation).
@@ -2580,6 +2630,12 @@ public:
     return Word(fourcc) && fourcc == F("CNST") && Word(count) && count <= 4096 && Skip(size_t(count) * 36);
   }
 
+  // The port-only PSWX property: CNST, a count, then an id and a frame each.
+  bool PortExtraSwooshes() {
+    uint32_t fourcc, count;
+    return Word(fourcc) && fourcc == F("CNST") && Word(count) && count <= 64 && Skip(size_t(count) * 8);
+  }
+
   const std::string& Error() const { return m_error; }
 
 private:
@@ -2642,11 +2698,15 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PerParticle(fourcc == F("VSMT"));
     } else if ((part && fourcc == F("SSZE")) || (vfx && fourcc == F("ITEN"))) {
       ok = reader.Element(Type::Real);
-    } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") || fourcc == F("PFCM"))) ||
+    } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") || fourcc == F("PFCM") || fourcc == F("PSHP"))) ||
                (vfx && fourcc == F("PIRN"))) {
       ok = reader.PortWord();
     } else if (vfx && fourcc == F("PVRT")) {
       ok = reader.PortVariables();
+    } else if (part && fourcc == F("PSWX")) {
+      ok = reader.PortExtraSwooshes();
+    } else if (!part && vfx && fourcc == F("PSRO")) {
+      ok = reader.PortWord();
     } else if (const auto found = retail.find(fourcc); found == retail.end()) {
       error = "property " + EffectFourCCString(fourcc) + " retail does not read";
       return false;

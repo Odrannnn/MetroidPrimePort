@@ -48,6 +48,8 @@ public:
 #ifdef TARGET_PC
   // port-only Remastered material (VMAT etc.; see CGenDescription::xPortVfx)
   std::unique_ptr< CPortVfxData > xPortVfx;
+  // port-only PSRO: POFS is turned by the swoosh's orientation (Remastered's ROTV(v, EXTR))
+  bool xPortRotateOffset = false;
   // port-only PIRN: a converted Remastered swoosh, whose COLR runs over the live points
   bool xPortIrnd = false;
   // port-only PVRT: Remastered particle variables (names, types, defaults)

@@ -109,6 +109,22 @@ public:
   bool GetValue(int frame, int& valOut) const override;
 };
 
+#ifdef TARGET_PC
+// port-only FIAT (Remastered's CIEFrameIndexFromAnimationTime, 0x2a9be8): start + frame * count / divisor,
+// clamped to count - 1, or wrapped modulo count when `loop`.
+class CIEFrameIndexFromAnimationTime : public CIntElement {
+  CIntElement* x4_start;
+  CIntElement* x8_count;
+  CIntElement* xc_divisor;
+  bool x10_loop;
+
+public:
+  CIEFrameIndexFromAnimationTime(CIntElement* start, CIntElement* count, CIntElement* divisor, bool loop);
+  ~CIEFrameIndexFromAnimationTime() override;
+  bool GetValue(int frame, int& valOut) const override;
+};
+#endif
+
 class CIETimeChain : public CIntElement {
   CIntElement* x4_a;
   CIntElement* x8_b;

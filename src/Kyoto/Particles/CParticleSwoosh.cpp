@@ -196,6 +196,11 @@ const bool CParticleSwoosh::Update(double dt) {
       }
       if (x1c_desc->x24_POFS) {
         x1c_desc->x24_POFS->GetValue(x28_curFrame, x15c_swooshes[x158_curParticle].mOffset);
+#ifdef TARGET_PC
+        if (x1c_desc->xPortRotateOffset) {
+          x15c_swooshes[x158_curParticle].mOffset = x44_orientation * x15c_swooshes[x158_curParticle].mOffset;
+        }
+#endif
       }
       x15c_swooshes[x158_curParticle].mUseOffset = x15c_swooshes[x158_curParticle].mOffset;
       if (x1c_desc->x14_COLR) {
