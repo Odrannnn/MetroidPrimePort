@@ -135,6 +135,11 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       swoosh->x45_26_CRND = CParticleDataFactory::GetBool(in);
       break;
 #ifdef TARGET_PC
+    // Port-only: POFS turned by the swoosh's orientation (xPortRotateOffset).
+    case 'PSRO':
+      CParticleDataFactory::GetClassID(in);
+      swoosh->xPortRotateOffset = in.ReadLong() != 0;
+      break;
     // Port-only Remastered particle variables (PVRT).
     case 'PVRT':
       CParticleDataFactory::GetClassID(in);

@@ -133,6 +133,11 @@ void CParticleDataFactory::LoadGPSMTokens(CGenDescription* desc) {
   if (desc->xc0_SSWH) {
     desc->xc0_SSWH->ForceCache();
   }
+#ifdef TARGET_PC
+  for (auto& extra : desc->xPortExtraSwooshes) {
+    extra.swoosh.ForceCache();
+  }
+#endif
 }
 
 #ifdef TARGET_PC
@@ -534,6 +539,23 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortIrnd = in.ReadLong() != 0;
       break;
+    // Port-only: the swooshes a converted effect starts beyond SSWH's one (xPortExtraSwooshes).
+    case SBIG('PSWX'): {
+      GetClassID(in);
+      const u32 count = in.ReadLong();
+      if (count > kPortVfxMaxElems) {
+        return false;
+      }
+      for (u32 i = 0; i < count; ++i) {
+        const CAssetId id = in.Get< CAssetId >();
+        const int frame = int(in.ReadLong());
+        if (id != 0) {
+          desc->xPortExtraSwooshes.push_back(
+              {TCachedToken< CSwooshDescription >(TToken< CSwooshDescription >(pool->GetObj(SObjectTag(SBIG('SWHC'), id)))), frame});
+        }
+      }
+      break;
+    }
     // Port-only: converted Remastered model particles that face the camera (xPortFaceCamera).
     case SBIG('PFCM'):
       GetClassID(in);
@@ -810,6 +832,15 @@ CIntElement* CParticleDataFactory::GetIntElement(CInputStream& in) {
     CIntElement* c = GetIntElement(in);
     return rs_new CIEClamp(a, b, c);
   }
+#ifdef TARGET_PC
+  case SBIG('FIAT'): {
+    CIntElement* start = GetIntElement(in);
+    CIntElement* count = GetIntElement(in);
+    CIntElement* divisor = GetIntElement(in);
+    const bool loop = GetBool(in);
+    return rs_new CIEFrameIndexFromAnimationTime(start, count, divisor, loop);
+  }
+#endif
   case SBIG('PULS'): {
     CIntElement* a = GetIntElement(in);
     CIntElement* b = GetIntElement(in);

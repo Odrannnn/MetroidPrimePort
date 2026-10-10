@@ -1119,6 +1119,26 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
     x290_activePartChildren.push_back(swoosh);
   }
 
+#ifdef TARGET_PC
+  // PSWX - the further swooshes a converted Remastered effect starts
+  if (x84_prevFrame != x74_curFrame) {
+    for (auto& extra : x28_loadedGenDesc->xPortExtraSwooshes) {
+      if (x74_curFrame != extra.frame) {
+        continue;
+      }
+      CParticleSwoosh* swoosh = rs_new CParticleSwoosh(extra.swoosh, 0);
+      swoosh->SetGlobalTranslation(xe8_globalTranslation);
+      swoosh->SetGlobalScale(x100_globalScale);
+      swoosh->SetLocalScale(x16c_localScale);
+      swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
+      swoosh->SetOrientation(x1d8_orientation);
+      swoosh->SetParticleEmission(x88_particleEmission);
+      x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
+      x290_activePartChildren.push_back(swoosh);
+    }
+  }
+#endif
+
   // SELC - electric child particle system
   if (x28_loadedGenDesc->xd8_SELC && x84_prevFrame != x74_curFrame && x74_curFrame == x2bc_SESD) {
     CParticleElectric* electric = rs_new CParticleElectric(*x28_loadedGenDesc->xd8_SELC);

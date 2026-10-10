@@ -140,6 +140,12 @@ public:
   std::unique_ptr< CPortVarTable > xPortVars;
   // port-only PFCM: each model particle is turned to face the camera before PMRT
   bool xPortFaceCamera = false;
+  // port-only PSWX: swooshes started beyond SSWH's one, each with its start frame
+  struct PortExtraSwoosh {
+    TCachedToken< CSwooshDescription > swoosh;
+    int frame;
+  };
+  std::vector< PortExtraSwoosh > xPortExtraSwooshes;
 #endif
   CVectorElement* x58_PMOP;
   CVectorElement* x5c_PMRT;
