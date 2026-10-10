@@ -156,7 +156,14 @@ uint64_t sTimingWallLastNs = 0;
 unsigned sTimingFrames = 0, sTimingTicks = 0;
 double sActualFps = 0.0, sActualTps = 0.0;
 double sThroughputFps = 0.0;
+// On by default on macOS: Dawn's Metal backend has no non-tearing mode besides
+// vsync (Mailbox keeps displaySyncEnabled), and Immediate at the 60 fps cap on a
+// 60 Hz panel shows a tear line rolling slowly up or down the screen.
+#if defined(__APPLE__)
+bool sVsyncEnabled = true;
+#else
 bool sVsyncEnabled = false;
+#endif
 // Android hides the status and navigation bars by default; a desktop starts windowed.
 #if defined(__ANDROID__)
 bool sFullscreen = true;
