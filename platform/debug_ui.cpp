@@ -12,6 +12,7 @@
 #include "port_log.h"
 #include "port_log_file.h"
 #include "port_paths.h"
+#include "port_config_reset.h"
 #include "port_apclient.h"
 #include "port_rando_gen.h"
 #include "port_controls.h"
@@ -406,6 +407,9 @@ float sGyroOverridePitch = 0.f;
 float sGyroOverrideYaw = 0.f;
 bool sVisible = false;
 bool sSettingsDirty = false;
+// Set once "Reset configuration" has moved the files away: nothing may write them
+// back before the process exits (SaveSettings returns early, ImGui's ini is off).
+bool sConfigReset = false;
 bool sAudioSettingsApplied = false;
 bool sPresentationSettingsApplied = false;
 CStateManager* sStateManager = nullptr;
@@ -885,7 +889,7 @@ void LogSettingChanges(const std::string& text) {
 }
 
 void SaveSettings() {
-  if (!sInitialized || !sSettingsDirty) {
+  if (!sInitialized || !sSettingsDirty || sConfigReset) {
     return;
   }
   const std::string text = SettingsText();
@@ -6642,6 +6646,63 @@ void DrawSettingsSection() {
   ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
   ImGui::TextWrapped("File: %s", path.c_str());
   ImGui::PopStyleColor();
+
+  static std::string sResetError;
+  if (ImGui::Button("Reset configuration...")) {
+    sResetError.clear();
+    ImGui::OpenPopup("Reset configuration?");
+  }
+  ImGui::SetItemTooltip("Back up and clear every port setting and control mapping.");
+  if (ImGui::BeginPopupModal("Reset configuration?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+    ImGui::TextUnformatted("This resets ALL port settings and control mappings (keyboard, mouse, touch and "
+                           "controllers) to their defaults on the next launch. The current files are moved to a "
+                           "backup folder inside the user folder, not deleted.");
+    ImGui::TextUnformatted("Save files, save states, mods, the disc image and the data folder location are not "
+                           "touched, and neither is the disc image path. Game options (invert Y, volumes...) stored "
+                           "inside a save file come back when that save loads.");
+    ImGui::TextUnformatted("The game closes now: progress since the last save station is lost. Start it again to "
+                           "get the defaults.");
+    if (!sResetError.empty()) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ThemeBadColor());
+      ImGui::TextWrapped("Reset failed, nothing was changed: %s", sResetError.c_str());
+      ImGui::PopStyleColor();
+    }
+    ImGui::PopTextWrapPos();
+    if (ImGui::Button("Reset and exit")) {
+      // Back up what is current, not what was last saved; a failed write stops here.
+      sSettingsDirty = true;
+      SaveSettings();
+      if (sSettingsDirty) {
+        sResetError = "could not save the current settings first.";
+      } else {
+        const std::string& folder = PortPaths::UserFolder();
+        const PortConfigReset::Result result =
+            PortConfigReset::Reset(PortConfigReset::detail::FromUtf8Path(folder.empty() ? "./" : folder));
+        if (!result.ok) {
+          sResetError = result.error;
+          PortLog::Write("port: reset configuration failed: %s\n", result.error.c_str());
+        } else {
+          PortLog::Write("port: reset configuration: %s\n",
+                         result.moved ? ("backup in " + result.backupDir).c_str() : "no files to move");
+          // From here no code path may write the configuration again.
+          sConfigReset = true;
+          if (ImGui::GetCurrentContext() != nullptr) {
+            ImGui::GetIO().IniFilename = nullptr;
+          }
+          SDL_Event quit{};
+          quit.type = SDL_EVENT_QUIT;
+          SDL_PushEvent(&quit);
+          ImGui::CloseCurrentPopup();
+        }
+      }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
 }
 
 // The connection page of the Archipelago tab: the Connect form, recent games,

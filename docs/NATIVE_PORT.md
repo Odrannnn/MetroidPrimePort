@@ -858,6 +858,22 @@ unpacks to a temporary directory instead of mounting.
   path and has a **Save settings now** button. Environment variables still
   override the file for that run, and are written back into it if any setting is
   changed during that run.
+- F1 > System > Settings > **Reset configuration...** puts every port setting and
+  control mapping back to its default: after a confirmation it saves the current
+  settings, moves `port_settings.ini`, `controls.toml`, `imgui.ini`,
+  `controller_ports.dat`, `keyboard_bindings.dat` and the `*.controller` mapping
+  files into a new `config-backup-<date>-<time>/` folder inside the user folder
+  (older backups are never reused), and exits; the next launch starts from
+  defaults (`platform/include/port_config_reset.h`, test `port_config_reset_tests`).
+  Only those names are touched, a symlink among them makes it refuse, and a failed
+  move restores everything and shows the error without quitting. A fresh
+  `port_settings.ini` keeps just `disc_path`, `remastered_nsp` and `remastered_keys`,
+  so the disc isn't asked for again. Saves, save states, mods, caches, the disc and
+  the data folder location are not touched. Game options that retail keeps inside
+  a save file (invert Y, volumes...) come back when that save loads; the port's
+  global copy (`game_options=`) is in the reset settings. After the reset nothing
+  writes the settings (`SaveSettings` is disabled, ImGui's ini off) until the
+  process exits. To undo, copy the files back from the backup folder.
 - Original experience (top of F1 > Game and the pause-menu options, persisted as
   `original_experience`, `MP_ORIGINAL=1`, console `original [on|off]`): plays the
   game as retail without touching the saved settings, so turning it off restores
