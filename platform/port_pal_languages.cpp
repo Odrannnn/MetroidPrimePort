@@ -36,10 +36,19 @@ std::string TypeName(uint32_t type) {
 }  // namespace
 
 bool RemapImportedImageTextureIds(std::wstring& text) {
-  // The PAL map legend names three textures absent from the USA PAK. These
-  // same icons are present there under the corresponding USA ids.
-  static const wchar_t* const kPalIds[] = {L"FAB0528D", L"DE6901DE", L"E7B56235"};
-  static const wchar_t* const kUsaIds[] = {L"8A78A5BF", L"39C0091E", L"C6FA23D1"};
+  // PAL STRG_Main source string 50 follows USA string 49 by icon order. The
+  // localized PAL legends use several ids for the same three USA-only icon
+  // slots: 6 Elevator, 7 Missile Recharge, and 8 Save Station.
+  static const wchar_t* const kPalIds[] = {
+      L"323A83B3", L"A9ABC1A5", L"FAB0528D",  // Elevator
+      L"2CE9B190", L"DE6901DE",                // Missile Recharge
+      L"7FF222B8", L"E7B56235",                // Save Station
+  };
+  static const wchar_t* const kUsaIds[] = {
+      L"8A78A5BF", L"8A78A5BF", L"8A78A5BF",  // USA legend entry 6
+      L"39C0091E", L"39C0091E",                // USA legend entry 7
+      L"C6FA23D1", L"C6FA23D1",                // USA legend entry 8
+  };
   bool changed = false;
   for (size_t tag = text.find(L"&image="); tag != std::wstring::npos;) {
     const size_t value = tag + 7;
@@ -62,7 +71,7 @@ bool RemapImportedImageTextureIds(std::wstring& text) {
       const bool leftBoundary = at == value || !IsTokenCharacter(text[at - 1]);
       const bool rightBoundary = at + 8 == end || !IsTokenCharacter(text[at + 8]);
       if (isHex && leftBoundary && rightBoundary) {
-        for (size_t i = 0; i < 3; ++i) {
+        for (size_t i = 0; i < sizeof(kPalIds) / sizeof(kPalIds[0]); ++i) {
           if (MatchesId(text, at, kPalIds[i])) {
             text.replace(at, 8, kUsaIds[i]);
             changed = true;

@@ -184,12 +184,16 @@ void TestFontTexture() {
 
 void TestImportedImageTextureIds() {
   std::wstring legend =
-      L"&image=SI,0.6875,0.6875,FAB0528D; &image=SI,0.6875,0.6875,DE6901DE; "
+      L"&image=SI,0.6875,0.6875,323A83B3; &image=SI,0.6875,0.6875,A9ABC1A5; "
+      L"&image=SI,0.6875,0.6875,FAB0528D; &image=SI,0.6875,0.6875,2CE9B190; "
+      L"&image=SI,0.6875,0.6875,DE6901DE; &image=SI,0.6875,0.6875,7FF222B8; "
       L"&image=SI,0.6875,0.6875,E7B56235;";
   Check(PortPalLanguages::RemapImportedImageTextureIds(legend), "map legend ids remapped");
-  Check(legend == L"&image=SI,0.6875,0.6875,8A78A5BF; &image=SI,0.6875,0.6875,39C0091E; "
+  Check(legend == L"&image=SI,0.6875,0.6875,8A78A5BF; &image=SI,0.6875,0.6875,8A78A5BF; "
+                  L"&image=SI,0.6875,0.6875,8A78A5BF; &image=SI,0.6875,0.6875,39C0091E; "
+                  L"&image=SI,0.6875,0.6875,39C0091E; &image=SI,0.6875,0.6875,C6FA23D1; "
                   L"&image=SI,0.6875,0.6875,C6FA23D1;",
-        "all three USA aliases");
+        "all seven PAL variants map to the matching USA icon slots");
 
   std::wstring lower = L"&image=SI,0.6875,0.6875,fab0528d;";
   Check(PortPalLanguages::RemapImportedImageTextureIds(lower) &&
