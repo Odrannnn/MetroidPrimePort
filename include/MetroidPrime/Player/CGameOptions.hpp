@@ -69,6 +69,7 @@ public:
   }
   int GetMusicVolume() const { return x5c_musicVol; }
   int GetSfxVolume() const { return x58_sfxVol; }
+  CAudioSys::ESurroundModes GetSurroundMode() const { return static_cast<CAudioSys::ESurroundModes>(x44_soundMode); }
   const float GetHudAlpha() const;
   int GetHUDAlpha() const { return x60_hudAlpha; }
   const float GetHelmetAlpha() const;

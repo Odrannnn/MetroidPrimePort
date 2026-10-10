@@ -7772,9 +7772,15 @@ void DrawGameAudio() {
   if (ImGui::SliderInt("Sound effects volume", &sfxPct, 0, 100, "%d%%") && gpGameState != nullptr) {
     gpGameState->GameOptions().SetSfxVolume((sfxPct * 127 + 50) / 100, true);
   }
+  // Surround mode: Mono / Stereo / Dolby Surround
+  int surround = gpGameState != nullptr ? static_cast<int>(gpGameState->GameOptions().GetSurroundMode()) : CAudioSys::kSM_Stereo;
+  constexpr const char* kSurroundLabels[] = {"Mono", "Stereo", "Dolby Surround"};
+  if (ImGui::Combo("Surround mode", &surround, kSurroundLabels, IM_ARRAYSIZE(kSurroundLabels)) && gpGameState != nullptr) {
+    gpGameState->GameOptions().SetSurroundMode(static_cast<CAudioSys::ESurroundModes>(surround), true);
+  }
   ImGui::EndDisabled();
-  ImGui::SetItemTooltip("The pause menu's volume options. Like them, they are stored in the save\n"
-                        "file the next time you save, and loading a save restores its volumes.");
+  ImGui::SetItemTooltip("The pause menu's volume options. Like them, they are stored globally\n"
+                        "(not per-save) and persist across restarts. Surround mode is also global.");
 }
 
 void DrawOriginalSection() {
