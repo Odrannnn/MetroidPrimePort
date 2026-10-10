@@ -1,5 +1,5 @@
 pkgname=metroid-prime-port-bin
-pkgver=0.19.0
+pkgver=0.20.0
 pkgrel=1
 pkgdesc="Native Linux port of Metroid Prime"
 arch=('x86_64')
