@@ -7,6 +7,9 @@
 #include "WorldFormat/CCollisionSurface.hpp"
 #include "WorldFormat/COBBTree.hpp"
 #include "rstl/math.hpp"
+#ifdef TARGET_PC
+#include "port_synthetic_effect.h"
+#endif
 
 #include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Math/CFrustumPlanes.hpp"
@@ -136,12 +139,44 @@ CIceImpact::CIceImpact(const TLockedToken< CGenDescription >& particle, TUniqueI
     x540_impactSpheres[i].x14_radius += x540_impactSpheres[i].x10_radiusStep;
   }
   x118_grid.MarkCells(CSphere(GetTranslation(), 2.4f), 2);
+#ifdef TARGET_PC
+  {
+    const SObjectTag wallTag('PART', PortRemastered::SyntheticEffectId("icespreadwall"));
+    const SObjectTag ceilingTag('PART', PortRemastered::SyntheticEffectId("icespreadceiling"));
+    if (gpResourceFactory->CanBuild(wallTag) && gpResourceFactory->CanBuild(ceilingTag)) {
+      xPortWallGen = rs_new CElementGen(gpSimplePool->GetObj(wallTag), CElementGen::kMOT_One,
+                                        CElementGen::kOSF_One);
+      xPortCeilingGen = rs_new CElementGen(gpSimplePool->GetObj(ceilingTag),
+                                           CElementGen::kMOT_One, CElementGen::kOSF_One);
+    }
+  }
+#endif
 }
 
 CIceImpact::~CIceImpact() {}
 
 void CIceImpact::CalculateRenderBounds() {
-  const rstl::optional_object< CAABox > bounds = xe8_elementGen->GetBounds();
+  rstl::optional_object< CAABox > bounds = xe8_elementGen->GetBounds();
+#ifdef TARGET_PC
+  if (!xPortWallGen.null()) {
+    const rstl::optional_object< CAABox > wall = xPortWallGen->GetBounds();
+    const rstl::optional_object< CAABox > ceiling = xPortCeilingGen->GetBounds();
+    if (wall) {
+      if (bounds) {
+        bounds->Include(*wall);
+      } else {
+        bounds = wall;
+      }
+    }
+    if (ceiling) {
+      if (bounds) {
+        bounds->Include(*ceiling);
+      } else {
+        bounds = ceiling;
+      }
+    }
+  }
+#endif
   if (bounds) {
     x598_25_hasRenderBounds = true;
     SetRenderBounds(*bounds);
@@ -166,6 +201,12 @@ void CIceImpact::AddToRenderer(const CFrustumPlanes& frustum, const CStateManage
     EnsureRendered(mgr);
   } else {
     gpRender->AddParticleGen(*xe8_elementGen);
+#ifdef TARGET_PC
+    if (!xPortWallGen.null()) {
+      gpRender->AddParticleGen(*xPortWallGen);
+      gpRender->AddParticleGen(*xPortCeilingGen);
+    }
+#endif
   }
 }
 
@@ -173,6 +214,12 @@ void CIceImpact::Render(const CStateManager& mgr) const {
   CElementGen::SetSubtractBlend(true);
   CCubeModel::SetRenderModelBlack(true);
   xe8_elementGen->Render();
+#ifdef TARGET_PC
+  if (!xPortWallGen.null()) {
+    xPortWallGen->Render();
+    xPortCeilingGen->Render();
+  }
+#endif
   CElementGen::SetSubtractBlend(false);
   CCubeModel::SetRenderModelBlack(false);
 }
@@ -211,6 +258,14 @@ void CIceImpact::Think(float dt, CStateManager& mgr) {
   }
   xe8_elementGen->SetOrientation(CTransform4f::Identity());
   xe8_elementGen->Update(dt);
+#ifdef TARGET_PC
+  if (!xPortWallGen.null()) {
+    xPortWallGen->SetOrientation(CTransform4f::Identity());
+    xPortWallGen->Update(dt);
+    xPortCeilingGen->SetOrientation(CTransform4f::Identity());
+    xPortCeilingGen->Update(dt);
+  }
+#endif
   if (xec_lightId != kInvalidUniqueId) {
     if (CGameLight* light = TCastToPtr< CGameLight >(mgr.ObjectById(xec_lightId))) {
       if (GetActive()) {
@@ -221,7 +276,14 @@ void CIceImpact::Think(float dt, CStateManager& mgr) {
   if (x598_24_followPlayerArea) {
     mgr.SetActorAreaId(*this, mgr.GetPlayer()->GetCurrentAreaId());
   }
-  if (xe8_elementGen->IsSystemDeletable()) {
+  bool deletable = xe8_elementGen->IsSystemDeletable();
+#ifdef TARGET_PC
+  if (!xPortWallGen.null()) {
+    deletable = deletable && xPortWallGen->IsSystemDeletable() &&
+                xPortCeilingGen->IsSystemDeletable();
+  }
+#endif
+  if (deletable) {
     mgr.DeleteObjectRequest(GetUniqueId());
   }
 }
@@ -476,9 +538,39 @@ bool CIceImpact::SubdivideAndGenerateParticles(CStateManager& mgr, const CVector
           normal[kDZ] += 0.4f * (mgr.Random()->Float() - 0.5f);
           const CTransform4f xf =
               CTransform4f::LookAt(CVector3f::Zero(), normal.AsNormalized(), direction);
-          xe8_elementGen->SetOrientation(xf);
-          xe8_elementGen->SetTranslation(point);
-          xe8_elementGen->ForceParticleCreation(1);
+          CElementGen* gen = xe8_elementGen.get();
+#ifdef TARGET_PC
+          if (!xPortWallGen.null()) {
+            // Remastered: floor above 45 degrees, ceiling below, wall between
+            const CVector3f unit = normal.AsNormalized();
+            if (unit.GetZ() > 0.70710677f) {
+              gen = xe8_elementGen.get();
+            } else if (unit.GetZ() < -0.70710677f) {
+              gen = xPortCeilingGen.get();
+            } else {
+              gen = xPortWallGen.get();
+            }
+          }
+#endif
+#ifdef TARGET_PC
+          if (!xPortWallGen.null() && gen->GetParticleCount() >= gen->GetMaxParticles()) {
+          } else
+#endif
+          {
+            gen->SetOrientation(xf);
+            gen->SetTranslation(point);
+            gen->ForceParticleCreation(1);
+          }
+#ifdef TARGET_PC
+          if (!xPortWallGen.null()) {
+            if (xe8_elementGen->GetParticleCount() >= xe8_elementGen->GetMaxParticles() &&
+                xPortWallGen->GetParticleCount() >= xPortWallGen->GetMaxParticles() &&
+                xPortCeilingGen->GetParticleCount() >= xPortCeilingGen->GetMaxParticles()) {
+              return true;
+            }
+            continue;
+          }
+#endif
           if (xe8_elementGen->GetParticleCount() == xe8_elementGen->GetMaxParticles()) {
             return true;
           }
