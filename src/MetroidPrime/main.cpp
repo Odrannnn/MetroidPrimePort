@@ -4,6 +4,7 @@
 // Port: Aurora owns the application/window/GPU loop; the game entry is renamed
 // and driven by platform/main.cpp.
 #include <algorithm>
+#include <chrono>
 #include <aurora/aurora.h>
 #include <aurora/event.h>
 #include <aurora/phase.hpp>
@@ -525,7 +526,26 @@ bool CGameArchitectureSupport::UpdateTicks() {
   PortDebug::SetTickPeriod(tickPeriod);
   sTicksAdvanced = 0;
   x4_archQueue.Push(MakeMsg::CreateFrameBegin(kAMT_Game, x78_gameFrameCount));
+  // Catching up must not cost more wall time than it recovers: when ticks are
+  // slower than real time (front-end THP decode on a slow CPU, issue #54), each
+  // long frame queued more ticks and the menu spiralled into multi-second
+  // frames. Past ~2 periods of tick work, drop the rest and run slow instead.
+  const bool budgeted = !PortDebug::Turbo() && !PortDebug::TickHold();
+  const double tickBudget = std::max(2.0 * period, 1.0 / 30.0);
+  const auto tickStart = std::chrono::steady_clock::now();
   for (unsigned tick = 0; tick < ticks; ++tick) {
+    if (budgeted && tick > 0 &&
+        std::chrono::duration< double >(std::chrono::steady_clock::now() - tickStart).count() >
+            tickBudget) {
+      static unsigned sDroppedLogs = 0;
+      if (sDroppedLogs < 5) {
+        ++sDroppedLogs;
+        PortLog::Write("MP ticks: ran %u of %u ticks, dropped the rest "
+                       "(ticks are slower than real time)\n",
+                       tick, ticks);
+      }
+      break;
+    }
     PortDebug::BeginFrameMouse();
     // A tick that doesn't reach CStateManager::Update (paused) leaves every
     // actor's snapshot stale, so actors don't blend between old transforms.
