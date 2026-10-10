@@ -238,9 +238,12 @@ f32 sPortGlow[3];
 bool sPortSky = false;
 f32 sPortSkyGain[3];
 f32 sPortChargeShell = 0.f;
+f32 sPortDisintegration = 0.f;
 } // namespace
 
 void CCubeModel::PortSetChargeShell(const f32 amount) { sPortChargeShell = amount; }
+
+void CCubeModel::PortSetDisintegration(const f32 amount) { sPortDisintegration = amount; }
 
 void CCubeModel::PortSetSky(const f32* rgb) {
   sPortSky = rgb != nullptr;
@@ -513,6 +516,11 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
     shield[22] = -view.Get11();
     shield[23] = view.Get13();
   }
+  // The Phazon Beam's veins (kind 35) take DIFC.w, the "DisintegrationAmount" variable, from the
+  // beam's fade (PortSetDisintegration); the record holds only its initial value.
+  if (kind > 34.5f && kind < 35.5f) {
+    shield[31] = sPortDisintegration;
+  }
   // The HoloGlass (kind 29) offsets its layers by a per-object phase: the sum of the model matrix's
   // translation, times 0.33 (row 4 x of its constants).
   if (kind > 28.5f && kind < 29.5f) {
@@ -564,7 +572,7 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   }
   // Only the boundary shield, the pickup, the holograms (16-18) and the Phazon3 stone (21) have constants;
   // every other material clears the last one's.
-  GXSetPBRShield(wind || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
+  GXSetPBRShield(wind || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) || (kind > 34.5f && kind < 35.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
   // World up as the shader sees it: view space is right, up, -forward.
   const f32 up[3] = {view.Get20(), view.Get22(), -view.Get21()};
   GXSetPBRMaterial(values, values + 3, values[6], values[7], values + 8, values + 13, up);

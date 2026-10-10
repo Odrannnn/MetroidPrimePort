@@ -81,6 +81,8 @@ static std::condition_variable g_pipelineReadyCv;
 static absl::flat_hash_map<PipelineRef, CachedPipeline> g_pipelines;
 static std::deque<PendingPipeline> g_pipelineQueue;
 static std::deque<PendingPipeline> g_backgroundPipelineQueue;
+// Set by set_background_pipelines_paused: background builds wait, lookups still compile.
+static bool g_backgroundPipelinesPaused = false;
 static absl::flat_hash_set<PipelineRef> g_pendingPipelines;
 static std::atomic_bool g_gpuCachePrunePending = false;
 static std::chrono::steady_clock::time_point g_pipelineLoadStart;
@@ -1088,9 +1090,10 @@ static void pipeline_worker() {
       if (g_hasPipelineThread) {
         // Several workers share the queues, so check them again under the lock every time.
         g_pipelineQueueCv.wait(lock, [] {
-          return !g_pipelineQueue.empty() || !g_backgroundPipelineQueue.empty() || g_pipelineThreadEnd;
+          return !g_pipelineQueue.empty() || (!g_backgroundPipelinesPaused && !g_backgroundPipelineQueue.empty()) ||
+                 g_pipelineThreadEnd;
         });
-      } else if (g_pipelineQueue.empty() && g_backgroundPipelineQueue.empty()) {
+      } else if (g_pipelineQueue.empty() && (g_backgroundPipelinesPaused || g_backgroundPipelineQueue.empty())) {
         return;
       }
       if (g_pipelineThreadEnd) {
@@ -1126,6 +1129,12 @@ static size_t pipeline_thread_count() {
   }
   if (const char* env = std::getenv("MP_PIPELINE_THREADS"); env != nullptr && *env != '\0') {
     return std::clamp<size_t>(std::strtoul(env, nullptr, 10), 1, 16);
+  }
+  // D3D11 is only picked where D3D12 and Vulkan failed: old GPUs, whose drivers often can't
+  // create objects concurrently, so the runtime runs every Create* under one lock. More workers
+  // only queue on it, and the game thread's buffer and texture creation waits behind them all.
+  if (webgpu::g_backendType == wgpu::BackendType::D3D11) {
+    return 1;
   }
   return std::clamp<size_t>(std::thread::hardware_concurrency() / 2, 1, 8);
 }
@@ -1290,6 +1299,9 @@ void initialize_pipeline_cache() {
   g_pipelineCacheWriterStop = false;
   g_pipelineThreadEnd = false;
   g_gpuCachePrunePending = false;
+  // See pipeline_thread_count: under D3D11 a build blocks the game thread's buffer and texture
+  // creation, so the seed waits until the app resumes background builds (in game, for the port).
+  g_backgroundPipelinesPaused = webgpu::g_backendType == wgpu::BackendType::D3D11;
 
   g_pipelineLoadStart = std::chrono::steady_clock::now();
   if (webgpu::g_backendType == wgpu::BackendType::WebGPU) {
@@ -1340,6 +1352,20 @@ void shutdown_pipeline_cache() {
 }
 
 void drop_pipelines() { g_dropPipelines.store(true, std::memory_order_release); }
+
+void set_background_pipelines_paused(bool paused) {
+  {
+    std::lock_guard lock{g_pipelineMutex};
+    if (g_backgroundPipelinesPaused == paused) {
+      return;
+    }
+    g_backgroundPipelinesPaused = paused;
+  }
+  Log.info("pipeline cache: background builds {}", paused ? "paused" : "resumed");
+  if (!paused) {
+    g_pipelineQueueCv.notify_all();
+  }
+}
 
 void begin_pipeline_frame() {
   if (!g_hasPipelineThread) {

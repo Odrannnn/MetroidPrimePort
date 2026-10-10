@@ -17,6 +17,7 @@
 //      the per-user folder and which has none in user/, stays on the per-user
 //      folder, so an update does not appear to lose the settings, mods and save
 //      states. Moving that folder's contents into user/ switches it over.
+//      Never inside a macOS app bundle.
 //   4. The per-user folder (SDL_GetPrefPath), for a read-only install such as
 //      a Flatpak or a system package.
 //
@@ -147,6 +148,13 @@ inline bool InAppImage() {
   return image != nullptr && image[0] != '\0';
 }
 
+// A macOS app bundle is signed as a whole: anything written inside it breaks
+// the signature (Gatekeeper then calls the app damaged), and a quarantined
+// download runs from a read-only translocated copy anyway.
+inline bool InAppBundle(const std::string& exe) {
+  return exe.find(".app/Contents/") != std::string::npos;
+}
+
 // The portable data folder: <executable folder>/user/. An AppImage keeps its
 // data loose next to the .AppImage file, as it always has.
 inline std::string PortableFolder() {
@@ -251,7 +259,7 @@ inline std::string Resolve() {
   return PrivateFolder();
 #else
   const std::string exe = ExecutableFolder();
-  if (!exe.empty() && Writable(exe)) {
+  if (!exe.empty() && !InAppBundle(exe) && Writable(exe)) {
     MigrateLooseData(exe);
     const std::string portable = PortableFolder();
     std::error_code ec;

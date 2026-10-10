@@ -27,7 +27,17 @@ ctest --test-dir build/native -L port --output-on-failure
 
 For Windows, run from an MSVC developer shell and add
 `-DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl` to configure.
-Plain MSVC `cl.exe`, MinGW, macOS, and ARM builds are not currently validated.
+Plain MSVC `cl.exe` and MinGW builds are not currently validated.
+
+macOS (Apple Silicon, macOS 13+) is experimental: `.github/workflows/macos.yml`
+builds it on `macos-15` with Homebrew's `ninja` and `openssl@3` and renders
+through Metal, but nobody has played it on a real Mac yet. Configure as that
+workflow does (static SDL3/nod/OpenSSL, and
+`-DCMAKE_DISABLE_FIND_PACKAGE_{xxHash,zstd,PkgConfig}=ON` so Homebrew's copies
+are not linked). The workflow packages an ad-hoc signed
+`Metroid Prime Port.app` with the small `ffmpeg` in `Contents/MacOS`. It is
+not notarised, so on first launch macOS refuses it: right-click > Open, or
+`xattr -dr com.apple.quarantine "Metroid Prime Port.app"`.
 
 If `ccache` is installed, configure compiles through it, and on Linux `mold`
 links when it is installed. Turn them off with `-DMP_USE_CCACHE=OFF` /
@@ -791,7 +801,8 @@ drawn model's bounds. Rendering is not affected.
 
 ### Platforms
 
-The port is built and tested on Linux and Windows. Its own platform code is
+The port is built and tested on Linux and Windows (macOS builds and passes
+its tests in CI, see Build). Its own platform code is
 portable - SDL3 and `std::filesystem` throughout - and the CMake keeps the MSVC
 linker paths from the template. The Windows build is exercised by
 `.github/workflows/windows.yml` on `windows-latest`, which only runs when

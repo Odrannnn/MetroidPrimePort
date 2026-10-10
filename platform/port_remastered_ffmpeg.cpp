@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <string_view>
 
 #include <SDL3/SDL.h>
 
@@ -56,7 +57,13 @@ std::string FindFfmpeg() {
 #endif
   // One shipped with the port comes before whatever the system has.
   if (const char* base = SDL_GetBasePath(); base != nullptr) {
-    const std::string beside = std::string(base) + name;
+    std::string beside = std::string(base) + name;
+#ifdef __APPLE__
+    // In an app bundle the base path is Contents/Resources/, and programs live
+    // in Contents/MacOS/ beside the port.
+    if (std::string_view(base).ends_with("/Contents/Resources/"))
+      beside = std::string(base) + "../MacOS/" + name;
+#endif
     std::error_code ec;
     if (std::filesystem::exists(std::filesystem::path(std::u8string(beside.begin(), beside.end())), ec) &&
         Runs(beside)) {

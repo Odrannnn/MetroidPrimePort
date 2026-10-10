@@ -22,12 +22,23 @@ class CTexture;
 class CPlayerVisor {
   struct SScanObjectIndicatorInfo {
     SScanObjectIndicatorInfo(TUniqueId id, float timer, float inRangeTimer)
-    : x0_objId(id), x4_timer(timer), x8_inRangeTimer(inRangeTimer), xc_inBox(false) {}
+    : x0_objId(id), x4_timer(timer), x8_inRangeTimer(inRangeTimer), xc_inBox(false)
+#ifdef TARGET_PC
+    , xPort_t(0.f)
+    , xPort_visible(false)
+#endif
+    {}
 
     TUniqueId x0_objId;
     float x4_timer;
     float x8_inRangeTimer;
     bool xc_inBox;
+#ifdef TARGET_PC
+    // Port: Remastered's per-entry pop-in (entry +0xc), 0..1 at 3/s toward "in the box".
+    float xPort_t;
+    // Port: IsScanOrGrapplePointVisibleToRender as of the previous update (one frame of lag).
+    bool xPort_visible;
+#endif
   };
 
   enum EScanWindowState {

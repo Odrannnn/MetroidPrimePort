@@ -51,7 +51,7 @@ option(MP_ANDROID_NOD_STUB "Use a non-functional nod stub for Android build prob
 # in statically. SDL3, OpenSSL, zlib and zstd stay as they are: their sonames are
 # stable, and a static OpenSSL would look for CA certificates where the build
 # host's distro keeps them.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID) OR APPLE)
     set(_mp_bundled_default ON)
 else()
     set(_mp_bundled_default OFF)
@@ -91,6 +91,13 @@ if(MP_ANDROID_NOD_STUB)
     add_library(mp_android_nod_stub STATIC platform/android_probe/nod_stub.c)
     target_include_directories(mp_android_nod_stub PUBLIC platform/android_probe/include)
     add_library(nod::nod ALIAS mp_android_nod_stub)
+endif()
+
+# Apple's libc++ still marks std::jthread/std::stop_token (used by aurora's
+# threads) experimental; the flag unlocks them and links libc++experimental.
+if(APPLE)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-fexperimental-library>)
+    add_link_options(-fexperimental-library)
 endif()
 
 # Aurora provides the GameCube/Wii compatibility layer (MIT): GX, OS, PAD, DVD,
@@ -426,8 +433,14 @@ elseif(CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED OR CMAKE_CXX_LINK_GROUP_USING_RES
         mp_game
         aurora::main
         "$<LINK_GROUP:RESCAN,aurora::core,aurora::gx>")
+elseif(APPLE)
+    # ld64 searches every archive again until nothing new resolves, so the
+    # cycle needs no group.
+    target_link_libraries(metroid_prime_port PRIVATE
+        mp_game
+        aurora::main aurora::core aurora::gx)
 else()
-    message(FATAL_ERROR "This port currently requires an ELF linker with RESCAN support or an MSVC-compatible COFF linker")
+    message(FATAL_ERROR "This port currently requires an ELF linker with RESCAN support, Apple ld or an MSVC-compatible COFF linker")
 endif()
 
 include(extern/aurora/cmake/AuroraCopyRuntimeDLLs.cmake)

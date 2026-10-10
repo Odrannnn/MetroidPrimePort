@@ -48,7 +48,7 @@
 #include <android/log.h>
 #include <sys/system_properties.h>
 #endif
-#if defined(__linux__) && !defined(__ANDROID__)
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__APPLE__)
 #include <sys/utsname.h>
 #endif
 
@@ -988,7 +988,7 @@ int main(int argc, char** argv) {
         }
         PortLog::Write("port: device:%s\n", deviceInfo.empty() ? " (no properties)" : deviceInfo.c_str());
     }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     {
         struct utsname uts = {};
         if (uname(&uts) == 0) {

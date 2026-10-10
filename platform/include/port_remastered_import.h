@@ -41,17 +41,17 @@ inline constexpr const char* kImportModName = "remastered-models";
 namespace ImportStage {
 // port_remastered_convert/cmdl: how models and materials are written (models, effects, rooms,
 // room models, HUD).
-inline constexpr int kConverter = 49;
+inline constexpr int kConverter = 50;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get, Cube
 // and Baked. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.
 inline constexpr int kTextures = 3;
 inline constexpr int kModels = 5;      // the table's models, their looks and the ANCS copies
-inline constexpr int kEffects = 10;     // port_remastered_effect_import and the particle converters
+inline constexpr int kEffects = 12;     // port_remastered_effect_import and the particle converters
 inline constexpr int kRooms = 11;      // port_remastered_room: roomenv/, .roomgeo, .roomliquid, water maps
 inline constexpr int kRoomModels = 0;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 0;        // port_remastered_text, and the font (port_remastered_font)
-inline constexpr int kHud = 6;         // port_remastered_hud, port_remastered_map
+inline constexpr int kHud = 7;         // port_remastered_hud, port_remastered_map
 inline constexpr int kMovies = 0;      // port_remastered_movie
 inline constexpr int kGallery = 0;     // the gallery pictures (port_gallery)
 }  // namespace ImportStage

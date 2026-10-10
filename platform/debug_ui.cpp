@@ -5003,6 +5003,25 @@ void DrawUpdateToast() {
   ImGui::End();
 }
 
+// Under D3D11 (old GPUs: D3D12 and Vulkan failed), the seed's shader builds wait while no
+// game is loaded. Those drivers run every object creation under one lock, so the front end's
+// loads waited behind each build: a crawling title screen and file select for minutes
+// (issue #54: GTX 550 Ti, 0.2-1.7 s per shader). In game it loads little and runs smoothly.
+// Aurora starts them held under D3D11.
+bool sBackgroundShadersHeld = false;
+
+void HoldBackgroundShadersOnFrontEnd() {
+  // MP_HOLD_FRONTEND_SHADERS=1/0 forces it on/off on any backend.
+  static const bool sHoldHere = port::EnvFlag("MP_HOLD_FRONTEND_SHADERS", aurora_get_backend() == BACKEND_D3D11);
+  static bool sSynced = false;
+  const bool hold = sHoldHere && sStateManager == nullptr;
+  if (!sSynced || hold != sBackgroundShadersHeld) {
+    sSynced = true;
+    sBackgroundShadersHeld = hold;
+    aurora_set_background_pipelines_paused(hold);
+  }
+}
+
 // While the startup compile runs (the pipeline cache and shipped seed, queued before the first
 // frame): after half a second, a count and a bar since the toast opened. Once that queue has
 // drained, shaders met in game compile without it.
@@ -5014,7 +5033,7 @@ void DrawShaderCompilationToast() {
   if (stats != nullptr && stats->queuedPipelines == 0) {
     sStartupDone = true;
   }
-  if (!sShowShaderCompilation || stats == nullptr || sStartupDone) {
+  if (!sShowShaderCompilation || stats == nullptr || sStartupDone || sBackgroundShadersHeld) {
     sQueuedSince = -1.0;
     return;
   }
@@ -8807,6 +8826,7 @@ void DrawUI() {
   DrawStaleImportToast();
   DrawUpdateToast();
   DrawDiscReadFailedAlert();
+  HoldBackgroundShadersOnFrontEnd();
   DrawShaderCompilationToast();
   if (sTouchLayoutSavePending.exchange(false, std::memory_order_acq_rel)) {
     MarkDirty();

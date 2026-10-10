@@ -3,6 +3,7 @@
 
 #include "port_remastered_effect_convert.h"
 #include "port_remastered_image.h"
+#include "port_synthetic_effect.h"
 
 #include <algorithm>
 #include <atomic>
@@ -1026,19 +1027,23 @@ public:
     row.genp = EffectGuidString(Swap(id));
     row.retail = retail;
     row.method = pairing.method;
-    if (!m_io.retailId(retail)) {
+    // A synthetic id (port_synthetic_effect.h) stands for no disc PART; it must not be one.
+    const bool synthetic = IsSyntheticEffectId(retail);
+    if (synthetic ? m_io.retailId(retail) : !m_io.retailId(retail)) {
       Report(row, "no-disc-part");
       return;
     }
     ++m_result.candidates;
-    // A standalone swoosh (SWSH) replaces a retail SWHC, a GENP a PART.
-    const bool swoosh = m_io.typeOf && m_io.typeOf(id) == kSwsh;
-    const uint32_t rootType = swoosh ? EffectFourCC("SWHC") : kPart;
+    // A standalone swoosh (SWSH) replaces a retail SWHC, an ELSM/ELC2 an ELSC, a GENP a PART.
+    const uint32_t stored = m_io.typeOf ? m_io.typeOf(id) : 0;
+    const bool swoosh = stored == kSwsh;
+    const bool electric = stored == EffectFourCC("ELSM") || stored == EffectFourCC("ELC2");
+    const uint32_t rootType = swoosh ? EffectFourCC("SWHC") : electric ? EffectFourCC("ELSC") : kPart;
     const std::string name = Hex(retail) + "." + EffectFourCCString(rootType);
     std::vector<uint8_t> data;
     std::string error;
     EffectNode effect;
-    if (!m_io.read(swoosh ? kSwsh : kGenp, id, data, error) || !ParseEffect(data.data(), data.size(), effect, error)) {
+    if (!m_io.read(swoosh || electric ? stored : kGenp, id, data, error) || !ParseEffect(data.data(), data.size(), effect, error)) {
       ++m_result.failed;
       Log(name + ": " + error);
       Report(row, "failed", "parse: " + error);

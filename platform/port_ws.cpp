@@ -1428,7 +1428,13 @@ bool Client::OpenTransport(const std::string& host, uint16_t port, bool secure, 
       LoadWindowsRoots(SSL_CTX_get_cert_store(mSslContext));
       SSL_CTX_set_cert_verify_callback(mSslContext, VerifyWithWindowsFallback, nullptr);
     }
-#else
+#elif defined(__APPLE__)
+    } else if (SSL_CTX_load_verify_locations(mSslContext, "/etc/ssl/cert.pem", nullptr) != 1) {
+      // A static OpenSSL's default paths point into the build machine; macOS ships its
+      // roots as a PEM bundle at this path.
+      return TransportFail("could not load the macOS TLS trust store /etc/ssl/cert.pem: " + TlsQueueText());
+#endif
+#ifndef _WIN32
     } else if (SSL_CTX_set_default_verify_paths(mSslContext) != 1) {
       return TransportFail("could not load the system TLS trust store: " + TlsQueueText());
     }

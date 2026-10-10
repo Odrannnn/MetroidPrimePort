@@ -1,11 +1,14 @@
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "port_debug.h"
 #include "port_room_env.h"
+#include "port_synthetic_effect.h"
 #ifdef MP_ENABLE_SMOKE_DRIVER
 #include "port_smoke.h"
 #endif
 
 #include "Kyoto/Math/CTransform4f.hpp"
+#include "MetroidPrime/CExplosion.hpp"
+#include "Kyoto/CResFactory.hpp"
 #include "Kyoto/Math/CVector3f.hpp"
 #include "MetroidPrime/CAnimData.hpp"
 #include "MetroidPrime/CAnimRes.hpp"
@@ -1395,6 +1398,9 @@ void CPlayerGun::DropBomb(CPlayerGun::EBWeapon weapon, CStateManager& mgr) {
                                      CTransform4f::Translate(mgr.GetPlayer()->GetTranslation() +
                                                              CVector3f(0.f, 0.f, ballHalfExtent)),
                                      gpTweakPlayerGun->GetBombInfo());
+    if (x784_bombEffects[weapon].size() > 2) {
+      bomb->SetAttractEffect(x784_bombEffects[weapon][2]);
+    }
     mgr.AddObject(*bomb);
 
     if (x308_bombCount == 3) {
@@ -1689,6 +1695,13 @@ void CPlayerGun::ChangeWeapon(const CPlayerState& playerState, CStateManager& mg
   x678_morph.StartWipe(CGunMorph::kD_In);
 }
 
+void CPlayerGun::PortForcePhazonBeam(const bool on) {
+  x835_24_canFirePhazon = on;
+  if (on) {
+    x835_25_inPhazonBeam = true;
+  }
+}
+
 void CPlayerGun::StartPhazonBeamTransition(bool active, CStateManager& mgr,
                                            CPlayerState& playerState) {
   if (x833_28_phazonBeamActive == active) {
@@ -1833,7 +1846,7 @@ void CPlayerGun::InitBeamData() {
 
 void CPlayerGun::InitBombData() {
   for (int i = 0; i < 2; ++i)
-    x784_bombEffects.push_back(rstl::reserved_vector< TLockedToken< CGenDescription >, 2 >());
+    x784_bombEffects.push_back(rstl::reserved_vector< TLockedToken< CGenDescription >, 3 >());
 
   TToken< CGenDescription > obj1 =
       gpSimplePool->GetObj(SObjectTag('PART', gpTweakGunRes->x28_bombSet));
@@ -1846,6 +1859,15 @@ void CPlayerGun::InitBombData() {
   x784_bombEffects[0].push_back(obj2);
   x784_bombEffects[1].push_back(obj3);
   x784_bombEffects[1].push_back(obj3);
+
+  // Remastered's extra bomb effects have no disc id; the import writes them under a name-derived
+  // one. Only when present do bombs use Remastered's three generators.
+  const SObjectTag attractTag('PART', PortRemastered::SyntheticEffectId("bombattract"));
+  const SObjectTag secondaryTag('PART', PortRemastered::SyntheticEffectId("powerbombsecondary"));
+  if (gpResourceFactory->CanBuild(attractTag) && gpResourceFactory->CanBuild(secondaryTag)) {
+    x784_bombEffects[0].push_back(gpSimplePool->GetObj(attractTag));
+    x784_bombEffects[1].push_back(gpSimplePool->GetObj(secondaryTag));
+  }
 }
 
 void CPlayerGun::InitMuzzleData() {
@@ -3076,11 +3098,25 @@ TUniqueId CPlayerGun::DropPowerBomb(CStateManager& mgr) const {
 
   TUniqueId uid = mgr.AllocateUniqueId();
   float zero = 0.f;
+  const bool remastered = x784_bombEffects[1].size() > 2;
+  if (remastered) {
+    // Remastered spawns PBSecondaryVFX at the bomb before the bomb itself.
+    const CTransform4f bombXf = CTransform4f::Translate(
+        mgr.GetPlayer()->GetTranslation() + CVector3f(zero, zero, ballHalfExtent));
+    CExplosion* secondary = rs_new CExplosion(
+        x784_bombEffects[1][2], mgr.AllocateUniqueId(), true,
+        CEntityInfo(kInvalidAreaId, CEntity::NullConnectionList), rstl::string_l("PBSecondaryVFX"), bombXf,
+        0, CVector3f(1.f, 1.f, 1.f), CColor::White());
+    mgr.AddObject(secondary);
+  }
   CPowerBomb* pBomb =
       rs_new CPowerBomb(x784_bombEffects[1][0], uid, kInvalidAreaId, x538_playerId,
                         CTransform4f::Translate(mgr.GetPlayer()->GetTranslation() +
                                                 CVector3f(zero, zero, ballHalfExtent)),
                         dInfo);
+  if (remastered) {
+    pBomb->SetRemasteredFilter();
+  }
   mgr.AddObject(*pBomb);
   return uid;
 }

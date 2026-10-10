@@ -18,6 +18,8 @@ public:
   void ReInitVariables();
 
   bool IsFiring(const CStateManager& mgr) const;
+  // Port: the Remastered Phazon gun is up (its charge gen is Remastered's).
+  bool PortRemasteredBeam() const;
   void PreRenderGunFx(const CStateManager& mgr, const CTransform4f& xf) override;
   void PostRenderGunFx(const CStateManager& mgr, const CTransform4f& xf) override;
   void UpdateGunFx(const bool shotSmoke, const float dt, const CStateManager& mgr,
@@ -48,6 +50,7 @@ private:
   float mClipWipeScale;
   float mClipWipeTranslate;
   float mIndirectAlpha;
+  float mDisintegration = 0.f; // Port: Remastered veins fade, 0..1
   bool mLoaded : 1;
   bool mClipWipeActive : 1;
   bool mVeinsAlphaActive : 1;

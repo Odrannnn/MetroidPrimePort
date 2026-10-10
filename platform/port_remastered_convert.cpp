@@ -1474,8 +1474,8 @@ constexpr uint32_t kShaderMacroNormal[] = {0xA3C367BE, 0x72B34E42, 0xB9E899F3, 0
 // (Jellyzap, Flaahgra's lower body) match too but use c4[0] as their TransmissionColor and
 // draw no glow, so they are left out. Sorted for binary_search.
 constexpr uint32_t kShaderInverseExposure[] = {
-    0x0A714D54, 0x17DD0A37, 0x1E462D99, 0x2835AB3B, 0x2E7A70CC, 0x2F540B27, 0x31E53C70,
-    0x46CB52A7, 0x47908924, 0x50DB912E, 0x5104B751, 0x53AD3B78, 0x7A8C93DB, 0x7DFCA4A1,
+    0x0A714D54, 0x17DD0A37, 0x1E462D99, 0x27A91776, 0x2835AB3B, 0x2E7A70CC, 0x2F540B27, 0x31E53C70,
+    0x46CB52A7, 0x47908924, 0x50DB912E, 0x5104B751, 0x53AD3B78, 0x7342BCCE, 0x7A8C93DB, 0x7DFCA4A1,
     0x86B48EF1, 0x8A2049D9, 0x8C121639, 0x94DC56A5, 0x99370071, 0x9C023C70, 0x9DB310D1,
     0x9FD5E413, 0xA6D80F61, 0xAB87F3D5, 0xAE819893, 0xB6268B63, 0xBEDB1948, 0xC371A140,
     0xC72CA0EC, 0xC80BC2C1, 0xCB9736B8, 0xCE685F8A, 0xD2D3ACCA, 0xD6E5D629, 0xE5CA8683,
@@ -1566,6 +1566,10 @@ constexpr uint32_t kShaderPhazonB = 0x9E52AA74;
 // strength and roughness follow an animated 3D noise (TCH0, a 64^3 volume) and whose glow is a fresnel-driven ramp
 // (TCH1), see kb material/07acff46.md.
 constexpr uint32_t kShaderPhazonPool = 0x07ACFF46;
+// Phazon_Veins_Mat (d61ae63a; kind 35), the Phazon Beam's veins: an opaque lit PBR surface with a disintegration
+// mask (TCH2) eaten by the "DisintegrationAmount" variable (DIFC.w), a glow (TCH0) and an edge ramp (TCH1), kb
+// material/d61ae63a.md.
+constexpr uint32_t kShaderPhazonVeins = 0xD61AE63A;
 // Distortion2 (24670bf0, the Phendrana ice walls, the crater's flesh glass; kind 23): refracts a mipped copy of
 // the frame by its normal map and a fresnel term, tinted by the base map and the vertex colour (kb material/24670bf0.md).
 constexpr uint32_t kShaderRefractGlass = 0x24670BF0;
@@ -1592,6 +1596,8 @@ constexpr ShaderTwin kShaderTwins[] = {
     // v5, weights in v6) and renormalise the skinned N and T (T1 too), nothing else. The port skins on its side
     // (DolphinCSkinRules.cpp, FinishTangentFrame, incl. the second frame).
     {0xC36C5166, kShaderIceSpreader}, {0xB55635D2, 0xA978D507}, {0xEF94ACCF, kShaderLava},
+    // 1ac34e37 (Core_Phazon_Mat) is 07acff46's skinned copy, as the others.
+    {0x1AC34E37, kShaderPhazonPool},
 };
 uint32_t ShaderFamily(uint32_t shader) {
   for (const ShaderTwin& t : kShaderTwins)
@@ -1625,7 +1631,7 @@ constexpr uint32_t kShaderSurfaceUnlit[] = {0x67135A0B, 0x6FC4D540};
 // ones read that multiply the albedo by it, as the standard shader does
 // (992941B7 is ColorUnlit: a door shield's blue is all vertex colour).
 constexpr uint32_t kShaderTints[] = {0x9EFE0D2E, 0xCA10C453, 0x17E458CD, 0xE9DF2188,
-                                     0x41A12C9E, 0xD6AA2A3A, 0x992941B7};
+                                     0x41A12C9E, 0xD6AA2A3A, 0x992941B7, kShaderPhazonVeins};
 
 // Which of a Remastered material's parameters feed the four maps, and its two
 // strengths. Later parameters replace earlier ones, as in the reference.
@@ -1670,6 +1676,7 @@ std::string ShaderRole(uint32_t shader) {
   add(shader == kShaderPhazon, "phazon");
   add(shader == kShaderPhazonB, "phazon-b");
   add(shader == kShaderPhazonPool, "phazon-pool");
+  add(shader == kShaderPhazonVeins, "phazon-veins");
   add(shader == kShaderRefractGlass || shader == kShaderRefractGlassB, "refract-glass");
   add(shader == kShaderHoloGlassB || shader == kShaderHoloGlassC, "holo-glass-b");
   add(shader == kShaderDualGlass, "dual-glass");
@@ -1716,6 +1723,7 @@ const char* KindName(int kind) {
   case 32: return "phazon-pool";
   case 33: return "xray-map";
   case 34: return "dual-glass";
+  case 35: return "phazon-veins";
   default: return "kind?";
   }
 }
@@ -2303,6 +2311,36 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
         }
       }
     }
+  } else if (shader == kShaderPhazonVeins && out.maps[kBase].has && out.maps[kMr].has && out.maps[kNormal].has &&
+             tch[0] && tch[1] && tch[2] && cch[0]) {
+    out.kind = 35;
+    // TCH0 (the glow) is the emissive map, scaled by CCH0.x; TCH1 (the edge ramp, read at (1 - m, 0)) and TCH2 (the
+    // disintegration mask) are the second layer's base and MR, raw. CCH0 (glow gain, ramp gain, amount scale, vertex
+    // alpha weight) is shield row 0, ICMC row 6 and DIFC row 7. The amount is "DisintegrationAmount" (DIFC.w).
+    set(kEmissive, tch[0]->texture);
+    set(kBase, tch[1]->texture, &out.layer[kBase]);
+    set(kMr, tch[2]->texture, &out.layer[kMr]);
+    out.layer[kBase].raw = out.layer[kMr].raw = true;
+    out.emissive = ShortestDouble(cch[0]->color[0]);
+    for (int i = 0; i < 4; ++i) {
+      out.shieldRows[i] = ShortestDouble(cch[0]->color[i]);
+      out.shieldRows[28 + i] = 1.0;
+    }
+    for (const ModelMaterialData& d : mat.data) {
+      if (d.kind != ModelMaterialData::Kind::Color) {
+        continue;
+      }
+      if (d.usage == FourCC('D', 'I', 'F', 'C')) {
+        for (int i = 0; i < 4; ++i) {
+          out.shieldRows[28 + i] = ShortestDouble(d.color[i]);
+        }
+      } else if (d.usage == FourCC('I', 'C', 'M', 'C')) {
+        for (int i = 0; i < 3; ++i) {
+          out.shieldRows[24 + i] = ShortestDouble(d.color[i]);
+        }
+      }
+    }
+    out.kindParam[0] = out.shieldRows[31];  // the runtime may replace it with the live variable
   } else if (shader == kShaderXrayMap && out.maps[kBase].has && out.maps[kNormal].has && tch[0] && cch[0] && cch[1]) {
     out.kind = 33;
     // 65e90e82, the X-ray visor's map material: CCH0/CCH1 are rows 0 and 1 as kind 31's, DIFC row 2 (rgba, default 1),
@@ -2756,6 +2794,13 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     out.emissive = 0.0;
     out.maps[kEmissive].has = false;
   }
+  if (out.kind == 35) {
+    // Opaque and lit; the base alpha is a weight in the dissolve and no opacity, and the vertex alpha picks no layer.
+    // The vertex colour tints it (kShaderTints) and the glow map stays: CCH0.x is its gain.
+    out.layered = true;
+    out.blended = out.cutout = out.mask = out.unlit = false;
+    out.height = 0.0;
+  }
   if (out.kind == 9) {
     // The glow is all the shader's; the vertex alpha picks the ramp's row and is no
     // opacity, and there is no edge between layers.
@@ -2768,7 +2813,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     static const char* const kKindRoles[] = {"up-layer", "detail", "lava", "parallax", "waterfall",
                                              "glass",    "lava-pool", "gun-glow", "premul-glass", "holo-glass",
                                              "frozen-shell", "matcap-shell", "boundary-shield", "pickup",
-                                             "holo",         "holo-refl",    "hologram",     "gun-fx", "vertex-blend", "phazon", "projected-blend", "decal-alpha", "phazon-pool"};
+                                             "holo",         "holo-refl",    "hologram",     "gun-fx", "vertex-blend", "phazon", "projected-blend", "decal-alpha", "phazon-pool", "phazon-veins"};
     for (const char* name : kKindRoles) {
       if (out.role.find(name) != std::string::npos) {
         out.reason += std::string("fallback: ") + name + " shader without its maps/params (or blend); ";
@@ -2993,7 +3038,7 @@ void PbrRecord(Blob& b, const RemMaterial& m, uint32_t wrap, uint32_t cube) {
     P32(b, cube);
   }
   b.insert(b.end(), tag, tag + 4);
-  if ((m.kind >= 14 && m.kind <= 19) || m.kind == 21 || m.kind == 22 || m.kind == 32 || m.kind == 25 || m.kind == 28 || m.kind == 29 || m.kind == 31 || m.kind == 33 || m.wind) {
+  if ((m.kind >= 14 && m.kind <= 19) || m.kind == 21 || m.kind == 22 || m.kind == 32 || m.kind == 35 || m.kind == 25 || m.kind == 28 || m.kind == 29 || m.kind == 31 || m.kind == 33 || m.wind) {
     // The boundary shield's (or pickup's) constants follow the record, as a trailer the reader strips first.
     // A swaying leaf's is the model's SWindSet (v1, v2, rate, b, c) in the first nine.
     for (double v : m.shieldRows) {
@@ -4450,6 +4495,9 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     const bool matcapShell = rem.kind == 13;
     // And the Frigate's force fields (kind 14), a retail model's fx surface drawn by the shader.
     const bool shield = (rem.kind >= 14 && rem.kind <= 19) || rem.kind == 25 || rem.kind == 28 || rem.kind == 29 || rem.kind == 31 || rem.kind == 33 || rem.kind == 34;
+    // The Phazon Beam's own materials (Core_Phazon_Mat 1ac34e37, Phazon_Veins_Mat d61ae63a) are retail gun surfaces
+    // drawn by their shaders too.
+    const bool phazonGun = rem.kind == 35 || (rem.kind == 32 && rem.shader == 0x1AC34E37);
     // 4BC890C1 is a plain lit Lambert that Remastered draws opaque (mesh class 0) where retail
     // used a blended effect: it takes the standard path, so it leaves the retail-fx gate.
     // Likewise any Remastered material without the blend or cutout flag: its mesh is class 0,
@@ -4462,7 +4510,7 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       // Row 6 w (unused by this kind otherwise): the retail konst alpha, a factor of the alpha of a particle model.
       rem.shieldRows[27] = GunFxParticle(pm) ? pm.konstAlpha : 1.0;
     }
-    if (!opt.standalone && !gunGlow && !frostShell && !matcapShell && !shield) {
+    if (!opt.standalone && !gunGlow && !frostShell && !matcapShell && !shield && !phazonGun) {
       if (rem.kind != 0) {
         loopNotes += std::string("kind ") + KindName(rem.kind) + " dropped: a retail model, not standalone; ";
       }
@@ -4470,7 +4518,7 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       rem.vcolor = false;
     }
     rem.macro = rem.macro && opt.standalone;
-    rem.layered = rem.layered && (gunGlow || frostShell || matcapShell || shield || (opt.standalone && (rem.kind != 0 || (useColor && rem.tinted))));
+    rem.layered = rem.layered && (gunGlow || frostShell || matcapShell || shield || phazonGun || (opt.standalone && (rem.kind != 0 || (useColor && rem.tinted))));
     rem.macroLayered = rem.macroLayered && rem.layered && opt.standalone;
     // Nor do the alpha and shading modes belong on one: what they say is about the
     // Remastered surface, and a retail model keeps the retail material's

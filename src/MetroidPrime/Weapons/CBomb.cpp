@@ -32,6 +32,7 @@ CBomb::CBomb(TToken< CGenDescription > particle1, TToken< CGenDescription > part
 , mFuseTime(f1)
 , mParticle1(rs_new CElementGen(particle1))
 , mParticle2(rs_new CElementGen(particle2))
+, mAttractStarted(false)
 , mLightId(kInvalidUniqueId)
 , mParticle2Ptr(CToken(particle2).GetTag().GetId())
 , mIsNotDetonated(true)
@@ -43,12 +44,22 @@ CBomb::CBomb(TToken< CGenDescription > particle1, TToken< CGenDescription > part
 
 CBomb::~CBomb() {}
 
+void CBomb::SetAttractEffect(TToken< CGenDescription > attract) {
+  mParticle3 = rs_new CElementGen(attract);
+  mParticle3->SetGlobalTranslation(GetTranslation());
+}
+
 void CBomb::Explode(const CVector3f& pos, CStateManager& mgr) {
   mgr.ApplyDamageToWorld(GetOwnerId(), *this, pos, x12c_curDamageInfo, GetFilter());
   CSfxManager::AddEmitter(SFXsam_misl_expl_01, GetTranslation(), CVector3f::Zero(), true);
   mgr.InformListeners(pos, kLNT_BombExplode);
   mgr.RemoveWeaponId(GetOwnerId(), GetType());
   mIsNotDetonated = false;
+  if (mParticle3.get()) {
+    // Remastered calls CParticleGen::ShutdownEffect (vtable +0x98). BombAttract has SHTM 0 and no
+    // SHTT, so that is DoShutdownBehavior(0): stop emitting, children shut down the same way.
+    mParticle3->SetParticleEmission(false);
+  }
 }
 
 void CBomb::Touch(CActor& actor, CStateManager& mgr) {
@@ -66,6 +77,14 @@ void CBomb::AddToRenderer(const CFrustumPlanes& frustum, const CStateManager& mg
   CVector3f forward = CGraphics::GetViewMatrix().GetForward();
   CVector3f closestPoint = aabox.ClosestPointAlongVector(forward);
 
+  if (mParticle3.get()) {
+    // Remastered adds all three generators every frame.
+    gpRender->AddParticleGen(*mParticle1, closestPoint, aabox);
+    gpRender->AddParticleGen(*mParticle2, closestPoint, aabox);
+    gpRender->AddParticleGen(*mParticle3, closestPoint, aabox);
+    return;
+  }
+
   if (mIsNotDetonated) {
     if (mFuseTime > 0.5f) {
       gpRender->AddParticleGen(*mParticle1, closestPoint, aabox);
@@ -81,6 +100,10 @@ void CBomb::Render(const CStateManager& mgr) const {}
 
 void CBomb::Think(float dt, CStateManager& mgr) {
   CWeapon::Think(dt, mgr);
+  if (mParticle3.get()) {
+    ThinkRemastered(dt, mgr);
+    return;
+  }
   if (mIsNotDetonated) {
     if (mFuseTime <= 0.f) {
       Explode(GetTranslation(), mgr);
@@ -136,12 +159,72 @@ void CBomb::Think(float dt, CStateManager& mgr) {
   mParticle2->SetGlobalTranslation(GetTranslation());
 }
 
+// Remastered's CBomb::Think (0x100dab0): BombSet updates every frame, BombAttract from the first
+// frame the bomb is attracted on, BombExplo once detonated or in the last half second.
+void CBomb::ThinkRemastered(float dt, CStateManager& mgr) {
+  mParticle1->Update(dt);
+  if (mDisableFuse) {
+    mAttractStarted = true;
+  }
+  if (mAttractStarted) {
+    mParticle3->Update(dt);
+  }
+
+  if (!mIsNotDetonated) {
+    mParticle2->Update(dt);
+    if (mParticle2->IsSystemDeletable()) {
+      mgr.DeleteObjectRequest(GetUniqueId());
+    }
+  } else {
+    if (mFuseTime <= 0.f) {
+      Explode(GetTranslation(), mgr);
+    }
+    // Explode cleared the armed bit: Remastered's test is !(armed && attracted).
+    if (mFuseTime <= 0.5f && !(mIsNotDetonated && mDisableFuse)) {
+      mParticle2->Update(dt);
+    }
+    if (!mDisableFuse) {
+      mFuseTime -= dt;
+    }
+
+    if (mIsNotDetonated) {
+      if (mAcceleration.MagSquared() > 0.f) {
+        mVelocity += dt * mAcceleration;
+      }
+    }
+
+    if (mIsNotDetonated && mVelocity.MagSquared() > 0.f) {
+      mPrevLocation = GetTranslation();
+      GlobalMove(dt * mVelocity);
+      CVector3f diffVec = GetTranslation() - mPrevLocation;
+      float diffMag = diffVec.Magnitude();
+      if (diffMag == 0.f) {
+        Explode(GetTranslation(), mgr);
+      } else {
+        static const CMaterialFilter kSolidFilter = CMaterialFilter::MakeIncludeExclude(
+            CMaterialList(kMT_Solid),
+            CMaterialList(kMT_Character, kMT_Player, kMT_ProjectilePassthrough));
+        CRayCastResult res =
+            mgr.RayStaticIntersection(mPrevLocation, diffVec / diffMag, diffMag, kSolidFilter);
+
+        if (res.IsValid()) {
+          Explode(GetTranslation(), mgr);
+        }
+      }
+    }
+  }
+
+  mParticle1->SetGlobalTranslation(GetTranslation());
+  mParticle2->SetGlobalTranslation(GetTranslation());
+  mParticle3->SetGlobalTranslation(GetTranslation());
+}
+
 ENTITY_ACCEPT_IMPL(CBomb)
 
 void CBomb::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId sender, CStateManager& mgr) {
   switch (msg) {
   case kSM_Registered: {
-    if (mParticle2->SystemHasLight()) {
+    if (!mParticle3.get() && mParticle2->SystemHasLight()) {
       mLightId = mgr.AllocateUniqueId();
       const int sourceId = mParticle2Ptr;
       mgr.AddObject(rs_new CGameLight(

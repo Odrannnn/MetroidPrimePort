@@ -3328,6 +3328,10 @@ void CStateManager::DrawWorld() const {
   // Remastered fogs the opaque world and sky full-screen, then the actors and transparents as
   // they draw (up to GXPortVolumetricFogEnd).
   PortDrawVolumetricFog(*this, backupViewMatrix, frustum);
+  // Remastered's X-ray distortion of the opaque world (pass A of its visor post).
+  if (GetPlayerState()->GetActiveVisor(*this) == CPlayerState::kPV_XRay) {
+    PortRoomEnv::XRayPass(true);
+  }
 #endif
   bool morphingPlayerVisible = false;
   rstl::reserved_vector< const CActor*, 1024 > thermalActors;
@@ -3458,6 +3462,9 @@ void CStateManager::DrawWorld() const {
       }
       CGraphics::SetDepthRange(0.125f, 1.f);
     }
+#ifdef TARGET_PC
+    if (!PortRoomEnv::ThermalPass(false, xf28_thermColdScale2 + xf24_thermColdScale1))
+#endif
     gpRender->DoThermalBlendCold();
     xf34_thermalFlag = kTD_Hot;
     for (const TUniqueId* it = renderFirst.begin(); it != renderFirst.end(); ++it) {
@@ -3562,6 +3569,9 @@ void CStateManager::DrawWorld() const {
     CGraphics::SetDepthRange(0.125f, 1.f);
   }
   if (thermal) {
+#ifdef TARGET_PC
+    if (!PortRoomEnv::ThermalPass(true, xf28_thermColdScale2 + xf24_thermColdScale1))
+#endif
     gpRender->DoThermalBlendHot();
     gpRender->SetThermal(false, 0.f, CColor::Black());
     xf34_thermalFlag = kTD_Bypass;
