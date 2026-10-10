@@ -324,6 +324,16 @@ private:
   // factor (CMorphBallMP1 + 0x22a8) mixes the glow's dry and wet values and drives its light.
   const void* xPortSwooshVarGen[2];
   u16 xPortSwooshVar[2];
+  // Remastered builds one BallInnerGlow gen per colour index (CMorphBallMP1 ctor 0xcdf494:
+  // Power, Varia, VariaWithSpiderBall, Gravity, Phazon at +0x2100) and updates/renders only the
+  // one at +0xc; empty without the imported assets (retail glow then).
+  rstl::single_ptr< CElementGen > xPortGlowSet[5];
+  CElementGen* PortGlowGen() const {
+    if (x8_ballGlowColorIdx < 5 && xPortGlowSet[x8_ballGlowColorIdx].get() != nullptr) {
+      return xPortGlowSet[x8_ballGlowColorIdx].get();
+    }
+    return x19d0_ballInnerGlowGen.get();
+  }
   const void* xPortGlowVarGen;
   uint xPortGlowVarIdx;
   u16 xPortGlowVars[6];

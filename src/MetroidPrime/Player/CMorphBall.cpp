@@ -42,6 +42,7 @@
 #include "port_debug.h"
 #include "port_model_variant.h"
 #include "port_remastered_ball_light.h"
+#include "port_synthetic_effect.h"
 #include "Kyoto/Math/CPlane.hpp"
 #include "Kyoto/Math/CRelAngle.hpp"
 #include "Kyoto/Math/CTransform4f.hpp"
@@ -435,6 +436,23 @@ CMorphBall::CMorphBall(CPlayer& player, float radius)
   xPortSwooshVarGen[0] = xPortSwooshVarGen[1] = nullptr;
   xPortGlowVarGen = nullptr;
   xPortGlowVarIdx = 0;
+  {
+    static const char* const kGlowNames[5] = {
+        "ballinnerglow_power", "ballinnerglow_varia", "ballinnerglow_variawithspiderball",
+        "ballinnerglow_gravity", "ballinnerglow_phazon"};
+    bool all = true;
+    for (const char* name : kGlowNames) {
+      all = all && gpResourceFactory->CanBuild(
+                       SObjectTag('PART', PortRemastered::SyntheticEffectId(name)));
+    }
+    if (all) {
+      for (int i = 0; i < 5; ++i) {
+        TToken< CGenDescription > token = gpSimplePool->GetObj(
+            SObjectTag('PART', PortRemastered::SyntheticEffectId(kGlowNames[i])));
+        xPortGlowSet[i] = rs_new CElementGen(token, CElementGen::kMOT_Normal, CElementGen::kOSF_One);
+      }
+    }
+  }
   xPortFlashVarGen = nullptr;
   xPortWaterFactor = 0.f;
   xPortTimeSinceBombJump = 0.f;
@@ -1393,12 +1411,12 @@ void CMorphBall::Update(float dt, CStateManager& mgr) {
 void CMorphBall::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid, CStateManager& mgr) {
   switch (msg) {
   case kSM_Registered:
-    if (x19d0_ballInnerGlowGen.get() != nullptr && x19d0_ballInnerGlowGen->SystemHasLight()) {
+    if (PortGlowGen() != nullptr && PortGlowGen()->SystemHasLight()) {
       x1c10_ballInnerGlowLight = mgr.AllocateUniqueId();
       const int sourceId = x1988_ballInnerGlow.GetTag().GetId();
       mgr.AddObject(rs_new CGameLight(x1c10_ballInnerGlowLight, kInvalidAreaId, false,
                                       rstl::string_l("BallLight"), GetBallToWorld(),
-                                      x0_player.GetUniqueId(), x19d0_ballInnerGlowGen->GetLight(),
+                                      x0_player.GetUniqueId(), PortGlowGen()->GetLight(),
                                       sourceId, 0, 0.f));
     }
     break;
@@ -1605,7 +1623,7 @@ void CMorphBall::PortUpdateWaterFactor(float dt, const CStateManager& mgr) {
 }
 
 void CMorphBall::PortBindGlowVars() {
-  CElementGen* gen = x19d0_ballInnerGlowGen.get();
+  CElementGen* gen = PortGlowGen();
   if (gen == nullptr || x8_ballGlowColorIdx > 4) {
     return;
   }
@@ -1779,8 +1797,8 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
     }
   }
 
-  x19d0_ballInnerGlowGen->SetGlobalTranslation(swooshToWorld.GetTranslation());
-  x19d0_ballInnerGlowGen->Update(dt);
+  PortGlowGen()->SetGlobalTranslation(swooshToWorld.GetTranslation());
+  PortGlowGen()->Update(dt);
 
   if (x1de8_boostChargeTime == 0.f && x1df4_boostDrainTime == 0.f) {
     const CColor clear(0);
@@ -1842,9 +1860,9 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
       if (IsMorphBallTransitionFlashValid() &&
           x19dc_morphBallTransitionFlashGen->SystemHasLight()) {
         light = x19dc_morphBallTransitionFlashGen->GetLight();
-      } else if (x19d0_ballInnerGlowGen.get() != nullptr &&
-                 x19d0_ballInnerGlowGen->SystemHasLight()) {
-        light = x19d0_ballInnerGlowGen->GetLight();
+      } else if (PortGlowGen() != nullptr &&
+                 PortGlowGen()->SystemHasLight()) {
+        light = PortGlowGen()->GetLight();
 #ifdef TARGET_PC
         innerGlowLight = true;
 #endif
@@ -2440,14 +2458,14 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
     x1bc8_wakeEffectGens[x1c0c_wakeEffectIdx]->Render();
   }
 
-  x19d0_ballInnerGlowGen->SetModulationColor(GetBallInnerGlowColor(x8_ballGlowColorIdx));
-  if (x19d0_ballInnerGlowGen->GetNumActiveChildParticles() > 0) {
-    CParticleGen* particle = x19d0_ballInnerGlowGen->GetActiveChildParticle(0);
+  PortGlowGen()->SetModulationColor(GetBallInnerGlowColor(x8_ballGlowColorIdx));
+  if (PortGlowGen()->GetNumActiveChildParticles() > 0) {
+    CParticleGen* particle = PortGlowGen()->GetActiveChildParticle(0);
     particle->SetModulationColor(GetBallHullGlowColor(x8_ballGlowColorIdx));
-    if (x19d0_ballInnerGlowGen->GetNumActiveChildParticles() > 1) {
-      particle = x19d0_ballInnerGlowGen->GetActiveChildParticle(1);
+    if (PortGlowGen()->GetNumActiveChildParticles() > 1) {
+      particle = PortGlowGen()->GetActiveChildParticle(1);
 #ifdef TARGET_PC
-      if (x19d0_ballInnerGlowGen->PortIsRemastered()) {
+      if (PortGlowGen()->PortIsRemastered()) {
         const SColorRgb& c = skRemasteredBoostedHullGlowColors[x8_ballGlowColorIdx];
         particle->SetModulationColor(CColor(c.x0_r, c.x1_g, c.x2_b, 0xff));
       } else
@@ -2456,7 +2474,7 @@ void CMorphBall::Render(const CStateManager& mgr, const CActorLights* lights) co
     }
   }
 
-  x19d0_ballInnerGlowGen->Render();
+  PortGlowGen()->Render();
   x19d4_spiderBallMagnetEffectGen->Render();
   RenderEnergyDrainEffects(mgr);
   if (x19d8_boostBallGlowGen->GetModulationColor().GetColor_u32() != 0) {
