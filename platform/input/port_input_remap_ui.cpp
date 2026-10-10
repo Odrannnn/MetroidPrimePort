@@ -1,8 +1,10 @@
 #include "port_input_remap_ui.h"
 
+#include "port_controls.h"
 #include "port_input_bindings.h"
 #include "port_input_devices.h"
 
+#include <dolphin/pad.h>
 #include <imgui.h>
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_scancode.h>
@@ -15,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace PortInputRemap {
@@ -96,13 +99,21 @@ constexpr STouchInfo kTouchControls[] = {
 UserBindings sWork;     // what the page edits; written through on every change
 bool sLoaded = false;
 uint64_t sSeenVersion = 0; // the bindings version sWork matches
-int sProfile = 0;       // index into sWork.profiles
-int sEditing = -1;      // binding index in the profile, or -2 for a new one
+// The device being edited: "kbd", "touch", "pads", or a controller profile's match
+// ("type:..." / "guid:..."). The first three are the Default profile (match "")
+// restricted to one family; the others are that match's profile.
+std::string sDevice = "kbd";
+constexpr int kEditNone = -1;
+constexpr int kEditNew = -2;
+constexpr int kEditInherited = -3; // sEditOrig, a built-in binding, is being changed
+int sEditing = kEditNone;          // else a binding index in the edited profile
+Binding sEditOrig;
 Binding sDraft;
 char sInputsText[256] = {};
 std::string sError;
-int sUnbindAction = 1;
-int sUnbindFamily = 1;
+char sFilter[64] = {};
+bool sOnlyBound = false;
+PortInput::Action sEditAction = PortInput::Action::None; // the action a new binding starts on
 
 struct SCapture {
   bool active = false;
@@ -191,36 +202,93 @@ void Commit() {
   }
 }
 
-UserProfile& EnsureProfile() {
-  if (sWork.profiles.empty()) {
-    UserProfile def;
-    def.name = "Default";
-    sWork.profiles.push_back(def);
+// A user profile by match, or null (reading never creates one).
+UserProfile* Find(const std::string& match) {
+  for (UserProfile& p : sWork.profiles) {
+    if (p.match == match) return &p;
   }
-  sProfile = std::clamp(sProfile, 0, int(sWork.profiles.size()) - 1);
-  return sWork.profiles[size_t(sProfile)];
+  return nullptr;
 }
 
-std::string ProfileLabel(const UserProfile& p) {
-  if (p.match.empty()) return p.name.empty() ? "Default (all devices)" : p.name + " (all devices)";
-  return (p.name.empty() ? std::string("Controller") : p.name) + " (" + p.match + ")";
+// The profile for a match, made on first edit. The Default one comes first.
+UserProfile& Ensure(const std::string& match, const std::string& name) {
+  if (UserProfile* p = Find(match)) return *p;
+  UserProfile p;
+  p.name = match.empty() ? std::string("Default") : name;
+  p.match = match;
+  sWork.profiles.push_back(p);
+  return sWork.profiles.back();
+}
+
+// What the selected device list entry edits.
+struct SView {
+  PortInput::Family family = PortInput::Family::Keyboard;
+  std::string match; // the profile's match: "" for the three general entries
+  std::string name;  // for a profile made on first edit
+  PortInput::Profile inherited; // what the action falls back to
+};
+
+SView MakeView() {
+  SView v;
+  if (sDevice == "touch") v.family = PortInput::Family::Touch;
+  else if (sDevice == "kbd") v.family = PortInput::Family::Keyboard;
+  else v.family = PortInput::Family::Pad;
+  if (sDevice != "kbd" && sDevice != "touch" && sDevice != "pads") {
+    v.match = sDevice;
+    if (const UserProfile* p = Find(sDevice)) v.name = p->name;
+  }
+  PortInputDevices::BuildBaseProfile(v.inherited);
+  // A kind or model sits on top of the Default profile's own overrides.
+  if (!v.match.empty()) {
+    if (const UserProfile* def = Find("")) PortInput::Overlay(v.inherited, *def);
+  }
+  return v;
+}
+
+UserProfile& EditedProfile(const SView& v) { return Ensure(v.match, v.name); }
+
+struct SDeviceEntry {
+  std::string key;
+  std::string label;
+};
+
+std::vector<SDeviceEntry> DeviceEntries() {
+  std::vector<SDeviceEntry> out = {
+      {"kbd", "Keyboard & mouse"}, {"touch", "Touch"}, {"pads", "All controllers"}};
+  const auto listed = [&](const std::string& key) {
+    return std::any_of(out.begin(), out.end(), [&](const SDeviceEntry& e) { return e.key == key; });
+  };
+  for (const PortInputDevices::SPadInfo& pad : PortInputDevices::ConnectedPads()) {
+    if (!pad.type.empty() && !listed("type:" + pad.type)) out.push_back({"type:" + pad.type, "All " + pad.type + " controllers"});
+    if (!pad.guid.empty() && !listed("guid:" + pad.guid)) out.push_back({"guid:" + pad.guid, pad.name + " (this model)"});
+  }
+  for (const UserProfile& p : sWork.profiles) {
+    if (p.match.empty() || listed(p.match)) continue;
+    out.push_back({p.match, (p.name.empty() ? p.match : p.name) + " (not connected)"});
+  }
+  return out;
 }
 
 // The inputs down now, in a fixed order (keys, mouse, pad buttons, axes).
-std::vector<Input> DownInputs(const PortInput::RawState& raw) {
+// Only the viewed device's family is read: keys and mouse for the keyboard view,
+// pad buttons and axes for a controller view, nothing for touch.
+std::vector<Input> DownInputs(const PortInput::RawState& raw, PortInput::Family family) {
   std::vector<Input> down;
-  for (int k = 0; k < PortInput::kKeyCount; ++k) {
-    if (raw.keys.test(size_t(k)) && k != SDL_SCANCODE_ESCAPE) down.push_back({Device::Key, 0, 50, uint16_t(k)});
-  }
-  for (int m = 0; m < PortInput::kMouseButtonCount; ++m) {
-    if ((raw.mouseButtons >> m) & 1u) down.push_back({Device::MouseButton, 0, 50, uint16_t(m)});
-  }
-  for (int b = 0; b < PortInput::kPadButtonCount; ++b) {
-    if ((raw.padButtons >> b) & 1u) down.push_back({Device::PadButton, 0, 50, uint16_t(b)});
-  }
-  for (int a = 0; a < PortInput::kPadAxisCount; ++a) {
-    if (std::fabs(raw.padAxes[a]) >= kAxisCapture) {
-      down.push_back({Device::PadAxis, int8_t(raw.padAxes[a] > 0.f ? 1 : -1), 50, uint16_t(a)});
+  if (family == PortInput::Family::Keyboard) {
+    for (int k = 0; k < PortInput::kKeyCount; ++k) {
+      if (raw.keys.test(size_t(k)) && k != SDL_SCANCODE_ESCAPE) down.push_back({Device::Key, 0, 50, uint16_t(k)});
+    }
+    for (int m = 0; m < PortInput::kMouseButtonCount; ++m) {
+      if ((raw.mouseButtons >> m) & 1u) down.push_back({Device::MouseButton, 0, 50, uint16_t(m)});
+    }
+  } else if (family == PortInput::Family::Pad) {
+    for (int b = 0; b < PortInput::kPadButtonCount; ++b) {
+      if ((raw.padButtons >> b) & 1u) down.push_back({Device::PadButton, 0, 50, uint16_t(b)});
+    }
+    for (int a = 0; a < PortInput::kPadAxisCount; ++a) {
+      if (std::fabs(raw.padAxes[a]) >= kAxisCapture) {
+        down.push_back({Device::PadAxis, int8_t(raw.padAxes[a] > 0.f ? 1 : -1), 50, uint16_t(a)});
+      }
     }
   }
   return down;
@@ -244,7 +312,7 @@ void FinishCapture() {
 
 // Records every input pressed until all are released again: one input, or a
 // chord in press order (the last one is the trigger). Esc cancels.
-void UpdateCapture() {
+void UpdateCapture(PortInput::Family family) {
   if (!sCapture.active) return;
   PortInput::RawState raw;
   PortInputDevices::ReadRaw(raw);
@@ -252,9 +320,9 @@ void UpdateCapture() {
     EndCapture();
     return;
   }
-  std::vector<Input> down = DownInputs(raw);
+  std::vector<Input> down = DownInputs(raw, family);
   const ImGuiIO& io = ImGui::GetIO();
-  if (sCapture.armed && (io.MouseWheel != 0.f || io.MouseWheelH != 0.f)) {
+  if (sCapture.armed && family == PortInput::Family::Keyboard && (io.MouseWheel != 0.f || io.MouseWheelH != 0.f)) {
     const bool vertical = io.MouseWheel != 0.f;
     const float v = vertical ? io.MouseWheel : io.MouseWheelH;
     sCapture.chord.push_back({Device::MouseWheel, int8_t(v > 0.f ? 1 : -1), 50, uint16_t(vertical ? 0 : 1)});
@@ -298,17 +366,21 @@ bool ActionCombo(const char* label, Action& action) {
   return changed;
 }
 
-void DrawEditor(UserProfile& profile) {
-  ImGui::SeparatorText(sEditing == -2 ? "New binding" : "Edit binding");
+void DrawEditor(const SView& v) {
+  using PortInput::Family;
+  ImGui::SeparatorText(sEditing == kEditNew ? "New binding" : "Edit binding");
   ActionCombo("Action", sDraft.action);
 
   if (sCapture.active) {
     ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), sCapture.armed ? "Press an input or a chord, then release it (Esc cancels)..."
                                                                      : "Release everything...");
-  } else {
+  } else if (v.family != Family::Touch) {
     if (ImGui::Button("Record")) StartCapture();
-    ImGui::SetItemTooltip("Press one input, or hold several in order (the last one is the trigger), then "
-                          "release them all. Mouse wheel too. Esc cancels.");
+    ImGui::SetItemTooltip(v.family == Family::Keyboard
+                              ? "Press one key or mouse button, or hold several in order (the last one is the "
+                                "trigger), then release them all. Mouse wheel too. Esc cancels."
+                              : "Press one controller button or move a stick, or hold several in order (the "
+                                "last one is the trigger), then release them all. Esc cancels.");
     ImGui::SameLine();
   }
   ImGui::SetNextItemWidth(-FLT_MIN);
@@ -317,21 +389,23 @@ void DrawEditor(UserProfile& profile) {
                         "axis:<name>+/-, touch:<control> (a, fire, missile...), gyro:yaw+ ... (docs/NATIVE_PORT.md). "
                         "Append @<percent> for an axis threshold.");
   if (!sCapture.active) {
-    ImGui::SetNextItemWidth(260.f);
-    if (ImGui::BeginCombo("##touch", "Add a touch control...")) {
-      for (const STouchInfo& t : kTouchControls) {
-        if (ImGui::Selectable(t.label)) {
-          std::string text = TrimSpaces(sInputsText);
-          if (!text.empty()) text += " + ";
-          text += std::string("touch:") + t.name;
-          std::snprintf(sInputsText, sizeof(sInputsText), "%s", text.c_str());
+    if (v.family == Family::Touch) {
+      ImGui::SetNextItemWidth(260.f);
+      if (ImGui::BeginCombo("##touch", "Add a touch control...")) {
+        for (const STouchInfo& t : kTouchControls) {
+          if (ImGui::Selectable(t.label)) {
+            std::string text = TrimSpaces(sInputsText);
+            if (!text.empty()) text += " + ";
+            text += std::string("touch:") + t.name;
+            std::snprintf(sInputsText, sizeof(sInputsText), "%s", text.c_str());
+          }
         }
+        ImGui::EndCombo();
       }
-      ImGui::EndCombo();
+      ImGui::SetItemTooltip("The touch controls hide while this menu is open, so they can't be recorded: "
+                            "pick one here. Picking another makes a chord.");
+      ImGui::SameLine();
     }
-    ImGui::SetItemTooltip("The touch controls hide while this menu is open, so Record can't see them: "
-                          "pick one here. Picking another makes a chord.");
-    ImGui::SameLine();
     if (ImGui::Button("Clear")) sInputsText[0] = '\0';
   }
 
@@ -396,7 +470,11 @@ void DrawEditor(UserProfile& profile) {
     ImGui::TextDisabled("A layer applies while its \"Layer n (hold)\" binding is held.");
   }
 
-  const bool valid = inputsOk && sDraft.action != Action::None && sDraft.contexts != 0;
+  const bool familyOk = inputsOk && PortInput::BindingFamily(parsed) == v.family;
+  if (inputsOk && !familyOk) {
+    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "This page binds %s inputs only.", kFamilies[int(v.family)]);
+  }
+  const bool valid = familyOk && sDraft.action != Action::None && sDraft.contexts != 0;
   ImGui::BeginDisabled(!valid);
   if (ImGui::Button("Save")) {
     parsed.action = sDraft.action;
@@ -409,123 +487,44 @@ void DrawEditor(UserProfile& profile) {
     parsed.scale = sDraft.scale;
     parsed.invert = sDraft.invert;
     parsed.contexts = sDraft.contexts;
-    if (sEditing >= 0 && sEditing < int(profile.bindings.size())) {
-      profile.bindings[size_t(sEditing)] = parsed;
-    } else {
-      profile.bindings.push_back(parsed);
+    UserProfile& profile = EditedProfile(v);
+    const Family family = v.family;
+    if (sEditing == kEditNew) {
+      // Keep the other built-in bindings of this action: a user binding drops them all.
+      PortInput::Materialize(profile, parsed.action, family, v.inherited);
+      PortInput::AddUserBinding(profile, parsed);
+    } else if (sEditing == kEditInherited) {
+      PortInput::Materialize(profile, sEditOrig.action, family, v.inherited);
+      PortInput::Materialize(profile, parsed.action, family, v.inherited);
+      const auto it = std::find(profile.bindings.begin(), profile.bindings.end(), sEditOrig);
+      if (it != profile.bindings.end()) {
+        const size_t index = size_t(it - profile.bindings.begin());
+        PortInput::RemoveUserBinding(profile, index);
+      }
+      PortInput::AddUserBinding(profile, parsed);
+    } else if (sEditing >= 0 && sEditing < int(profile.bindings.size())) {
+      const Binding& old = profile.bindings[size_t(sEditing)];
+      if (old.action == parsed.action && PortInput::BindingFamily(old) == family) {
+        profile.bindings[size_t(sEditing)] = parsed;
+      } else {
+        PortInput::RemoveUserBinding(profile, size_t(sEditing));
+        PortInput::Materialize(profile, parsed.action, family, v.inherited);
+        PortInput::AddUserBinding(profile, parsed);
+      }
     }
-    sEditing = -1;
+    sEditing = kEditNone;
     EndCapture();
     Commit();
   }
   ImGui::EndDisabled();
   ImGui::SameLine();
   if (ImGui::Button("Cancel")) {
-    sEditing = -1;
+    sEditing = kEditNone;
     EndCapture();
   }
 }
 
-void DrawProfilePicker() {
-  std::string guid, type, name;
-  const bool hasPad = PortInputDevices::ActivePad(guid, type, name);
-  if (hasPad) {
-    ImGui::Text("Controller: %s (%s)", name.c_str(), type.c_str());
-  } else {
-    ImGui::TextDisabled("No controller connected.");
-  }
-
-  const std::string current = sWork.profiles.empty() ? std::string("Default (all devices)")
-                                                     : ProfileLabel(sWork.profiles[size_t(sProfile)]);
-  if (ImGui::BeginCombo("Profile", current.c_str())) {
-    for (int i = 0; i < int(sWork.profiles.size()); ++i) {
-      if (ImGui::Selectable((ProfileLabel(sWork.profiles[size_t(i)]) + "##" + std::to_string(i)).c_str(), i == sProfile)) {
-        sProfile = i;
-        sEditing = -1;
-      }
-    }
-    ImGui::EndCombo();
-  }
-  if (hasPad) {
-    const auto add = [&](const std::string& match, const char* label) {
-      for (int i = 0; i < int(sWork.profiles.size()); ++i) {
-        if (sWork.profiles[size_t(i)].match == match) {
-          sProfile = i;
-          return;
-        }
-      }
-      EnsureProfile();
-      UserProfile p;
-      p.name = label;
-      p.match = match;
-      sWork.profiles.push_back(p);
-      sProfile = int(sWork.profiles.size()) - 1;
-      sEditing = -1;
-      Commit();
-    };
-    if (!type.empty() && ImGui::Button("Profile for this kind of controller")) add("type:" + type, type.c_str());
-    ImGui::SetItemTooltip("Applies to every %s controller, on top of the default profile.", type.c_str());
-    ImGui::SameLine();
-    if (ImGui::Button("Profile for this controller only")) add("guid:" + guid, name.c_str());
-    ImGui::SetItemTooltip("Applies only to this controller model (its SDL GUID), on top of the default "
-                          "profile; wins over a profile for its kind.");
-  }
-  const PortInputDevices::SActiveProfiles active = PortInputDevices::ActiveUserProfiles();
-  if (active.sel.pad != nullptr) ImGui::TextDisabled("In use: default + %s", ProfileLabel(*active.sel.pad).c_str());
-}
-
-void DrawProfileOptions(UserProfile& profile) {
-  char nameBuf[64];
-  std::snprintf(nameBuf, sizeof(nameBuf), "%s", profile.name.c_str());
-  if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf))) profile.name = nameBuf;
-  if (ImGui::IsItemDeactivatedAfterEdit()) Commit();
-  if (ImGui::Checkbox("Replace the built-in controls", &profile.replace)) Commit();
-  ImGui::SetItemTooltip("On: only this page's bindings apply (with the default profile's, for a "
-                        "controller profile). Off: they are added on top of the Keyboard & mouse and "
-                        "Controller pages, replacing what those bind to the same action on the same "
-                        "kind of device.");
-  int window = profile.chordWindowMs;
-  if (ImGui::SliderInt("Chord window (ms)", &window, 0, 200, window == 0 ? "Default" : "%d")) {
-    profile.chordWindowMs = uint16_t(window);
-  }
-  if (ImGui::IsItemDeactivatedAfterEdit()) Commit();
-  ImGui::SetItemTooltip("How long an input that starts a chord waits for the rest before it acts alone.");
-}
-
-void DrawUnbinds(UserProfile& profile) {
-  if (!ImGui::TreeNode("Removed built-in bindings")) return;
-  ImGui::TextDisabled("Drops what the other pages bind to an action on one kind of device.");
-  for (size_t i = 0; i < profile.unbind.size(); ++i) {
-    const PortInput::Unbind& u = profile.unbind[i];
-    ImGui::PushID(int(i));
-    if (ImGui::SmallButton("x")) {
-      profile.unbind.erase(profile.unbind.begin() + std::ptrdiff_t(i));
-      Commit();
-      ImGui::PopID();
-      break;
-    }
-    ImGui::SameLine();
-    ImGui::Text("%s on %s", std::string(PortInput::Info(u.action).label).c_str(), kFamilies[int(u.family)]);
-    ImGui::PopID();
-  }
-  Action a = Action(sUnbindAction);
-  ImGui::SetNextItemWidth(200.f);
-  if (ActionCombo("##unbindAction", a)) sUnbindAction = int(a);
-  ImGui::SameLine();
-  ImGui::SetNextItemWidth(160.f);
-  ImGui::Combo("##unbindFamily", &sUnbindFamily, kFamilies, int(std::size(kFamilies)));
-  ImGui::SameLine();
-  if (ImGui::Button("Remove")) {
-    const PortInput::Unbind u{Action(sUnbindAction), PortInput::Family(sUnbindFamily)};
-    if (std::find(profile.unbind.begin(), profile.unbind.end(), u) == profile.unbind.end()) {
-      profile.unbind.push_back(u);
-      Commit();
-    }
-  }
-  ImGui::TreePop();
-}
-
-void DrawBindingRow(const Binding& b) {
+void DrawBindingRow(const Binding& b, bool inherited = false) {
   ImGui::TableNextColumn();
   ImGui::TextUnformatted(std::string(PortInput::Info(b.action).label).c_str());
   ImGui::TableNextColumn();
@@ -541,7 +540,9 @@ void DrawBindingRow(const Binding& b) {
     ImGui::TextUnformatted(TriggerLabel(b.trigger));
   }
   ImGui::TableNextColumn();
-  ImGui::TextUnformatted(b.contexts == PortInput::kCtxAll ? "everywhere" : PortInput::ContextsToText(b.contexts).c_str());
+  std::string where = b.contexts == PortInput::kCtxAll ? "everywhere" : PortInput::ContextsToText(b.contexts);
+  if (inherited) where += " (inherited)";
+  ImGui::TextUnformatted(where.c_str());
 }
 
 void DrawEffective() {
@@ -559,6 +560,241 @@ void DrawEffective() {
   ImGui::TreePop();
 }
 
+bool Contains(const std::string& text, const char* filter) {
+  if (filter[0] == '\0') return true;
+  const auto lower = [](std::string s) {
+    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+  };
+  return lower(text).find(lower(filter)) != std::string::npos;
+}
+
+// A change the table asks for; applied after it so the rows aren't edited mid-draw.
+struct SPending {
+  enum class Op { None, RemoveUser, RemoveInherited, Revert } op = Op::None;
+  Action action = Action::None;
+  size_t index = 0;
+  Binding binding;
+};
+
+void ApplyPending(const SView& v, const SPending& pending) {
+  if (pending.op == SPending::Op::None) return;
+  UserProfile& profile = EditedProfile(v);
+  switch (pending.op) {
+  case SPending::Op::RemoveUser: PortInput::RemoveUserBinding(profile, pending.index); break;
+  case SPending::Op::RemoveInherited: {
+    PortInput::Materialize(profile, pending.action, v.family, v.inherited);
+    const auto it = std::find(profile.bindings.begin(), profile.bindings.end(), pending.binding);
+    if (it != profile.bindings.end()) PortInput::RemoveUserBinding(profile, size_t(it - profile.bindings.begin()));
+    break;
+  }
+  case SPending::Op::Revert: PortInput::Revert(profile, pending.action, v.family); break;
+  case SPending::Op::None: break;
+  }
+  sEditing = kEditNone;
+  Commit();
+}
+
+void DrawTable(const SView& v) {
+  ImGui::SetNextItemWidth(220.f);
+  ImGui::InputTextWithHint("##filter", "Filter actions", sFilter, sizeof(sFilter));
+  ImGui::SameLine();
+  ImGui::Checkbox("Only bound", &sOnlyBound);
+
+  const UserProfile* user = Find(v.match);
+  SPending pending;
+  if (ImGui::BeginTable("bindings", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::TableSetupColumn("Action");
+    ImGui::TableSetupColumn("Inputs");
+    ImGui::TableSetupColumn("Trigger");
+    ImGui::TableSetupColumn("Where");
+    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableHeadersRow();
+    for (int i = 1; i < PortInput::kActionCount; ++i) {
+      const Action action = Action(i);
+      const std::string label(PortInput::Info(action).label);
+      if (!Contains(label, sFilter)) continue;
+      const bool overridden = user != nullptr && PortInput::Overridden(*user, action, v.family);
+      // (binding, index into the user's bindings or -1 for an inherited one)
+      std::vector<std::pair<Binding, int>> rows;
+      if (overridden) {
+        for (int n = 0; n < int(user->bindings.size()); ++n) {
+          const Binding& b = user->bindings[size_t(n)];
+          if (b.count > 0 && b.action == action && PortInput::BindingFamily(b) == v.family) rows.push_back({b, n});
+        }
+      } else {
+        for (const Binding& b : PortInput::InFamily(v.inherited.bindings, action, v.family)) rows.push_back({b, -1});
+      }
+      if (rows.empty() && sOnlyBound) continue;
+
+      ImGui::PushID(i);
+      const auto buttons = [&](bool last) {
+        if (last) {
+          if (ImGui::SmallButton("+")) {
+            BeginEdit(kEditNew, Binding{action});
+          }
+          ImGui::SetItemTooltip("Add a binding for this action.");
+          if (overridden) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Revert")) {
+              pending.op = SPending::Op::Revert;
+              pending.action = action;
+            }
+            ImGui::SetItemTooltip("Back to what this device inherits.");
+          }
+        }
+      };
+      if (rows.empty()) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(label.c_str());
+        ImGui::TableNextColumn();
+        ImGui::TextDisabled(overridden ? "(unbound)" : "-");
+        ImGui::TableNextColumn();
+        ImGui::TableNextColumn();
+        ImGui::TableNextColumn();
+        buttons(true);
+      }
+      for (size_t r = 0; r < rows.size(); ++r) {
+        const Binding& b = rows[r].first;
+        const int userIndex = rows[r].second;
+        ImGui::PushID(int(r));
+        ImGui::TableNextRow();
+        if (userIndex < 0) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        DrawBindingRow(b, userIndex < 0);
+        if (userIndex < 0) ImGui::PopStyleColor();
+        ImGui::TableNextColumn();
+        if (ImGui::SmallButton("Edit")) {
+          BeginEdit(userIndex < 0 ? kEditInherited : userIndex, b);
+          sEditOrig = b;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("x")) {
+          if (userIndex < 0) {
+            pending.op = SPending::Op::RemoveInherited;
+            pending.action = action;
+            pending.binding = b;
+          } else {
+            pending.op = SPending::Op::RemoveUser;
+            pending.index = size_t(userIndex);
+          }
+        }
+        ImGui::SetItemTooltip("Remove this binding.");
+        ImGui::SameLine();
+        buttons(r + 1 == rows.size());
+        ImGui::PopID();
+      }
+      ImGui::PopID();
+    }
+    ImGui::EndTable();
+  }
+  ApplyPending(v, pending);
+}
+
+struct SPreset {
+  const char* name;
+  const char* id;
+};
+constexpr SPreset kKeyPresets[] = {{"Classic", "classic"}, {"Mouse & keyboard", "mouse"}};
+constexpr SPreset kPadPresets[] = {
+    {"GameCube", "gamecube"}, {"Remastered", "remastered"}, {"Modern", "modern"}, {"Southpaw", "southpaw"}};
+
+// The reset buttons, each behind a confirmation.
+void DrawReset(const SView& v) {
+  using PortInput::Family;
+  static int sPreset = 0;
+  if (ImGui::Button("Reset...")) {
+    sPreset = 0;
+    ImGui::OpenPopup("resetDevice");
+  }
+  if (!ImGui::BeginPopup("resetDevice")) return;
+  const SPreset* presets = nullptr;
+  int count = 0;
+  if (sDevice == "kbd") {
+    presets = kKeyPresets;
+    count = int(std::size(kKeyPresets));
+  } else if (sDevice == "pads") {
+    presets = kPadPresets;
+    count = int(std::size(kPadPresets));
+  }
+  const bool gcAdapter = PADIsGCAdapter(0) != 0;
+  if (count > 0) {
+    ImGui::TextUnformatted("Reset this page's bindings to a preset:");
+    for (int i = 0; i < count; ++i) {
+      const bool needsPad = sDevice == "pads" && (std::string_view(presets[i].id) == "remastered" ||
+                                                  std::string_view(presets[i].id) == "modern");
+      ImGui::BeginDisabled(needsPad && gcAdapter);
+      ImGui::RadioButton(presets[i].name, &sPreset, i);
+      ImGui::EndDisabled();
+    }
+    if (sPreset >= count || (sDevice == "pads" && gcAdapter && (sPreset == 1 || sPreset == 2))) sPreset = 0;
+    ImGui::TextDisabled("Your own bindings here are removed. Other devices are left alone.");
+  } else if (v.family == Family::Touch) {
+    ImGui::TextUnformatted("Remove every touch binding of yours?");
+  } else {
+    ImGui::TextUnformatted("Remove this device's own bindings, so it uses All controllers again?");
+  }
+  if (ImGui::Button("Reset")) {
+    sEditing = kEditNone;
+    EndCapture();
+    if (UserProfile* p = Find(v.match)) {
+      if (v.match.empty()) {
+        PortInput::ClearFamily(*p, v.family);
+      } else {
+        p->bindings.clear();
+        p->unbind.clear();
+      }
+      Commit();
+    }
+    if (count > 0 && sDevice == "kbd") PortControls::ApplyKeyPresetNamed(presets[sPreset].id);
+    if (count > 0 && sDevice == "pads") PortControls::ApplyPadPresetNamed(presets[sPreset].id);
+    ImGui::CloseCurrentPopup();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+}
+
+void DrawProfileOptions(const SView& v) {
+  const UserProfile* user = Find(v.match);
+  const bool isProfile = !v.match.empty();
+  if (isProfile && user != nullptr) {
+    char nameBuf[64];
+    std::snprintf(nameBuf, sizeof(nameBuf), "%s", user->name.c_str());
+    if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf))) EditedProfile(v).name = nameBuf;
+    if (ImGui::IsItemDeactivatedAfterEdit()) Commit();
+    bool replace = user->replace;
+    if (ImGui::Checkbox("Replace the built-in controls", &replace)) {
+      EditedProfile(v).replace = replace;
+      Commit();
+    }
+    ImGui::SetItemTooltip("On: only this device's bindings apply (with All controllers'). Off: they are "
+                          "added on top, replacing what the other bindings give the same action.");
+  }
+  int window = user != nullptr ? user->chordWindowMs : 0;
+  if (ImGui::SliderInt("Chord window (ms)", &window, 0, 200, window == 0 ? "Default" : "%d")) {
+    EditedProfile(v).chordWindowMs = uint16_t(window);
+  }
+  if (ImGui::IsItemDeactivatedAfterEdit()) Commit();
+  ImGui::SetItemTooltip("How long an input that starts a chord waits for the rest before it acts alone.");
+  if (isProfile && user != nullptr) {
+    if (ImGui::Button("Delete this profile")) ImGui::OpenPopup("deleteProfile");
+    if (ImGui::BeginPopup("deleteProfile")) {
+      ImGui::Text("Delete %s and its %d bindings?", user->name.c_str(), int(user->bindings.size()));
+      if (ImGui::Button("Delete")) {
+        std::erase_if(sWork.profiles, [&](const UserProfile& p) { return p.match == v.match; });
+        sDevice = "pads";
+        sEditing = kEditNone;
+        Commit();
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+    }
+  }
+}
+
 } // namespace
 
 bool Capturing() {
@@ -574,80 +810,50 @@ void Draw() {
   sLastDrawMs.store(now, std::memory_order_relaxed);
   // Picks up a hand edit or a deleted file, unless the page is mid-edit.
   const uint64_t version = PortInputDevices::UserBindingsVersion();
-  if (!sLoaded || (version != sSeenVersion && sEditing == -1 && !sCapture.active)) {
+  if (!sLoaded || (version != sSeenVersion && sEditing == kEditNone && !sCapture.active)) {
     sWork = *PortInputDevices::UserBindings();
     sSeenVersion = version;
     sLoaded = true;
   }
-  UpdateCapture();
 
   ImGui::TextWrapped("Bind any action to a key, mouse button, controller input or touch control, or to a "
-                     "chord of up to four of them. These bindings go on top of the other pages and are "
-                     "saved in controls.toml in the user folder. The Default profile holds keyboard, "
-                     "mouse and touch bindings and applies to every controller; a controller profile "
-                     "adds bindings for one kind or model of controller on top.");
+                     "chord of up to four of them, for each device. Greyed rows are what the device gets "
+                     "without you; changing one makes it yours, and Revert gives it back. Saved in "
+                     "controls.toml in the user folder.");
   if (!sError.empty()) ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", sError.c_str());
-  DrawProfilePicker();
 
-  if (sWork.profiles.empty()) {
-    if (ImGui::Button("Add binding")) {
-      EnsureProfile();
-      BeginEdit(-2, Binding{Action::PadA});
-    }
-    if (sEditing != -1) DrawEditor(EnsureProfile());
-    DrawEffective();
-    return;
+  const std::vector<SDeviceEntry> entries = DeviceEntries();
+  if (std::none_of(entries.begin(), entries.end(), [](const SDeviceEntry& e) { return e.key == sDevice; })) {
+    sDevice = "kbd";
   }
+  std::string current;
+  for (const SDeviceEntry& e : entries) {
+    if (e.key == sDevice) current = e.label;
+  }
+  if (ImGui::BeginCombo("Device", current.c_str())) {
+    for (const SDeviceEntry& e : entries) {
+      if (ImGui::Selectable((e.label + "##" + e.key).c_str(), e.key == sDevice) && e.key != sDevice) {
+        sDevice = e.key;
+        sEditing = kEditNone;
+        EndCapture();
+      }
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::SetItemTooltip("Keyboard & mouse, touch and All controllers apply to every device of that kind. "
+                        "A controller kind or model is added on top of All controllers.");
 
-  UserProfile& profile = EnsureProfile();
+  const SView view = MakeView();
+  UpdateCapture(view.family);
+
+  ImGui::SameLine();
+  DrawReset(view);
   ImGui::Separator();
-  if (ImGui::BeginTable("bindings", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Action");
-    ImGui::TableSetupColumn("Inputs");
-    ImGui::TableSetupColumn("Trigger");
-    ImGui::TableSetupColumn("Where");
-    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableHeadersRow();
-    int remove = -1;
-    for (int i = 0; i < int(profile.bindings.size()); ++i) {
-      ImGui::PushID(i);
-      ImGui::TableNextRow();
-      DrawBindingRow(profile.bindings[size_t(i)]);
-      ImGui::TableNextColumn();
-      if (ImGui::SmallButton("Edit")) BeginEdit(i, profile.bindings[size_t(i)]);
-      ImGui::SameLine();
-      if (ImGui::SmallButton("x")) remove = i;
-      ImGui::PopID();
-    }
-    ImGui::EndTable();
-    if (remove >= 0) {
-      profile.bindings.erase(profile.bindings.begin() + remove);
-      if (sEditing == remove) sEditing = -1;
-      else if (sEditing > remove) --sEditing;
-      Commit();
-    }
-  }
-  if (profile.bindings.empty()) ImGui::TextDisabled("No bindings in this profile yet.");
-  if (sEditing == -1 && ImGui::Button("Add binding")) BeginEdit(-2, Binding{Action::PadA});
-  if (sEditing != -1) DrawEditor(profile);
 
+  if (sEditing != kEditNone) DrawEditor(view);
+  DrawTable(view);
   ImGui::Separator();
-  DrawProfileOptions(profile);
-  DrawUnbinds(profile);
-  if (ImGui::Button("Delete this profile")) ImGui::OpenPopup("deleteProfile");
-  if (ImGui::BeginPopup("deleteProfile")) {
-    ImGui::Text("Delete %s and its %d bindings?", ProfileLabel(profile).c_str(), int(profile.bindings.size()));
-    if (ImGui::Button("Delete")) {
-      sWork.profiles.erase(sWork.profiles.begin() + sProfile);
-      sProfile = 0;
-      sEditing = -1;
-      Commit();
-      ImGui::CloseCurrentPopup();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
-    ImGui::EndPopup();
-  }
+  DrawProfileOptions(view);
   DrawEffective();
 }
 

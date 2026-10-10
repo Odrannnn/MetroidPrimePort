@@ -60,6 +60,10 @@
 // the pad's Fire leaves the keyboard's Fire alone. unbind drops one action's
 // base bindings in one family without adding any.
 //
+// The Remap page's device views map onto these profiles by family: Keyboard &
+// mouse, Touch and All controllers are the match "" profile restricted to one
+// family; a controller kind or model is its own profile (pad family).
+//
 // Profile choice: the profile with match "" (the first one, if several) always
 // applies; then the first profile matching the active pad's GUID, else the first
 // matching its type, is layered on top of it.
@@ -122,5 +126,28 @@ Selection Select(const UserBindings& bindings, std::string_view guid, std::strin
 
 // Applies one user profile over a profile (the overlay rule above).
 void Overlay(Profile& profile, const UserProfile& user);
+
+// Family-filtered editing, for the Remap page's per-device views (the Default
+// profile holds the keyboard, touch and all-controller views, one family each).
+// The family of a binding is its trigger input's (the last one).
+Family BindingFamily(const Binding& b);
+// Whether the profile overrides (binds or unbinds) an action in a family; if not,
+// the action inherits the built-in bindings.
+bool Overridden(const UserProfile& user, Action action, Family family);
+// A profile's bindings of an action in a family (the profile's own list).
+std::vector<Binding> InFamily(const std::vector<Binding>& bindings, Action action, Family family);
+// Before editing an inherited action: copies the inherited bindings of (action,
+// family) into the profile, unless it overrides them already, since any binding
+// replaces all of the inherited ones.
+void Materialize(UserProfile& user, Action action, Family family, const Profile& inherited);
+// Adds a binding, dropping an unbind it supersedes.
+void AddUserBinding(UserProfile& user, const Binding& b);
+// Removes the binding at an index; when it was the action's last one in its
+// family, an unbind keeps the built-in ones from coming back.
+void RemoveUserBinding(UserProfile& user, size_t index);
+// The action inherits again in that family (drops its bindings and unbinds).
+void Revert(UserProfile& user, Action action, Family family);
+// Every override and unbind in one family (a reset to the built-in controls).
+void ClearFamily(UserProfile& user, Family family);
 
 } // namespace PortInput

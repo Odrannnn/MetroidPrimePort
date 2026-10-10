@@ -2,8 +2,8 @@
 
 #include <string_view>
 
-// Input rebinding: the port's keyboard defaults and the overlay's Controls page.
-// The binding storage, matching and persistence live in Aurora (dolphin/pad.h).
+// The port's keyboard and controller presets, over the Aurora PAD mappings
+// (dolphin/pad.h). Binding itself is the overlay's Controls > Remap page.
 
 namespace PortControls {
 
@@ -16,16 +16,11 @@ bool ApplyKeyPresetNamed(std::string_view name);
 // The Controls page's controller preset button: "gamecube", "remastered",
 // "modern" or "southpaw". Saves. False for any other name.
 bool ApplyPadPresetNamed(std::string_view name);
-// True while the Controls tab is waiting for, or settling after, an input to
-// bind; controller navigation of the overlay should ignore the pad then.
-bool Capturing();
 // True if the native controller button (SDL_GamepadButton) presses a PAD button
 // other than L, as its main or alt binding.
 bool PadButtonBoundBesidesL(int native);
-// The Controls page's Keyboard & mouse and Controller sub-tabs of the debug
-// overlay. Each polls the capture and shows its prompt, so a binding can be
-// started from either.
-void DrawKeyboardMouse();
-void DrawController();
+// The stick deadzone and trigger click-point sliders of the Controller settings
+// page (nothing when no controller is on pad 1).
+void DrawDeadZones();
 
 } // namespace PortControls

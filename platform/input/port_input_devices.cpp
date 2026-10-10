@@ -534,11 +534,33 @@ void ReadRaw(PortInput::RawState& raw) {
   raw.touch = sTouchControls.load(std::memory_order_relaxed);
 }
 
-void BuildProfile(Profile& out) {
+std::vector<SPadInfo> ConnectedPads() {
+  std::vector<SPadInfo> pads;
+  int count = 0;
+  SDL_JoystickID* ids = SDL_GetGamepads(&count);
+  for (int i = 0; ids != nullptr && i < count; ++i) {
+    if (SDL_IsJoystickVirtual(ids[i])) continue;
+    SPadInfo info;
+    char buf[33] = {};
+    SDL_GUIDToString(SDL_GetJoystickGUIDForID(ids[i]), buf, sizeof(buf));
+    info.guid = buf;
+    if (const char* t = SDL_GetGamepadStringForType(SDL_GetGamepadTypeForID(ids[i]))) info.type = t;
+    if (const char* n = SDL_GetGamepadNameForID(ids[i])) info.name = n;
+    pads.push_back(std::move(info));
+  }
+  SDL_free(ids);
+  return pads;
+}
+
+void BuildBaseProfile(Profile& out) {
   out = Profile{};
   BindController(out);
   BindKeyboard(out);
   BindPortControls(out);
+}
+
+void BuildProfile(Profile& out) {
+  BuildBaseProfile(out);
   const SActiveProfiles user = ActiveUserProfiles();
   sTouchBound.store(TouchBoundMask(user), std::memory_order_relaxed);
   if (user.sel.base != nullptr) PortInput::Overlay(out, *user.sel.base);
