@@ -475,6 +475,28 @@ void PADClearPort(const u32 port) {
   SDL_SetGamepadPlayerIndex(ctrl->m_controller, -1);
 }
 
+// SDL also types pads as GameCube by VID/PID alone (PowerA's 20d6:a711 is shared with a Switch-style pad), and
+// those have no full-pull click on MISC3/MISC4. Bound to it, L and R could never press, and the analog fallback
+// in PADRead is skipped; unbound, the trigger past its click point presses them. Also run on saved mappings,
+// which hold the old default for such pads.
+static void UnbindMissingTriggerClick(aurora::input::GameController* controller) {
+  if (SDL_GamepadHasButton(controller->m_controller, SDL_GAMEPAD_BUTTON_MISC3)) {
+    return;
+  }
+  bool changed = false;
+  for (auto& mapping : controller->m_buttonMapping) {
+    if ((mapping.padButton == PAD_TRIGGER_L || mapping.padButton == PAD_TRIGGER_R) &&
+        (mapping.nativeButton == SDL_GAMEPAD_BUTTON_MISC3 || mapping.nativeButton == SDL_GAMEPAD_BUTTON_MISC4)) {
+      mapping.nativeButton = PAD_NATIVE_BUTTON_INVALID;
+      changed = true;
+    }
+  }
+  if (changed) {
+    Log.info("{} has no trigger click: L and R follow the analog triggers",
+             SDL_GetGamepadName(controller->m_controller));
+  }
+}
+
 void __PADSetDefaultMapping(aurora::input::GameController* controller) /*  NOLINT(*-reserved-identifier) */
 {
   switch (SDL_GetGamepadType(controller->m_controller)) {
@@ -511,19 +533,7 @@ void __PADSetDefaultMapping(aurora::input::GameController* controller) /*  NOLIN
     break;
   case SDL_GAMEPAD_TYPE_GAMECUBE:
     controller->m_buttonMapping = g_defaultButtonsGamecube;
-    // SDL also types pads as GameCube by VID/PID alone (PowerA's 20d6:a711 is shared with a Switch-style
-    // pad), and those have no full-pull click on MISC3/MISC4. Bound to it, L and R could never press, and
-    // the analog fallback in PADRead is skipped; unbound, the trigger past its click point presses them.
-    if (!SDL_GamepadHasButton(controller->m_controller, SDL_GAMEPAD_BUTTON_MISC3)) {
-      for (auto& mapping : controller->m_buttonMapping) {
-        if ((mapping.padButton == PAD_TRIGGER_L || mapping.padButton == PAD_TRIGGER_R) &&
-            (mapping.nativeButton == SDL_GAMEPAD_BUTTON_MISC3 || mapping.nativeButton == SDL_GAMEPAD_BUTTON_MISC4)) {
-          mapping.nativeButton = PAD_NATIVE_BUTTON_INVALID;
-        }
-      }
-      Log.info("{} has no trigger click: L and R follow the analog triggers",
-               SDL_GetGamepadName(controller->m_controller));
-    }
+    UnbindMissingTriggerClick(controller);
     break;
   default:
     controller->m_buttonMapping = g_defaultButtonsStandard;
@@ -646,6 +656,8 @@ void __PADLoadMapping(aurora::input::GameController* controller) /*  NOLINT(*-re
   if (buttonCorrupt) {
     Log.warn("__PADLoadMapping port={}: corrupt button data in file, resetting buttons to defaults", playerIndex);
     __PADSetDefaultMapping(controller);
+  } else {
+    UnbindMissingTriggerClick(controller);
   }
 }
 
