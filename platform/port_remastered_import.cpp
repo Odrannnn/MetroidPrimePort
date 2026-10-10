@@ -19,6 +19,7 @@
 #include <future>
 #include <list>
 #include <map>
+#include <tuple>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -834,11 +835,13 @@ public:
           m_effects.emplace(assets[a].id, Where{m_paks.size(), a});
           for (const std::string& name : assets[a].names) {
             m_effectNames.emplace(FrameKey(name), assets[a].id);
+            m_effectIdNames.emplace(assets[a].id, FrameKey(name));
           }
         } else if (type == kSWSH) {
           m_swooshes.emplace(assets[a].id, Where{m_paks.size(), a});
           for (const std::string& name : assets[a].names) {
             m_effectNames.emplace(FrameKey(name), assets[a].id);
+            m_effectIdNames.emplace(assets[a].id, FrameKey(name));
           }
         } else if (type == kELSM || type == kELC2) {
           m_electrics.emplace(assets[a].id, Where{m_paks.size(), a});
@@ -1034,6 +1037,15 @@ public:
     const Pak& pak = *m_paks[found->second.pak];
     return pak.ReadAsset(pak.Assets()[found->second.asset], out, error);
   }
+  // A GENP/SWSH's (lower-case) name; the first when it has several.
+  bool EffectName(const ModelUuid& id, std::string& name) const {
+    const auto found = m_effectIdNames.find(id);
+    if (found == m_effectIdNames.end()) {
+      return false;
+    }
+    name = found->second;
+    return true;
+  }
   bool EffectByName(const std::string& name, ModelUuid& id) const {
     const auto found = m_effectNames.find(name);
     if (found == m_effectNames.end()) {
@@ -1146,6 +1158,7 @@ private:
   std::unordered_map<ModelUuid, uint32_t, PakIdHash> m_electricTypes;
   Index m_materials;
   std::unordered_map<std::string, Where> m_projectiles;  // WPSM, by FrameKey
+  std::map<ModelUuid, std::string> m_effectIdNames;  // the first name of a GENP and SWSH
   std::unordered_map<std::string, ModelUuid> m_effectNames;  // the named GENP and SWSH, by FrameKey
   std::unordered_map<std::string, Where> m_frames;  // GUIF, by FrameKey
   std::unordered_map<std::string, Where> m_tweaks;  // LDTA, by FrameKey
@@ -1444,8 +1457,26 @@ std::string HexId(uint32_t id) {
   return text;
 }
 
+// A retail effect id that two projectiles reference gives each its own Remastered effect: the
+// first claimant (in WPSM name, then field order) keeps the disc's id, any other with a different
+// effect gets a synthetic id and an entry in the table the game reads (effectids.map: owner WPSC,
+// field, retail id, synthetic id; PortMods::RemapEffectId).
+struct EffectIdRemap {
+  uint32_t owner;
+  uint32_t field;  // the WPSC field's fourcc
+  uint32_t retail;
+  uint32_t synthetic;
+};
+
 std::vector<EffectPairing> ProjectilePairings(const Remastered& remastered, Retail& retail,
-                                              std::vector<std::string>& lines) {
+                                              std::vector<std::string>& lines,
+                                              std::vector<EffectIdRemap>& remaps) {
+  struct Claim {
+    uint32_t owner;
+    EffectGuid guid;
+    std::string who;
+  };
+  std::map<uint32_t, Claim> claims;  // by disc id
   struct Field {
     const char* tag;
     uint32_t type;  // the Remastered asset a reference must be
@@ -1497,8 +1528,35 @@ std::vector<EffectPairing> ProjectilePairings(const Remastered& remastered, Reta
         }
         continue;
       }
-      pairings.push_back({guid, discId, "wpsm " + name + " " + field.tag});
-      lines.push_back("WPSM " + name + " " + field.tag + ": " + EffectGuidString(ToStored(guid)) + " -> " + HexId(discId));
+      const std::string who = name + " " + field.tag;
+      uint32_t target = discId;
+      const auto claim = claims.find(discId);
+      if (claim == claims.end()) {
+        claims.emplace(discId, Claim{wpsc, guid, who});
+      } else if (claim->second.guid != guid) {
+        // The effect's name, else (most of the projectile effects are unnamed) the claimant's.
+        std::string effectName;
+        if (!remastered.EffectName(guid, effectName)) {
+          effectName = who;
+          for (char& c : effectName) {
+            c = char(std::tolower(static_cast<unsigned char>(c)));
+          }
+        }
+        const uint32_t synthetic = SyntheticEffectId(effectName.c_str());
+        if (retail.HasId(synthetic)) {
+          lines.push_back("WPSM " + who + ": " + HexId(discId) + " is shared with " + claim->second.who +
+                          ", no synthetic id for " + EffectGuidString(ToStored(guid)));
+          continue;
+        }
+        lines.push_back("WPSM " + who + ": " + HexId(discId) + " is shared with " + claim->second.who + ", so " +
+                        HexId(synthetic) + " (" + effectName + ")");
+        target = synthetic;
+        remaps.push_back({wpsc, uint32_t(uint8_t(field.tag[0])) << 24 | uint32_t(uint8_t(field.tag[1])) << 16 |
+                                    uint32_t(uint8_t(field.tag[2])) << 8 | uint8_t(field.tag[3]),
+                          discId, synthetic});
+      }
+      pairings.push_back({guid, target, "wpsm " + who});
+      lines.push_back("WPSM " + who + ": " + EffectGuidString(ToStored(guid)) + " -> " + HexId(target));
     }
   }
   // Effects the disc's PARTs/SWHCs name the same (SamGunFx.pak), that no WPSC reaches.
@@ -2405,15 +2463,31 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       std::lock_guard<std::mutex> lock(reportMutex);
       effectRows.push_back(text);
     };
+    std::vector<uint8_t> effectTable;  // effectids.map
     {
       std::vector<std::string> pairLines;
-      effectIO.pairings = ProjectilePairings(remastered, retail, pairLines);
+      std::vector<EffectIdRemap> remaps;
+      effectIO.pairings = ProjectilePairings(remastered, retail, pairLines, remaps);
+      std::sort(remaps.begin(), remaps.end(), [](const EffectIdRemap& a, const EffectIdRemap& b) {
+        return std::tie(a.owner, a.field, a.retail) < std::tie(b.owner, b.field, b.retail);
+      });
+      std::string table;
+      for (const EffectIdRemap& remap : remaps) {
+        char text[64];
+        std::snprintf(text, sizeof(text), "%08X %08X %08X %08X\n", remap.owner, remap.field, remap.retail,
+                      remap.synthetic);
+        table += text;
+      }
+      effectTable.assign(table.begin(), table.end());
       for (const std::string& line : pairLines) {
         std::printf("remastered import: projectile %s\n", line.c_str());
       }
       AddLine("effects: " + std::to_string(effectIO.pairings.size()) + " projectile effects paired");
     }
     const EffectImportResult effects = ImportEffects(effectIO);
+    if (!effectTable.empty()) {
+      effectIO.write("effectids.map", effectTable);
+    }
     AddLine("effects: " + std::to_string(effects.written) + " of " + std::to_string(effects.candidates) + " written (" +
             std::to_string(effects.parts) + " PARTs, " + std::to_string(effects.textures) + " textures, " +
             std::to_string(effects.flipbooks) + " flipbooks, " + std::to_string(effects.models) + " models, " +
