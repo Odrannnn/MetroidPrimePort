@@ -7,12 +7,15 @@
 
 #include "port_remastered_convert.h"
 #include "port_remastered_anuv_gun.h"
+#include "port_pbr_record.h"
 #include "port_remastered_uv.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace PortRemastered;
@@ -83,7 +86,7 @@ uint32_t Be32(const std::vector<uint8_t>& d, size_t o) {
 // Runs a conversion of the fixture's model, standalone (which is how a room's own
 // material is converted), and returns the CMDL it wrote. False when it failed,
 // with the message in `error`.
-bool Convert(const Model& model, std::vector<uint8_t>& cmdl, std::string& error) {
+bool Convert(const Model& model, std::vector<uint8_t>& cmdl, std::string& error, bool lightmapUv = false) {
   ConvertIO io;
   io.texture = [](const ModelUuid&, Image& out, std::string&) {
     out.width = out.height = 4;
@@ -98,6 +101,7 @@ bool Convert(const Model& model, std::vector<uint8_t>& cmdl, std::string& error)
   };
   ConvertOptions opt;
   opt.standalone = true;
+  opt.lightmapUv = lightmapUv;
   opt.retail = 0xABCD1234;
   opt.skip.clear();  // the default drops a material whose name holds "simple"
   Converter converter(io);
@@ -224,6 +228,209 @@ bool ReadMapCoords(const std::vector<uint8_t>& d, std::vector<uint32_t>& coords)
     }
   }
   return coords.size() == nmaps;
+}
+
+struct CmdlSection {
+  size_t offset = 0;
+  size_t size = 0;
+};
+
+struct LightmapOutput {
+  int slot = -1;
+  std::vector<std::pair<float, float>> coords;
+};
+
+uint16_t Be16(const std::vector<uint8_t>& d, size_t o) {
+  return uint16_t((uint16_t(d[o]) << 8) | d[o + 1]);
+}
+
+bool ReadSections(const std::vector<uint8_t>& d, uint32_t& materialSets, std::vector<CmdlSection>& sections) {
+  if (d.size() < 44 || Be32(d, 0) != 0xDEADBABE) {
+    return false;
+  }
+  const uint32_t count = Be32(d, 36);
+  materialSets = Be32(d, 40);
+  if (count == 0 || count > (d.size() - 44) / 4) {
+    return false;
+  }
+  size_t offset = (44 + size_t(count) * 4 + 31) & ~size_t(31);
+  if (offset > d.size()) {
+    return false;
+  }
+  sections.resize(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    const size_t size = Be32(d, 44 + size_t(i) * 4);
+    if (size > d.size() - offset) {
+      return false;
+    }
+    sections[i] = {offset, size};
+    offset += size;
+  }
+  return materialSets > 0 && count >= materialSets + 6;
+}
+
+// Reads the actual LMUV slot and follows the generated display-list indices into
+// the CMDL texcoord section. The tiny fixtures use one 0x90 command per surface,
+// no colour attribute and no vertex welding, so `vertexCount` is known exactly.
+bool ReadLightmapOutputs(const std::vector<uint8_t>& d, size_t vertexCount, std::vector<LightmapOutput>& outputs) {
+  uint32_t materialSets = 0;
+  std::vector<CmdlSection> sections;
+  if (vertexCount == 0 || !ReadSections(d, materialSets, sections)) {
+    return false;
+  }
+  const CmdlSection& materialSection = sections[0];
+  size_t p = materialSection.offset;
+  if (materialSection.size < 8) {
+    return false;
+  }
+  const uint32_t textureCount = Be32(d, p);
+  p += 4;
+  if (textureCount > (materialSection.offset + materialSection.size - p) / 4) {
+    return false;
+  }
+  p += size_t(textureCount) * 4;
+  if (p + 4 > materialSection.offset + materialSection.size) {
+    return false;
+  }
+  const uint32_t materialCount = Be32(d, p);
+  p += 4;
+  if (materialCount == 0 || materialCount > (materialSection.offset + materialSection.size - p) / 4) {
+    return false;
+  }
+  std::vector<uint32_t> ends(materialCount);
+  for (uint32_t& end : ends) {
+    end = Be32(d, p);
+    p += 4;
+  }
+  const size_t materialData = p;
+  outputs.assign(materialCount, LightmapOutput{});
+  uint32_t previousEnd = 0;
+  std::vector<uint32_t> texcoordCounts(materialCount, 0);
+  for (uint32_t i = 0; i < materialCount; ++i) {
+    if (ends[i] < previousEnd || ends[i] > materialSection.offset + materialSection.size - materialData) {
+      return false;
+    }
+    const size_t start = materialData + previousEnd;
+    const size_t size = ends[i] - previousEnd;
+    if (size < 12) {
+      return false;
+    }
+    const uint32_t flags = Be32(d, start);
+    const uint32_t maps = Be32(d, start + 4);
+    const size_t descriptorAt = start + 8 + size_t(maps) * 4;
+    if ((flags & kPbrFlag) == 0 || descriptorAt + 4 > start + size) {
+      return false;
+    }
+    const uint32_t descriptor = Be32(d, descriptorAt);
+    for (int slot = 0; slot < 8; ++slot) {
+      texcoordCounts[i] += ((descriptor >> (8 + 2 * slot)) & 3) != 0 ? 1u : 0u;
+    }
+    outputs[i].slot = PortPbrRecord::LightmapSlot(d.data() + start + size, size);
+    previousEnd = ends[i];
+  }
+
+  const size_t surfaceTableIndex = size_t(materialSets) + 5;
+  const CmdlSection& surfaceTable = sections[surfaceTableIndex];
+  if (surfaceTable.size < 4) {
+    return false;
+  }
+  const uint32_t surfaceCount = Be32(d, surfaceTable.offset);
+  if (surfaceCount > sections.size() - (size_t(materialSets) + 6)) {
+    return false;
+  }
+  const CmdlSection& uvSection = sections[size_t(materialSets) + 3];
+  const size_t uvBytesPerVertex = 8;
+  for (uint32_t surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex) {
+    const CmdlSection& surface = sections[size_t(materialSets) + 6 + surfaceIndex];
+    if (surface.size < 67) {
+      return false;
+    }
+    const uint32_t material = Be32(d, surface.offset + 12);
+    if (material >= materialCount) {
+      return false;
+    }
+    const int lightmapSlot = outputs[material].slot;
+    if (lightmapSlot < 0) {
+      continue;
+    }
+    if (uint32_t(lightmapSlot) >= texcoordCounts[material]) {
+      return false;
+    }
+    const uint32_t displayListSize = Be32(d, surface.offset + 16) & 0x7FFFFFFFu;
+    const size_t displayList = surface.offset + 64;
+    if (displayListSize < 3 || displayListSize > surface.size - 64 || d[displayList] != 0x90) {
+      return false;
+    }
+    const uint16_t indexCount = Be16(d, displayList + 1);
+    const size_t stride = 4 + size_t(texcoordCounts[material]) * 2;
+    if (indexCount == 0 || 3 + size_t(indexCount) * stride > displayListSize) {
+      return false;
+    }
+    for (uint16_t i = 0; i < indexCount; ++i) {
+      const size_t item = displayList + 3 + size_t(i) * stride;
+      const size_t attribute = item + 4 + size_t(lightmapSlot) * 2;
+      const size_t emittedIndex = Be16(d, attribute);
+      const size_t array = emittedIndex / vertexCount;
+      const size_t vertex = emittedIndex % vertexCount;
+      const size_t uvAt = uvSection.offset + (array * vertexCount + vertex) * uvBytesPerVertex;
+      if (uvAt > uvSection.offset + uvSection.size || uvSection.offset + uvSection.size - uvAt < uvBytesPerVertex) {
+        return false;
+      }
+      outputs[material].coords.emplace_back(PortPbrRecord::BeFloat(d.data() + uvAt),
+                                             PortPbrRecord::BeFloat(d.data() + uvAt + 4));
+    }
+  }
+  return true;
+}
+
+ModelMaterial LightmapMaterial(uint32_t shader, const char* name) {
+  Fixture fixture(0, 0, 2);
+  fixture.material.name = name;
+  fixture.material.data[0].usage = FourCC('B', 'C', 'L', 'R');
+  fixture.material.data[0].texture.usage = FourCC('B', 'C', 'L', 'R');
+  for (int i = 0; i < 4; ++i) {
+    fixture.material.shaderId[size_t(i)] = uint8_t(shader >> (24 - 8 * i));
+  }
+  return fixture.material;
+}
+
+ModelVertexBuffer LightmapBuffer(float offset, bool hasCoord3) {
+  ModelVertexBuffer vb;
+  vb.vertexCount = 3;
+  vb.uvs.resize(2);
+  vb.uvsZw.resize(hasCoord3 ? 2 : 1);
+  for (int vertex = 0; vertex < 3; ++vertex) {
+    vb.positions.insert(vb.positions.end(), {offset + float(vertex), float(vertex * vertex), float(vertex * 2)});
+    vb.normals.insert(vb.normals.end(), {0.f, 1.f, 0.f});
+    vb.uvs[0].insert(vb.uvs[0].end(), {0.25f, 0.5f});
+    vb.uvsZw[0].insert(vb.uvsZw[0].end(), {11.f, 12.f});
+    vb.uvs[1].insert(vb.uvs[1].end(), {21.f, 22.f});
+    if (hasCoord3) {
+      vb.uvsZw[1].insert(vb.uvsZw[1].end(), {31.f, 32.f});
+    }
+  }
+  return vb;
+}
+
+Model LightmapModel(std::vector<ModelMaterial> materials, std::vector<ModelVertexBuffer> buffers,
+                    const std::vector<std::pair<uint32_t, uint32_t>>& draws) {
+  Model model;
+  model.materials = std::move(materials);
+  model.vertexBuffers = std::move(buffers);
+  for (const auto& [material, buffer] : draws) {
+    ModelMesh mesh;
+    mesh.material = material;
+    mesh.vertexBuffer = buffer;
+    mesh.indices = {0, 1, 2};
+    model.meshes.push_back(std::move(mesh));
+  }
+  return model;
+}
+
+bool AllLightmapCoords(const LightmapOutput& output, float u, float v) {
+  return output.slot >= 0 && output.coords.size() >= 3 &&
+         std::all_of(output.coords.begin(), output.coords.end(),
+                     [=](const auto& coord) { return coord.first == u && coord.second == v; });
 }
 
 // The rule on its own, over the seven coords a material can have: base, MR,
@@ -377,6 +584,62 @@ void TestConverter() {
   }
 }
 
+void TestLightmapUv() {
+  constexpr uint32_t kProjectedBlend = 0xD6AA2A3A;
+  constexpr uint32_t kOrdinaryPbr = 0xBFB300B6;
+  std::vector<uint8_t> cmdl;
+  std::vector<LightmapOutput> outputs;
+  std::string error;
+
+  {  // d6aa2a3a samples TEXCOORD_1.zw (converter coord 3), not UV0.zw.
+    const Model model = LightmapModel({LightmapMaterial(kProjectedBlend, "projected")},
+                                      {LightmapBuffer(0.f, true)}, {{0, 0}});
+    Check(Convert(model, cmdl, error, true), "converted d6aa2a3a with lightmap UVs");
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read d6aa2a3a's emitted LMUV attribute");
+    if (!outputs.empty()) {
+      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), "d6aa2a3a LMUV indices address TEXCOORD_1.zw data");
+    }
+  }
+  {  // The ordinary PBR path keeps TEXCOORD_0.zw (converter coord 1).
+    const Model model = LightmapModel({LightmapMaterial(kOrdinaryPbr, "ordinary")},
+                                      {LightmapBuffer(0.f, false)}, {{0, 0}});
+    cmdl.clear();
+    outputs.clear();
+    Check(Convert(model, cmdl, error, true), "converted ordinary PBR with lightmap UVs");
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read ordinary PBR's emitted LMUV attribute");
+    if (!outputs.empty()) {
+      Check(AllLightmapCoords(outputs[0], 11.f, 12.f), "ordinary PBR LMUV indices address TEXCOORD_0.zw data");
+    }
+  }
+  {  // One output material spans two buffers; a missing coord 3 must disable LMUV
+     // for the group rather than falling back to either buffer's UV0.
+    const Model model = LightmapModel({LightmapMaterial(kProjectedBlend, "mixed")},
+                                      {LightmapBuffer(0.f, true), LightmapBuffer(10.f, false)}, {{0, 0}, {0, 1}});
+    cmdl.clear();
+    outputs.clear();
+    Check(Convert(model, cmdl, error, true), "converted mixed-buffer d6aa2a3a");
+    Check(ReadLightmapOutputs(cmdl, 6, outputs), "read mixed-buffer d6aa2a3a material");
+    if (!outputs.empty()) {
+      Check(outputs[0].slot == -1 && outputs[0].coords.empty(),
+            "mixed buffers omit LMUV when any primitive buffer lacks the selected channel");
+    }
+  }
+  {  // Material groups choose independently: coord 3 for d6aa2a3a, coord 1 for
+     // ordinary PBR, even though they share one model and the latter lacks coord 3.
+    const Model model = LightmapModel({LightmapMaterial(kProjectedBlend, "projected"),
+                                       LightmapMaterial(kOrdinaryPbr, "ordinary")},
+                                      {LightmapBuffer(0.f, true), LightmapBuffer(10.f, false)}, {{0, 0}, {1, 1}});
+    cmdl.clear();
+    outputs.clear();
+    Check(Convert(model, cmdl, error, true), "converted mixed-family lightmap model");
+    Check(ReadLightmapOutputs(cmdl, 6, outputs), "read mixed-family LMUV attributes");
+    if (outputs.size() >= 2) {
+      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), "d6aa2a3a group emits coord 3 independently");
+      Check(AllLightmapCoords(outputs[1], 11.f, 12.f), "ordinary PBR group emits coord 1 independently");
+    }
+  }
+}
+
 // Two maps on one source set through different ANUV transforms: the gun model's
 // entry moves transform 1 and leaves 0 still. With AUVI (0,0,0,0) both maps read
 // set 0, and one texgen would carry the base along with the MR map's motion, so the
@@ -414,6 +677,7 @@ void TestSlotSplit() {
 int main() {
   TestRule();
   TestConverter();
+  TestLightmapUv();
   TestSlotSplit();
   if (sFailures == 0) {
     std::printf("port_remastered_uv_tests: ok\n");

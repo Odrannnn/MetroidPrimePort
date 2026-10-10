@@ -4270,11 +4270,6 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       }
     }
   }
-  // Whether any buffer carries UV0.zw (the lightmap's coordinates, material texcoord 1).
-  bool hasLightmapUv = false;
-  for (uint32_t bi : bufOrder) {
-    hasLightmapUv = hasLightmapUv || (buffers[bi].uv.size() > 1 && !buffers[bi].uv[1].empty());
-  }
   // Vertex tangents (the NBT normal section, CMDL flag 0x8) only when every buffer has them.
   bool useTan = !bufOrder.empty();
   for (uint32_t bi : bufOrder) {
@@ -4450,11 +4445,33 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     d.retail = retailBlend;
     io.decision(d);
   };
-  for (const auto& key : keys) {
+  for (size_t outputMaterial = 0; outputMaterial < keys.size(); ++outputMaterial) {
+    const auto& key = keys[outputMaterial];
     std::string loopNotes;  // what this loop changed on the material, for the report
     const int rmat = std::get<0>(key);
     const RetailMaterial& pm = retail.mats[rmat];
     RemMaterial rem = mats[std::get<1>(key)];
+    // The projected-blend shader's lightmap input is TEXCOORD_1.zw (converter
+    // coord 3); ordinary lightmapped PBR shaders use TEXCOORD_0.zw (coord 1).
+    const size_t lightmapCoord = rem.family == kShaderProjBlend ? 3 : 1;
+    // LMUV is one descriptor shared by every primitive in this output-material
+    // group. Emit it only when each such primitive's buffer has the selected
+    // channel; otherwise uvSet() would silently substitute UV0 for the missing
+    // channel on that buffer.
+    bool hasLightmapUv = false;
+    if (opt.lightmapUv) {
+      bool hasPrimitive = false;
+      bool allHaveLightmapUv = true;
+      for (const Prim& p : prims) {
+        if (p.omat < 0 || size_t(p.omat) != outputMaterial) {
+          continue;
+        }
+        hasPrimitive = true;
+        const Buffer& b = buffers[p.buffer];
+        allHaveLightmapUv = allHaveLightmapUv && lightmapCoord < b.uv.size() && !b.uv[lightmapCoord].empty();
+      }
+      hasLightmapUv = hasPrimitive && allHaveLightmapUv;
+    }
     if (std::get<2>(key)) {
       rem.lightScale[0] = std::abs(rem.lits);
       rem.lightScale[1] = 0.0;
@@ -4678,13 +4695,14 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       for (uint32_t& a : attrs) {
         a = a == 0xFFFFFFFFu ? zero : a;
       }
-      // The lightmap's coordinates (texcoord 1: UV0.zw) ride on one more attribute, if the
-      // model has them and a slot is free; the material's 'LMUV' trailer names the slot.
+      // The selected lightmap coordinates ride on one more attribute, if every
+      // primitive in this material group has them and a slot is free; the material's
+      // 'LMUV' trailer names the slot.
       int lightmapSlot = -1;
       if (opt.lightmapUv && hasLightmapUv && ntexattr < 8) {
         lightmapSlot = int(ntexattr);
         vtx |= 3u << (8 + 2 * ntexattr);
-        attrs.push_back(uvIndex(1, nullptr));
+        attrs.push_back(uvIndex(lightmapCoord, nullptr));
         ++ntexattr;
       }
       dlAttrs.push_back(attrs);
