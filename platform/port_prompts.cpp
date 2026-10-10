@@ -774,6 +774,9 @@ const char* ActiveDevice() {
   if (PortDebug::OriginalExperience()) {
     return "gamecube";
   }
+  if (const char* forced = PortDebug::PromptGlyphs()) {
+    return forced;
+  }
   switch (sActiveInput.load(std::memory_order_relaxed)) {
   case ActiveInput::Keyboard:
     return "keyboard";

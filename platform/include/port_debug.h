@@ -185,6 +185,9 @@ bool CinemaBars();
 // window's magnification (CMFGame::Draw), instead of stretching a copy of the screen. Off by
 // default and under Original experience.
 bool SharpScanWindow();
+// The glyph set the on-screen prompts are forced to ("xbox", "playstation", "switch", "gamecube",
+// "keyboard"), or nullptr to follow the input in use. Thread-safe.
+const char* PromptGlyphs();
 // HUD scale in percent (50-100). Compact HUD elements shrink toward the nearest
 // screen edge or corner; screen-spanning decoration keeps its size. Only the
 // combat/scan/ball HUD frames and the minimap, not the helmet or menus.

@@ -185,6 +185,9 @@ PortDebug::EAspectMode sAspectMode = PortDebug::kAspect_Window;
 bool sHudWide = true;
 bool sCinemaBars = false;
 bool sSharpScanWindow = false;
+// Index into kPromptGlyphs; 0 = follow the input in use. Atomic: PortPrompts reads it off the UI thread.
+std::atomic< int > sPromptGlyphs{0};
+constexpr const char* kPromptGlyphs[] = {"auto", "xbox", "playstation", "switch", "gamecube", "keyboard"};
 bool sShowShaderCompilation = true;
 bool sShowMenuHint = true;
 int sHudScale = PortDebug::kHudScaleMax;
@@ -514,6 +517,12 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sCinemaBars = ParseBool(value);
   } else if (key == "sharp_scan_window") {
     sSharpScanWindow = ParseBool(value);
+  } else if (key == "prompt_glyphs") {
+    for (int i = 0; i < int(std::size(kPromptGlyphs)); ++i) {
+      if (value == kPromptGlyphs[i]) {
+        sPromptGlyphs.store(i, std::memory_order_relaxed);
+      }
+    }
   } else if (key == "show_shader_compilation") {
     sShowShaderCompilation = ParseBool(value);
   } else if (key == "show_menu_hint") {
@@ -715,6 +724,7 @@ std::string SettingsText() {
   file << "hud_wide=" << (sHudWide ? 1 : 0) << '\n';
   file << "cinema_bars=" << (sCinemaBars ? 1 : 0) << '\n';
   file << "sharp_scan_window=" << (sSharpScanWindow ? 1 : 0) << '\n';
+  file << "prompt_glyphs=" << kPromptGlyphs[sPromptGlyphs.load(std::memory_order_relaxed)] << '\n';
   file << "show_shader_compilation=" << (sShowShaderCompilation ? 1 : 0) << '\n';
   file << "show_menu_hint=" << (sShowMenuHint ? 1 : 0) << '\n';
   file << "hud_scale=" << sHudScale << '\n';
@@ -1369,6 +1379,11 @@ bool CinemaBars() {
 bool SharpScanWindow() {
   EnsureInitialized();
   return sSharpScanWindow && !sOriginalExperience;
+}
+
+const char* PromptGlyphs() {
+  const int glyphs = sPromptGlyphs.load(std::memory_order_relaxed);
+  return glyphs > 0 ? kPromptGlyphs[glyphs] : nullptr;
 }
 
 int HudScale() {
@@ -5930,8 +5945,19 @@ void DrawTexturePack() {
 }
 
 void DrawControlsOptions() {
-  ImGui::SeparatorText("Buttons");
   const bool locked = BeginOriginalLocked();
+  ImGui::SeparatorText("On-screen prompts");
+  int glyphs = sPromptGlyphs.load(std::memory_order_relaxed);
+  if (ImGui::Combo("Button glyphs", &glyphs,
+                   "Follow the input in use\0" "Xbox\0" "PlayStation\0" "Nintendo Switch\0" "GameCube\0"
+                   "Keyboard & mouse\0")) {
+    sPromptGlyphs.store(glyphs, std::memory_order_relaxed);
+    MarkDirty();
+  }
+  ItemHelp("Which buttons the game's prompts and tutorials show. Follow: the keyboard, controller or "
+           "touch layout you last used. GameCube shows the game's own art.");
+
+  ImGui::SeparatorText("Buttons");
   bool lockOnToggle = sInput.lockOnToggle;
   if (ImGui::Checkbox("Toggle Lock-On", &lockOnToggle)) {
     SetLockOnToggle(lockOnToggle);

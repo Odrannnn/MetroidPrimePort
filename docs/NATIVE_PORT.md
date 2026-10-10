@@ -368,7 +368,9 @@ is connected; the Android touch overlay's layout), so in-game button prompts
 match what is in the player's hands. Only deliberate input switches it: a key
 press, a mouse move or click, a pad button, or a stick or trigger pushed past
 half way; the touch overlay's virtual pad does not count. The set is swapped
-automatically, and `MP_TEXTURE_DEVICE` forces the name. A folder with no subfolders is used as a
+automatically. F1 Controls > Options "Button glyphs" (`prompt_glyphs=`) pins
+one set (Xbox, PlayStation, Nintendo Switch, GameCube or keyboard & mouse), and
+`MP_TEXTURE_DEVICE` forces any name. A folder with no subfolders is used as a
 single device-agnostic pack; a folder that has device subfolders but not the one
 selected loads nothing rather than mixing packs. `MP_DUMP_TEXTURES=1` writes
 every source texture to `<cachePath>/texture_dumps` as DDS, for authoring
