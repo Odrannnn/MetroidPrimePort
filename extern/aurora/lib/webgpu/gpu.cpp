@@ -256,7 +256,13 @@ wgpu::PresentMode select_present_mode(const wgpu::SurfaceCapabilities& capabilit
       return wgpu::PresentMode::FifoRelaxed;
     }
   } else {
-    // Dawn only disables CAMetalLayer displaySyncEnabled for Immediate on Metal
+    // Dawn only disables CAMetalLayer displaySyncEnabled for Immediate on Metal. On D3D, Mailbox is
+    // a flip-model present without DXGI_PRESENT_ALLOW_TEARING: uncapped while DWM composes the
+    // window, but held to the refresh rate in fullscreen (independent flip). Only Immediate tears.
+    const bool d3d = g_backendType == wgpu::BackendType::D3D12 || g_backendType == wgpu::BackendType::D3D11;
+    if (d3d && supports(wgpu::PresentMode::Immediate)) {
+      return wgpu::PresentMode::Immediate;
+    }
     if (g_backendType != wgpu::BackendType::Metal && supports(wgpu::PresentMode::Mailbox)) {
       return wgpu::PresentMode::Mailbox;
     }
