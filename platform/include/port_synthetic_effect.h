@@ -27,6 +27,11 @@ constexpr bool IsSyntheticEffectId(uint32_t id) { return (id >> 24) == 0xFEu; }
 // Lower-case names of the Remastered-only effects the import writes under SyntheticEffectId().
 inline constexpr const char* kSyntheticEffectNames[] = {
     "bombattract",
+    "nftlight",
+    "nftsourceendcap",
+    "nfttargetendcap",
+    "icespreadwall",
+    "icespreadceiling",
     "powerbombsecondary",
     "bustermuzzle",
     "busterimpact",

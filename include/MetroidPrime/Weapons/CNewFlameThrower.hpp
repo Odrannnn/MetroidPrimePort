@@ -5,6 +5,7 @@
 
 #include "Kyoto/CRandom16.hpp"
 #include "Kyoto/Math/CSphere.hpp"
+#include "Kyoto/Particles/CParticleSwoosh.hpp"
 #include "rstl/single_ptr.hpp"
 
 struct CWeaponAssetInfo;
@@ -74,6 +75,14 @@ private:
   void RemoveDeadEntriesFromSortedLists();
   void SetWorldDarkening(CStateManager& mgr, TAreaId area, float speed, float target);
   bool CanDamage(CActor& actor, CStateManager& mgr);
+#ifdef TARGET_PC
+  void PortCreateGens();
+  void PortUpdateEndCaps(CStateManager& mgr, float dt);
+  void PortUpdateLights(float dt);
+  void PortStopGens();
+  CVector3f PortAdjustedImpactPosition(const CStateManager& mgr, const CVector3f& contact,
+                                       const CParticleSwoosh::SSwooshData& swoosh) const;
+#endif
 
   CRandom16 x2e8_rand;
   float x2ec_particlesDoneTimer;
@@ -103,6 +112,15 @@ private:
   rstl::reserved_vector< rstl::vector< SSortedListEntry >, 3 > x380_flameContactPoints;
   int x3b4_numSmokeParticlesSpawned;
   rstl::reserved_vector< TUniqueId, 4 > x3b8_lightIds;
+#ifdef TARGET_PC
+  // Remastered's NFTSourceEndCap/NFTTargetEndCap/NFTLight (synthetic ids); null without them.
+  rstl::single_ptr< CElementGen > xPortSourceCaps[4];
+  rstl::single_ptr< CElementGen > xPortTargetCaps[4];
+  float xPortTargetScale[4];
+  rstl::single_ptr< CElementGen > xPortLightGens[5];
+  // Per swoosh point (Remastered's 0x510): 1 = hit a surface edge-on, 2 = hit.
+  rstl::vector< int > xPortImpactType;
+#endif
 };
 CHECK_SIZEOF(CNewFlameThrower, (VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02 ? 0x3f0
                                 : VERSION >= VERSION_GM8P_00                             ? 0x3d8
