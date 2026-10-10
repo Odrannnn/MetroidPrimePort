@@ -351,6 +351,11 @@ void UpdateCapture(PortInput::Family family) {
 }
 
 bool sAdvancedSync = false; // set the editor's Advanced node from the draft on the next draw
+// The editor is drawn under the row it edits (a new binding: under its action's
+// last row). When that row isn't on screen (filtered, section closed), it goes
+// above the table instead.
+Action sEditAction = Action::None;
+bool sEditRowShown = true; // the last table draw reached the edited row
 
 // Whether a binding uses anything the editor keeps under Advanced.
 bool UsesAdvanced(const Binding& b) {
@@ -360,6 +365,8 @@ bool UsesAdvanced(const Binding& b) {
 
 void BeginEdit(int index, const Binding& b) {
   sEditing = index;
+  sEditAction = b.action;
+  sEditRowShown = true;
   sDraft = b;
   sAdvancedSync = true;
   std::snprintf(sInputsText, sizeof(sInputsText), "%s", InputsToText(b).c_str());
@@ -751,7 +758,8 @@ std::string Notes(const Binding& b) {
   return out;
 }
 
-void DrawTable(const SView& v) {
+// editorDrawn: the editor already went above the table this frame.
+void DrawTable(const SView& v, bool editorDrawn) {
   ImGui::SetNextItemWidth(220.f);
   ImGui::InputTextWithHint("##filter", "Filter actions", sFilter, sizeof(sFilter));
   ImGui::SameLine();
@@ -759,17 +767,41 @@ void DrawTable(const SView& v) {
 
   const UserProfile* user = Find(v.match);
   SPending pending;
+  bool editRowShown = false;
+  bool saved = false;
   for (const SGroup& group : Groups()) {
     // A filter opens every section, so a match is never hidden in a closed one.
     if (sFilter[0] != '\0') ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     if (!ImGui::CollapsingHeader(group.label, group.open ? ImGuiTreeNodeFlags_DefaultOpen : 0)) continue;
-    if (!ImGui::BeginTable(group.label, 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) continue;
-    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.2f);
-    ImGui::TableSetupColumn("Input", ImGuiTableColumnFlags_WidthStretch, 1.4f);
-    ImGui::TableSetupColumn("Notes", ImGuiTableColumnFlags_WidthStretch, 1.f);
-    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableHeadersRow();
+    // Called with the same ID stack each time, so a table resumed under the
+    // editor keeps the columns of the one above it.
+    const auto beginTable = [&](bool headers) {
+      if (!ImGui::BeginTable(group.label, 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) return false;
+      ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.2f);
+      ImGui::TableSetupColumn("Input", ImGuiTableColumnFlags_WidthStretch, 1.4f);
+      ImGui::TableSetupColumn("Notes", ImGuiTableColumnFlags_WidthStretch, 1.f);
+      ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+      if (headers) ImGui::TableHeadersRow();
+      return true;
+    };
+    if (!beginTable(true)) continue;
+    bool tableOpen = true;
+    // Breaks the table under the row just drawn for the editor, then goes on.
+    const auto editorHere = [&] {
+      editRowShown = true;
+      if (editorDrawn) return;
+      editorDrawn = true;
+      ImGui::EndTable();
+      ImGui::Indent();
+      DrawEditor(v);
+      ImGui::Unindent();
+      ImGui::Separator();
+      saved = sEditing == kEditNone;
+      user = Find(v.match); // a Save can add the profile
+      tableOpen = beginTable(false);
+    };
     for (const Action action : group.actions) {
+      if (!tableOpen) break;
       const std::string label(PortInput::Info(action).label);
       const char* hint = GameHint(action);
       if (!Contains(label, sFilter) && (hint == nullptr || !Contains(hint, sFilter))) continue;
@@ -786,7 +818,6 @@ void DrawTable(const SView& v) {
       }
       if (rows.empty() && sOnlyBound) continue;
 
-      ImGui::PushID(int(action));
       const auto actionCell = [&](bool first) {
         ImGui::TableNextColumn();
         if (!first) return;
@@ -809,7 +840,11 @@ void DrawTable(const SView& v) {
           ImGui::SetItemTooltip("Back to the default inputs.");
         }
       };
+      // Read after the row's buttons: an Edit or + pressed this frame opens the editor at once.
+      const auto addingHere = [&] { return sEditing == kEditNew && sEditAction == action; };
       if (rows.empty()) {
+        ImGui::PushID(int(action));
+        ImGui::PushID(-1);
         ImGui::TableNextRow();
         actionCell(true);
         ImGui::TableNextColumn();
@@ -817,12 +852,22 @@ void DrawTable(const SView& v) {
         ImGui::TableNextColumn();
         ImGui::TableNextColumn();
         buttons(true);
+        ImGui::PopID();
+        ImGui::PopID();
+        if (addingHere()) editorHere();
       }
-      for (size_t r = 0; r < rows.size(); ++r) {
+      for (size_t r = 0; r < rows.size() && tableOpen; ++r) {
         const Binding& b = rows[r].first;
         const int userIndex = rows[r].second;
+        const auto editingRow = [&] {
+          return sEditAction == action &&
+                 (userIndex < 0 ? sEditing == kEditInherited && b == sEditOrig : sEditing == userIndex);
+        };
+        // The IDs are popped before the editor, so its table resumes with the same ID.
+        ImGui::PushID(int(action));
         ImGui::PushID(int(r));
         ImGui::TableNextRow();
+        if (editingRow()) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_Header));
         actionCell(r == 0);
         ImGui::TableNextColumn();
         ImGui::TextUnformatted(InputsToText(b).c_str());
@@ -857,12 +902,15 @@ void DrawTable(const SView& v) {
         ImGui::SameLine();
         buttons(r + 1 == rows.size());
         ImGui::PopID();
+        ImGui::PopID();
+        if (editingRow() || (r + 1 == rows.size() && addingHere())) editorHere();
       }
-      ImGui::PopID();
     }
-    ImGui::EndTable();
+    if (tableOpen) ImGui::EndTable();
   }
-  ApplyPending(v, pending);
+  sEditRowShown = editRowShown;
+  // A remove index from before a Save in the same frame may be stale.
+  if (!saved) ApplyPending(v, pending);
 }
 
 struct SPreset {
@@ -1022,8 +1070,9 @@ void Draw() {
   DrawReset(view);
   ImGui::Separator();
 
-  if (sEditing != kEditNone) DrawEditor(view);
-  DrawTable(view);
+  const bool editorOnTop = sEditing != kEditNone && !sEditRowShown;
+  if (editorOnTop) DrawEditor(view);
+  DrawTable(view, editorOnTop);
   ImGui::Separator();
   if (ImGui::TreeNode("Advanced##page")) {
     ImGui::Checkbox("Separate bindings per controller kind or model", &sPadProfiles);
