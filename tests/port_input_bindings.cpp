@@ -345,9 +345,44 @@ void TestFamilyEditing() {
   ClearFamily(user, Family::Keyboard);
   CHECK(user.unbind.empty());
 }
+void TestDuplicateBindings() {
+  const Binding key = Bind(Action::PadA, {In(Device::Key, 44)});
+  Profile inherited;
+  inherited.bindings.push_back(key);
+  UserProfile user;
+  Materialize(user, key.action, Family::Keyboard, inherited);
+  for (int i = 0; i < 5; ++i) AddUserBinding(user, key);
+  CHECK(user.bindings.size() == 1);
+
+  Binding other = key;
+  other.action = Action::PadB;
+  AddUserBinding(user, other);
+  other = key;
+  other.trigger = Trigger::Tap;
+  AddUserBinding(user, other);
+  CHECK(user.bindings.size() == 3);
+
+  // Editing another key to the existing key coalesces the duplicate.
+  AddUserBinding(user, Bind(Action::PadA, {In(Device::Key, 45)}));
+  RemoveUserBinding(user, 3);
+  AddUserBinding(user, key);
+  CHECK(user.bindings.size() == 3);
+  CHECK(user.unbind.empty());
+
+  other = key;
+  other.contexts = kCtxMorphBall;
+  AddUserBinding(user, other);
+  AddUserBinding(user, other);
+  CHECK(user.bindings.size() == 4);
+
+  UserProfile controllerProfile;
+  AddUserBinding(controllerProfile, key);
+  CHECK(controllerProfile.bindings.size() == 1);
+}
 } // namespace
 
 int main() {
+  TestDuplicateBindings();
   TestFamilyEditing();
   TestInputText();
   TestContexts();

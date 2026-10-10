@@ -877,7 +877,8 @@ void AddUserBinding(UserProfile& user, const Binding& b) {
     const Family family = BindingFamily(b);
     std::erase_if(user.unbind, [&](const Unbind& u) { return u.action == b.action && u.family == family; });
   }
-  user.bindings.push_back(b);
+  if (std::find(user.bindings.begin(), user.bindings.end(), b) == user.bindings.end())
+    user.bindings.push_back(b);
 }
 
 void RemoveUserBinding(UserProfile& user, size_t index) {

@@ -782,6 +782,18 @@ void SaveDraft(const SViews& views, Binding parsed) {
     EndCapture();
     Commit();
   };
+  if (sEditing == kEditNew) {
+    const SView& target = views[to];
+    const UserProfile* user = Find(target.match);
+    const auto& bindings = user != nullptr && PortInput::Overridden(*user, parsed.action, to)
+                               ? user->bindings : target.inherited.bindings;
+    if (std::find(bindings.begin(), bindings.end(), parsed) != bindings.end()) {
+      // An existing default is already bound: don't turn it into an override.
+      sEditing = kEditNone;
+      EndCapture();
+      return;
+    }
+  }
   if (sEditing == kEditInherited || sEditing >= 0) {
     const SView& from = views[sEditFamily];
     UserProfile& profile = EditedProfile(from);
@@ -792,7 +804,8 @@ void SaveDraft(const SViews& views, Binding parsed) {
     } else if (sEditing < int(profile.bindings.size())) {
       const Binding& old = profile.bindings[size_t(sEditing)];
       if (old.action == parsed.action && to == sEditFamily) {
-        profile.bindings[size_t(sEditing)] = parsed;
+        PortInput::RemoveUserBinding(profile, size_t(sEditing));
+        PortInput::AddUserBinding(profile, parsed);
         finish();
         return;
       }
@@ -970,7 +983,7 @@ const char* GameHint(Action a) {
 }
 
 // A binding's non-default settings, in words ("" when it has none).
-std::string Notes(const Binding& b) {
+std::string Notes(const Binding& b, bool includeContexts = true) {
   std::string out;
   const auto add = [&](const std::string& s) {
     if (!out.empty()) out += ", ";
@@ -979,7 +992,7 @@ std::string Notes(const Binding& b) {
   if (b.trigger != Trigger::Press) add(TriggerLabel(b.trigger));
   if (b.turboHz != 0) add("turbo " + std::to_string(b.turboHz) + "/s");
   if (b.IsChord() && b.anyOrder) add("any order");
-  if (b.contexts != PortInput::kCtxAll) {
+  if (includeContexts && b.contexts != PortInput::kCtxAll) {
     std::string where;
     for (const SContextInfo& c : kContexts) {
       if ((b.contexts & c.bit) == 0) continue;
@@ -1112,7 +1125,7 @@ void DrawTable(const SViews& views, bool editorDrawn) {
           const Binding& b = cell.rows[r].first;
           const int userIndex = cell.rows[r].second;
           const bool isDefault = userIndex < 0;
-          const std::string notes = Notes(b);
+          const std::string notes = Notes(b, false);
           // Inputs flow left to right and wrap at the column's edge.
           if (!first) {
             float width = ChipLayout(b).width + xGap + xWidth;
@@ -1129,7 +1142,8 @@ void DrawTable(const SViews& views, bool editorDrawn) {
           }
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip)) {
             std::string tip = ChipTooltip(b);
-            if (!notes.empty()) tip += "\n" + notes;
+            const std::string tooltipNotes = Notes(b);
+            if (!tooltipNotes.empty()) tip += "\n" + tooltipNotes;
             tip += isDefault ? "\nDefault: changing or removing it makes this device's inputs for the action "
                                "yours; Revert gives the defaults back."
                              : "\nClick to change.";
