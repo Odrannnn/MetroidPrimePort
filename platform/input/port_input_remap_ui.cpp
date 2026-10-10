@@ -58,6 +58,41 @@ constexpr SContextInfo kContexts[] = {
 
 constexpr const char* kFamilies[] = {"Keyboard & mouse", "Controller", "Touch"};
 
+// The touch controls Record can't reach (the overlay hides while F1 is open), as
+// "touch:" names and the editor's labels. The sticks, D-pad and menu button
+// aren't remappable, so they're left out.
+struct STouchInfo {
+  const char* name;
+  const char* label;
+};
+constexpr STouchInfo kTouchControls[] = {
+    {"a", "A"},
+    {"b", "B"},
+    {"x", "X"},
+    {"y", "Y"},
+    {"l", "L"},
+    {"r", "R"},
+    {"z", "Z"},
+    {"visor", "Visor"},
+    {"beam", "Beam"},
+    {"start", "Start"},
+    {"map", "Map"},
+    {"eye", "Hide controls"},
+    {"turbo", "Turbo"},
+    {"jump", "Twin stick: Jump"},
+    {"fire", "Twin stick: Fire"},
+    {"morph", "Twin stick: Morph"},
+    {"missile", "Twin stick: Missile"},
+    {"lt", "Twin stick: LT Lock"},
+    {"lb", "Twin stick: LB Jump"},
+    {"rt", "Twin stick: RT Fire"},
+    {"rb", "Twin stick: RB Missile"},
+    {"tz", "Twin stick: Map (Z)"},
+    {"tturbo", "Twin stick: Turbo"},
+    {"beam_shift", "Twin stick: Beam (held)"},
+    {"map_tap", "Minimap tap"},
+};
+
 UserBindings sWork;     // what the page edits; written through on every change
 bool sLoaded = false;
 uint64_t sSeenVersion = 0; // the bindings version sWork matches
@@ -281,6 +316,24 @@ void DrawEditor(UserProfile& profile) {
   ImGui::SetItemTooltip("Inputs, joined with +: key:<name>, mouse:left, wheel:up, pad:<button>, "
                         "axis:<name>+/-, touch:<control> (a, fire, missile...), gyro:yaw+ ... (docs/NATIVE_PORT.md). "
                         "Append @<percent> for an axis threshold.");
+  if (!sCapture.active) {
+    ImGui::SetNextItemWidth(260.f);
+    if (ImGui::BeginCombo("##touch", "Add a touch control...")) {
+      for (const STouchInfo& t : kTouchControls) {
+        if (ImGui::Selectable(t.label)) {
+          std::string text = TrimSpaces(sInputsText);
+          if (!text.empty()) text += " + ";
+          text += std::string("touch:") + t.name;
+          std::snprintf(sInputsText, sizeof(sInputsText), "%s", text.c_str());
+        }
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::SetItemTooltip("The touch controls hide while this menu is open, so Record can't see them: "
+                          "pick one here. Picking another makes a chord.");
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) sInputsText[0] = '\0';
+  }
 
   Binding parsed = sDraft;
   const bool inputsOk = InputsFromText(sInputsText, parsed);
@@ -530,7 +583,9 @@ void Draw() {
 
   ImGui::TextWrapped("Bind any action to a key, mouse button, controller input or touch control, or to a "
                      "chord of up to four of them. These bindings go on top of the other pages and are "
-                     "saved in controls.toml in the user folder.");
+                     "saved in controls.toml in the user folder. The Default profile holds keyboard, "
+                     "mouse and touch bindings and applies to every controller; a controller profile "
+                     "adds bindings for one kind or model of controller on top.");
   if (!sError.empty()) ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", sError.c_str());
   DrawProfilePicker();
 

@@ -1018,7 +1018,9 @@ unpacks to a temporary directory instead of mounting.
   bindings stay. Touch inputs are named after the overlay controls (`touch:a`,
   `touch:fire`, `touch:missile`, `touch:morph`, ..., plus `touch:beam_shift`,
   `touch:turbo_held`, `touch:map_tap`); a bound touch control no longer sends
-  its own button. The D-pad, the sticks and the menu button can't be remapped.
+  its own button. The overlay hides while F1 is open, so Record can't see touch
+  controls: the editor's "Add a touch control..." list picks them instead.
+  The D-pad, the sticks and the menu button can't be remapped.
 - `MP_CINEMA_BARS=0|1` (Video > Display "Cutscene black bars", persisted as `cinema_bars`,
   default off): the scripted 16:9 cutscene letterbox. Off, cutscenes narrower than 16:9
   show the cinematic camera's full shot (Vert+); elevator rides and credits keep theirs.
