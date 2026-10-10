@@ -182,6 +182,51 @@ public:
   }
 };
 
+// Remastered colour combinators (GetColorElement 0x25ece4). Remastered keeps half floats with no
+// clamp; CColor is bytes, so results are clamped to [0, 1].
+// MULT: CCEMultiply 0x2c7704, a * b per channel (CColor4f::Modulate).
+class CCEPortMultiply : public CColorElement {
+  CColorElement* x4_a;
+  CColorElement* x8_b;
+
+public:
+  CCEPortMultiply(CColorElement* a, CColorElement* b) : x4_a(a), x8_b(b) {}
+  ~CCEPortMultiply() override {
+    delete x4_a;
+    delete x8_b;
+  }
+  bool GetValue(int frame, CColor& out) const override {
+    CColor a, b;
+    x4_a->GetValue(frame, a);
+    x8_b->GetValue(frame, b);
+    out = CColor(a.GetRed() * b.GetRed(), a.GetGreen() * b.GetGreen(), a.GetBlue() * b.GetBlue(),
+                 a.GetAlpha() * b.GetAlpha());
+    return false;
+  }
+};
+
+// MDAO: CCEModifyAlphaOnly 0x2c8678, the colour's RGB with alpha max(real, 0).
+class CCEPortModifyAlpha : public CColorElement {
+  CColorElement* x4_color;
+  CRealElement* x8_alpha;
+
+public:
+  CCEPortModifyAlpha(CColorElement* color, CRealElement* alpha) : x4_color(color), x8_alpha(alpha) {}
+  ~CCEPortModifyAlpha() override {
+    delete x4_color;
+    delete x8_alpha;
+  }
+  bool GetValue(int frame, CColor& out) const override {
+    x4_color->GetValue(frame, out);
+    float alpha = 1.f;
+    if (x8_alpha != nullptr) {
+      x8_alpha->GetValue(frame, alpha);
+    }
+    out.SetAlpha(alpha < 0.f ? 0.f : alpha > 1.f ? 1.f : alpha);
+    return false;
+  }
+};
+
 class CInputStream;
 // Reads a PVRT body (after the CNST class id): u32 count, then per variable 16 guid bytes, u32
 // type and 4 float bit patterns. Null on a malformed table.

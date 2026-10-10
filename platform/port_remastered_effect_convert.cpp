@@ -156,6 +156,8 @@ const Signatures& ElementsOf(Type type) {
   static const Signatures colorElements = {
       {F("CNST"), "rrrr"}, {F("KEYE"), "k"},   {F("KEYP"), "k"},    {F("FADE"), "ccr"}, {F("CFDE"), "ccrr"},
       {F("CHAN"), "cci"},  {F("PULS"), "iicc"}, {F("PCOL"), ""},    {F("NONE"), ""},
+      // Port-only (CParticleDataFactory under TARGET_PC).
+      {F("MULT"), "cc"},   {F("MDAO"), "cr"},
   };
   // SETR is left out: Remastered writes SEMR, which retail reads too.
   static const Signatures emitterElements = {

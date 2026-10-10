@@ -1379,6 +1379,18 @@ CColorElement* CParticleDataFactory::GetColorElement(CInputStream& in) {
   case SBIG('VARC'):
     ret = rs_new CCEPortVar(in.ReadLong());
     break;
+  case SBIG('MULT'): {
+    CColorElement* a = GetColorElement(in);
+    CColorElement* b = GetColorElement(in);
+    ret = rs_new CCEPortMultiply(a, b);
+    break;
+  }
+  case SBIG('MDAO'): {
+    CColorElement* c = GetColorElement(in);
+    CRealElement* a = GetRealElement(in);
+    ret = rs_new CCEPortModifyAlpha(c, a);
+    break;
+  }
 #endif
   case SBIG('CNST'): {
     CElementAllocationChunk* allocationContext = IElement::CElementAllocator::GetCurrentChunk();
