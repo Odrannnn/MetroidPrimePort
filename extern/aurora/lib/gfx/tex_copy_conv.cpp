@@ -20,33 +20,6 @@ static Module Log("aurora::gfx::tex_copy_conv");
 
 using webgpu::g_device;
 
-// The preamble for copies out of the HDR scene: `src` is sampled through hdr_sample, which runs the post's
-// tone curve (bloom.cpp's `tone`, one channel at a time) and the exact sRGB encode.
-static constexpr std::string_view HdrBindings = R"(
-@group(0) @binding(3) var<uniform> hdr_tone: array<vec4f, 3>;
-
-fn hdr_curve(x: f32) -> f32 {
-    if (x < hdr_tone[1].z) {
-        return ((hdr_tone[0].x * x + hdr_tone[0].y) * x + hdr_tone[0].z) * x;
-    }
-    if (x < hdr_tone[1].w) {
-        return hdr_tone[1].x * x + hdr_tone[1].y;
-    }
-    let st = max(hdr_tone[2].y * x + hdr_tone[2].z, 0.0);
-    return hdr_tone[2].x * st / (1.0 + st) + hdr_tone[2].w;
-}
-
-fn hdr_sample(uv: vec2f) -> vec4f {
-    let t = textureSample(src, src_samp, uv);
-    var c = max(t.rgb, vec3f(0.0));
-    if (hdr_tone[1].x > 0.0) {
-        c = vec3f(hdr_curve(c.r), hdr_curve(c.g), hdr_curve(c.b));
-    }
-    let l = clamp(c, vec3f(0.0), vec3f(1.0));
-    return vec4f(select(1.055 * pow(l, vec3f(1.0 / 2.4)) - 0.055, 12.92 * l, l <= vec3f(0.0031308)), t.a);
-}
-)"sv;
-
 static constexpr std::string_view ShaderPreamble = R"(
 @group(0) @binding(0) var src_samp: sampler;
 @group(0) @binding(1) var src: texture_2d<f32>;
@@ -350,14 +323,11 @@ static constexpr std::array DepthConvPipelines{
 };
 
 static wgpu::BindGroupLayout g_bindGroupLayout;
-static wgpu::BindGroupLayout g_hdrBindGroupLayout;
 static wgpu::BindGroupLayout g_depthBindGroupLayout;
 static wgpu::Sampler g_nearestSampler;
 static wgpu::Sampler g_linearSampler;
 static absl::flat_hash_map<GXTexFmt, wgpu::RenderPipeline> g_pipelines;
-static absl::flat_hash_map<GXTexFmt, wgpu::RenderPipeline> g_hdrPipelines;
 static wgpu::RenderPipeline g_blitPipeline;
-static wgpu::RenderPipeline g_hdrBlitPipeline;
 static wgpu::BindGroupLayout g_depthSnapshotBindGroupLayout;
 static wgpu::BindGroupLayout g_depthSnapshotBindGroupLayoutMS;
 static wgpu::RenderPipeline g_depthSnapshotPipeline;
@@ -429,21 +399,11 @@ static wgpu::RenderPipeline create_depth_snapshot_pipeline(const std::string_vie
 }
 
 static wgpu::RenderPipeline create_pipeline(const ConvPipeline& conv, const std::string_view shaderPreamble,
-                                            const wgpu::BindGroupLayout& bindGroupLayout, bool hdr = false) {
+                                            const wgpu::BindGroupLayout& bindGroupLayout) {
   std::string shaderSource;
-  shaderSource.reserve(shaderPreamble.size() + conv.fragShader.size() + (hdr ? HdrBindings.size() : 0));
+  shaderSource.reserve(shaderPreamble.size() + conv.fragShader.size());
   shaderSource += shaderPreamble;
-  if (hdr) {
-    shaderSource += HdrBindings;
-    std::string frag{conv.fragShader};
-    constexpr std::string_view call = "textureSample(src, src_samp, in.uv)";
-    for (size_t at = frag.find(call); at != std::string::npos; at = frag.find(call, at)) {
-      frag.replace(at, call.size(), "hdr_sample(in.uv)");
-    }
-    shaderSource += frag;
-  } else {
-    shaderSource += conv.fragShader;
-  }
+  shaderSource += conv.fragShader;
 
   const wgpu::ShaderSourceWGSL wgslSource{wgpu::ShaderSourceWGSL::Init{
       .code = shaderSource.c_str(),
@@ -550,33 +510,11 @@ void initialize() {
   };
   g_depthBindGroupLayout = g_device.CreateBindGroupLayout(&depthBindGroupLayoutDescriptor);
 
-  {
-    auto hdrEntries = std::vector<wgpu::BindGroupLayoutEntry>(bindGroupLayoutEntries.begin(),
-                                                              bindGroupLayoutEntries.end());
-    hdrEntries.push_back(wgpu::BindGroupLayoutEntry{
-        .binding = 3,
-        .visibility = wgpu::ShaderStage::Fragment,
-        .buffer =
-            wgpu::BufferBindingLayout{
-                .type = wgpu::BufferBindingType::Uniform,
-            },
-    });
-    const wgpu::BindGroupLayoutDescriptor hdrDescriptor{
-        .label = "TexCopyConv HDR Bind Group Layout",
-        .entryCount = hdrEntries.size(),
-        .entries = hdrEntries.data(),
-    };
-    g_hdrBindGroupLayout = g_device.CreateBindGroupLayout(&hdrDescriptor);
-  }
-  g_hdrBlitPipeline = create_pipeline(
-      {GX_TF_RGBA8, FragPassthrough, webgpu::g_graphicsConfig.surfaceConfiguration.format, "TexCopyConv HDR Blit"},
-      ShaderPreamble, g_hdrBindGroupLayout, true);
   g_blitPipeline = create_pipeline(
       {GX_TF_RGBA8, FragPassthrough, webgpu::g_graphicsConfig.surfaceConfiguration.format, "TexCopyConv Blit"},
       ShaderPreamble, g_bindGroupLayout);
   for (const auto& conv : ConvPipelines) {
     g_pipelines[conv.fmt] = create_pipeline(conv, ShaderPreamble, g_bindGroupLayout);
-    g_hdrPipelines[conv.fmt] = create_pipeline(conv, ShaderPreamble, g_hdrBindGroupLayout, true);
     if (conv.outputFormat != to_wgpu(conv.fmt)) {
       Log.fatal("Output format mismatch for {}", conv.fmt);
     }
@@ -614,11 +552,8 @@ void initialize() {
 
 void shutdown() {
   g_pipelines.clear();
-  g_hdrPipelines.clear();
   g_blitPipeline = {};
-  g_hdrBlitPipeline = {};
   g_bindGroupLayout = {};
-  g_hdrBindGroupLayout = {};
   g_depthBindGroupLayout = {};
   g_nearestSampler = {};
   g_linearSampler = {};
@@ -673,16 +608,10 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
             .offset = req.uniformRange.offset,
             .size = req.uniformRange.size,
         },
-        wgpu::BindGroupEntry{
-            .binding = 3,
-            .buffer = detail::resources().uniformBuffer,
-            .offset = req.toneRange.offset,
-            .size = req.toneRange.size,
-        },
     };
     const wgpu::BindGroupDescriptor bindGroupDescriptor{
-        .layout = req.hdr ? g_hdrBindGroupLayout : g_bindGroupLayout,
-        .entryCount = req.hdr ? bindGroupEntries.size() : bindGroupEntries.size() - 1,
+        .layout = g_bindGroupLayout,
+        .entryCount = bindGroupEntries.size(),
         .entries = bindGroupEntries.data(),
     };
     bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
@@ -710,17 +639,14 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
 }
 
 void run(const wgpu::CommandEncoder& cmd, const ConvRequest& req) {
-  auto& pipelines = req.hdr && !gx::is_depth_format(req.fmt) ? g_hdrPipelines : g_pipelines;
-  const auto it = pipelines.find(req.fmt);
-  if (it == pipelines.end()) {
+  const auto it = g_pipelines.find(req.fmt);
+  if (it == g_pipelines.end()) {
     Log.fatal("No copy conversion pipeline for format {}", static_cast<int>(req.fmt));
   }
   execute(cmd, req, it->second);
 }
 
-void blit(const wgpu::CommandEncoder& cmd, const ConvRequest& req) {
-  execute(cmd, req, req.hdr ? g_hdrBlitPipeline : g_blitPipeline);
-}
+void blit(const wgpu::CommandEncoder& cmd, const ConvRequest& req) { execute(cmd, req, g_blitPipeline); }
 
 bool snapshot_depth_supported() noexcept { return static_cast<bool>(g_depthSnapshotPipeline); }
 

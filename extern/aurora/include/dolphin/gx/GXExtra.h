@@ -281,9 +281,6 @@ void GXPortVolumetricFogEnd(void);
 // their blend mode is additive or premultiplied (the static render state's "no fog" flag), when
 // they are not fogged at all and only add to the already fogged frame.
 void GXPortSetParticleFog(GXBool on);
-// Draws the world into an HDR target until GXPortPostProcess turns it into the EFB (which then always
-// runs). Does nothing where it can't. Returns whether the frame is HDR.
-GXBool GXPortSceneHdr(GXBool on);
 // Port extension: one of Remastered's X-ray visor post passes (shader 00089f0) over the EFB as
 // drawn so far. `p` is the shader's constants p0..p7; p[0][2] == 1 runs the distortion after the
 // opaque world (it reads the depth, whose GX z range is depthRange), anything else the ramp and

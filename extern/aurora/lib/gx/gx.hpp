@@ -598,7 +598,7 @@ struct ShaderConfig {
   // endianness.
   u8 pbrBindPos : 1 = false;
   u8 pbrBindLe : 1 = false;
-  u8 hdr : 1 = false; // the draw goes to the RGBA16Float scene target (GX_AURORA_PORT_SCENE_HDR)
+  u8 pad1 : 1 = 0;
   u8 pbr = 0; // GX_AURORA_SET_PBR
   u8 sdf = 0; // GX_AURORA_SET_SDF
   u8 depthOnly = 0; // pass 1 of GX_AURORA_PORT_DEPTH_PREPASS: the colour is not written
@@ -653,7 +653,6 @@ struct ShaderInfo {
   bool usesHudDyin : 1 = false; // ShaderConfig::hudSample >= 2: the hud_dyin uniform
   bool usesLightmap : 1 = false; // ShaderConfig::pbrLightmapAttr is set
   bool usesVolFog : 1 = false;
-  bool usesHdrTone : 1 = false; // ShaderConfig::hdr on a retail draw: pbr_tone for the colour's way back
   bool usesShadow : 1 = false;    // ShaderConfig::shadow: the shadow uniforms and vs_shadow
   bool shadowReceive : 1 = false; // shadow_receives: group 2 uses the shadow layout
 };

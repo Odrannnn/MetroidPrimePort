@@ -1,4 +1,3 @@
-#include "port_env.h"
 #include "MetroidPrime/CMFGame.hpp"
 #include "Kyoto/CResFactory.hpp"
 #include "Kyoto/CSimplePool.hpp"
@@ -299,17 +298,6 @@ void CMFGame::Draw() const {
                           toned && measure ? PortRoomEnv::MeasureExposure() : 0.f);
       }
     };
-    // The world draws into the HDR scene frame (exposed linear light) that postProcess turns into the
-    // EFB; thermal and X-ray draw straight to it. Opt in until the water/VFX paths are HDR-ready.
-    const auto beginSceneHdr = [this]() {
-      static const bool enabled = port::EnvFlag("MP_HDR_SCENE", false);
-      const CPlayerState::EPlayerVisor visor = mStateManager->GetPlayerState()->GetActiveVisor(*mStateManager);
-      float tone[3][4] = {};
-      if (enabled && visor != CPlayerState::kPV_Thermal && visor != CPlayerState::kPV_XRay &&
-          PortRoomEnv::Tone(tone)) {
-        GXPortSceneHdr(GX_TRUE);
-      }
-    };
     // Sharp scan window: the window's picture is the world drawn again through a zoomed
     // camera, instead of the screen's centre stretched (the copy clears the EFB after it).
     float scanZoom = 1.f;
@@ -320,14 +308,12 @@ void CMFGame::Draw() const {
         mGuiManager->PortPlayerVisorDrawn(*mStateManager) &&
         scanVisor->PortScanZoom(*mStateManager, scanZoom, scanWidth, scanHeight)) {
       CStateManager::sPortViewZoom = scanZoom;
-      beginSceneHdr();
       mStateManager->DrawWorld();
       postProcess(false);
       mGuiManager->PortDrawScanZoomReticles(*mStateManager);
       CStateManager::sPortViewZoom = 1.f;
       CPlayerVisor::PortCopyScanZoom(scanWidth, scanHeight, scanZoom);
     }
-    beginSceneHdr();
 #endif
     mStateManager->DrawWorld();
     (void)mStateManager->GetPlayer()->IsPlayerDeadEnough();

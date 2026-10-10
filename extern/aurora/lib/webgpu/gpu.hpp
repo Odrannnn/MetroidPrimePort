@@ -48,9 +48,6 @@ extern bool g_vulkanLibraryFailed;
 extern GraphicsConfig g_graphicsConfig;
 extern TextureWithSampler g_frameBuffer;
 extern TextureWithSampler g_frameBufferResolved;
-// RGBA16Float scene frame (MSAA + 1x resolve), the same size as the EFB.
-extern TextureWithSampler g_sceneHdr;
-extern TextureWithSampler g_sceneHdrResolved;
 extern TextureWithSampler g_depthBuffer;
 extern wgpu::RenderPipeline g_CopyPipeline;
 extern wgpu::RenderPipeline g_CopyPremultipliedAlphaPipeline;
@@ -74,8 +71,7 @@ bool surface_window_changed();
 void resize_swapchain(uint32_t width, uint32_t height, uint32_t nativeWidth, uint32_t nativeHeight, bool force = false);
 // Changes MSAA (1 or 4) and the anisotropy that GX_ANISO_4 maps to. Call between frames with a live surface.
 void set_quality(uint32_t msaaSamples, uint16_t anisotropy);
-TextureWithSampler create_render_texture(uint32_t width, uint32_t height, bool multisampled,
-                                         wgpu::TextureFormat formatOverride = wgpu::TextureFormat::Undefined);
+TextureWithSampler create_render_texture(uint32_t width, uint32_t height, bool multisampled);
 const TextureWithSampler& present_source() noexcept;
 wgpu::BindGroup create_copy_bind_group(const TextureWithSampler& source);
 void set_resampler(AuroraSampler sampler) noexcept;

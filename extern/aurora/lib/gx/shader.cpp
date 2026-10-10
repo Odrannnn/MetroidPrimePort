@@ -3742,30 +3742,6 @@ fn vf_apply(c: vec4f, fog: vec4f, w: f32) -> vec4f {
     uniBufAttrs += "\n    pbr_lmap_axes: array<vec4f, 3>,";
     uniBufAttrs += "\n    pbr_room_lights: vec4f,";
     auto pbr = pbr_func(config, info, vtxOutAttrs, vtxXfrAttrs, vtxOutIdx, vidxAttr);
-    if (config.hdr != 0 && !pbr.empty()) {
-      // The HDR scene takes the exposed, unclamped light: the composite applies the tone curve and the
-      // sRGB encode. The scene copies (map 7) come from the same target, so they're already linear.
-      const auto swap = [&](std::string_view what, std::string_view with) {
-        size_t at = 0;
-        while ((at = pbr.find(what, at)) != std::string::npos) {
-          pbr.replace(at, what.size(), with);
-          at += with.size();
-        }
-      };
-      swap("prev = vec4f(srgb_enc(pbr_tm + pbr_pass), pbr_alpha);", "prev = vec4f(pbr_out + pbr_pass, pbr_alpha);");
-      swap("srgb_dec(textureSampleLevel(tex7,", "scene_dec(textureSampleLevel(tex7,");
-      swap("srgb_dec(pbr_gs)", "scene_dec(pbr_gs)");
-      swap("srgb_dec(pbr_hg)", "scene_dec(pbr_hg)");
-      swap("srgb_dec(pbr_sfb)", "scene_dec(pbr_sfb)");
-      // The debug views are display colours.
-      swap("      if (ubuf.pbr_volume[5].w > 0.5) {\n          prev = vec4f(clamp(pbr_vdiag",
-           "      var pbr_hdr_view = ubuf.pbr_layer.w > 0.5;\n      if (ubuf.pbr_volume[5].w > 0.5) {\n          pbr_hdr_view = true;\n          prev = vec4f(clamp(pbr_vdiag");
-      swap("      if (ubuf.pbr_probe[0].w > 1.5) {\n          var pbr_dd = pbr_pd;",
-           "      if (ubuf.pbr_probe[0].w > 1.5) {\n          pbr_hdr_view = true;\n          var pbr_dd = pbr_pd;");
-      const size_t end = pbr.rfind("\n    }");
-      assert(end != std::string::npos);
-      pbr.insert(end, "\n      if (pbr_hdr_view) {\n          prev = vec4f(hdr_from_display(prev.rgb), prev.a);\n      }");
-    }
     // An unlit surface (baked room light: pbr_func drops its light loop) has no room light to
     // shadow, but takes the sun's own colour.
     if (!pbr.empty() && info.shadowReceive) {
@@ -3920,11 +3896,6 @@ fn vf_apply(c: vec4f, fog: vec4f, w: f32) -> vec4f {
     uniBufAttrs += "\n    volfog: vec4f,";
     uniBufAttrs += "\n    volfog_tone: array<vec4f, 3>,";
   }
-  if (info.usesHdrTone) {
-    // A retail draw into the HDR scene: the tone curve to take its colour back through (the PBR
-    // shaders have it as pbr_tone).
-    uniBufAttrs += "\n    pbr_tone: array<vec4f, 3>,";
-  }
   uniBufAttrs += fmt::format("\n    texcoord_scale: array<vec4f, {}>,", MaxTexCoord);
   if (info.usedIndTexMtxs.any()) {
     uniBufAttrs += fmt::format("\n    ind_mtx: array<mat2x4f, {}>,", MaxIndTexMtxs);
@@ -3960,59 +3931,6 @@ fn vf_apply(c: vec4f, fog: vec4f, w: f32) -> vec4f {
   if (info.usesVolFog && !pbrVolFog) {
     fragmentFn += fmt::format("\n    // Volumetric fog\n    prev = vf_apply(prev, {}, {});", volFogSample,
                               volFogWeight("clamp(prev.a, 0.0, 1.0)"));
-  }
-  if (config.hdr != 0) {
-    // The HDR scene holds exposed linear light: a retail draw's display colour goes back through the
-    // tone curve's inverse (the composite applies the curve again), as the bloom pass's `exposed` does.
-    uniformPre += R"""(
-fn hdr_tone(x: f32) -> f32 {
-    if (x < ubuf.pbr_tone[1].z) {
-        return ((ubuf.pbr_tone[0].x * x + ubuf.pbr_tone[0].y) * x + ubuf.pbr_tone[0].z) * x;
-    }
-    if (x < ubuf.pbr_tone[1].w) {
-        return ubuf.pbr_tone[1].x * x + ubuf.pbr_tone[1].y;
-    }
-    let st = max(ubuf.pbr_tone[2].y * x + ubuf.pbr_tone[2].z, 0.0);
-    return ubuf.pbr_tone[2].x * st / (1.0 + st) + ubuf.pbr_tone[2].w;
-}
-
-fn hdr_untone(y: f32) -> f32 {
-    let mid = ubuf.pbr_tone[1].z;
-    let lineStart = ubuf.pbr_tone[1].x * mid + ubuf.pbr_tone[1].y;
-    if (y < lineStart) {
-        var x = y / max(lineStart, 1e-4) * mid;
-        for (var n = 0; n < 4; n++) {
-            let slope = (3.0 * ubuf.pbr_tone[0].x * x + 2.0 * ubuf.pbr_tone[0].y) * x + ubuf.pbr_tone[0].z;
-            x = clamp(x - (hdr_tone(x) - y) / max(slope, 1e-4), 0.0, mid);
-        }
-        return x;
-    }
-    let top = ubuf.pbr_tone[2].w;
-    if (y < top || ubuf.pbr_tone[2].y <= 0.0) {
-        return (y - ubuf.pbr_tone[1].y) / ubuf.pbr_tone[1].x;
-    }
-    let u = min((y - top) / max(ubuf.pbr_tone[2].x, 1e-4), 0.999);
-    return u / (1.0 - u) / ubuf.pbr_tone[2].y + ubuf.pbr_tone[1].w;
-}
-
-// A display (sRGB) colour as the HDR scene holds it. Without a tone curve (pbr_tone[1].x <= 0) the
-// composite's curve is the identity, so the colour is just made linear.
-fn hdr_from_display(c: vec3f) -> vec3f {
-    let y = srgb_dec(c);
-    if (ubuf.pbr_tone[1].x <= 0.0) {
-        return y;
-    }
-    // Capped where the curve draws about 0.97 of white, as bloom's reconstruction of the LDR EFB is: a retail
-    // white has lost its level and the shoulder's inverse runs off to hundreds there (a flood through the bloom).
-    return min(vec3f(hdr_untone(y.r), hdr_untone(y.g), hdr_untone(y.b)), vec3f(4.0));
-}
-
-fn scene_dec(e: vec3f) -> vec3f {
-    return max(e, vec3f(0.0));
-})""";
-  }
-  if (config.hdr != 0 && !config.pbr) {
-    fragmentFn += "\n    // HDR scene\n    prev = vec4f(hdr_from_display(prev.rgb), prev.a);";
   }
   if (config.alphaCompare) {
     const auto discard = alpha_compare_discard(config);

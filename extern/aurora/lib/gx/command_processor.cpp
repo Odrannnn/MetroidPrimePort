@@ -1316,8 +1316,6 @@ void handle_aurora(ByteReader& reader) noexcept {
     }
     std::memcpy(&params, words, sizeof(params));
     gfx::thermal::record(params);
-  } else if (subCmd == GX_AURORA_PORT_SCENE_HDR) {
-    gfx::set_scene_hdr(reader.read<u8>() != 0);
   } else if (subCmd == GX_AURORA_PORT_PARTICLE_FOG) {
     const bool on = reader.read<u8>() != 0;
     if (g_gxState.particleFog != on) {

@@ -50,8 +50,6 @@ bool g_vulkanLibraryFailed = false;
 GraphicsConfig g_graphicsConfig;
 TextureWithSampler g_frameBuffer;
 TextureWithSampler g_frameBufferResolved;
-TextureWithSampler g_sceneHdr;
-TextureWithSampler g_sceneHdrResolved;
 TextureWithSampler g_depthBuffer;
 
 // EFB -> XFB copy pipeline
@@ -275,15 +273,13 @@ wgpu::PresentMode select_present_mode(const wgpu::SurfaceCapabilities& capabilit
   return wgpu::PresentMode::Fifo;
 }
 
-TextureWithSampler create_render_texture(uint32_t width, uint32_t height, bool multisampled,
-                                         wgpu::TextureFormat formatOverride) {
+TextureWithSampler create_render_texture(uint32_t width, uint32_t height, bool multisampled) {
   const wgpu::Extent3D size{
       .width = width,
       .height = height,
       .depthOrArrayLayers = 1,
   };
-  const auto format =
-      formatOverride != wgpu::TextureFormat::Undefined ? formatOverride : g_graphicsConfig.surfaceConfiguration.format;
+  const auto format = g_graphicsConfig.surfaceConfiguration.format;
   uint32_t sampleCount = 1;
   if (multisampled) {
     sampleCount = g_graphicsConfig.msaaSamples;
@@ -1253,8 +1249,6 @@ void shutdown() {
   g_resampledFrameBuffer = {};
   g_frameBuffer = {};
   g_frameBufferResolved = {};
-  g_sceneHdr = {};
-  g_sceneHdrResolved = {};
   g_depthBuffer = {};
   g_queue = {};
   g_surface = {};
@@ -1300,9 +1294,6 @@ static void resize_swapchain_internal(uint32_t width, uint32_t height, uint32_t 
   }
   g_frameBuffer = create_render_texture(width, height, true);
   g_frameBufferResolved = create_render_texture(width, height, false);
-  // The HDR scene target (Remastered's scene frame: exposed linear light, unclamped).
-  g_sceneHdr = create_render_texture(width, height, true, wgpu::TextureFormat::RGBA16Float);
-  g_sceneHdrResolved = create_render_texture(width, height, false, wgpu::TextureFormat::RGBA16Float);
   g_depthBuffer = create_depth_texture(width, height);
   g_CopyBindGroup = create_copy_bind_group(present_source());
 }

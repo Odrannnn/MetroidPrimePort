@@ -305,14 +305,13 @@ wgpu::TextureFormat depth_format() noexcept { return webgpu::g_graphicsConfig.de
 uint32_t sample_count() noexcept { return webgpu::g_graphicsConfig.msaaSamples; }
 
 RenderTargetLayout scene_render_target_layout() noexcept {
-  const auto& color = scene_hdr_active() ? webgpu::g_sceneHdr : webgpu::g_frameBuffer;
   RenderTargetLayout layout{
       .colorAttachmentCount = 1,
       .colorAttachments = {{{
           .semantic = ColorAttachmentSemantic::SceneColor,
-          .format = color.format,
-          .width = color.size.width,
-          .height = color.size.height,
+          .format = webgpu::g_frameBuffer.format,
+          .width = webgpu::g_frameBuffer.size.width,
+          .height = webgpu::g_frameBuffer.size.height,
       }}},
       .depthStencilFormat = webgpu::g_graphicsConfig.depthFormat,
       .sampleCount = webgpu::g_graphicsConfig.msaaSamples,
