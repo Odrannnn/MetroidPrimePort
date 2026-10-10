@@ -130,13 +130,11 @@ void CBomb::Think(float dt, CStateManager& mgr) {
   }
 
   if (mIsNotDetonated) {
-    if (mIsNotDetonated) {
-      if (mAcceleration.MagSquared() > 0.f) {
-        mVelocity += dt * mAcceleration;
-      }
+    if (mAcceleration.MagSquared() > 0.f) {
+      mVelocity += dt * mAcceleration;
     }
 
-    if (mIsNotDetonated && mVelocity.MagSquared() > 0.f) {
+    if (mVelocity.MagSquared() > 0.f) {
       mPrevLocation = GetTranslation();
       GlobalMove(dt * mVelocity);
       CVector3f diffVec = GetTranslation() - mPrevLocation;
