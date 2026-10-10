@@ -1069,6 +1069,8 @@ unpacks to a temporary directory instead of mounting.
 - Crosshair opacity and colour (Video > Display, persisted as `crosshair_opacity`,
   0-100 percent, default 100, and `crosshair_color`, `RRGGBB` or empty for the
   game's own colour): the centre crosshair of free aim, mouse aim and twin stick.
+  The opacity is the crosshair's alpha, so 100% draws it at full strength (the
+  game's own alpha is 19%).
   Original experience ignores both.
 - Hide helmet and hide visor effects (Video > Display and pause Options > Visor,
   persisted as `hide_helmet` and `hide_visor_effects`, off by default): the

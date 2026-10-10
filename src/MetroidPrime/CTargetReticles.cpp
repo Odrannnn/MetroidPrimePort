@@ -1215,7 +1215,12 @@ void CCompoundTargetReticle::DrawOrbitZoneGroup(const CMatrix3f& rot,
     if (PortDebug::CrosshairColor(rgb)) {
       color = CColor(rgb[0], rgb[1], rgb[2], color.GetAlpha());
     }
-    color = color.WithAlphaModulatedBy(static_cast< float >(PortDebug::CrosshairOpacity()) / 100.f);
+    // The tweak's alpha is 0.19, so the additive strokes barely show on a modern screen. Outside
+    // Original experience the opacity setting is the alpha itself (100% = full strength).
+    const float opacity = static_cast< float >(PortDebug::CrosshairOpacity()) / 100.f;
+    color = PortDebug::OriginalExperience()
+                ? color.WithAlphaModulatedBy(opacity)
+                : CColor(color.GetRed(), color.GetGreen(), color.GetBlue(), opacity);
 #endif
     model->Draw(CModelFlags::Additive(color.WithAlphaModulatedBy(x1e8_crosshairsScale))
                     .DepthCompareUpdate(false, false));

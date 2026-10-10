@@ -5562,7 +5562,7 @@ void DrawVideoDisplay() {
     MarkDirty();
   }
   ImGui::SetItemTooltip("The crosshair in the middle of the screen (free aim, mouse aim, twin "
-                        "stick).");
+                        "stick). 100%% is full strength; the game's own crosshair is much fainter (19%%).");
   if (ImGui::Checkbox("Custom crosshair colour", &sCrosshairCustomColor)) {
     MarkDirty();
   }
