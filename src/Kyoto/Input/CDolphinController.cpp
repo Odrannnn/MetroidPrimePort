@@ -15,6 +15,7 @@
 
 #ifdef TARGET_PC
 #include "port_controls.h"
+#include "port_input_devices.h"
 #include "port_input_map.h"
 #endif
 
@@ -117,9 +118,6 @@ void CDolphinController::Poll() {
 }
 
 void CDolphinController::ReadDevices() {
-  PADStatus status[4]{};
-  PADRead(status);
-  PADClamp(status);
   // Not SDL_GetMouseState: that counts touches as left clicks.
   unsigned held = PortDebug::MouseHeldButtons() & PortInputMap::kMouseButtonMask;
   bool inputFocused = SDL_GetKeyboardFocus() != nullptr;
@@ -129,68 +127,16 @@ void CDolphinController::ReadDevices() {
 #endif
   // The console's pad commands work in a window without focus.
   inputFocused = inputFocused || PortConsoleEnabled();
-  int mouseActions[PortInputMap::kMouseButtonCount];
-  for (int i = 0; i < PortInputMap::kMouseButtonCount; ++i) {
-    mouseActions[i] = PortDebug::MouseAction(i);
-  }
-  const unsigned mouse = PortDebug::MouseWeaponButtons(held);
-  // Out of first-person aim the buttons bound to A and B still press them:
-  // bombs and boosts in morph ball, advancing text boxes and menus. Its gate
-  // also waits for a release, so a held charge carried into morph ball does
-  // not drop a bomb. Only those buttons feed the gate, so a held side button
-  // with nothing to do there does not hold it shut.
-  const unsigned menuPad = PortInputMap::kPadA | PortInputMap::kPadB;
-  const PortInputMap::SMouseResult menuMouse = PortInputMap::MouseActions(
-      mouseActions,
-      PortDebug::MouseMenuButtons(held & PortInputMap::MouseButtonsFor(mouseActions, menuPad),
-                                  inputFocused),
-      menuPad);
-  if (menuMouse.buttons != 0) {
-    status[0].err = PAD_ERR_NONE;
-    status[0].button |= static_cast< u16 >(menuMouse.buttons);
-  }
-  bool mouseShift = false;
-  bool mouseL = false;
-  if (PortDebug::MouseGameplayActive() && PortDebug::MouseCaptured() && PortDebug::MouseButtons()) {
-    // Add held states to the normal PAD path: its press/release edges drive
-    // charge shots and missile cooldowns. Saved bindings remain untouched.
-    status[0].err = PAD_ERR_NONE;
-    const PortInputMap::SMouseResult actions = PortInputMap::MouseActions(mouseActions, mouse);
-    status[0].button |= static_cast< u16 >(actions.buttons);
-    // Fully depressed, after PADClamp's dead zone.
-    if (actions.buttons & PAD_TRIGGER_L) status[0].triggerL = 150;
-    if (actions.buttons & PAD_TRIGGER_R) status[0].triggerR = 150;
-    mouseShift = actions.shift;
-    mouseL = (actions.buttons & PAD_TRIGGER_L) != 0;
-  }
-  // Alt controller buttons (Controls tab): Aurora maps one native button to
-  // each PAD button, the port ORs in a second.
-  if (status[0].err == PAD_ERR_NONE) {
-    const unsigned alt = PortControls::HeldAltPadButtons();
-    status[0].button |= static_cast< u16 >(alt);
-    if ((alt & PAD_TRIGGER_L) && status[0].triggerL < 150) status[0].triggerL = 150;
-    if ((alt & PAD_TRIGGER_R) && status[0].triggerR < 150) status[0].triggerR = 150;
-  }
-  // A touch-overlay minimap tap: one poll of Z held, released on the next.
-  if (PortDebug::ConsumeMapTapZ()) {
-    status[0].err = PAD_ERR_NONE;
-    status[0].button |= PAD_TRIGGER_Z;
-  }
-  // Turbo fire (Controls tab binding, unbound by default, or the touch Turbo
-  // button): A pressed on one poll and released on the next, so the gun sees a
-  // press edge every other tick and its own shot delays set the rate. A real A
-  // held alongside wins, as mashing would not release it either.
-  static unsigned sTurboTicks = 0;
-  if (PortControls::TurboHeld() || PortDebug::TouchTurboFire()) {
-    if ((sTurboTicks++ & 1) == 0) {
-      status[0].err = PAD_ERR_NONE;
-      status[0].button |= PAD_BUTTON_A;
-    }
-  } else {
-    sTurboTicks = 0;
-  }
-  // The beam shift, bound in the Controls tab (left shift by default).
-  const bool shiftHeld = mouseShift || PortControls::ShiftHeld() || PortDebug::TouchBeamShift();
+  // Every binding (pad, keyboard, mouse, alt buttons, turbo, touch extras) goes
+  // through the input engine; Aurora's PADRead then adds the virtual pads and
+  // its suppression to port 0's result.
+  const PortInputDevices::SPoll devices = PortInputDevices::Poll(held, inputFocused);
+  PADSetPortOverride(0, &devices.status);
+  PADStatus status[4]{};
+  PADRead(status);
+  PADClamp(status);
+  const bool mouseL = devices.mouseL;
+  const bool shiftHeld = devices.beamShift;
   for (int i = 0; i < 4; ++i) {
     // One disconnected port must not prevent the other ports updating. Clear
     // stale held buttons on disconnect and keep UI interaction out of gameplay.

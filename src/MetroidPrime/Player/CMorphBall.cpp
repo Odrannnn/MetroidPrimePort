@@ -491,7 +491,8 @@ void CMorphBall::ComputeBallMovement(const CFinalInput& input, CStateManager& mg
     sSpringBallCooldown -= dt;
   } else if ((input.ARAUp() > 0.f || shiftSpring ||
               (input.Time() > 0.f && (PortDebug::TwinStickRightY() > 0.25f ||
-                                      PortDebug::SpringBallFlickPending()))) &&
+                                      PortDebug::SpringBallFlickPending() ||
+                                      PortDebug::SpringBallRequested()))) &&
              x0_player.GetPlayerMovementState() == NPlayer::kMS_OnGround &&
              x0_player.GetSurfaceRestraint() != CPlayer::kSR_Shrubbery && IsMovementAllowed() &&
              !x0_player.IsAttached() &&

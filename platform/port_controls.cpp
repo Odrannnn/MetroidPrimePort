@@ -1144,43 +1144,6 @@ bool ApplyPadPresetNamed(std::string_view name) {
   return true;
 }
 
-bool ShiftHeld() {
-  for (int slot = 0; slot < PAD_KEY_SLOT_COUNT; ++slot) {
-    const SInput key = RowInput(ECapture::kShiftKey, 0, slot);
-    if (key.code != PAD_KEY_INVALID && InputHeld(key)) {
-      return true;
-    }
-  }
-  const SInput pad = ShiftPadInput();
-  return pad.code != -1 && InputHeld(pad);
-}
-
-bool TurboHeld() {
-  // Retail has no turbo; the bindings stay listed for when it's turned off.
-  if (PortDebug::OriginalExperience()) {
-    return false;
-  }
-  for (int slot = 0; slot < PAD_KEY_SLOT_COUNT; ++slot) {
-    const SInput key = RowInput(ECapture::kTurboKey, 0, slot);
-    if (key.code != PAD_KEY_INVALID && InputHeld(key)) {
-      return true;
-    }
-  }
-  const SInput pad = TurboPadInput();
-  return pad.code != -1 && InputHeld(pad);
-}
-
-unsigned HeldAltPadButtons() {
-  unsigned buttons = 0;
-  for (const SControlPadButton& row : kControlPadButtons) {
-    const SInput alt = NativeCodeInput(PortDebug::PadAltButton(PadBit(row.button)));
-    if (alt.code != -1 && InputHeld(alt)) {
-      buttons |= row.button;
-    }
-  }
-  return buttons;
-}
-
 bool PadButtonBoundBesidesL(s32 native) {
   u32 count = 0;
   const PADButtonMapping* list = PADGetButtonMappings(kControlPort, &count);
