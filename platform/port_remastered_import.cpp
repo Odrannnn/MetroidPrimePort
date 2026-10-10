@@ -34,6 +34,7 @@
 #include "port_build_info.h"
 #include "port_disc.h"
 #include "port_gallery.h"
+#include "port_synthetic_effect.h"
 #include "port_map_icons.h"
 #include "port_model_variant.h"
 #include "port_mods.h"
@@ -1513,6 +1514,15 @@ std::vector<EffectPairing> ProjectilePairings(const Remastered& remastered, Reta
     if (named.retail != 0 && retail.HasId(named.retail) && remastered.EffectByName(named.name, id)) {
       pairings.push_back({id, named.retail, std::string("name ") + named.name});
       lines.push_back(std::string("name ") + named.name + ": " + EffectGuidString(ToStored(id)) + " -> " + HexId(named.retail));
+    }
+  }
+  // Effects the disc has no PART for are imported under an id from their name.
+  for (const char* name : kSyntheticEffectNames) {
+    ModelUuid id;
+    const uint32_t synthetic = SyntheticEffectId(name);
+    if (!retail.HasId(synthetic) && remastered.EffectByName(name, id)) {
+      pairings.push_back({id, synthetic, std::string("synthetic ") + name});
+      lines.push_back(std::string("synthetic ") + name + ": " + EffectGuidString(ToStored(id)) + " -> " + HexId(synthetic));
     }
   }
   return pairings;

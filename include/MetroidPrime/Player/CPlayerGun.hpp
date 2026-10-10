@@ -420,7 +420,7 @@ private:
   rstl::reserved_vector< CGunWeapon*, 4 > x760_selectableBeams;
   rstl::auto_ptr< CElementGen > x774_holoTransitionGen;
   rstl::auto_ptr< CElementGen > x77c_comboXferGen;
-  rstl::reserved_vector< rstl::reserved_vector< TLockedToken< CGenDescription >, 2 >, 2 >
+  rstl::reserved_vector< rstl::reserved_vector< TLockedToken< CGenDescription >, 3 >, 2 >
       x784_bombEffects;
   rstl::reserved_vector< TLockedToken< CGenDescription >, 5 > x7c0_auxMuzzleEffects;
   rstl::reserved_vector< rstl::auto_ptr< CElementGen >, 5 > x800_auxMuzzleGenerators;

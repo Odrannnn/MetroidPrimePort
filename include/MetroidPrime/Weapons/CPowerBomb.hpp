@@ -26,6 +26,9 @@ public:
   bool IsEnding() const { return x15c_curTime > kEndingTime; }
   void ApplyDynamicDamage(const CVector3f&, CStateManager&);
 
+  // Remastered's flash tint (PlayerGun tweak +0xd4 as shipped), set when its effects are active.
+  void SetRemasteredFilter() { x170_remasteredFilter = true; }
+
   static const CColor& FadeColor() { return kFadeColor; }
   static const float EndingTime() { return kEndingTime; }
 private:
@@ -39,6 +42,7 @@ private:
   float x164_radiusIncrement;
   rstl::single_ptr< CElementGen > x168_particle;
   float x16c_radius;
+  bool x170_remasteredFilter;
 };
 
 #endif // _CPOWERBOMB
