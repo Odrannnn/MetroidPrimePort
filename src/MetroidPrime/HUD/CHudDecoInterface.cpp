@@ -112,8 +112,9 @@ void CHudDecoInterfaceCombat::SetFrameColorValue(float value) {
 }
 
 void CHudDecoInterfaceCombat::Update(float dt, const CStateManager& mgr) {
-  x6c_camera->SetO2WTransform(CSamusHud::BuildFinalCameraTransform(
-      x4_rotation, x14_pivotPosition + x20_offset, x2c_camPos));
+  x6c_camera->SetHudO2WTransform(
+      CSamusHud::BuildFinalCameraTransform(x4_rotation, x14_pivotPosition + x20_offset, x2c_camPos),
+      x2c_camPos);
 }
 
 void CHudDecoInterfaceCombat::UpdateCameraDebugSettings(float fov, float y, float z) {
@@ -137,6 +138,11 @@ CHudDecoInterfaceXRay::CHudDecoInterfaceXRay(CGuiFrame& hud)
 , x9c_25_visGame(true) {
   xa0_camera = hud.GetFrameCamera();
   x30_camPos = xa0_camera->GetLocalPosition();
+#ifdef TARGET_PC
+  // The ring (out to 0.6 of the half width) and its outer arcs are one mesh: the widescreen warp
+  // stretches only past the ring, eased so the arcs stay round.
+  xa0_camera->SetSliceBand(0.63f, 0.95f, true);
+#endif
   xa4_basewidget_pivot = hud.FindWidget(skPivotWidgetName);
   xa8_basewidget_seeker = hud.FindWidget(skSeekerWidgetNameXRay);
   xac_basewidget_rotate = hud.FindWidget("basewidget_rotate");
@@ -209,8 +215,9 @@ void CHudDecoInterfaceXRay::Update(float dt, const CStateManager& mgr) {
   } else {
     x4_seekerScale = rstl::min_val(1.f, 3.f * dt + x4_seekerScale);
   }
-  xa0_camera->SetO2WTransform(CSamusHud::BuildFinalCameraTransform(
-      x8_rotation, x18_pivotPosition + x24_offset, x30_camPos));
+  xa0_camera->SetHudO2WTransform(
+      CSamusHud::BuildFinalCameraTransform(x8_rotation, x18_pivotPosition + x24_offset, x30_camPos),
+      x30_camPos);
   xa8_basewidget_seeker->SetO2PTransform(
       CTransform4f(CMatrix3f::Scale(x4_seekerScale) * x3c_reticuleXf, x60_seekerPosition));
 }
@@ -398,8 +405,10 @@ void CHudDecoInterfaceScan::Update(float dt, const CStateManager& mgr) {
     x250_basewidget_rightside->SetLocalPosition(x224_rightsidePosition -
                                                 x250_basewidget_rightside->RotateO2P(sidesPos));
   }
-  x244_camera->SetO2WTransform(CSamusHud::BuildFinalCameraTransform(
-      x1e4_rotation, x1f4_pivotPosition + x200_offset, x20c_camPos));
+  x244_camera->SetHudO2WTransform(
+      CSamusHud::BuildFinalCameraTransform(x1e4_rotation, x1f4_pivotPosition + x200_offset,
+                                           x20c_camPos),
+      x20c_camPos);
   if (x10_loadedScanHudFlat == nullptr) {
     if (x4_scanHudFlat.TryCache() && x4_scanHudFlat.GetObject()->GetIsFinishedLoading()) {
       InitializeFlatFrame();
@@ -547,6 +556,11 @@ CHudDecoInterfaceThermal::CHudDecoInterfaceThermal(CGuiFrame& hud)
 , x70_25_visGame(true) {
   x74_camera = hud.GetFrameCamera();
   x2c_camPos = x74_camera->GetLocalPosition();
+#ifdef TARGET_PC
+  // The reticle's triangle reaches 0.56 of the half width: the widescreen warp stretches only the
+  // straight bars past it.
+  x74_camera->SetSliceBand(0.62f, 0.75f, false);
+#endif
   x78_basewidget_pivot = hud.FindWidget(skPivotWidgetName);
   const char* const reticleName = "basewidget_reticle";
   x7c_basewidget_reticle = hud.FindWidget(reticleName);
@@ -637,8 +651,9 @@ void CHudDecoInterfaceThermal::Update(float dt, const CStateManager& mgr) {
   }
   x80_model_retflash->SetColor(
       CColor::White().WithAlphaOf(CMath::AbsF(x6c_retflashTimer) * 0.5f + 0.5f));
-  x74_camera->SetO2WTransform(CSamusHud::BuildFinalCameraTransform(
-      x4_rotation, x14_pivotPosition + x20_offset, x2c_camPos));
+  x74_camera->SetHudO2WTransform(
+      CSamusHud::BuildFinalCameraTransform(x4_rotation, x14_pivotPosition + x20_offset, x2c_camPos),
+      x2c_camPos);
   x7c_basewidget_reticle->SetO2PTransform(CTransform4f(x38_reticuleXf, x5c_reticulePosition));
 }
 

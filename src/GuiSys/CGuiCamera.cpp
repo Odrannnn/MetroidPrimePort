@@ -214,7 +214,8 @@ CTransform4f CGuiCamera::GetAspectSpreadTransform(const CVector3f& worldAnchor) 
   }
   // The horizontal spread: x += offset * depth is an exact image translation, so the widget keeps
   // its authored shape (turning it toward the eye squashed the side clusters at very wide ratios).
-  const float offset = GetAspectSliceOffset(eyePos.GetX() / eyePos.GetY());
+  const float offset = GetAspectSliceOffset(eyePos.GetX() / eyePos.GetY(), false,
+                                            GetSliceCenter(eyePos.GetY()));
   return mSpreadView *
          CTransform4f(1.f, offset, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f) * invView;
 }
@@ -228,16 +229,33 @@ bool CGuiCamera::GetAspectSlices(float& inner, float& outer, bool curved) const 
   // authored half width.
   // A curved model (the helmet's arcs) spreads the stretch out to its corners instead, so the arc
   // stays one smooth curve; a narrow band would flatten it into straight runs with kinks.
+  if (mSliceBand) {
+    inner = mSliceInner * mSpreadHalfTan;
+    outer = mSliceOuter * mSpreadHalfTan;
+    return true;
+  }
   inner = 0.4f * mSpreadHalfTan;
   outer = (curved ? kCurveOuter : 0.455f) * mSpreadHalfTan;
   return true;
 }
 
-float CGuiCamera::GetAspectSliceOffset(float tangent, bool curved) const {
+void CGuiCamera::SetHudO2WTransform(const CTransform4f& xf, const CVector3f& idlePos) {
+  SetO2WTransform(xf);
+  mSpreadLag = xf.GetQuickInverse() * CTransform4f::Translate(idlePos);
+}
+
+float CGuiCamera::GetSliceCenter(float depth) const {
+  const CVector3f center = mSpreadLag * CVector3f(0.f, depth, 0.f);
+  return center.GetY() > 0.f ? center.GetX() / center.GetY() : 0.f;
+}
+
+float CGuiCamera::GetAspectSliceOffset(float tangent, bool curved, float center) const {
   float inner, outer;
   if (!GetAspectSlices(inner, outer, curved)) {
     return 0.f;
   }
+  curved = IsSliceCurved(curved);
+  tangent -= center;
   // Past `outer` everything keeps its authored distance to the screen edge.
   const float shift = (mSpread - 1.f) * mSpreadHalfTan;
   const float a = std::fabs(tangent);

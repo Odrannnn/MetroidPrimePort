@@ -1830,8 +1830,10 @@ void CSamusHud::UpdateHudLag(float dt, const CStateManager& mgr) {
     }
     x588_base_basewidget_pivot->SetIdleXform(
         CTransform4f(CMatrix3f::Identity(), x588_base_basewidget_pivot->GetWorldPosition()));
-    x274_loadedFrmeBaseHud->GetFrameCamera()->SetO2WTransform(BuildFinalCameraTransform(
-        CQuaternion::NoRotation(), x304_basewidgetIdlePos, x310_cameraPos));
+    x274_loadedFrmeBaseHud->GetFrameCamera()->SetHudO2WTransform(
+        BuildFinalCameraTransform(CQuaternion::NoRotation(), x304_basewidgetIdlePos,
+                                  x310_cameraPos),
+        x310_cameraPos);
     x8_targetingMgr.CompoundTargetReticle().SetLeadingOrientation(CQuaternion::NoRotation());
   } else {
     CUnitVector3f cameraDirection(x2f8_fpCamDir, CUnitVector3f::kN_No);
@@ -1863,8 +1865,9 @@ void CSamusHud::UpdateHudLag(float dt, const CStateManager& mgr) {
       x29c_decoIntf->SetHudRotation(lagRotation);
       x29c_decoIntf->SetHudOffset(lagOffset);
     }
-    x274_loadedFrmeBaseHud->GetFrameCamera()->SetO2WTransform(
-        BuildFinalCameraTransform(lagRotation, x304_basewidgetIdlePos + lagOffset, x310_cameraPos));
+    x274_loadedFrmeBaseHud->GetFrameCamera()->SetHudO2WTransform(
+        BuildFinalCameraTransform(lagRotation, x304_basewidgetIdlePos + lagOffset, x310_cameraPos),
+        x310_cameraPos);
     x2f8_fpCamDir = cameraDirection;
   }
 }

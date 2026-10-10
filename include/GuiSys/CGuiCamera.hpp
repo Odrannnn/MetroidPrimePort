@@ -69,10 +69,31 @@ public:
   // past `outer` it slides by the whole spread. False unless that spread is active.
   // `curved` is the smooth variant for the helmet's arcs: a wider band with an eased stretch.
   bool GetAspectSlices(float& inner, float& outer, bool curved = false) const;
-  // How far that warp moves the image at screen tangent `tangent`.
-  float GetAspectSliceOffset(float tangent, bool curved = false) const;
+  // How far that warp moves the image at screen tangent `tangent`, for a warp centred on screen
+  // tangent `center` (GetSliceCenter).
+  float GetAspectSliceOffset(float tangent, bool curved = false, float center = 0.f) const;
+  // HUD lag moves the frame's content on screen. `idleToView` maps the frame's view space without
+  // lag onto the one drawn (identity at rest), so the warp's slices follow the content instead of
+  // staying put while it moves through them.
+  void SetSpreadLag(const CTransform4f& idleToView) { mSpreadLag = idleToView; }
+  // Places a HUD camera at `xf` (CSamusHud::BuildFinalCameraTransform) whose unlagged pose is
+  // unrotated at `idlePos`, and sets the spread lag to match.
+  void SetHudO2WTransform(const CTransform4f& xf, const CVector3f& idlePos);
+  // Where the lagged content's screen centre is, as a screen tangent at view depth `depth`.
+  float GetSliceCenter(float depth) const;
   // Where the curved warp's band ends, as a fraction of the authored half width.
   static constexpr float kCurveOuter = 0.85f;
+  // A frame whose centre piece is wider than the combat HUD's energy bar (the thermal and X-ray
+  // reticle frames) moves the band out past it, in fractions of the authored half width; `curved`
+  // eases the stretch for every sliced model of the frame. Combat's band when unset.
+  void SetSliceBand(float inner, float outer, bool curved) {
+    mSliceInner = inner;
+    mSliceOuter = outer;
+    mSliceCurved = curved;
+    mSliceBand = true;
+  }
+  // Whether the warp for a model asking for `curved` is eased (a frame band decides for all).
+  bool IsSliceCurved(bool curved) const { return mSliceBand ? mSliceCurved : curved; }
   // HUD scale: frames that opt in shrink about the view centre
   // (see PortDebug::HudScale).
   void SetHudScaled(bool scaled) { mHudScaled = scaled; }
@@ -103,6 +124,11 @@ public:
   mutable bool mSpreadAboutEye = false;
   // Half the authored screen width as a tangent, for the slices.
   mutable float mSpreadHalfTan = 0.f;
+  bool mSliceBand = false;
+  bool mSliceCurved = false;
+  float mSliceInner = 0.f;
+  float mSliceOuter = 0.f;
+  CTransform4f mSpreadLag = CTransform4f::Identity();
   // Camera-to-world transform used by the last Draw.
   mutable CTransform4f mSpreadView = CTransform4f::Identity();
   bool mHudScaled = false;
