@@ -70,6 +70,7 @@ public:
     // port-only VMAT material (CPortVfxData), evaluated where SIZE/COLR are
     float xPortSsze;       // SSZE: secondary size (= SIZE when the PART has none)
     float xPortIten;       // ITEN: colour intensity
+    float xPortColor[4];   // COLR unclamped (HDR), for the VFX paths; x34_color is the clamped one
     float xPortVpmt[4][4]; // VPMT rows
     CVector3f xPortLaunchDir; // unit launch velocity (zero if it launched at rest), for VORN 1
 #endif
@@ -83,6 +84,7 @@ public:
     , xPortSeed(0)
     , xPortSsze(0.f)
     , xPortIten(1.f)
+    , xPortColor{1.f, 1.f, 1.f, 1.f}
     , xPortVpmt{}
     , xPortLaunchDir(CVector3f::Zero())
 #endif

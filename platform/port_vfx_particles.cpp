@@ -355,8 +355,8 @@ void CElementGen::PortRenderParticlesVfx() {
       tm[s].f = EvalReal(r[5], partFrame, 0.f);
     }
 
-    float color[4] = {p.x34_color.GetRed() * p.xPortIten, p.x34_color.GetGreen() * p.xPortIten,
-                      p.x34_color.GetBlue() * p.xPortIten, p.x34_color.GetAlpha()};
+    float color[4] = {p.xPortColor[0] * p.xPortIten, p.xPortColor[1] * p.xPortIten,
+                      p.xPortColor[2] * p.xPortIten, p.xPortColor[3]};
     if (hasModu) {
       for (int i = 0; i < 4; ++i) {
         color[i] *= modu[i];
@@ -471,10 +471,10 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
     tm[s].sinE = std::sin(e);
     tm[s].f = EvalReal(r[5], partFrame, 0.f);
   }
-  const float color[4] = {p.x34_color.GetRed() * p.xPortIten * modulate.GetRed(),
-                          p.x34_color.GetGreen() * p.xPortIten * modulate.GetGreen(),
-                          p.x34_color.GetBlue() * p.xPortIten * modulate.GetBlue(),
-                          p.x34_color.GetAlpha() * modulate.GetAlpha()};
+  const float color[4] = {p.xPortColor[0] * p.xPortIten * modulate.GetRed(),
+                          p.xPortColor[1] * p.xPortIten * modulate.GetGreen(),
+                          p.xPortColor[2] * p.xPortIten * modulate.GetBlue(),
+                          p.xPortColor[3] * modulate.GetAlpha()};
 
   // The vertices once, in world space; the triangles index them. One scratch buffer serves every
   // particle (the render thread is the only caller), so a frame allocates nothing per particle.

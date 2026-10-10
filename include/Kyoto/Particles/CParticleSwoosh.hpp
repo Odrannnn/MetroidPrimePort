@@ -212,6 +212,7 @@ private:
   // evaluated with COLR, and its draw through the VFX material.
   struct SPortVfxPoint {
     float iten = 1.f;
+    float color[4] = {1.f, 1.f, 1.f, 1.f}; // COLR unclamped (HDR); white without a COLR
     float vpmt[4][4] = {};
   };
   std::vector< SPortVfxPoint > xPortVfxPts;

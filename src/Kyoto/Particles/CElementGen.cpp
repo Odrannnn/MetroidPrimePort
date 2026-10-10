@@ -825,6 +825,11 @@ void CElementGen::UpdateExistingParticles() {
     }
     if (CColorElement* colr = x28_loadedGenDesc->x24_COLR) {
       colr->GetValue(particleFrame, p->x34_color);
+#ifdef TARGET_PC
+      if (x28_loadedGenDesc->xPortVfx) {
+        colr->GetValueHdr(particleFrame, p->xPortColor);
+      }
+#endif
     }
 #ifdef TARGET_PC
     if (x28_loadedGenDesc->xPortVfx) {
@@ -923,6 +928,11 @@ void CElementGen::CreateNewParticles(int count) {
 
     if (CColorElement* colr = x28_loadedGenDesc->x24_COLR) {
       colr->GetValue(0, particle.x34_color);
+#ifdef TARGET_PC
+      if (x28_loadedGenDesc->xPortVfx) {
+        colr->GetValueHdr(0, particle.xPortColor);
+      }
+#endif
     } else {
       particle.x34_color = CColor(0xFFFFFFFF);
     }

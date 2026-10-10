@@ -100,6 +100,10 @@ public:
     const auto& v = x_values[i];
     return CColor(v[0], v[1], v[2], v[3]);
   }
+  // The stored floats, unclamped (null out of range).
+  const std::array< float, 4 >* ColorHdr(u32 i) const {
+    return i < x_values.size() ? &x_values[i] : nullptr;
+  }
   CVector3f Vector(u32 i) const {
     if (i >= x_values.size()) {
       return CVector3f::Zero();
@@ -180,6 +184,15 @@ public:
                                                : CColor(0.f, 0.f, 0.f, 0.f);
     return false;
   }
+  bool GetValueHdr(int, float out[4]) const override {
+    const std::array< float, 4 >* v = CPortVarGlobals::sCurrent != nullptr
+                                          ? CPortVarGlobals::sCurrent->ColorHdr(x4_index)
+                                          : nullptr;
+    for (int i = 0; i < 4; ++i) {
+      out[i] = v != nullptr ? (*v)[i] : 0.f;
+    }
+    return false;
+  }
 };
 
 // Remastered colour combinators (GetColorElement 0x25ece4). Remastered keeps half floats with no
@@ -203,6 +216,15 @@ public:
                  a.GetAlpha() * b.GetAlpha());
     return false;
   }
+  bool GetValueHdr(int frame, float out[4]) const override {
+    float a[4], b[4];
+    x4_a->GetValueHdr(frame, a);
+    x8_b->GetValueHdr(frame, b);
+    for (int i = 0; i < 4; ++i) {
+      out[i] = a[i] * b[i];
+    }
+    return false;
+  }
 };
 
 // MDAO: CCEModifyAlphaOnly 0x2c8678, the colour's RGB with alpha max(real, 0).
@@ -223,6 +245,15 @@ public:
       x8_alpha->GetValue(frame, alpha);
     }
     out.SetAlpha(alpha < 0.f ? 0.f : alpha > 1.f ? 1.f : alpha);
+    return false;
+  }
+  bool GetValueHdr(int frame, float out[4]) const override {
+    x4_color->GetValueHdr(frame, out);
+    float alpha = 1.f;
+    if (x8_alpha != nullptr) {
+      x8_alpha->GetValue(frame, alpha);
+    }
+    out[3] = alpha < 0.f ? 0.f : alpha;
     return false;
   }
 };
