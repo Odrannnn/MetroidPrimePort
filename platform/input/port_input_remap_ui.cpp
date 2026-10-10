@@ -113,7 +113,6 @@ constexpr int kEditNew = -2;
 constexpr int kEditInherited = -3; // sEditOrig, a built-in binding, is being changed
 int sEditing = kEditNone;          // else a binding index in sEditFamily's profile
 PortInput::Family sEditFamily = PortInput::Family::Keyboard; // where the edited binding is
-bool sQuickAdd = false; // "+": the next recorded input is saved at once
 Binding sEditOrig;
 Binding sDraft;
 char sInputsText[256] = {};
@@ -390,7 +389,6 @@ bool UsesAdvanced(const Binding& b) {
 void BeginEdit(int index, const Binding& b, PortInput::Family family) {
   sEditing = index;
   sEditFamily = family;
-  sQuickAdd = false;
   sEditAction = b.action;
   sEditRowShown = true;
   sDraft = b;
@@ -591,23 +589,6 @@ std::string ChipTooltip(const Binding& b) {
   return out;
 }
 
-bool ActionCombo(const char* label, Action& action) {
-  bool changed = false;
-  if (ImGui::BeginCombo(label, std::string(PortInput::Info(action).label).c_str())) {
-    for (int i = 1; i < PortInput::kActionCount; ++i) {
-      const Action a = Action(i);
-      const bool selected = a == action;
-      if (ImGui::Selectable(std::string(PortInput::Info(a).label).c_str(), selected)) {
-        action = a;
-        changed = true;
-      }
-      if (selected) ImGui::SetItemDefaultFocus();
-    }
-    ImGui::EndCombo();
-  }
-  return changed;
-}
-
 void DrawAdvancedEditor(const Binding& parsed, bool inputsOk);
 void SaveDraft(const SViews& views, Binding parsed);
 
@@ -630,14 +611,9 @@ void TouchPicker() {
 }
 
 void DrawEditor(const SViews& views) {
-  if (sQuickAdd) {
-    // "+" is recording; Draw() saves what it gets.
-    ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), "%s: press any key, mouse button or controller input, or hold "
-                       "several for a chord (Esc cancels)...", std::string(PortInput::Info(sDraft.action).label).c_str());
-    return;
-  }
-  ImGui::SeparatorText(sEditing == kEditNew ? "New binding" : "Edit binding");
-  ActionCombo("Action", sDraft.action);
+  const std::string title = std::string(sEditing == kEditNew ? "New binding: " : "Edit binding: ") +
+                            std::string(PortInput::Info(sEditAction).label);
+  ImGui::SeparatorText(title.c_str());
 
   Binding parsed = sDraft;
   const bool inputsOk = InputsFromText(sInputsText, parsed);
@@ -667,7 +643,7 @@ void DrawEditor(const SViews& views) {
     if (ImGui::Button("Clear")) sInputsText[0] = '\0';
   }
 
-  // Everything past the action and its input, open by itself when the binding uses it.
+  // Additional settings open by themselves when the binding uses them.
   if (sAdvancedSync) {
     ImGui::SetNextItemOpen(UsesAdvanced(sDraft), ImGuiCond_Always);
     sAdvancedSync = false;
@@ -1168,29 +1144,6 @@ void DrawTable(const SViews& views, bool editorDrawn) {
           ImGui::SetItemTooltip("Remove this input.");
           ImGui::PopID();
         }
-        // The touch controls hide under this menu, so they're picked, not recorded.
-        if (f == Family::Touch) {
-          if (!first) ImGui::SameLine();
-          first = false;
-          if (ImGui::SmallButton("+ Touch")) ImGui::OpenPopup("addTouch");
-          ImGui::SetItemTooltip("Add a touch control.");
-          if (ImGui::BeginPopup("addTouch")) {
-            for (const STouchInfo& t : kTouchControls) {
-              if (!ImGui::Selectable(t.label)) continue;
-              BeginEdit(kEditNew, Binding{action}, Family::Touch);
-              Binding parsed = sDraft;
-              std::snprintf(sInputsText, sizeof(sInputsText), "touch:%s", t.name);
-              if (InputsFromText(sInputsText, parsed)) {
-                SaveDraft(views, parsed);
-                saved = true;
-                findUsers();
-              } else {
-                sEditing = kEditNone;
-              }
-            }
-            ImGui::EndPopup();
-          }
-        }
         ImGui::PopID();
       }
       if (first) {
@@ -1201,11 +1154,9 @@ void DrawTable(const SViews& views, bool editorDrawn) {
       ImGui::TableNextColumn();
       if (ImGui::SmallButton("+")) {
         BeginEdit(kEditNew, Binding{action}, Family::Keyboard);
-        sQuickAdd = true;
-        StartCapture();
       }
-      ImGui::SetItemTooltip("Add an input: press +, then any key, mouse button or controller input (hold several "
-                            "for a chord).");
+      ImGui::SetItemTooltip("Add a binding for this action. Use Record to capture any key, mouse button or "
+                            "controller input, then Save.");
       if (overridden != 0) {
         ImGui::SameLine();
         if (ImGui::SmallButton("Revert")) {
@@ -1363,8 +1314,8 @@ void Draw() {
     sLoaded = true;
   }
 
-  ImGui::TextWrapped("Each action lists its inputs for every device. Press + and then any key, mouse button or "
-                     "controller input to add one; click an input to change it, x removes it. Greyed inputs are "
+  ImGui::TextWrapped("Each action lists its inputs for every device. Press + to add a binding; use Record and Save "
+                     "in the editor. Click an input to change it, x removes it. Greyed inputs are "
                      "the defaults; Revert brings them back.");
   if (!sError.empty()) ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", sError.c_str());
 
@@ -1393,15 +1344,6 @@ void Draw() {
 
   const SViews views = MakeViews();
   UpdateCapture();
-  if (sQuickAdd && !sCapture.active) {
-    sQuickAdd = false;
-    Binding parsed = sDraft;
-    if (sInputsText[0] != '\0' && InputsFromText(sInputsText, parsed) && parsed.count > 0 && OneFamily(parsed)) {
-      SaveDraft(views, parsed);
-    } else {
-      sEditing = kEditNone;
-    }
-  }
 
   ImGui::SameLine();
   DrawReset(views);

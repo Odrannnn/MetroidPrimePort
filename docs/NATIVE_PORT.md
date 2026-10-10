@@ -1018,14 +1018,16 @@ unpacks to a temporary directory instead of mounting.
   crosshair) and "Controller settings" (active controller, stick aim and dead
   zones). **Controller settings > Controller** selects any detected gamepad, including
   one assigned to player 2 or later; the choice is saved and restored on reconnect.
-  Select it here before recording its bindings in Remap. The Remap Device list selects
+  Select it here before recording its bindings in Remap. Remap's "Controller bindings for" selects
   binding profiles, not the controller used to play. Every binding is on **Controls > Remap**, below.
-- **Controls > Remap** binds any action, per device (the Device list: Keyboard & mouse, Touch,
-  Controllers, plus saved controller kind/model profiles; Advanced > "Separate bindings per
-  controller kind or model" lists the connected ones too). Actions are grouped (game buttons,
+- **Controls > Remap** lists all devices' bindings together, with keyboard, mouse, controller
+  and touch icons. "Controller bindings for" selects all controllers or a controller kind/model
+  profile, including saved profiles. Actions are grouped (game buttons,
   move and aim, beams, visors, Morph Ball, port, layers) with the GameCube button's game function
-  beside it; inputs the device has out of the box are marked "default". Editing one makes it
-  yours, "Revert" gives the default back, and Record accepts only that device's inputs. Keyboard &
+  beside it; default inputs are greyed out. Click an input to edit it, or **+** to open a new
+  binding editor beneath that action. The action is fixed to the row: use **Record**, then
+  **Save** (or **Cancel**). Record accepts keyboard, mouse or controller input; repeated identical
+  mappings are ignored. Editing a default makes it yours, and "Revert" gives the default back. Keyboard &
   mouse, Touch and Controllers are the Default profile restricted to that family of input;
   a kind or model is its own profile on top. "Reset..." restores a preset (after a confirmation).
   It binds any action to an input or a chord of up to four
