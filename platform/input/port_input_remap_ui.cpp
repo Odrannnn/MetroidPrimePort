@@ -113,7 +113,6 @@ char sInputsText[256] = {};
 std::string sError;
 char sFilter[64] = {};
 bool sOnlyBound = false;
-PortInput::Action sEditAction = PortInput::Action::None; // the action a new binding starts on
 
 struct SCapture {
   bool active = false;
