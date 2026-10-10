@@ -999,6 +999,26 @@ unpacks to a temporary directory instead of mounting.
   saved by Aurora next to the other controller data, with buttons to clear the
   keyboard bindings and restore the controller defaults. The beam shift and the
   mouse buttons are rows here too (port settings, not Aurora's).
+- **Controls > Remap** binds any action to an input or a chord of up to four
+  (hold the first ones, press the last; or "Any order" within the chord window),
+  with a trigger (press, tap, hold, double tap, toggle), turbo, a scale/invert
+  for analog actions and the contexts it applies in (gameplay, morph ball, map,
+  menus, scan visor, or one of four layers, active while a "Layer n (hold)"
+  binding is held). Actions are the pad's buttons and stick halves, plus beam and
+  visor picks, Spring Ball, beam shift, the port menu, save/load state,
+  screenshot and Original experience. Bindings are layered over the other pages:
+  binding an action from one kind of device (keyboard & mouse, controller,
+  touch) replaces what the other pages bind to it from that kind only, and
+  "Removed built-in bindings" drops one without adding another. A profile can
+  follow the connected controller's kind (SDL type) or that controller model
+  (SDL GUID); it goes on top of the default profile, GUID before type. Saved as
+  `controls.toml` in the user folder (format in
+  `platform/include/port_input_bindings.h`). Edits to the file are picked up
+  within a second; a file that doesn't parse is logged and the last good
+  bindings stay. Touch inputs are named after the overlay controls (`touch:a`,
+  `touch:fire`, `touch:missile`, `touch:morph`, ..., plus `touch:beam_shift`,
+  `touch:turbo_held`, `touch:map_tap`); a bound touch control no longer sends
+  its own button. The D-pad, the sticks and the menu button can't be remapped.
 - `MP_CINEMA_BARS=0|1` (Video > Display "Cutscene black bars", persisted as `cinema_bars`,
   default off): the scripted 16:9 cutscene letterbox. Off, cutscenes narrower than 16:9
   show the cinematic camera's full shot (Vert+); elevator rides and credits keep theirs.

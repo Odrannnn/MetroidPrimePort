@@ -15,6 +15,8 @@
 #include "port_apclient.h"
 #include "port_rando_gen.h"
 #include "port_controls.h"
+#include "port_input_devices.h"
+#include "port_input_remap_ui.h"
 #include "port_data_folder.h"
 #include "port_gci.h"
 #include "port_mods.h"
@@ -263,6 +265,7 @@ std::atomic<int> sVisorRequest{-1};
 std::atomic<uint64_t> sVisorRequestUntilNs{0};
 std::atomic<int> sBeamRequest{-1};
 std::atomic<uint64_t> sBeamRequestUntilNs{0};
+std::atomic<uint64_t> sSpringRequestUntilNs{0};
 constexpr uint64_t kWheelRequestNs = 120'000'000;
 std::mutex sMinimapMutex;
 bool sMinimapValid = false;
@@ -2498,6 +2501,16 @@ bool BeamRequested(int beam) {
   return sBeamRequest.load() == beam && SDL_GetTicksNS() < sBeamRequestUntilNs.load();
 }
 
+void RequestSpringBall() { sSpringRequestUntilNs.store(SDL_GetTicksNS() + kWheelRequestNs); }
+
+bool SpringBallRequested() { return SDL_GetTicksNS() < sSpringRequestUntilNs.load(); }
+
+void RequestSaveStateHotkey(int which) {
+  if (which == 1 || which == 2) {
+    sSaveStateHotkey.store(which, std::memory_order_release);
+  }
+}
+
 // Game thread, once per HUD draw (valid=false when the minimap isn't shown).
 void SetMinimapRect(bool valid, bool drawn, float x0, float y0, float x1, float y1) {
   std::lock_guard lock(sMinimapMutex);
@@ -3826,7 +3839,7 @@ void UpdateControllerNav() {
   // While the Controls tab captures a pad input, the pad binds instead of
   // navigating (releasing everything here also ends any nav press in progress).
   // A pad that went away releases everything the same way.
-  const bool capturing = pad == nullptr || PortControls::Capturing();
+  const bool capturing = pad == nullptr || PortControls::Capturing() || PortInputRemap::Capturing();
   const auto held = [pad, capturing](SDL_GamepadButton button) {
     return !capturing && SDL_GetGamepadButton(pad, button);
   };
@@ -7701,6 +7714,10 @@ void DrawControlsTab() {
     DrawControlsTouchGyro();
     ImGui::EndTabItem();
   }
+  if (SubTab("Controls", "Remap")) {
+    PortInputRemap::Draw();
+    ImGui::EndTabItem();
+  }
   ImGui::EndTabBar();
 }
 
@@ -8635,6 +8652,19 @@ Java_org_metroidprime_port_TouchControlsView_nativeVirtualButton(JNIEnv*, jclass
   if (SDL_Joystick* pad = TouchPad().handle) {
     SDL_SetJoystickVirtualButton(pad, static_cast< int >(button), down == JNI_TRUE);
   }
+}
+
+// Every overlay control's press and release, for touch: bindings in controls.toml.
+extern "C" JNIEXPORT void JNICALL
+Java_org_metroidprime_port_TouchControlsView_nativeTouchControl(JNIEnv*, jclass, jint control,
+                                                                jboolean down) {
+  PortInputDevices::SetTouchControl(static_cast< int >(control), down == JNI_TRUE);
+}
+
+// Whether a binding takes over the control, so the overlay skips its own button.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_metroidprime_port_TouchControlsView_nativeTouchControlBound(JNIEnv*, jclass, jint control) {
+  return PortInputDevices::TouchControlBound(static_cast< int >(control)) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL

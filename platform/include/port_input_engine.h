@@ -154,7 +154,6 @@ enum class ActionKind : uint8_t {
   X(SaveState, Digital, "save_state", "Save state")                                                \
   X(LoadState, Digital, "load_state", "Load state")                                                \
   X(Screenshot, Digital, "screenshot", "Screenshot")                                               \
-  X(FastForward, Digital, "fast_forward", "Fast forward (hold)")                                   \
   X(ToggleOriginal, Digital, "toggle_original", "Original experience")
 
 enum class Action : uint16_t {

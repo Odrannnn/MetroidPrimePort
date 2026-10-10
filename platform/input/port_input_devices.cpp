@@ -2,13 +2,30 @@
 
 #include "port_debug.h"
 #include "port_input_map.h"
+#include "port_input_remap_ui.h"
+#include "port_log.h"
+#include "port_paths.h"
+#include "MetroidPrime/CStateManager.hpp"
+#include "MetroidPrime/Player/CPlayer.hpp"
+#include "MetroidPrime/Player/CPlayerState.hpp"
 
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <mutex>
+#include <sstream>
+
+namespace aurora {
+void request_screenshot() noexcept;
+}
 
 namespace PortInputDevices {
 namespace {
@@ -20,6 +37,36 @@ using PortInput::Input;
 using PortInput::Profile;
 
 constexpr u32 kPort = 0;
+
+// The user's bindings (controls.toml), loaded on first use and reloaded when the file
+// changes (checked once a second), so hand edits apply without a restart. The game
+// thread polls them and the F1 page writes them, so they're published as immutable
+// snapshots under a lock.
+std::mutex sUserMutex;
+std::shared_ptr<const PortInput::UserBindings> sUser = std::make_shared<const PortInput::UserBindings>();
+uint64_t sUserVersion = 0;
+bool sUserLoaded = false;
+std::filesystem::file_time_type sUserTime{};
+std::chrono::steady_clock::time_point sUserChecked{};
+
+// Touch overlay controls held now (codes 0..kTouchControlCount-1), set from Android's
+// UI thread.
+std::atomic<uint64_t> sTouchControls{0};
+std::atomic<uint64_t> sTouchBound{0};
+
+std::string UserBindingsPath() { return PortPaths::UserFolder() + "controls.toml"; }
+
+std::string ScancodeName(int scancode) {
+  const char* name = SDL_GetScancodeName(static_cast< SDL_Scancode >(scancode));
+  return name != nullptr ? name : "";
+}
+
+int ScancodeFromName(std::string_view name) {
+  const SDL_Scancode code = SDL_GetScancodeFromName(std::string(name).c_str());
+  return code == SDL_SCANCODE_UNKNOWN ? -1 : static_cast< int >(code);
+}
+
+void InstallKeyNames() { PortInput::SetKeyNames(ScancodeName, ScancodeFromName); }
 
 Action PadBitAction(unsigned padButton) {
   switch (padButton) {
@@ -273,6 +320,7 @@ void FillRawState(PortInput::RawState& raw, unsigned mouseHeld, bool focused) {
   }
   raw.mouseButtons = mouse;
 
+  raw.touch = sTouchControls.load(std::memory_order_relaxed);
   if (PortDebug::TouchBeamShift()) raw.touch |= uint64_t{1} << kTouchBeamShift;
   if (PortDebug::TouchTurboFire()) raw.touch |= uint64_t{1} << kTouchTurbo;
   if (PortDebug::ConsumeMapTapZ()) raw.touch |= uint64_t{1} << kTouchMapTap;
@@ -290,6 +338,40 @@ s8 StickY(float down, float up) {
   return static_cast< s8 >(std::clamp(static_cast< int >(y), -127, 127));
 }
 
+// One of menu (front end, pause screen), map, morph ball or gameplay; the scan
+// visor adds scan to gameplay.
+uint16_t GameContexts() {
+  CStateManager* mgr = PortDebug::StateManager();
+  if (mgr == nullptr || PortDebug::PauseScreenOpen()) return PortInput::kCtxMenu;
+  if (PortDebug::MapScreenOpen()) return PortInput::kCtxMap;
+  if (const CPlayer* player = mgr->GetPlayer()) {
+    const CPlayer::EPlayerMorphBallState morph = player->GetMorphballTransitionState();
+    if (morph == CPlayer::kMS_Morphed || morph == CPlayer::kMS_Morphing) return PortInput::kCtxMorphBall;
+  }
+  uint16_t contexts = PortInput::kCtxGameplay;
+  const CPlayerState* state = mgr->GetPlayerState();
+  if (state != nullptr && state->GetCurrentVisor() == CPlayerState::kPV_Scan) contexts |= PortInput::kCtxScan;
+  return contexts;
+}
+
+// The actions that aren't pad inputs go straight to the code that does them.
+void RouteDirectActions(const PortInput::Output& out) {
+  // EBeamId and EPlayerVisor order, as RequestBeam/RequestVisor take them.
+  static constexpr Action kBeams[] = {Action::BeamPower, Action::BeamIce, Action::BeamWave, Action::BeamPlasma};
+  static constexpr Action kVisors[] = {Action::VisorCombat, Action::VisorXray, Action::VisorScan,
+                                       Action::VisorThermal};
+  for (int i = 0; i < 4; ++i) {
+    if (out.Pressed(kBeams[i])) PortDebug::RequestBeam(i);
+    if (out.Pressed(kVisors[i])) PortDebug::RequestVisor(i);
+  }
+  if (out.Pressed(Action::SpringBall)) PortDebug::RequestSpringBall();
+  if (out.Pressed(Action::PortMenu)) PortDebug::RequestToggle();
+  if (out.Pressed(Action::SaveState)) PortDebug::RequestSaveStateHotkey(1);
+  if (out.Pressed(Action::LoadState)) PortDebug::RequestSaveStateHotkey(2);
+  if (out.Pressed(Action::Screenshot)) aurora::request_screenshot();
+  if (out.Pressed(Action::ToggleOriginal)) PortDebug::SetOriginalExperience(!PortDebug::OriginalExperience());
+}
+
 u8 Trigger(float analog, bool click) {
   if (click) return 180;
   return static_cast< u8 >(std::clamp(std::lround(analog * 32767.f) / 128L, 0L, 255L));
@@ -297,11 +379,170 @@ u8 Trigger(float analog, bool click) {
 
 } // namespace
 
+namespace {
+
+void PublishLocked(PortInput::UserBindings bindings) {
+  sUser = std::make_shared<const PortInput::UserBindings>(std::move(bindings));
+  ++sUserVersion;
+}
+
+// Loads controls.toml on first use and reloads it when it changed. Call with
+// sUserMutex held.
+void RefreshLocked() {
+  const auto now = std::chrono::steady_clock::now();
+  if (sUserLoaded && now - sUserChecked < std::chrono::seconds(1)) return;
+  sUserChecked = now;
+  if (!sUserLoaded) InstallKeyNames();
+  const bool first = !sUserLoaded;
+  sUserLoaded = true;
+  const std::string path = UserBindingsPath();
+  std::error_code ec;
+  const auto time = std::filesystem::last_write_time(path, ec);
+  if (ec) {
+    // No file (or it was deleted): no user bindings.
+    if (sUserTime != std::filesystem::file_time_type{}) {
+      sUserTime = {};
+      PublishLocked({});
+    }
+    return;
+  }
+  if (!first && time == sUserTime) return;
+  sUserTime = time;
+  std::ifstream file(path, std::ios::binary);
+  if (!file) return;
+  std::ostringstream text;
+  text << file.rdbuf();
+  PortInput::UserBindings parsed;
+  std::string error;
+  if (PortInput::ParseUserBindings(text.str(), parsed, &error)) {
+    PortLog::Write("port: controls.toml loaded (%zu profiles)\n", parsed.profiles.size());
+    PublishLocked(std::move(parsed));
+  } else {
+    // A half-finished hand edit keeps the bindings that were loaded before it.
+    PortLog::Write("port: controls.toml ignored, keeping the last good bindings: %s\n", error.c_str());
+  }
+}
+
+} // namespace
+
+std::shared_ptr<const PortInput::UserBindings> UserBindings() {
+  std::lock_guard lock(sUserMutex);
+  RefreshLocked();
+  return sUser;
+}
+
+uint64_t UserBindingsVersion() {
+  std::lock_guard lock(sUserMutex);
+  RefreshLocked();
+  return sUserVersion;
+}
+
+bool SetUserBindings(const PortInput::UserBindings& bindings) {
+  std::lock_guard lock(sUserMutex);
+  RefreshLocked();
+  const std::string path = UserBindingsPath();
+  const std::string tmp = path + ".tmp";
+  std::error_code ec;
+  bool written = false;
+  {
+    std::ofstream file(tmp, std::ios::binary | std::ios::trunc);
+    if (file) {
+      file << PortInput::SerializeUserBindings(bindings);
+      written = static_cast< bool >(file.flush());
+    }
+  }
+  if (written) std::filesystem::rename(tmp, path, ec);
+  if (!written || ec) {
+    std::filesystem::remove(tmp, ec);
+    return false;
+  }
+  sUserTime = std::filesystem::last_write_time(path, ec);
+  PublishLocked(bindings);
+  return true;
+}
+
+void SetTouchControl(int control, bool down) {
+  if (control < 0 || control >= kTouchControlCount) return;
+  const uint64_t bit = uint64_t{1} << control;
+  if (down) sTouchControls.fetch_or(bit, std::memory_order_relaxed);
+  else sTouchControls.fetch_and(~bit, std::memory_order_relaxed);
+}
+
+// Read from the Android UI thread: the mask is published by the game thread's
+// poll, so no SDL calls or file reads happen there.
+bool TouchControlBound(int control) {
+  if (control < 0 || control >= kTouchControlCount) return false;
+  return (sTouchBound.load(std::memory_order_relaxed) >> control) & 1;
+}
+
+static uint64_t TouchBoundMask(const SActiveProfiles& active) {
+  uint64_t mask = 0;
+  for (const PortInput::UserProfile* p : {active.sel.base, active.sel.pad}) {
+    if (p == nullptr) continue;
+    for (const Binding& b : p->bindings) {
+      for (int i = 0; i < b.count; ++i) {
+        const Input& in = b.inputs[size_t(i)];
+        if (in.device == Device::Touch && in.code < kTouchControlCount) mask |= uint64_t{1} << in.code;
+      }
+    }
+  }
+  return mask;
+}
+
+bool ActivePad(std::string& guid, std::string& type, std::string& name) {
+  guid.clear();
+  type.clear();
+  name.clear();
+  const s32 index = PADGetIndexForPort(kPort);
+  SDL_Gamepad* pad = index >= 0 ? PADGetSDLGamepadForIndex(static_cast< u32 >(index)) : nullptr;
+  if (pad == nullptr) return false;
+  char buf[33] = {};
+  SDL_GUIDToString(SDL_GetJoystickGUID(SDL_GetGamepadJoystick(pad)), buf, sizeof(buf));
+  guid = buf;
+  if (const char* t = SDL_GetGamepadStringForType(SDL_GetGamepadType(pad))) type = t;
+  if (const char* n = SDL_GetGamepadName(pad)) name = n;
+  return true;
+}
+
+SActiveProfiles ActiveUserProfiles() {
+  std::string guid;
+  std::string type;
+  std::string name;
+  ActivePad(guid, type, name);
+  SActiveProfiles active;
+  active.bindings = UserBindings();
+  active.sel = PortInput::Select(*active.bindings, guid, type);
+  return active;
+}
+
+void ReadRaw(PortInput::RawState& raw) {
+  raw = PortInput::RawState{};
+  int numKeys = 0;
+  if (const bool* keys = SDL_GetKeyboardState(&numKeys)) {
+    for (int i = 0; i < numKeys && i < PortInput::kKeyCount; ++i) {
+      if (keys[i]) raw.keys.set(static_cast< size_t >(i));
+    }
+  }
+  PADRawState pad{};
+  if (PADGetRawState(kPort, &pad)) {
+    raw.padButtons = pad.buttons;
+    for (int a = 0; a < PAD_RAW_AXIS_COUNT && a < PortInput::kPadAxisCount; ++a) {
+      raw.padAxes[a] = std::clamp(static_cast< float >(pad.axes[a]) / 32767.f, -1.f, 1.f);
+    }
+  }
+  raw.mouseButtons = (SDL_GetMouseState(nullptr, nullptr) & PortInputMap::kMouseButtonMask) << kMouseKeySlot;
+  raw.touch = sTouchControls.load(std::memory_order_relaxed);
+}
+
 void BuildProfile(Profile& out) {
   out = Profile{};
   BindController(out);
   BindKeyboard(out);
   BindPortControls(out);
+  const SActiveProfiles user = ActiveUserProfiles();
+  sTouchBound.store(TouchBoundMask(user), std::memory_order_relaxed);
+  if (user.sel.base != nullptr) PortInput::Overlay(out, *user.sel.base);
+  if (user.sel.pad != nullptr) PortInput::Overlay(out, *user.sel.pad);
 }
 
 PADStatus Synthesize(const PortInput::Output& out) {
@@ -342,9 +583,16 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   PortInput::RawState raw;
   FillRawState(raw, mouseHeld, focused);
   sClockMs += static_cast< double >(PortDebug::TickPeriod()) * 1000.0;
-  const PortInput::Output& out = sRuntime.Poll(raw, PortInput::kCtxGameplay, sClockMs);
-
+  const PortInput::Output& out = sRuntime.Poll(raw, GameContexts(), sClockMs);
   SPoll r;
+  if (PortInputRemap::Capturing()) {
+    // The F1 Remap page is recording an input: it reaches neither the game nor
+    // the direct actions (a bound PortMenu would close the page mid-capture).
+    r.status.err = PAD_ERR_NO_CONTROLLER;
+    return r;
+  }
+  RouteDirectActions(out);
+
   r.status = Synthesize(out);
   r.beamShift = out.Held(Action::BeamShift);
   for (int i = 0; i < PortInputMap::kMouseButtonCount; ++i) {

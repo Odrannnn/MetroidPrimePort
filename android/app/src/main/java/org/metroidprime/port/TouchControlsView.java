@@ -402,6 +402,8 @@ final class TouchControlsView extends View {
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Map<Integer, TouchTarget> targets = new HashMap<>();
     private final Map<Integer, Integer> held = new HashMap<>();
+    // Fingers on each editor control (C_*), for touch: bindings in controls.toml.
+    private final int[] touchHeld = new int[CONTROL_IDS.length];
     // Fingers passed on to SDL; see forwardToSdl.
     private final Set<Integer> forwarded = new HashSet<>();
     private final RectF hideBounds = new RectF();
@@ -456,6 +458,10 @@ final class TouchControlsView extends View {
     private static native void nativeSetTouchDevice(boolean xboxLayout);
     private static native void nativeToggleDebugOverlay();
     private static native void nativeVirtualButton(int button, boolean down);
+    // Every control's press and release (touch: bindings), and whether a binding
+    // takes the control over, so the overlay doesn't send its own button too.
+    private static native void nativeTouchControl(int control, boolean down);
+    private static native boolean nativeTouchControlBound(int control);
     // The twin layout's Beam button is held: the D-pad picks beams, not visors.
     private static native void nativeTouchBeamShift(boolean held);
     // The Turbo button is held: the game acts as if Fire were mashed.
@@ -495,7 +501,7 @@ final class TouchControlsView extends View {
                 editPending = true;
             }
             // F1 can switch Turbo off while the overlay hides this view's draws.
-            if (held.containsKey(TURBO_FIRE) && !nativeTouchTurbo()) {
+            if (turboTouched() && !nativeTouchTurbo()) {
                 releaseTurbo();
             }
             // The overlay can open without this view hearing of it (a pad, or
@@ -871,6 +877,12 @@ final class TouchControlsView extends View {
         }
         targets.clear();
         held.clear();
+        for (int control = 0; control < touchHeld.length; ++control) {
+            if (touchHeld[control] != 0) {
+                touchHeld[control] = 0;
+                nativeTouchControl(control, false);
+            }
+        }
         leftPointer = -1;
         rightPointer = -1;
         aimPointer = -1;
@@ -971,7 +983,7 @@ final class TouchControlsView extends View {
                 final TouchTarget target = new TouchTarget(BUTTON, pill.id());
                 target.control = pill;
                 targets.put(pointerId, target);
-                pressControl(pill.id());
+                pressTarget(target, pillControl(pill), pill.id() != TOGGLE_DEBUG_OVERLAY);
                 return;
             }
         }
@@ -980,7 +992,7 @@ final class TouchControlsView extends View {
                 final TouchTarget target = TouchTarget.begin(BUTTON, button.button, x, y);
                 target.control = button;
                 targets.put(pointerId, target);
-                pressControl(button.button);
+                pressTarget(target, controlOf(button), true);
                 return;
             }
         }
@@ -988,7 +1000,7 @@ final class TouchControlsView extends View {
             final TouchTarget target = TouchTarget.begin(BUTTON, TURBO_FIRE, x, y);
             target.control = turboButton;
             targets.put(pointerId, target);
-            pressControl(TURBO_FIRE);
+            pressTarget(target, controlOf(turboButton), true);
             return;
         }
         // Hidden wheel buttons (wheels unusable) let the touch through.
@@ -1390,7 +1402,10 @@ final class TouchControlsView extends View {
             return;
         }
         if (target.type == BUTTON) {
-            releaseControl(target.id);
+            releaseTouchControl(target);
+            if (!target.bound) {
+                releaseControl(target.id);
+            }
             if (target.aiming) {
                 nativeTouchAimDown(false);
             }
@@ -1399,6 +1414,37 @@ final class TouchControlsView extends View {
         final boolean left = target.type == LEFT_STICK;
         nativeVirtualAxis(left ? AXIS_LEFTX : AXIS_RIGHTX, 0f);
         nativeVirtualAxis(left ? AXIS_LEFTY : AXIS_RIGHTY, 0f);
+    }
+
+    // Presses a pill or face button: reports the control, and sends its own button
+    // unless a touch: binding takes the control over (MENU always opens F1).
+    private void pressTarget(TouchTarget target, int control, boolean remappable) {
+        target.touchControl = control;
+        if (control >= 0 && control < touchHeld.length && touchHeld[control]++ == 0) {
+            nativeTouchControl(control, true);
+        }
+        target.bound = remappable && control >= 0 && nativeTouchControlBound(control);
+        if (!target.bound) {
+            pressControl(target.id);
+        }
+    }
+
+    private void releaseTouchControl(TouchTarget target) {
+        final int control = target.touchControl;
+        target.touchControl = -1;
+        if (control >= 0 && control < touchHeld.length && touchHeld[control] > 0 &&
+            --touchHeld[control] == 0) {
+            nativeTouchControl(control, false);
+        }
+    }
+
+    private boolean turboTouched() {
+        for (TouchTarget target : targets.values()) {
+            if (target.id == TURBO_FIRE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void pressControl(int id) {
@@ -1437,7 +1483,7 @@ final class TouchControlsView extends View {
     // Lets go of Turbo when its button is no longer drawn (F1 turned it off while
     // a finger was on it), so it cannot stay on with nothing to release it.
     private void releaseTurbo() {
-        if (!held.containsKey(TURBO_FIRE)) {
+        if (!held.containsKey(TURBO_FIRE) && !turboTouched()) {
             return;
         }
         final Iterator<TouchTarget> it = targets.values().iterator();
@@ -1445,6 +1491,7 @@ final class TouchControlsView extends View {
             final TouchTarget target = it.next();
             if (target.id == TURBO_FIRE) {
                 it.remove();
+                releaseTouchControl(target);
                 // A finger sliding on Turbo was also aiming.
                 if (target.aiming) {
                     aimPointer = -1;
@@ -1792,6 +1839,10 @@ final class TouchControlsView extends View {
     }
 
     private static int pillControl(PillButton pill) {
+        final int slot = cornerSlot(pill);
+        if (slot >= 0) {
+            return slot == 0 ? C_START : C_MENU;
+        }
         if (pill.control >= 0) {
             return pill.control;
         }
@@ -2814,6 +2865,10 @@ final class TouchControlsView extends View {
         // The pill or face button a BUTTON target pressed. Twin sends one GC button
         // from two controls, so the highlight follows the control, not `held`.
         Object control;
+        // Its editor control (C_*), still reported as held, or -1.
+        int touchControl = -1;
+        // A touch: binding took the control over: no button of its own to release.
+        boolean bound;
 
         TouchTarget(int type, int id) {
             this.type = type;

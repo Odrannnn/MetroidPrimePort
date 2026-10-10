@@ -529,6 +529,11 @@ void RequestBeam(int beam);
 void CaptureWheelIcons(int wheel, CGuiModel* const* icons);
 bool VisorRequested(int visor);
 bool BeamRequested(int beam);
+// The binding engine's direct actions (PortInputDevices): one Spring Ball, and the
+// save-state hotkeys (1 save, 2 load; F5/F9 send the same).
+void RequestSpringBall();
+bool SpringBallRequested();
+void RequestSaveStateHotkey(int which);
 bool TouchMapTap();
 void SetTouchMapTap(bool on);
 void SetMinimapRect(bool valid, bool drawn, float x0, float y0, float x1, float y1);
