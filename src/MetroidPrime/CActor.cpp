@@ -27,6 +27,7 @@
 
 #ifdef TARGET_PC
 #include "port_debug.h"
+#include "port_presentation_rules.h"
 #include "Kyoto/Math/CQuaternion.hpp"
 #endif
 
@@ -922,7 +923,8 @@ void CActor::PortSnapshotRenderTransform() {
   xPortPrevGeneration = sPortTickGeneration;
 }
 
-bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out) const {
+bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out,
+                               const CVector3f& pivot) const {
   const float t = CCameraManager::GetPresentationInterpolation();
   if (t < 0.f || t >= 1.f || xPortPrevGeneration != sPortTickGeneration ||
       xPortOwnPresentation || !PortDebug::ActorInterpolation())
@@ -931,7 +933,7 @@ bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out) cons
     return false;
   CTransform4f blend = CTransform4f::Identity();
   CTransform4f cur = CTransform4f::Identity();
-  if (!PortBlendRigid(xPortPrevTransform, x34_transform, t, blend, cur))
+  if (!PortBlendRigid(xPortPrevTransform, x34_transform, t, blend, cur, pivot))
     return false;
   // Drawn eye position = view^-1 * blend * cur^-1 * world, so the model lands
   // at the blend while everything else about the draw stays the same.
@@ -940,29 +942,34 @@ bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out) cons
 }
 
 bool CActor::PortBlendRigid(const CTransform4f& from, const CTransform4f& to, float t,
-                            CTransform4f& blend, CTransform4f& cur) {
-  const CVector3f prevPos = from.GetTranslation();
-  const CVector3f curPos = to.GetTranslation();
-  // Same snap rule as the camera snapshot: teleports and big turns cut.
-  if ((curPos - prevPos).MagSquared() > 16.f)
-    return false;
+                            CTransform4f& blend, CTransform4f& cur, const CVector3f& pivot) {
+  // The blend turns about the pivot (a world offset from the actor origin to
+  // its visual centre; zero for most actors), and that centre is what lerps.
+  const bool pivoted = pivot.MagSquared() > 0.f;
+  const CVector3f prevPos = from.GetTranslation() + pivot;
+  const CVector3f curPos = to.GetTranslation() + pivot;
   CQuaternion prevRot = CQuaternion::NoRotation();
   CQuaternion curRot = CQuaternion::NoRotation();
   PortRigid(from, prevRot);
   cur = PortRigid(to, curRot);
-  if (fabsf(CQuaternion::Dot(prevRot, curRot)) < 0.9238795f)
+  cur.SetTranslation(curPos);
+  // Same snap rule as the camera snapshot: teleports and big turns cut.
+  const PortRigidBlendKind kind = PortClassifyRigidBlend(
+      (curPos - prevPos).MagSquared(), fabsf(CQuaternion::Dot(prevRot, curRot)), pivoted);
+  if (kind == PortRigidBlendKind::Cut)
     return false;
-  blend =
-      CQuaternion::SlerpLocal(prevRot, curRot, t).BuildTransform4f(prevPos + (curPos - prevPos) * t);
+  const CVector3f centre = prevPos + (curPos - prevPos) * t;
+  blend = (kind == PortRigidBlendKind::Full ? CQuaternion::SlerpLocal(prevRot, curRot, t) : curRot)
+              .BuildTransform4f(centre);
   return true;
 }
 
-CPortActorRenderScope::CPortActorRenderScope(const CActor& actor)
+CPortActorRenderScope::CPortActorRenderScope(const CActor& actor, const CVector3f& pivot)
 : xSavedView(CGraphics::GetViewMatrix()), xActive(false) {
   if (sPortRenderScopeActive)
     return;
   CTransform4f view = CTransform4f::Identity();
-  if (!actor.PortPresentedView(xSavedView, view))
+  if (!actor.PortPresentedView(xSavedView, view, pivot))
     return;
   xActive = true;
   sPortRenderScopeActive = true;

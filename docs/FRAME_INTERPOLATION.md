@@ -70,6 +70,20 @@ Implemented as a view shift rather than by swapping the transform in every
   draw through the callback, which is.
 - Snaps like the camera: more than 4 units or more than 45° in a tick, and
   any actor whose transform didn't change.
+- Morph ball: the ball is drawn at `GetBallToWorld()` = player origin +
+  (0,0,radius) in world Z, so the player's scope passes that offset as a
+  pivot. The blend rotates about the ball centre and lerps the centre
+  itself; pivoting about the origin swung the centre by the roll delta each
+  frame (visible jitter while rolling). A roll over 45° per tick no longer
+  cuts the whole blend for a pivoted actor: it keeps the translation lerp and
+  takes the current rotation. Teleports (> 4 units) still cut. The rules are in
+  `platform/include/port_presentation_rules.h` (`PortClassifyRigidBlend`).
+- The camera snapshot (`CCameraManager`) records the tick generation it was
+  written in, and `GetCurrentCameraTransform`/`GetPresentedLookRotation` use it
+  only while that matches the current tick (`PortSnapshotFresh`). A tick that
+  skips `CCameraManager::Update` (soft pause after a scan completes) falls back
+  to the simulation transform instead of replaying the stale prev→cur pair
+  every frame, which flickered the camera. Test: `port_presentation_rules_tests`.
 
 Limits: bounds, culling, PreRender lighting and shadows stay on the sim
 transform; particles queued to the renderer (not drawn inside the actor's
