@@ -24,6 +24,7 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include <SDL3/SDL_iostream.h>
@@ -1159,6 +1160,7 @@ static size_t load_pipeline_cache_entries(ShaderType type, uint32_t configVersio
   }
 
   size_t acceptedRows = 0;
+  size_t skippedIncompatibleRows = 0;
   while ((ret = sqlite3_step(g_pipelineCacheLoadStmt)) == SQLITE_ROW) {
     const auto* configBlob = static_cast<const uint8_t*>(sqlite3_column_blob(g_pipelineCacheLoadStmt, 0));
     const auto configSize = sqlite3_column_bytes(g_pipelineCacheLoadStmt, 0);
@@ -1173,6 +1175,13 @@ static size_t load_pipeline_cache_entries(ShaderType type, uint32_t configVersio
       continue;
     }
 
+    if constexpr (std::is_same_v<PipelineConfig, gx::PipelineConfig>) {
+      if (!gx::pipeline_config_compatible(config, webgpu::g_lightmapBinding)) {
+        ++skippedIncompatibleRows;
+        continue;
+      }
+    }
+
     find_pipeline_impl(type, config, [=] { return create(config); }, PipelinePriority::Background, firstFrameUsed);
     ++acceptedRows;
   }
@@ -1184,6 +1193,9 @@ static size_t load_pipeline_cache_entries(ShaderType type, uint32_t configVersio
 
   sqlite3_reset(g_pipelineCacheLoadStmt);
   sqlite3_clear_bindings(g_pipelineCacheLoadStmt);
+  if constexpr (std::is_same_v<PipelineConfig, gx::PipelineConfig>) {
+    Log.info("pipeline cache: skipped {} incompatible GX rows", skippedIncompatibleRows);
+  }
   return acceptedRows;
 }
 

@@ -54,6 +54,7 @@ if (AURORA_ENABLE_GX)
   # Compile GX sources directly to avoid pulling in the full renderer/WebGPU runtime
   add_executable(gx_fifo_tests
     gx_fifo_test.cpp
+    gx_pipeline_compatibility_test.cpp
     gx_test_stubs.cpp
     # GX API implementations (encoders)
     ../lib/dolphin/gx/GXBump.cpp
