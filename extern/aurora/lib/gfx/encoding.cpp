@@ -276,10 +276,12 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
         .uniformRange = passInfo.resolveUniformRange,
         .dst = passInfo.resolveTarget,
         .sampleFilter = needsScaling ? tex_copy_conv::SampleFilter::Linear : tex_copy_conv::SampleFilter::Nearest,
+        .hdr = passInfo.resolveHdr && !isDepth,
+        .toneRange = passInfo.resolveToneRange,
     };
     if (needsConversion) {
       tex_copy_conv::run(cmd, convReq);
-    } else if (needsScaling) {
+    } else if (needsScaling || convReq.hdr) {
       tex_copy_conv::blit(cmd, convReq);
     } else {
       const webgpu::gpu_prof::Zone zone{cmd, "EFB copy"};

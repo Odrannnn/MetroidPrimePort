@@ -24,6 +24,8 @@ static_assert(sizeof(Params) <= 128);
 constexpr uint32_t CostNoFrameCopy = 4;
 constexpr uint32_t CostNoDepthReload = 8;
 constexpr uint32_t CostKeepDepth = 16;
+// The world was drawn into the HDR scene target (GXPortSceneHdr): the composite is the HDR -> LDR step.
+constexpr uint32_t HdrInput = 32;
 
 static_assert(sizeof(Params) % 4 == 0);
 

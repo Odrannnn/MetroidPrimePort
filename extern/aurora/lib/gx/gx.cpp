@@ -381,7 +381,7 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
   const auto blendState =
       to_blend_state(config.blendMode, config.blendFacSrc, config.blendFacDst, config.blendOp, config.dstAlpha);
   const std::array colorTargets{wgpu::ColorTargetState{
-      .format = g_graphicsConfig.surfaceConfiguration.format,
+      .format = config.shaderConfig.hdr ? wgpu::TextureFormat::RGBA16Float : g_graphicsConfig.surfaceConfiguration.format,
       .blend = &blendState,
       .writeMask = to_write_mask(config.colorUpdate, config.alphaUpdate),
   }};
@@ -558,6 +558,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   // depth-only pass stays one).
   const bool drawId = g_gxState.drawIdMode && !depthOnly;
   config.shaderConfig.drawId = drawId;
+  config.shaderConfig.hdr = gfx::scene_hdr_active() && !drawId;
   if (drawId) {
     config.shaderConfig.fogType = GX_FOG_NONE;
     config.shaderConfig.fogRangeEnabled = false;

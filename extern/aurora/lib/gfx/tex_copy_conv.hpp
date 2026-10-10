@@ -17,6 +17,10 @@ struct ConvRequest {
   Range uniformRange;        // UV transform uniform (offset + scale)
   TextureHandle dst;         // Destination texture
   SampleFilter sampleFilter = SampleFilter::Nearest;
+  // srcView is the RGBA16Float scene (exposed linear light): the copy takes it through the tone curve in
+  // toneRange (3 x vec4, GXPortPostProcess's layout) and the exact sRGB encode, as the EFB holds colour.
+  bool hdr = false;
+  Range toneRange;
 };
 
 bool needs_conversion(GXTexFmt fmt);
