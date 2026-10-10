@@ -38,6 +38,11 @@ struct PipelineConfig {
 };
 static_assert(std::has_unique_object_representations_v<PipelineConfig>);
 
+constexpr bool pipeline_config_compatible(const PipelineConfig& config, bool lightmapBinding) noexcept {
+  const auto& shader = config.shaderConfig;
+  return shader.pbr == 0 || shader.pbrLightmapAttr == GX_VA_NULL || lightmapBinding;
+}
+
 wgpu::RenderPipeline create_pipeline([[maybe_unused]] const PipelineConfig& config);
 void render(const DrawData& data, const wgpu::RenderPassEncoder& pass);
 
