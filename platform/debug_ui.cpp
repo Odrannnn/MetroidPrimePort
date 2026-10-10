@@ -144,6 +144,10 @@ unsigned sSimRate = 60;
 bool sSimAdaptive = false;
 float sTickPeriod = 1.f / 60.f;
 bool sFrameLimitEnabled = true;
+int sFpsCap = 0; // with the 60 FPS cap off; 0 = unlimited
+constexpr int kFpsCapMin = 30;
+constexpr int kFpsCapMax = 500;
+int ClampFpsCap(int fps) { return fps <= 0 ? 0 : std::clamp(fps, kFpsCapMin, kFpsCapMax); }
 bool sTurbo = false;
 unsigned sTurboTicks = 1;
 bool sTraceTiming = false;
@@ -479,6 +483,8 @@ void ApplySetting(const std::string& key, const std::string& value) {
   }
   if (key == "frame_limit") {
     sFrameLimitEnabled = ParseBool(value);
+  } else if (key == "fps_cap") {
+    sFpsCap = ClampFpsCap(std::atoi(value.c_str()));
   } else if (key == "vsync") {
     sVsyncEnabled = ParseBool(value);
   } else if (key == "fullscreen") {
@@ -788,6 +794,7 @@ std::string SettingsText() {
   file << "dynamic_res_target=" << sDynamicResTarget << '\n';
   file << "dynamic_res_min=" << sDynamicResMin << '\n';
   file << "frame_limit=" << (sFrameLimitEnabled ? 1 : 0) << '\n';
+  file << "fps_cap=" << sFpsCap << '\n';
   file << "sim_rate=" << sSimRate << '\n';
   file << "sim_adaptive=" << (sSimAdaptive ? 1 : 0) << '\n';
   file << "smooth_frames=" << (sSmoothFrames ? 1 : 0) << '\n';
@@ -1041,6 +1048,9 @@ void EnsureInitialized() {
     sSimAdaptive = true;
   }
   sOriginalExperience = port::EnvFlag("MP_ORIGINAL", sOriginalExperience);
+  if (std::getenv("MP_FPS_CAP") != nullptr) {
+    sFpsCap = ClampFpsCap(port::EnvInt("MP_FPS_CAP", 0));
+  }
 
   std::atexit(SaveSettings);
   ApplyLiveSplit();
@@ -1152,6 +1162,11 @@ bool FrameLimitEnabled() {
   return EffectiveFrameLimit();
 }
 
+int FrameRateCap() {
+  EnsureInitialized();
+  return EffectiveFrameLimit() ? 60 : sFpsCap;
+}
+
 
 static double DynamicResTargetFps() {
   double target = sDynamicResTarget;
@@ -1159,7 +1174,8 @@ static double DynamicResTargetFps() {
     const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
     target = mode != nullptr && mode->refresh_rate > 0.f ? mode->refresh_rate : 60.0;
   }
-  return EffectiveFrameLimit() ? std::min(target, 60.0) : target;
+  const int cap = EffectiveFrameLimit() ? 60 : sFpsCap;
+  return cap > 0 ? std::min(target, static_cast< double >(cap)) : target;
 }
 
 static void ResetDynamicRes() {
@@ -1274,8 +1290,8 @@ void RecordFrame(uint64_t durationNs, unsigned ticks, bool presented) {
     sActualTps = sTimingTicks / (wallSeconds > 0.0 ? wallSeconds : seconds);
     if (sTraceTiming) {
       std::fprintf(stderr,
-                   "[timing] presented=%.1f FPS throughput=%.1f FPS simulation=%.1f ticks/s cap=%s\n",
-                   sActualFps, sThroughputFps, sActualTps, EffectiveFrameLimit() ? "60" : "off");
+                   "[timing] presented=%.1f FPS throughput=%.1f FPS simulation=%.1f ticks/s cap=%d\n",
+                   sActualFps, sThroughputFps, sActualTps, EffectiveFrameLimit() ? 60 : sFpsCap);
     }
     UpdateDynamicRes(sActualFps, sTimingFrames);
     sTimingNs = 0;
@@ -3961,6 +3977,20 @@ void DrawPerformanceTab() {
   if (ImGui::Checkbox("60 FPS cap (target)", &frameLimit)) {
     SetFrameLimitEnabled(frameLimit);
     MarkDirty();
+  }
+  {
+    // One past the top is "Unlimited" (saved as 0).
+    ImGui::BeginDisabled(sFrameLimitEnabled);
+    int cap = sFpsCap > 0 ? sFpsCap : kFpsCapMax + 1;
+    if (ImGui::SliderInt("FPS cap", &cap, kFpsCapMin, kFpsCapMax + 1, cap > kFpsCapMax ? "Unlimited" : "%d FPS",
+                         ImGuiSliderFlags_AlwaysClamp)) {
+      sFpsCap = cap > kFpsCapMax ? 0 : ClampFpsCap(cap);
+      ResetDynamicRes();
+      MarkDirty();
+    }
+    ImGui::EndDisabled();
+    ItemHelp("With the 60 FPS cap off, the most frames drawn a second. Vsync still holds it to "
+             "the display's refresh rate.");
   }
   // Both, because they answer different questions. Throughput is what the
   // machine produces once the pacing wait is excluded; presented is what

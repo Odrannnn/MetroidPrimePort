@@ -884,7 +884,6 @@ int CMain::RsMain(int argc, const char* const* argv) {
     PortDebug::RestoreGameOptions();
 
     double dt = 1.0 / 60.0;
-    constexpr uint64_t framePeriodNs = 1000000000ull / 60;
     uint64_t nextFrameDeadline = SDL_GetTicksNS();
     // When the first frame was actually presented, and when the process started.
     // Startup is a number people ask about and the frame log is only a counter,
@@ -935,8 +934,11 @@ int CMain::RsMain(int argc, const char* const* argv) {
                      !event->sdl.key.repeat && event->sdl.key.scancode == SDL_SCANCODE_F10) {
             PortDebug::SetFrameLimitEnabled(!PortDebug::FrameLimitEnabled());
             nextFrameDeadline = SDL_GetTicksNS();
-            fprintf(stderr, "Frame limit: %s\n",
-                    PortDebug::FrameLimitEnabled() ? "60 FPS" : "unlimited");
+            if (PortDebug::FrameRateCap() > 0) {
+              fprintf(stderr, "Frame limit: %d FPS\n", PortDebug::FrameRateCap());
+            } else {
+              fprintf(stderr, "Frame limit: unlimited\n");
+            }
           } else if (event->type == AURORA_WINDOW_RESIZED ||
                      event->type == AURORA_DISPLAY_SCALE_CHANGED) {
             ApplyAspectMode();
@@ -1164,7 +1166,10 @@ int CMain::RsMain(int argc, const char* const* argv) {
       // when a frame overruns its budget.
       const uint64_t workEndNs = SDL_GetTicksNS();
       aurora::phase::set(aurora::phase::Main, "frame pacing");
-      if (PortDebug::FrameLimitEnabled() && !PortDebug::Turbo()) {
+      // 60 under the 60 FPS cap, else the FPS cap setting (0 = unlimited).
+      const int frameRateCap = PortDebug::FrameRateCap();
+      if (frameRateCap > 0 && !PortDebug::Turbo()) {
+        const uint64_t framePeriodNs = 1000000000ull / static_cast< uint64_t >(frameRateCap);
         nextFrameDeadline += framePeriodNs;
         const uint64_t now = SDL_GetTicksNS();
         if (nextFrameDeadline > now) {

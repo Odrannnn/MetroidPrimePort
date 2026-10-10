@@ -137,6 +137,9 @@ float TickFrames();
 
 // Presentation
 bool FrameLimitEnabled();
+// Frames a second the main loop is paced to: 60 under the 60 FPS cap, else the
+// FPS cap setting (fps_cap=, MP_FPS_CAP); 0 = unlimited.
+int FrameRateCap();
 void SetFrameLimitEnabled(bool enabled);
 void RecordFrame(uint64_t durationNs, unsigned ticks, bool presented);
 bool VsyncEnabled();

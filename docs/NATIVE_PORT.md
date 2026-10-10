@@ -846,7 +846,7 @@ unpacks to a temporary directory instead of mounting.
 - Keyboard defaults: WASD / IJKL for sticks, X/Z/C/V for A/B/X/Y, Return for
   Start, arrows for D-pad, Q/E for L/R, and F for Z. Existing mappings take
   precedence. SDL controllers are supported.
-- F1: debug overlay. F10: 60 FPS cap/unlimited presentation. F11: fullscreen.
+- F1: debug overlay. F10: 60 FPS cap on/off (off: F1 Video > Frame rate "FPS cap", `fps_cap=`, `MP_FPS_CAP`; 0 = unlimited). F11: fullscreen.
   F12: screenshot.
 - Fullscreen (F1 > Video > Display, persisted as `fullscreen`): a borderless window over
   the whole screen on desktop, toggled with F11; on Android it hides the status
