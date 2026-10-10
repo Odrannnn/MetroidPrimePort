@@ -29,3 +29,27 @@ inline PortRigidBlendKind PortClassifyRigidBlend(float dist2, float rotDot, bool
     return pivoted ? PortRigidBlendKind::TranslateOnly : PortRigidBlendKind::Cut;
   return PortRigidBlendKind::Full;
 }
+
+// The blend itself, shared by CActor::PortBlendRigid and the tests. `Ops`
+// supplies the math: Rigid(xf, rot) (orthonormal form of xf, rotation out),
+// Translation(xf), SetTranslation(xf, v), Dot(q, q), Slerp(q, q, t) and
+// Build(q, centre). `pivot` is a world offset from the actor origin to its
+// visual centre; that centre lerps and the turn happens about it.
+template <class Xf, class Vec, class Quat, class Ops>
+bool PortBlendRigidGeneric(const Ops& ops, const Xf& from, const Xf& to, float t, Xf& blend,
+                           Xf& cur, const Vec& pivot, bool pivoted) {
+  const Vec prevPos = ops.Translation(from) + pivot;
+  const Vec curPos = ops.Translation(to) + pivot;
+  Quat prevRot, curRot;
+  ops.Rigid(from, prevRot);
+  cur = ops.Rigid(to, curRot);
+  ops.SetTranslation(cur, curPos);
+  const PortRigidBlendKind kind =
+      PortClassifyRigidBlend((curPos - prevPos).MagSquared(), ops.AbsDot(prevRot, curRot), pivoted);
+  if (kind == PortRigidBlendKind::Cut)
+    return false;
+  const Vec centre = prevPos + (curPos - prevPos) * t;
+  blend = ops.Build(kind == PortRigidBlendKind::Full ? ops.Slerp(prevRot, curRot, t) : curRot,
+                    centre);
+  return true;
+}

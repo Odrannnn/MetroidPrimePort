@@ -13,6 +13,8 @@
 #include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
+#include "MetroidPrime/Player/CMorphBall.hpp"
+#include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
 
 #include "Kyoto/Audio/CAudioSys.hpp"
@@ -923,8 +925,7 @@ void CActor::PortSnapshotRenderTransform() {
   xPortPrevGeneration = sPortTickGeneration;
 }
 
-bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out,
-                               const CVector3f& pivot) const {
+bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out) const {
   const float t = CCameraManager::GetPresentationInterpolation();
   if (t < 0.f || t >= 1.f || xPortPrevGeneration != sPortTickGeneration ||
       xPortOwnPresentation || !PortDebug::ActorInterpolation())
@@ -933,6 +934,15 @@ bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out,
     return false;
   CTransform4f blend = CTransform4f::Identity();
   CTransform4f cur = CTransform4f::Identity();
+  // A fully morphed player is drawn as the ball at the origin lifted by its
+  // radius (GetBallToWorld); the blend turns about that centre. Transitions
+  // draw the biped at the origin and keep the zero pivot.
+  CVector3f pivot = CVector3f::Zero();
+  if (const CPlayer* player = TCastToConstPtr< CPlayer >(this)) {
+    if (player->GetMorphballTransitionState() == CPlayer::kMS_Morphed &&
+        player->GetMorphBall() != nullptr)
+      pivot = CVector3f(0.f, 0.f, player->GetMorphBall()->GetBallRadius());
+  }
   if (!PortBlendRigid(xPortPrevTransform, x34_transform, t, blend, cur, pivot))
     return false;
   // Drawn eye position = view^-1 * blend * cur^-1 * world, so the model lands
@@ -941,35 +951,35 @@ bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out,
   return true;
 }
 
+namespace {
+struct PortRigidOps {
+  CTransform4f Rigid(const CTransform4f& xf, CQuaternion& rot) const { return PortRigid(xf, rot); }
+  CVector3f Translation(const CTransform4f& xf) const { return xf.GetTranslation(); }
+  void SetTranslation(CTransform4f& xf, const CVector3f& v) const { xf.SetTranslation(v); }
+  float AbsDot(const CQuaternion& a, const CQuaternion& b) const {
+    return fabsf(CQuaternion::Dot(a, b));
+  }
+  CQuaternion Slerp(const CQuaternion& a, const CQuaternion& b, float t) const {
+    return CQuaternion::SlerpLocal(a, b, t);
+  }
+  CTransform4f Build(const CQuaternion& q, const CVector3f& centre) const {
+    return q.BuildTransform4f(centre);
+  }
+};
+} // namespace
+
 bool CActor::PortBlendRigid(const CTransform4f& from, const CTransform4f& to, float t,
                             CTransform4f& blend, CTransform4f& cur, const CVector3f& pivot) {
-  // The blend turns about the pivot (a world offset from the actor origin to
-  // its visual centre; zero for most actors), and that centre is what lerps.
-  const bool pivoted = pivot.MagSquared() > 0.f;
-  const CVector3f prevPos = from.GetTranslation() + pivot;
-  const CVector3f curPos = to.GetTranslation() + pivot;
-  CQuaternion prevRot = CQuaternion::NoRotation();
-  CQuaternion curRot = CQuaternion::NoRotation();
-  PortRigid(from, prevRot);
-  cur = PortRigid(to, curRot);
-  cur.SetTranslation(curPos);
-  // Same snap rule as the camera snapshot: teleports and big turns cut.
-  const PortRigidBlendKind kind = PortClassifyRigidBlend(
-      (curPos - prevPos).MagSquared(), fabsf(CQuaternion::Dot(prevRot, curRot)), pivoted);
-  if (kind == PortRigidBlendKind::Cut)
-    return false;
-  const CVector3f centre = prevPos + (curPos - prevPos) * t;
-  blend = (kind == PortRigidBlendKind::Full ? CQuaternion::SlerpLocal(prevRot, curRot, t) : curRot)
-              .BuildTransform4f(centre);
-  return true;
+  return PortBlendRigidGeneric< CTransform4f, CVector3f, CQuaternion >(
+      PortRigidOps(), from, to, t, blend, cur, pivot, pivot.MagSquared() > 0.f);
 }
 
-CPortActorRenderScope::CPortActorRenderScope(const CActor& actor, const CVector3f& pivot)
+CPortActorRenderScope::CPortActorRenderScope(const CActor& actor)
 : xSavedView(CGraphics::GetViewMatrix()), xActive(false) {
   if (sPortRenderScopeActive)
     return;
   CTransform4f view = CTransform4f::Identity();
-  if (!actor.PortPresentedView(xSavedView, view, pivot))
+  if (!actor.PortPresentedView(xSavedView, view))
     return;
   xActive = true;
   sPortRenderScopeActive = true;

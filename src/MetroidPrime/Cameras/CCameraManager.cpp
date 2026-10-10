@@ -546,7 +546,8 @@ bool CCameraManager::GetPresentedLookRotation(const CStateManager& mgr,
   float dpitch = 0.f;
   if (sPresentationInterpolation < 0.f || sCameraSnapshotOwner != this ||
       sCameraSnapshotId != GetCurrentCameraId() ||
-      !PortSnapshotFresh(sCameraSnapshotGeneration, CActor::PortTickGeneration()) || !mgr.GetPlayer()->MouseLookIsFree(mgr) ||
+      !PortSnapshotFresh(sCameraSnapshotGeneration, CActor::PortTickGeneration()) ||
+      !mgr.GetPlayer()->MouseLookIsFree(mgr) ||
       !PortDebug::PresentedAimDelta(sPresentationInterpolation, dyaw, dpitch)) {
     return false;
   }

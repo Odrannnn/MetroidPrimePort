@@ -3438,14 +3438,7 @@ void CStateManager::DrawWorld() const {
     x880_envFxManager->Render(*this);
   if (morphingPlayerVisible) {
 #ifdef TARGET_PC
-    // The ball model sits at GetBallToWorld: the player origin lifted by the
-    // ball radius along world Z, so the blend turns about that centre.
-    CPortActorRenderScope presented(
-        *x84c_player,
-        x84c_player->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed &&
-                x84c_player->GetMorphBall() != nullptr
-            ? CVector3f(0.f, 0.f, x84c_player->GetMorphBall()->GetBallRadius())
-            : CVector3f::Zero());
+    CPortActorRenderScope presented(*x84c_player);
 #endif
     x84c_player->Render(*this);
   }

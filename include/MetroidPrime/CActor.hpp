@@ -259,8 +259,7 @@ public:
   // The camera-to-world view that draws this actor at its blended transform
   // instead of x34_transform. False when no blend applies (the view is left
   // alone): smoothing off, capped frames, snapped moves, new actors.
-  bool PortPresentedView(const CTransform4f& view, CTransform4f& out,
-                         const CVector3f& pivot = CVector3f::Zero()) const;
+  bool PortPresentedView(const CTransform4f& view, CTransform4f& out) const;
   // Rigid blend of two transforms at t, with the snap rule above (over 4
   // units or 45 degrees apart = false). `cur` gets the rigid form of `to`.
   // A non-zero `pivot` (world offset to the visual centre, the morph ball's
@@ -339,8 +338,7 @@ private:
 // CActor::PortPresentedView). Nested scopes leave the outer one's view.
 class CPortActorRenderScope {
 public:
-  explicit CPortActorRenderScope(const CActor& actor,
-                                 const CVector3f& pivot = CVector3f::Zero());
+  explicit CPortActorRenderScope(const CActor& actor);
   ~CPortActorRenderScope();
 
 private:
