@@ -101,6 +101,9 @@ private:
     float offset;
   };
   mutable PortTickPair< SPortSpiral > xPortSpiral;
+  // Remastered's BusterImpact (a synthetic PART; null when the mod lacks it): emits at the point
+  // the beam hits, oriented by the hit normal (CWaveBusterMP1::Think 0x010262e0).
+  rstl::single_ptr< CElementGen > xPortImpactGen;
 #endif
 };
 CHECK_SIZEOF(CWaveBuster, (VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02 ? 0x400

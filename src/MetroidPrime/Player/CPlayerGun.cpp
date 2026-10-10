@@ -657,6 +657,10 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
     x72c_currentBeam->DrawMuzzleFx(mgr);
   }
 
+#ifdef TARGET_PC
+  PortRenderFlashes();
+#endif
+
   if (gunState == CGunMorph::kGS_InWipe || gunState == CGunMorph::kGS_OutWipe) {
     x774_holoTransitionGen->Render();
   }
@@ -971,6 +975,14 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
     x800_auxMuzzleGenerators[x320_currentAuxBeam]->SetParticleEmission(emitting);
     x800_auxMuzzleGenerators[x320_currentAuxBeam]->Update(advDt);
   }
+
+#ifdef TARGET_PC
+  {
+    // Same scale as the muzzle flash (Remastered updates them together).
+    const float flashScale = x832_26_comboFiring ? (x344_comboXferTimer < 1.f ? 1.f - x344_comboXferTimer : 0.f) * 2.f : 2.f;
+    PortUpdateFlashes(advDt, CVector3f(flashScale, flashScale, flashScale));
+  }
+#endif
 
   if (x748_rainSplashGenerator.get()) {
     x748_rainSplashGenerator->Update(advDt, mgr);
@@ -1301,6 +1313,11 @@ void CPlayerGun::UpdateNormalShotCycle(float dt, CStateManager& mgr) {
 #ifdef MP_ENABLE_SMOKE_DRIVER
   PortSmokeMouseShot(x330_chargeState == kCS_Charged, false);
 #endif
+#ifdef TARGET_PC
+  if (x330_chargeState != kCS_Normal) {
+    PortStartFlash(3 + int(x310_currentBeam));
+  }
+#endif
   x72c_currentBeam->Fire(
       x834_27_underwater, dt, CPlayerState::EChargeStage(x330_chargeState), xf, mgr,
       static_cast< const TUniqueId& >(targetHoming ? GetTargetId(mgr) : kInvalidUniqueId),
@@ -1360,6 +1377,16 @@ void CPlayerGun::FireSecondary(float dt, CStateManager& mgr) {
     xf.AddTranslation(mgr.GetCameraManager()->GetGlobalCameraTranslation(mgr));
 #ifdef MP_ENABLE_SMOKE_DRIVER
     PortSmokeMouseShot(x330_chargeState == kCS_Charged, true);
+#endif
+#ifdef TARGET_PC
+    // Missile flash, or the combo's (only Power's super missile and Ice's combo have one).
+    if (x330_chargeState != kCS_Charged) {
+      PortStartFlash(0);
+    } else if (x310_currentBeam == CPlayerState::kBI_Power) {
+      PortStartFlash(1);
+    } else if (x310_currentBeam == CPlayerState::kBI_Ice) {
+      PortStartFlash(2);
+    }
 #endif
     x744_auxWeapon->Fire(dt, x834_27_underwater, CPlayerState::EBeamId(x310_currentBeam),
                          CPlayerState::EChargeStage(x330_chargeState), xf, mgr,
@@ -1870,7 +1897,64 @@ void CPlayerGun::InitBombData() {
   }
 }
 
+#ifdef TARGET_PC
+void CPlayerGun::PortInitFlashes() {
+  static const uint kIds[kPortFlashCount] = {
+      PortRemastered::SyntheticEffectId("missilemuzzleflash"),
+      PortRemastered::SyntheticEffectId("supermissilemuzzleflash"),
+      PortRemastered::SyntheticEffectId("icecombomuzzleflash"),
+      PortRemastered::SyntheticEffectId("powerchargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("icechargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("wavechargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("plasmachargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("phazonchargemuzzleflash"),
+  };
+  mPortFlashTokens = rstl::reserved_vector< TLockedToken< CGenDescription >, kPortFlashCount >();
+  for (int i = 0; i < kPortFlashCount; ++i) {
+    mPortFlashToken[i] = -1;
+    const SObjectTag tag('PART', kIds[i]);
+    if (gpResourceFactory->CanBuild(tag)) {
+      mPortFlashToken[i] = int(mPortFlashTokens.size());
+      mPortFlashTokens.push_back(gpSimplePool->GetObj(tag));
+    }
+  }
+}
+
+void CPlayerGun::PortStartFlash(int slot) {
+  if (slot < 0 || slot >= kPortFlashCount || mPortFlashToken[slot] < 0) {
+    return;
+  }
+  mPortFlashGens[slot] = rs_new CElementGen(mPortFlashTokens[mPortFlashToken[slot]]);
+}
+
+void CPlayerGun::PortUpdateFlashes(float dt, const CVector3f& scale) {
+  for (int i = 0; i < kPortFlashCount; ++i) {
+    CElementGen* gen = mPortFlashGens[i].get();
+    if (gen == nullptr) {
+      continue;
+    }
+    gen->SetGlobalOrientAndTrans(x418_beamLocalXf);
+    gen->SetGlobalScale(scale);
+    gen->Update(dt);
+    if (gen->IsSystemDeletable()) {
+      mPortFlashGens[i] = rstl::auto_ptr< CElementGen >();
+    }
+  }
+}
+
+void CPlayerGun::PortRenderFlashes() const {
+  for (int i = 0; i < kPortFlashCount; ++i) {
+    if (mPortFlashGens[i].get() != nullptr) {
+      mPortFlashGens[i]->Render();
+    }
+  }
+}
+#endif
+
 void CPlayerGun::InitMuzzleData() {
+#ifdef TARGET_PC
+  PortInitFlashes();
+#endif
   for (int i = 0; i < 5; ++i) {
     x7c0_auxMuzzleEffects.push_back(gpSimplePool->GetObj(SObjectTag(
         'PART', gpTweakGunRes->GetAuxMuzzleResId(static_cast< CPlayerState::EBeamId >(i)))));
