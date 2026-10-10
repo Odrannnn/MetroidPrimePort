@@ -52,6 +52,7 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -62,6 +63,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     private static final int SDL_MAJOR_VERSION = 3;
     private static final int SDL_MINOR_VERSION = 4;
     private static final int SDL_MICRO_VERSION = 10;
+    private static final AtomicReference<String> sNextSaveDialogSuggestedFilename = new AtomicReference<>();
 /*
     // Display InputType.SOURCE/CLASS of events and devices
     //
@@ -2054,7 +2056,28 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     /**
      * This method is called by SDL using JNI.
      */
+    public static void setNextSaveDialogSuggestedFilename(String filename) {
+        sNextSaveDialogSuggestedFilename.set(filename);
+    }
+
+    private static String safeSaveDialogTitle(String suggestedFilename) {
+        if (suggestedFilename != null) {
+            int separator = Math.max(suggestedFilename.lastIndexOf('/'), suggestedFilename.lastIndexOf('\\'));
+            String basename = suggestedFilename.substring(separator + 1);
+            if (!basename.isEmpty() && !basename.equals(".") && !basename.equals("..")) {
+                return basename;
+            }
+        }
+        return "save.gci";
+    }
+
+    /**
+     * This method is called by SDL using JNI.
+     */
     public static boolean showFileDialog(String[] filters, boolean allowMultiple, boolean forWrite, int requestCode) {
+        // Consume only on a save request, before any early return or launch
+        // failure, so cancelling one export cannot leave its name for the next.
+        String suggestedFilename = forWrite ? sNextSaveDialogSuggestedFilename.getAndSet(null) : null;
         if (mSingleton == null) {
             return false;
         }
@@ -2088,6 +2111,9 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         Intent intent = new Intent(forWrite ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple);
+        if (forWrite) {
+            intent.putExtra(Intent.EXTRA_TITLE, safeSaveDialogTitle(suggestedFilename));
+        }
         // Without these the provider hands back a one-shot grant: the URI opens
         // for this launch and is unusable on the next one, so the remembered disc
         // fails to open every time after the first. PERSISTABLE is what

@@ -753,6 +753,10 @@ if(MP_BUILD_TESTS)
     # dependency-free Python and skip themselves when python3 is absent.
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME port_android_save_dialog_title
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/port_android_save_dialog_title.py
+                    ${CMAKE_CURRENT_SOURCE_DIR})
+        set_tests_properties(port_android_save_dialog_title PROPERTIES TIMEOUT 15 LABELS port)
         add_test(NAME port_ap_fixture
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/port_ap_fixture.py
                     ${CMAKE_CURRENT_SOURCE_DIR})

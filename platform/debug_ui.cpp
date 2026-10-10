@@ -4216,6 +4216,50 @@ std::string CardExportDolphin() {
 }
 
 namespace {
+#if defined(__ANDROID__)
+void SetNextAndroidSaveDialogFilename(const char* filename) {
+  JNIEnv* env = static_cast< JNIEnv* >(SDL_GetAndroidJNIEnv());
+  if (env == nullptr) {
+    return;
+  }
+  jobject activity = static_cast< jobject >(SDL_GetAndroidActivity());
+  if (activity == nullptr) {
+    return;
+  }
+
+  jclass cls = env->GetObjectClass(activity);
+  jmethodID method = nullptr;
+  jstring name = nullptr;
+  if (cls != nullptr && !env->ExceptionCheck()) {
+    method = env->GetStaticMethodID(cls, "setNextSaveDialogSuggestedFilename", "(Ljava/lang/String;)V");
+  }
+  if (env->ExceptionCheck()) {
+    env->ExceptionClear();
+    method = nullptr;
+  }
+  if (method != nullptr) {
+    name = env->NewStringUTF(filename != nullptr ? filename : "");
+    if (env->ExceptionCheck()) {
+      env->ExceptionClear();
+      name = nullptr;
+    }
+    if (name != nullptr) {
+      env->CallStaticVoidMethod(cls, method, name);
+      if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+      }
+    }
+  }
+  if (name != nullptr) {
+    env->DeleteLocalRef(name);
+  }
+  if (cls != nullptr) {
+    env->DeleteLocalRef(cls);
+  }
+  env->DeleteLocalRef(activity);
+}
+#endif
+
 void OpenCardDialog(CardPick pick) {
   int windowCount = 0;
   SDL_Window** windows = SDL_GetWindows(&windowCount);
@@ -4255,6 +4299,11 @@ void OpenCardDialog(CardPick pick) {
     location = sCardExportQueue.empty()
                    ? std::string()
                    : PortGci::PathString(sCardExportQueue.front().filename());
+#if defined(__ANDROID__)
+    // SDL's Android save picker ignores its initial-location argument. Hand the
+    // current queue member's basename to its Java dialog instead.
+    SetNextAndroidSaveDialogFilename(location.c_str());
+#endif
     SDL_ShowSaveFileDialog(done, userdata, window, nullptr, 0,
                            location.empty() ? nullptr : location.c_str());
     break;
