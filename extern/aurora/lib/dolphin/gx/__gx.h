@@ -130,6 +130,7 @@ struct __GXData_struct {
   u32 genMode;      // general mode (numTexGens, numChans, numTevStages, cullMode, numIndStages)
 
   u32 tImage0[8];   // texture image 0 registers
+  u16 tSizeM1[8][2]; // port: full width-1/height-1 (image0's 10-bit fields wrap past 1024)
   u32 tMode0[8];    // texture mode 0 registers
   u32 texmapId[16]; // texture map ID tracking
 

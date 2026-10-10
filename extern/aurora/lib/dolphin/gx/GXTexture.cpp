@@ -252,6 +252,8 @@ void GXLoadTexObj(GXTexObj* obj_, GXTexMapID id) {
   }
 
   __gx->tImage0[id] = obj->image0;
+  __gx->tSizeM1[id][0] = static_cast<u16>(obj->width() - 1);
+  __gx->tSizeM1[id][1] = static_cast<u16>(obj->height() - 1);
   __gx->tMode0[id] = obj->mode0;
   __gx->dirtyState |= 1;
   __gx->bpSent = 1;
