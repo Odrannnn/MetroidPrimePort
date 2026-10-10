@@ -144,6 +144,8 @@ bool shader_overridden(u64 hash) noexcept { return false; }
 } // namespace aurora::gx
 namespace aurora::gfx {
 void drop_pipelines() {}
+void set_scene_hdr(bool) {}
+bool scene_hdr_active() { return false; }
 } // namespace aurora::gfx
 
 // --- Buffer push stubs ---

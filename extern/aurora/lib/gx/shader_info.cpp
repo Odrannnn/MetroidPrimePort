@@ -370,6 +370,10 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
     // near, range, exposure; the tone curve
     info.uniformSize += sizeof(Vec4<float>) * 4;
   }
+  if (config.hdr && !config.pbr) {
+    info.usesHdrTone = true;
+    info.uniformSize += sizeof(Vec4<float>) * 3;
+  }
   info.uniformSize += MaxTexCoord * sizeof(Vec4<float>);
   if (info.usedIndTexMtxs.any()) {
     info.uniformSize += MaxIndTexMtxs * sizeof(Mat2x4<float>);
@@ -555,6 +559,11 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
   if (info.usesVolFog) {
     buf.append(g_gxState.volFogParams);
     for (const auto& v : g_gxState.volFogTone) {
+      buf.append(v);
+    }
+  }
+  if (info.usesHdrTone) {
+    for (const auto& v : g_gxState.pbrTone) {
       buf.append(v);
     }
   }

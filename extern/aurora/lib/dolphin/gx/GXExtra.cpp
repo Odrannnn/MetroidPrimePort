@@ -19,6 +19,7 @@ namespace {
 // GXPortSetDrawIdMode: the frame must reach the screen as the draws made it, so the post-processing and
 // the volumetric fog are left out.
 bool sDrawIdMode = false;
+bool sSceneHdr = false; // GXPortSceneHdr: the next GXPortPostProcess resolves the HDR scene
 
 // Port: a PBR draw sets all of its probe, cube, ambient, volume, tone and material state
 // per surface, and neighbouring surfaces almost always repeat it. The processor already
@@ -123,10 +124,19 @@ GXBool GXPortPostProcess(GXBool bloom, f32 threshold, const f32 tints[5][3], con
   params.gradeWeight = gradeWeight;
   // The curve's toe has no use for row 0's w; it carries the exposure (see bloom.hpp).
   params.tone[0][3] = tone != nullptr && exposure > 0.f ? exposure : 0.f;
-  if (!params.bloom && gradeA == 0 && gradeB == 0 && params.tone[0][3] == 0.f) {
+  // The HDR scene always needs the composite (it is the step into the EFB), so nothing skips here.
+  const bool hdr = sSceneHdr;
+  sSceneHdr = false;
+  if (hdr) {
+    params.bloom |= aurora::gfx::bloom::HdrInput;
+  } else if (!params.bloom && gradeA == 0 && gradeB == 0 && params.tone[0][3] == 0.f) {
     return true;
   }
   if (!aurora::gfx::bloom::ensure_task()) {
+    if (hdr) {
+      GX_WRITE_AURORA(GX_AURORA_PORT_SCENE_HDR);
+      GX_WRITE_U8(0);
+    }
     return false;
   }
   // Through the FIFO: recording it directly would first wait for the FIFO thread to finish
@@ -174,6 +184,13 @@ void GXPortVolumetricFogEnd() { GX_WRITE_AURORA(GX_AURORA_PORT_VOLUMETRIC_FOG_EN
 void GXPortSetParticleFog(GXBool on) {
   GX_WRITE_AURORA(GX_AURORA_PORT_PARTICLE_FOG);
   GX_WRITE_U8(on ? 1 : 0);
+}
+
+GXBool GXPortSceneHdr(GXBool on) {
+  sSceneHdr = on && GXGetPBRCostTest() != 10 && !sDrawIdMode;
+  GX_WRITE_AURORA(GX_AURORA_PORT_SCENE_HDR);
+  GX_WRITE_U8(sSceneHdr ? 1 : 0);
+  return sSceneHdr;
 }
 
 GXBool GXPortXRayPass(const f32 p[8][4], const f32 tone[3][4], const f32 depthRange[3]) {

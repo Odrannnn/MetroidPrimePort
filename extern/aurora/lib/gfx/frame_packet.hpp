@@ -98,6 +98,8 @@ struct RenderPass {
   ClipRect resolveRect;
   Range resolveUniformRange;
   Range resolveMipsUniformRange;
+  bool resolveHdr = false; // the copy source is the HDR scene target
+  Range resolveToneRange;
   bool resolveMips = false; // resolveTarget has a mip chain to fill after the copy
   int probeFace = -1; // resolveTarget is this face of the PBR probe
   Range probeUniformRange;

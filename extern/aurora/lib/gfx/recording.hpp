@@ -57,6 +57,12 @@ void queue_texture_copy(wgpu::TexelCopyTextureInfo src, wgpu::TexelCopyTextureIn
 void begin_offscreen(uint32_t width, uint32_t height);
 void end_offscreen();
 uint32_t get_sample_count() noexcept;
+// True while the world draws into the RGBA16Float g_sceneHdr (GX_AURORA_PORT_SCENE_HDR); false in an
+// offscreen pass.
+bool scene_hdr_active() noexcept;
+// Starts (true) the HDR scene phase on a cleared g_sceneHdr pass. The phase ends in the post task that
+// record_encoder_task_overwriting is told ends it. A no-op without an HDR target.
+void set_scene_hdr(bool on);
 RenderTargetLayout get_render_target_layout() noexcept;
 void clear_caches() noexcept;
 
@@ -119,7 +125,7 @@ enum class DepthAfter : uint8_t {
   IfUnread,
 };
 bool record_encoder_task_overwriting(uint64_t type, const void* payload, size_t payloadSize, uint64_t drawType,
-                                     DepthAfter depth = DepthAfter::Load);
+                                     DepthAfter depth = DepthAfter::Load, bool endsSceneHdr = false);
 template <typename DrawData>
 DrawData* get_last_draw_command();
 template <typename PipelineConfig>
