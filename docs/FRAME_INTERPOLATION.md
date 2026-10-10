@@ -71,8 +71,10 @@ Implemented as a view shift rather than by swapping the transform in every
 - Snaps like the camera: more than 4 units or more than 45° in a tick, and
   any actor whose transform didn't change.
 - Morph ball: the ball is drawn at `GetBallToWorld()` = player origin +
-  (0,0,radius) in world Z, so the player's scope passes that offset as a
-  pivot. The blend rotates about the ball centre and lerps the centre
+  (0,0,radius) in world Z. `CActor::PortPresentedView` selects that pivot
+  for the fully morphed player, covering both renderer callbacks and recursive
+  draws; morph/unmorph transitions keep the biped's origin pivot.
+  The blend rotates about the ball centre and lerps the centre
   itself; pivoting about the origin swung the centre by the roll delta each
   frame (visible jitter while rolling). A roll over 45° per tick no longer
   cuts the whole blend for a pivoted actor: it keeps the translation lerp and
