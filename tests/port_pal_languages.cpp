@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 namespace {
 int sFailures = 0;
@@ -181,12 +182,54 @@ void TestFontTexture() {
   Check(!PortPalLanguages::FontTexture(MakeStrg(1, 1), texture), "not a font");
 }
 
+void TestImportedImageTextureIds() {
+  std::wstring legend =
+      L"&image=SI,0.6875,0.6875,323A83B3; &image=SI,0.6875,0.6875,A9ABC1A5; "
+      L"&image=SI,0.6875,0.6875,FAB0528D; &image=SI,0.6875,0.6875,2CE9B190; "
+      L"&image=SI,0.6875,0.6875,DE6901DE; &image=SI,0.6875,0.6875,7FF222B8; "
+      L"&image=SI,0.6875,0.6875,E7B56235;";
+  Check(PortPalLanguages::RemapImportedImageTextureIds(legend), "map legend ids remapped");
+  Check(legend == L"&image=SI,0.6875,0.6875,8A78A5BF; &image=SI,0.6875,0.6875,8A78A5BF; "
+                  L"&image=SI,0.6875,0.6875,8A78A5BF; &image=SI,0.6875,0.6875,39C0091E; "
+                  L"&image=SI,0.6875,0.6875,39C0091E; &image=SI,0.6875,0.6875,C6FA23D1; "
+                  L"&image=SI,0.6875,0.6875,C6FA23D1;",
+        "all seven PAL variants map to the matching USA icon slots");
+
+  std::wstring lower = L"&image=SI,0.6875,0.6875,fab0528d;";
+  Check(PortPalLanguages::RemapImportedImageTextureIds(lower) &&
+            lower == L"&image=SI,0.6875,0.6875,8A78A5BF;",
+        "lowercase asset id");
+
+  std::wstring otherIds =
+      L"&image=SI,0.6875,0.6875,FE2235F5; &image=SI,0.6875,0.6875,41031B9B; "
+      L"&image=SI,0.6875,0.6875,40074106; &image=SI,0.6875,0.6875,A9D17D44; "
+      L"&image=SI,0.6875,0.6875,95401DA9; &image=SI,0.6875,0.6875,81DFB050; "
+      L"&image=SI,0.6875,0.6875,CB91BD62;";
+  const std::wstring unchangedOtherIds = otherIds;
+  Check(!PortPalLanguages::RemapImportedImageTextureIds(otherIds) && otherIds == unchangedOtherIds,
+        "other seven map legend ids unchanged");
+
+  std::wstring notImage =
+      L"FAB0528D &font=FAB0528D; text DE6901DE; &image=SI,0.68,0.68,E7B56235";
+  const std::wstring unchangedNotImage = notImage;
+  Check(!PortPalLanguages::RemapImportedImageTextureIds(notImage) && notImage == unchangedNotImage,
+        "prose, font tag, and unterminated image tag unchanged");
+
+  std::wstring partialIds =
+      L"&image=SI,0,0,0FAB0528D; &image=SI,0,0,FAB0528DA; &image=SI,0,0,xFAB0528D; "
+      L"&image=SI,0,0,FAB0528D_;";
+  const std::wstring unchangedPartialIds = partialIds;
+  Check(!PortPalLanguages::RemapImportedImageTextureIds(partialIds) && partialIds == unchangedPartialIds,
+        "partial or embedded ids unchanged");
+}
+
 }  // namespace
 
 int main() {
   TestReadPak();
   TestIsStringTable();
   TestFontTexture();
+  TestImportedImageTextureIds();
   if (sFailures != 0) {
     std::fprintf(stderr, "%d failure(s)\n", sFailures);
     return 1;

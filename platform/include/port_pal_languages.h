@@ -22,6 +22,10 @@
 
 namespace PortPalLanguages {
 
+// On a USA disc, the PAL map-legend icons use different TXTR ids. Rewrite
+// those ids only inside complete &image=...; tags (not text or font tags).
+bool RemapImportedImageTextureIds(std::wstring& text);
+
 // Reads up to `size` bytes at `offset` of a PAK; returns how many it read.
 using ReadAt = std::function<size_t(uint64_t offset, uint8_t* out, size_t size)>;
 
