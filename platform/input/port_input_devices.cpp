@@ -7,16 +7,21 @@
 #include "port_paths.h"
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
+#include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
 
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_timer.h>
+#include <SDL3/SDL_touch.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -53,6 +58,18 @@ std::chrono::steady_clock::time_point sUserChecked{};
 // UI thread.
 std::atomic<uint64_t> sTouchControls{0};
 std::atomic<uint64_t> sTouchBound{0};
+
+// Mouse wheel notches since the last poll (x1000, vertical then horizontal), added
+// by an SDL event watch on the event thread.
+std::atomic<int> sWheelMilli[2]{};
+
+bool SDLCALL WheelWatch(void*, SDL_Event* event) {
+  if (event->type != SDL_EVENT_MOUSE_WHEEL || event->wheel.which == SDL_TOUCH_MOUSEID) return true;
+  const float flip = event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.f : 1.f;
+  sWheelMilli[0].fetch_add(static_cast< int >(std::lround(event->wheel.y * flip * 1000.f)), std::memory_order_relaxed);
+  sWheelMilli[1].fetch_add(static_cast< int >(std::lround(event->wheel.x * flip * 1000.f)), std::memory_order_relaxed);
+  return true;
+}
 
 std::string UserBindingsPath() { return PortPaths::UserFolder() + "controls.toml"; }
 
@@ -263,6 +280,12 @@ void BindPortControls(Profile& p) {
   Bind(p, Action::PadA, Make(Device::Touch, kTouchTurbo), turboHz);
   Bind(p, Action::PadZ, Make(Device::Touch, kTouchMapTap));
 
+  // The wheel cycles beams, as in PrimeHack (issue #61); retail has no wheel.
+  if (!PortDebug::OriginalExperience()) {
+    Bind(p, Action::BeamPrev, Make(Device::MouseWheel, 0, 1));
+    Bind(p, Action::BeamNext, Make(Device::MouseWheel, 0, -1));
+  }
+
   // Mouse buttons: under mouse aim each does its action (or the beam shift);
   // out of it the ones on A and B still press them (bombs, boosts, text boxes).
   for (int i = 0; i < PortInputMap::kMouseButtonCount; ++i) {
@@ -328,6 +351,22 @@ void FillRawState(PortInput::RawState& raw, unsigned mouseHeld, bool focused) {
   }
   raw.mouseButtons = mouse;
 
+  // A whole notch is a press for one poll; a smooth-scrolling wheel's fractions add
+  // up to one, and extra notches in one poll are dropped. Scrolling over the F1
+  // overlay or an unfocused window is dropped too.
+  static bool sWheelWatch = false;
+  if (!sWheelWatch) sWheelWatch = SDL_AddEventWatch(WheelWatch, nullptr);
+  const bool wheelLive = focused && !PortDebug::Visible();
+  for (int i = 0; i < 2; ++i) {
+    const int milli = sWheelMilli[i].exchange(0, std::memory_order_relaxed);
+    if (!wheelLive) continue;
+    if (std::abs(milli) >= 1000) {
+      raw.wheel[i] = milli > 0 ? 1.f : -1.f;
+    } else if (milli != 0) {
+      sWheelMilli[i].fetch_add(milli, std::memory_order_relaxed);
+    }
+  }
+
   raw.touch = sTouchControls.load(std::memory_order_relaxed);
   if (PortDebug::TouchBeamShift()) raw.touch |= uint64_t{1} << kTouchBeamShift;
   if (PortDebug::TouchTurboFire()) raw.touch |= uint64_t{1} << kTouchTurbo;
@@ -362,6 +401,77 @@ uint16_t GameContexts() {
   return contexts;
 }
 
+// A next/previous pick the game hasn't taken yet.
+struct CyclePending {
+  int target = -1;
+  uint64_t untilNs = 0;
+};
+CyclePending sCyclePending[2]; // [0] visor, [1] beam
+
+// The beam or visor the game is on or switching to; -1 out of a game.
+int CurrentPick(bool beam) {
+  CStateManager* mgr = PortDebug::StateManager();
+  const CPlayerState* state = mgr != nullptr ? mgr->GetPlayerState() : nullptr;
+  const CPlayer* player = mgr != nullptr ? mgr->GetPlayer() : nullptr;
+  if (state == nullptr || player == nullptr) return -1;
+  return beam ? static_cast< int >(player->GetPlayerGun()->GetPrimaryDestWeaponId())
+              : static_cast< int >(state->GetTransitioningVisor());
+}
+
+// Next/previous beam or visor: the owned one `dir` steps from the current pick, in
+// the pause screen's order (Power, Wave, Ice, Plasma; Combat, Scan, Thermal, X-ray),
+// as PrimeHack cycles them. -1 when there's nothing else to pick.
+int CycleTarget(bool beam, int dir) {
+  // EBeamId / EPlayerVisor values in cycle order, and the item that owns each.
+  static constexpr int kBeamOrder[] = {CPlayerState::kBI_Power, CPlayerState::kBI_Wave, CPlayerState::kBI_Ice,
+                                       CPlayerState::kBI_Plasma};
+  static constexpr CPlayerState::EItemType kBeamItems[] = {CPlayerState::kIT_PowerBeam, CPlayerState::kIT_WaveBeam,
+                                                           CPlayerState::kIT_IceBeam, CPlayerState::kIT_PlasmaBeam};
+  static constexpr int kVisorOrder[] = {CPlayerState::kPV_Combat, CPlayerState::kPV_Scan, CPlayerState::kPV_Thermal,
+                                        CPlayerState::kPV_XRay};
+  static constexpr CPlayerState::EItemType kVisorItems[] = {
+      CPlayerState::kIT_CombatVisor, CPlayerState::kIT_ScanVisor, CPlayerState::kIT_ThermalVisor,
+      CPlayerState::kIT_XRayVisor};
+  const CPlayerState* state = PortDebug::StateManager() != nullptr ? PortDebug::StateManager()->GetPlayerState() : nullptr;
+  const int dest = CurrentPick(beam);
+  if (state == nullptr || dest < 0) return -1;
+  const int* order = beam ? kBeamOrder : kVisorOrder;
+  const CPlayerState::EItemType* items = beam ? kBeamItems : kVisorItems;
+  // Count from a pick the game hasn't taken yet, so quick notches keep stepping.
+  const int current = sCyclePending[beam].target >= 0 ? sCyclePending[beam].target : dest;
+  int pos = 0;
+  while (pos < 4 && order[pos] != current) ++pos;
+  if (pos == 4) pos = 0;
+  for (int step = 1; step < 4; ++step) {
+    const int i = ((pos + dir * step) % 4 + 4) % 4;
+    if (state->HasPowerUp(items[i])) return order[i];
+  }
+  return -1;
+}
+
+// Starts a cycle pick, or re-sends the pending one each poll until the game has
+// taken it: the gun and visor ignore requests while they're still switching
+// (CPlayerGun::HandleWeaponChange skips input in weapon state 0x8), and a request
+// only lasts 120 ms. `beam` picks which; `target` -1 just keeps the pending one alive.
+void PushCyclePick(bool beam, int target) {
+  CyclePending& p = sCyclePending[beam];
+  const uint64_t now = SDL_GetTicksNS();
+  if (target >= 0) {
+    p.target = target;
+    p.untilNs = now + 1'500'000'000ull;
+  }
+  if (p.target < 0) return;
+  if (now > p.untilNs || CurrentPick(beam) == p.target) {
+    p.target = -1;
+    return;
+  }
+  if (beam) {
+    PortDebug::RequestBeam(p.target);
+  } else {
+    PortDebug::RequestVisor(p.target);
+  }
+}
+
 // The actions that aren't pad inputs go straight to the code that does them.
 void RouteDirectActions(const PortInput::Output& out) {
   // EBeamId and EPlayerVisor order, as RequestBeam/RequestVisor take them.
@@ -369,9 +479,20 @@ void RouteDirectActions(const PortInput::Output& out) {
   static constexpr Action kVisors[] = {Action::VisorCombat, Action::VisorXray, Action::VisorScan,
                                        Action::VisorThermal};
   for (int i = 0; i < 4; ++i) {
-    if (out.Pressed(kBeams[i])) PortDebug::RequestBeam(i);
-    if (out.Pressed(kVisors[i])) PortDebug::RequestVisor(i);
+    // A direct pick replaces a pending cycle pick.
+    if (out.Pressed(kBeams[i])) {
+      sCyclePending[1].target = -1;
+      PortDebug::RequestBeam(i);
+    }
+    if (out.Pressed(kVisors[i])) {
+      sCyclePending[0].target = -1;
+      PortDebug::RequestVisor(i);
+    }
   }
+  const int beamDir = out.Pressed(Action::BeamNext) ? 1 : out.Pressed(Action::BeamPrev) ? -1 : 0;
+  PushCyclePick(true, beamDir != 0 ? CycleTarget(true, beamDir) : -1);
+  const int visorDir = out.Pressed(Action::VisorNext) ? 1 : out.Pressed(Action::VisorPrev) ? -1 : 0;
+  PushCyclePick(false, visorDir != 0 ? CycleTarget(false, visorDir) : -1);
   if (out.Pressed(Action::SpringBall)) PortDebug::RequestSpringBall();
   if (out.Pressed(Action::PortMenu)) PortDebug::RequestToggle();
   if (out.Pressed(Action::SaveState)) PortDebug::RequestSaveStateHotkey(1);

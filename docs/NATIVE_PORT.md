@@ -1014,7 +1014,7 @@ unpacks to a temporary directory instead of mounting.
   gameplay, morph ball, map, menus, scan visor, or one of four layers: a layer is active while
   its "Layer n (hold)" binding is held, like a shift key, and its bindings win over the same
   input's normal ones). Actions are the pad's buttons and stick halves, plus beam and
-  visor picks, Spring Ball, beam shift, the port menu, save/load state,
+  visor picks (direct or next/previous), Spring Ball, beam shift, the port menu, save/load state,
   screenshot and Original experience. Bindings are layered over the other pages:
   binding an action from one kind of device (keyboard & mouse, controller,
   touch) replaces what the other pages bind to it from that kind only, and
@@ -1265,6 +1265,11 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   ball, text boxes, menus) only the buttons set to A or B count, so the left
   button still lays bombs and advances text. Every mouse button only counts
   after it has been seen released.
+- The mouse wheel cycles beams (up: previous, down: next; off under Original
+  experience), as PrimeHack does, in the pause screen's order (Power, Wave,
+  Ice, Plasma), skipping beams not yet found. Remap also has "Next/Previous
+  visor" (Combat, Scan, Thermal, X-ray), unbound by default; bind them, or the
+  beam ones, to any input, such as the side mouse buttons or `wheel:left|right`.
 - Outside lock-on, A/D (the left-stick lateral axis) strafe in mouse mode rather
   than applying the console's turning torque. Movement uses the current mouse
   heading and the game's acceleration, friction, surface restraints and collision
