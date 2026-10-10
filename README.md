@@ -9,6 +9,12 @@ through Aurora (SDL3 and WebGPU), with no emulator involved.
 reads it from a disc image and never ships any of its assets. This repository
 ships no disc image, and neither does any package or release built from it.
 
+## Opening the settings overlay
+
+Press F1 at any time to open or close the Metroid Prime Port settings overlay
+
+The overlay contains the full port configuration, including Game, Controls, Video, Remastered, Mods, Archipelago, Tracker, Save states, System and Debug options
+
 ## What it adds over the console release
 
 - Widescreen rendering — 4:3, 16:9 or following the window — with the HUD spread
