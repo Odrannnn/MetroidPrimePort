@@ -243,7 +243,8 @@ Two things to know when reproducing this:
 
 - **The card follows the executable, not `MP_USER_PATH`.** `CARDSetBasePath` is
   given `SDL_GetBasePath()`, so each build directory has its own card. A save
-  written by one build is invisible to another.
+  written by one build is invisible to another. Inside a macOS app bundle it is
+  kept in the user folder instead.
 - **A single press at a guessed frame is not enough.** The title takes ~2000
   frames to fade in on this path, and a press during the fade is silently
   ignored, which is indistinguishable from "the button does not work". Use

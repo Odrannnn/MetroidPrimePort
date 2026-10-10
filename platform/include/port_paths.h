@@ -301,10 +301,13 @@ inline const std::vector<std::string>& MigrationLog() {
 // The memory card's folder. It has always been in the executable's folder, also
 // for an install whose other data is still in the per-user folder and whatever
 // MP_USER_PATH says; now that is its user/ subfolder. It follows UserFolder
-// only where the executable's folder is read-only (an AppImage, a Flatpak).
+// where the executable's folder is read-only (an AppImage, a Flatpak) or inside
+// a macOS app bundle, where SDL_GetBasePath is Contents/Resources/: a card there
+// breaks the bundle's signature and is lost with the app when it is replaced.
 inline std::string CardFolder() {
 #if !defined(__ANDROID__)
-  if (const char* base = SDL_GetBasePath(); base != nullptr && detail::Writable(base)) {
+  if (const char* base = SDL_GetBasePath();
+      base != nullptr && !detail::InAppBundle(base) && detail::Writable(base)) {
     detail::MigrateLooseData(detail::WithSeparator(base));
     const std::string folder = detail::WithSeparator(base) + "user/";
     std::error_code ec;
