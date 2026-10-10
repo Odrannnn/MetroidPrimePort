@@ -657,19 +657,22 @@ const std::vector<SGroup>& Groups() {
     std::vector<SGroup> g = {
         {"Game buttons",
          {Action::PadA, Action::PadB, Action::PadX, Action::PadY, Action::PadZ, Action::PadStart, Action::PadL,
-          Action::PadR, Action::LAnalog, Action::RAnalog},
+          Action::PadR, Action::LAnalog, Action::RAnalog, Action::PadUp, Action::PadDown, Action::PadLeft,
+          Action::PadRight},
          true},
+        // The C-stick is the right stick: twin-stick aim, classic beam picks, map panning.
         {"Move and aim",
-         {Action::MainUp, Action::MainDown, Action::MainLeft, Action::MainRight, Action::AimUp, Action::AimDown,
-          Action::AimLeft, Action::AimRight, Action::LookX, Action::LookY},
+         {Action::MainUp, Action::MainDown, Action::MainLeft, Action::MainRight, Action::CUp, Action::CDown,
+          Action::CLeft, Action::CRight},
          true},
+        // Direct picks work in every scheme; the GameCube inputs behind them are listed above.
         {"Beams",
-         {Action::CUp, Action::CDown, Action::CLeft, Action::CRight, Action::BeamShift, Action::BeamPower,
-          Action::BeamWave, Action::BeamIce, Action::BeamPlasma, Action::BeamNext, Action::BeamPrev},
+         {Action::BeamPower, Action::BeamWave, Action::BeamIce, Action::BeamPlasma, Action::BeamNext,
+          Action::BeamPrev, Action::BeamShift},
          true},
         {"Visors",
-         {Action::PadUp, Action::PadDown, Action::PadLeft, Action::PadRight, Action::VisorCombat, Action::VisorScan,
-          Action::VisorThermal, Action::VisorXray, Action::VisorNext, Action::VisorPrev},
+         {Action::VisorCombat, Action::VisorScan, Action::VisorThermal, Action::VisorXray, Action::VisorNext,
+          Action::VisorPrev},
          true},
         {"Morph Ball", {Action::SpringBall}, true},
         {"Port", {Action::PortMenu, Action::SaveState, Action::LoadState, Action::Screenshot, Action::ToggleOriginal}, true},
@@ -677,7 +680,11 @@ const std::vector<SGroup>& Groups() {
     };
     // An action added to the engine but not sorted here still gets a row.
     SGroup other{"Other", {}, true};
+    // Aim*/Look* aren't read by the game yet (aim is the C-stick, mouse look its own path): no rows.
+    const Action unused[] = {Action::AimUp, Action::AimDown, Action::AimLeft, Action::AimRight, Action::LookX,
+                             Action::LookY};
     for (int i = 1; i < PortInput::kActionCount; ++i) {
+      if (std::find(std::begin(unused), std::end(unused), Action(i)) != std::end(unused)) continue;
       const bool listed = std::any_of(g.begin(), g.end(), [&](const SGroup& s) {
         return std::find(s.actions.begin(), s.actions.end(), Action(i)) != s.actions.end();
       });
@@ -709,7 +716,7 @@ const char* GameHint(Action a) {
   case Action::CUp:
   case Action::CDown:
   case Action::CLeft:
-  case Action::CRight: return "Pick a beam";
+  case Action::CRight: return "Aim, or pick a beam";
   case Action::PadUp:
   case Action::PadDown:
   case Action::PadLeft:
