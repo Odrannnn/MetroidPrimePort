@@ -56,7 +56,9 @@ void CBomb::Explode(const CVector3f& pos, CStateManager& mgr) {
   mgr.RemoveWeaponId(GetOwnerId(), GetType());
   mIsNotDetonated = false;
   if (mParticle3.get()) {
-    mParticle3->EndLifetime();
+    // Remastered calls CParticleGen::ShutdownEffect (vtable +0x98). BombAttract has SHTM 0 and no
+    // SHTT, so that is DoShutdownBehavior(0): stop emitting, children shut down the same way.
+    mParticle3->SetParticleEmission(false);
   }
 }
 
@@ -177,18 +179,21 @@ void CBomb::ThinkRemastered(float dt, CStateManager& mgr) {
     if (mFuseTime <= 0.f) {
       Explode(GetTranslation(), mgr);
     }
-    if (mFuseTime <= 0.5f && !mDisableFuse) {
+    // Explode cleared the armed bit: Remastered's test is !(armed && attracted).
+    if (mFuseTime <= 0.5f && !(mIsNotDetonated && mDisableFuse)) {
       mParticle2->Update(dt);
     }
     if (!mDisableFuse) {
       mFuseTime -= dt;
     }
 
-    if (mAcceleration.MagSquared() > 0.f) {
-      mVelocity += dt * mAcceleration;
+    if (mIsNotDetonated) {
+      if (mAcceleration.MagSquared() > 0.f) {
+        mVelocity += dt * mAcceleration;
+      }
     }
 
-    if (mVelocity.MagSquared() > 0.f) {
+    if (mIsNotDetonated && mVelocity.MagSquared() > 0.f) {
       mPrevLocation = GetTranslation();
       GlobalMove(dt * mVelocity);
       CVector3f diffVec = GetTranslation() - mPrevLocation;
