@@ -12,6 +12,8 @@
 #include <dolphin/pad.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace PortInputDevices {
 
@@ -66,6 +68,18 @@ bool ActivePad(std::string& guid, std::string& type, std::string& name);
 // The devices as they are, for an input capture: keys, port 0's pad (axes without
 // deadzones) and SDL's mouse buttons (code kMouseKeySlot..).
 void ReadRaw(PortInput::RawState& raw);
+
+// A connected controller (virtual touch pads excluded): SDL GUID, gamepad type
+// string and name.
+struct SPadInfo {
+  std::string guid;
+  std::string type;
+  std::string name;
+};
+std::vector<SPadInfo> ConnectedPads();
+// The profile the saved controls describe without the user's bindings: what each
+// action inherits on the Remap page.
+void BuildBaseProfile(PortInput::Profile& out);
 
 // The profile the saved controls describe, with the user's bindings on top
 // (exposed for tests and the remap UI).

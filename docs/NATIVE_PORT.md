@@ -437,7 +437,7 @@ to another button gets a GameCube icon, named after the button's default action.
 The binding icons register above the static set, so reloading that set never
 hides them. The chosen icon is logged when it changes ("prompt A keyboard_x").
 `MP_SMOKE_BIND_A=<scancode>` (negative for mouse buttons, -3 is middle) rebinds
-the A action once, for checking this without going through the Controls page; it
+the A action once, for checking this without going through the Controls > Remap page; it
 needs a `-DMP_ENABLE_SMOKE_DRIVER=ON` build such as `build/smoke-gcc`, and
 `MP_FAST_BOOT=1 MP_SKIP_CUTSCENES=1 MP_SMOKE_PAUSE=<ticks>` reaches the pause
 screen quickly to see the result.
@@ -886,7 +886,7 @@ unpacks to a temporary directory instead of mounting.
   a C-stick held from the keyboard is not consumed, so keyboard beam keys still
   pick beams, and an L from a key or mouse button stays lock-on (not a beam
   modifier). Fire
-  stays on whatever is bound to A; remap it on the Controls page.
+  stays on whatever is bound to A; remap it in Controls > Remap.
 - Spring Ball (Controls > Options, persisted as `spring_ball`, off by default): C-stick
   up in morph ball jumps, as in Metroid Prime Trilogy and the randomprime discs
   the Archipelago world makes, once the Morph Ball Bombs are held. It is a bomb
@@ -954,12 +954,12 @@ unpacks to a temporary directory instead of mounting.
   default; presets leave them alone. On Android, F1 Touch controls "Turbo fire
   button" (`touch_turbo=`, off by default) adds a "T" button to either touch
   layout, movable and resizable in the layout editor (issue #10).
-- Alt controller buttons (Controls > Controller, "Alt button" column, persisted as
+- Alt controller buttons (the pad buttons' second binding in Controls > Remap, persisted as
   `pad_alt`, 16 comma-separated native codes indexed by the PAD bit, -1 for
   none): a second controller button or trigger per GameCube button. Aurora maps
   one native button to each PAD button, so the port reads the alt one itself and
   ORs it in (`PortControls::HeldAltPadButtons`, from `CDolphinController`).
-- Control presets (Controls page). Keyboard: **Classic** (the first-run layout)
+- Control presets (Controls > Remap, "Reset..." beside the device list: Keyboard & mouse and All controllers). Keyboard: **Classic** (the first-run layout)
   and **Mouse & keyboard** (WASD, E fire, Space jump, left ctrl/C morph, F
   missile, Q lock on, left alt free look, Tab/M map, 1-4 beams and 5-8 visors
   through whichever C-stick direction or D-pad button the disc's tweak gives
@@ -993,13 +993,16 @@ unpacks to a temporary directory instead of mounting.
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
   input is disabled. The console's `status` prints the game's L/A and the charge.
-- The overlay's **Controls** page rebinds pad 1: click Bind, then press the input.
-  "Keyboard & mouse" assigns a key or mouse button to each pad button and stick
-  axis; "Controller" assigns a physical controller button or axis. Bindings are
-  saved by Aurora next to the other controller data, with buttons to clear the
-  keyboard bindings and restore the controller defaults. The beam shift and the
-  mouse buttons are rows here too (port settings, not Aurora's).
-- **Controls > Remap** binds any action to an input or a chord of up to four
+- The overlay's **Controls** page keeps settings only: "Mouse settings" (mouse
+  buttons as pad buttons, inversion, crosshair) and "Controller settings" (dead
+  zones). Every binding is on **Controls > Remap**, below.
+- **Controls > Remap** binds any action, per device (the Device list: Keyboard & mouse, Touch,
+  All controllers, and each connected controller kind or model, plus any such profile already
+  saved). Every action is listed with what the device inherits (greyed); editing one makes it
+  yours, "Revert" gives the built-in back, and Record accepts only that device's inputs. Keyboard &
+  mouse, Touch and All controllers are the Default profile restricted to that family of input;
+  a kind or model is its own profile on top. "Reset..." restores a preset (after a confirmation).
+  It binds any action to an input or a chord of up to four
   (hold the first ones, press the last; or "Any order" within the chord window),
   with a trigger (press, tap, hold, double tap, toggle), turbo, a scale/invert
   for analog actions and the contexts it applies in (gameplay, morph ball, map,
@@ -1243,7 +1246,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   Mouse aim replaces the R-button free look, so switching it on in F1 also
   switches on twin stick (still its own setting): the mouse and a pad's right
   stick then add into the same aim.
-- In mouse mode the five mouse buttons act as pad buttons, set in the Controls > Keyboard & mouse
+- In mouse mode the five mouse buttons act as pad buttons, set in the Controls > Mouse settings
   sub-tab's "Mouse buttons" list (`mouse_left`, `mouse_middle`, `mouse_right`,
   `mouse_x1`, `mouse_x2`: none, a pad button, a D-pad direction or the beam
   shift). By default **left-click fires / holds a charge / releases a charged
@@ -1263,8 +1266,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   behavior; closing F1 does not require reacquiring a lock to strafe.
 - Mouse mode requests the GC aiming crosshair without holding R or entering the
   console's movement-restricting free-look mode. `MP_DISABLE_MOUSE_CROSSHAIR=1`
-  opts out. The Controls > Keyboard & mouse sub-tab exposes inversion, weapon-button and crosshair toggles.
-- Crosshair size (Controls > Keyboard & mouse and pause Options > Controller, persisted as
+  opts out. The Controls > Mouse settings sub-tab exposes inversion, weapon-button and crosshair toggles.
+- Crosshair size (Controls > Mouse settings and pause Options > Controller, persisted as
   `crosshair_size`, 25-100 percent, default 50): scales the free-aim crosshair
   under mouse aim and twin stick, where it is always shown and the retail size
   covers much of the view. Holding R without either keeps the retail size.

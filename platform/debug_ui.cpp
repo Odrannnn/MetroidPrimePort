@@ -3839,7 +3839,7 @@ void UpdateControllerNav() {
   // While the Controls tab captures a pad input, the pad binds instead of
   // navigating (releasing everything here also ends any nav press in progress).
   // A pad that went away releases everything the same way.
-  const bool capturing = pad == nullptr || PortControls::Capturing() || PortInputRemap::Capturing();
+  const bool capturing = pad == nullptr || PortInputRemap::Capturing();
   const auto held = [pad, capturing](SDL_GamepadButton button) {
     return !capturing && SDL_GetGamepadButton(pad, button);
   };
@@ -6016,7 +6016,7 @@ void DrawControlsKeyboardMouse() {
     sMouseButtonGate.Reset();
     MarkDirty();
   }
-  ImGui::SetItemTooltip("Mouse buttons are set in Controls > Keyboard & mouse. Existing "
+  ImGui::SetItemTooltip("Mouse buttons are set below and in Controls > Remap. Existing "
                         "keyboard/controller weapon bindings also work.");
   if (ImGui::Checkbox("Crosshair", &sInput.mouseCrosshair)) {
     MarkDirty();
@@ -6030,7 +6030,28 @@ void DrawControlsKeyboardMouse() {
   }
   ImGui::SetItemTooltip("Applies under mouse aim and twin stick.");
 
-  PortControls::DrawKeyboardMouse();
+  ImGui::SeparatorText("Mouse buttons");
+  ImGui::TextDisabled("The pad button or beam shift each mouse button presses under mouse aim; out of it "
+                      "only A and B work (bombs, menus). Chords, taps and holds: Controls > Remap.");
+  static const char* const kMouseActionNames[PortInputMap::kMA_Count] = {
+      "None", "A", "B", "X", "Y", "L", "R", "Z", "Start", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right",
+      "Beam shift"};
+  static const char* const kMouseNames[PortInputMap::kMouseButtonCount] = {"Left", "Middle", "Right", "X1 (back)",
+                                                                           "X2 (forward)"};
+  for (int button = 0; button < PortInputMap::kMouseButtonCount; ++button) {
+    ImGui::PushID(button);
+    const int current = PortDebug::MouseAction(button);
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.f);
+    if (ImGui::BeginCombo(kMouseNames[button], kMouseActionNames[current])) {
+      for (int action = 0; action < PortInputMap::kMA_Count; ++action) {
+        if (ImGui::Selectable(kMouseActionNames[action], action == current)) {
+          PortDebug::SetMouseAction(button, action);
+        }
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::PopID();
+  }
 }
 
 void DrawControlsController() {
@@ -6042,7 +6063,7 @@ void DrawControlsController() {
   }
   ItemHelp("Twin stick uses the right stick as a direct camera aim (the same path as the mouse) and "
            "consumes it, so it no longer free-looks. Fire stays on whatever is bound to A; remap it "
-           "in Controls > Controller.");
+           "in Controls > Remap.");
   bool remasteredMovement = sInput.remasteredMovement;
   if (ImGui::Checkbox("Remastered movement (twin stick and mouse aim)", &remasteredMovement)) {
     SetRemasteredMovement(remasteredMovement);
@@ -6068,7 +6089,14 @@ void DrawControlsController() {
     }
     ImGui::EndDisabled();
   }
-  PortControls::DrawController();
+  if (SDL_Gamepad* pad = PADGetSDLGamepadForIndex(0);
+      pad != nullptr && SDL_IsJoystickVirtual(SDL_GetGamepadID(pad))) {
+    // Aurora ignores mappings on the virtual touch pad.
+    ImGui::TextWrapped("The touch controls always use the GameCube layout; presets and remaps apply to "
+                       "real controllers only.");
+  } else {
+    PortControls::DrawDeadZones();
+  }
 }
 
 void DrawControlsTouchGyro() {
@@ -7721,11 +7749,11 @@ void DrawControlsTab() {
     DrawControlsOptions();
     ImGui::EndTabItem();
   }
-  if (SubTab("Controls", "Keyboard & mouse")) {
+  if (SubTab("Controls", "Mouse settings")) {
     DrawControlsKeyboardMouse();
     ImGui::EndTabItem();
   }
-  if (SubTab("Controls", "Controller")) {
+  if (SubTab("Controls", "Controller settings")) {
     DrawControlsController();
     ImGui::EndTabItem();
   }

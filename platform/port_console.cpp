@@ -579,7 +579,7 @@ void CmdHelp() {
   Out("                           fly the view away from the player (HUD hidden; freeze holds the game still)");
   Out("aspect <4:3|16:9|window>   switch the rendering aspect, as the Options row does");
   Out("original [on|off]   Original experience (retail settings over the saved ones)");
-  Out("keypreset classic|mouse   apply a keyboard preset (Controls page), as its button");
+  Out("keypreset classic|mouse   apply a keyboard preset (Controls > Remap), as its button");
   Out("padpreset gamecube|remastered|modern|southpaw   apply a controller preset to pad 1");
   Out("fov <45..90>               first-person vertical FOV, as the Options row does");
   Out("window [<w> <h>]           resize the window (leaves fullscreen); prints the size");

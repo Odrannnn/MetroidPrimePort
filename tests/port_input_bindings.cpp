@@ -294,9 +294,61 @@ void TestOverlay() {
   CHECK(p.chordWindowMs == 90);
   CHECK(p.bindings == user.bindings);
 }
+
+void TestFamilyEditing() {
+  Profile inherited;
+  inherited.bindings.push_back(Bind(Action::PadA, {In(Device::Key, 44)}));
+  inherited.bindings.push_back(Bind(Action::PadA, {In(Device::Key, 45)}));
+  inherited.bindings.push_back(Bind(Action::PadA, {In(Device::PadButton, 0)}));
+  inherited.bindings.push_back(Bind(Action::PadB, {In(Device::PadButton, 1)}));
+
+  UserProfile user;
+  CHECK(BindingFamily(inherited.bindings[2]) == Family::Pad);
+  CHECK(!Overridden(user, Action::PadA, Family::Keyboard));
+
+  // Editing one of two inherited keys keeps the other, and the pad binding alone.
+  Materialize(user, Action::PadA, Family::Keyboard, inherited);
+  CHECK(user.bindings.size() == 2);
+  CHECK(Overridden(user, Action::PadA, Family::Keyboard));
+  CHECK(!Overridden(user, Action::PadA, Family::Pad));
+  Materialize(user, Action::PadA, Family::Keyboard, inherited); // already overridden: no copy
+  CHECK(user.bindings.size() == 2);
+  Profile p = inherited;
+  Overlay(p, user);
+  CHECK(p.bindings.size() == 4);
+  CHECK(InFamily(p.bindings, Action::PadA, Family::Pad).size() == 1);
+
+  // Removing the last one unbinds the family.
+  RemoveUserBinding(user, 0);
+  CHECK(user.unbind.empty());
+  RemoveUserBinding(user, 0);
+  CHECK(user.bindings.empty());
+  CHECK(user.unbind.size() == 1 && user.unbind[0] == (Unbind{Action::PadA, Family::Keyboard}));
+  p = inherited;
+  Overlay(p, user);
+  CHECK(InFamily(p.bindings, Action::PadA, Family::Keyboard).empty());
+  CHECK(InFamily(p.bindings, Action::PadA, Family::Pad).size() == 1);
+
+  // A new binding supersedes the unbind.
+  AddUserBinding(user, Bind(Action::PadA, {In(Device::Key, 9)}));
+  CHECK(user.unbind.empty() && user.bindings.size() == 1);
+
+  // Revert and ClearFamily.
+  AddUserBinding(user, Bind(Action::PadB, {In(Device::PadButton, 2)}));
+  Revert(user, Action::PadA, Family::Keyboard);
+  CHECK(!Overridden(user, Action::PadA, Family::Keyboard));
+  CHECK(Overridden(user, Action::PadB, Family::Pad));
+  user.unbind.push_back({Action::PadZ, Family::Keyboard});
+  ClearFamily(user, Family::Pad);
+  CHECK(user.bindings.empty());
+  CHECK(user.unbind.size() == 1);
+  ClearFamily(user, Family::Keyboard);
+  CHECK(user.unbind.empty());
+}
 } // namespace
 
 int main() {
+  TestFamilyEditing();
   TestInputText();
   TestContexts();
   TestRoundTrip();
