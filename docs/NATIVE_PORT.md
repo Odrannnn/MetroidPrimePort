@@ -962,7 +962,7 @@ unpacks to a temporary directory instead of mounting.
   none): a second controller button or trigger per GameCube button. Aurora maps
   one native button to each PAD button, so the port reads the alt one itself and
   ORs it in (`PortControls::HeldAltPadButtons`, from `CDolphinController`).
-- Control presets (Controls > Remap, "Reset..." beside the device list: Keyboard & mouse and All controllers). Keyboard: **Classic** (the first-run layout)
+- Control presets (Controls > Remap, "Reset..." beside the device list: Keyboard & mouse and Controllers). Keyboard: **Classic** (the first-run layout)
   and **Mouse & keyboard** (WASD, E fire, Space jump, left ctrl/C morph, F
   missile, Q lock on, left alt free look, Tab/M map, 1-4 beams and 5-8 visors
   through whichever C-stick direction or D-pad button the disc's tweak gives
@@ -1000,17 +1000,20 @@ unpacks to a temporary directory instead of mounting.
   buttons as pad buttons, inversion, crosshair) and "Controller settings" (dead
   zones). Every binding is on **Controls > Remap**, below.
 - **Controls > Remap** binds any action, per device (the Device list: Keyboard & mouse, Touch,
-  All controllers, and each connected controller kind or model, plus any such profile already
-  saved). Every action is listed with what the device inherits (greyed); editing one makes it
-  yours, "Revert" gives the built-in back, and Record accepts only that device's inputs. Keyboard &
-  mouse, Touch and All controllers are the Default profile restricted to that family of input;
+  Controllers, plus saved controller kind/model profiles; Advanced > "Separate bindings per
+  controller kind or model" lists the connected ones too). Actions are grouped (game buttons,
+  move and aim, beams, visors, Morph Ball, port, layers) with the GameCube button's game function
+  beside it; inputs the device has out of the box are marked "default". Editing one makes it
+  yours, "Revert" gives the default back, and Record accepts only that device's inputs. Keyboard &
+  mouse, Touch and Controllers are the Default profile restricted to that family of input;
   a kind or model is its own profile on top. "Reset..." restores a preset (after a confirmation).
   It binds any action to an input or a chord of up to four
-  (hold the first ones, press the last; or "Any order" within the chord window),
-  with a trigger (press, tap, hold, double tap, toggle), turbo, a scale/invert
-  for analog actions and the contexts it applies in (gameplay, morph ball, map,
-  menus, scan visor, or one of four layers, active while a "Layer n (hold)"
-  binding is held). Actions are the pad's buttons and stick halves, plus beam and
+  (hold the first ones, press the last; or "Any order" within the chord window). The editor's
+  Advanced section holds the typed input text, the trigger (press, tap, hold, double tap,
+  toggle), turbo, a scale/invert for analog actions and where it works (everywhere, or only in
+  gameplay, morph ball, map, menus, scan visor, or one of four layers: a layer is active while
+  its "Layer n (hold)" binding is held, like a shift key, and its bindings win over the same
+  input's normal ones). Actions are the pad's buttons and stick halves, plus beam and
   visor picks, Spring Ball, beam shift, the port menu, save/load state,
   screenshot and Original experience. Bindings are layered over the other pages:
   binding an action from one kind of device (keyboard & mouse, controller,

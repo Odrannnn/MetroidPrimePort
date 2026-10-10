@@ -251,15 +251,24 @@ struct SDeviceEntry {
   std::string label;
 };
 
+// Offer the connected controllers' kinds and models as their own profiles (saved
+// profiles are listed either way).
+bool sPadProfiles = false;
+
 std::vector<SDeviceEntry> DeviceEntries() {
-  std::vector<SDeviceEntry> out = {
-      {"kbd", "Keyboard & mouse"}, {"touch", "Touch"}, {"pads", "All controllers"}};
+  std::vector<SDeviceEntry> out = {{"kbd", "Keyboard & mouse"}, {"touch", "Touch"}, {"pads", "Controllers"}};
   const auto listed = [&](const std::string& key) {
     return std::any_of(out.begin(), out.end(), [&](const SDeviceEntry& e) { return e.key == key; });
   };
   for (const PortInputDevices::SPadInfo& pad : PortInputDevices::ConnectedPads()) {
-    if (!pad.type.empty() && !listed("type:" + pad.type)) out.push_back({"type:" + pad.type, "All " + pad.type + " controllers"});
-    if (!pad.guid.empty() && !listed("guid:" + pad.guid)) out.push_back({"guid:" + pad.guid, pad.name + " (this model)"});
+    const std::string type = "type:" + pad.type;
+    const std::string guid = "guid:" + pad.guid;
+    if (!pad.type.empty() && !listed(type) && (sPadProfiles || Find(type) != nullptr || sDevice == type)) {
+      out.push_back({type, "Only " + pad.type + " controllers"});
+    }
+    if (!pad.guid.empty() && !listed(guid) && (sPadProfiles || Find(guid) != nullptr || sDevice == guid)) {
+      out.push_back({guid, "Only " + pad.name + " (this model)"});
+    }
   }
   for (const UserProfile& p : sWork.profiles) {
     if (p.match.empty() || listed(p.match)) continue;
@@ -341,9 +350,18 @@ void UpdateCapture(PortInput::Family family) {
   if (!sCapture.chord.empty() && down.empty()) FinishCapture();
 }
 
+bool sAdvancedSync = false; // set the editor's Advanced node from the draft on the next draw
+
+// Whether a binding uses anything the editor keeps under Advanced.
+bool UsesAdvanced(const Binding& b) {
+  return b.trigger != Trigger::Press || b.turboHz != 0 || b.contexts != PortInput::kCtxAll || (b.IsChord() && b.anyOrder) ||
+         b.scale != 1.f || b.invert;
+}
+
 void BeginEdit(int index, const Binding& b) {
   sEditing = index;
   sDraft = b;
+  sAdvancedSync = true;
   std::snprintf(sInputsText, sizeof(sInputsText), "%s", InputsToText(b).c_str());
   EndCapture();
 }
@@ -365,15 +383,31 @@ bool ActionCombo(const char* label, Action& action) {
   return changed;
 }
 
+void DrawAdvancedEditor(const Binding& parsed, bool inputsOk);
+void SaveDraft(const SView& v, Binding parsed);
+
 void DrawEditor(const SView& v) {
   using PortInput::Family;
   ImGui::SeparatorText(sEditing == kEditNew ? "New binding" : "Edit binding");
   ActionCombo("Action", sDraft.action);
 
+  Binding parsed = sDraft;
+  const bool inputsOk = InputsFromText(sInputsText, parsed);
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Input:");
+  ImGui::SameLine();
   if (sCapture.active) {
     ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), sCapture.armed ? "Press an input or a chord, then release it (Esc cancels)..."
                                                                      : "Release everything...");
-  } else if (v.family != Family::Touch) {
+  } else {
+    if (inputsOk) {
+      ImGui::TextUnformatted(sInputsText);
+    } else {
+      ImGui::TextDisabled(sInputsText[0] == '\0' ? "(none)" : "(not understood: see Advanced)");
+    }
+    ImGui::SameLine();
+  }
+  if (!sCapture.active && v.family != Family::Touch) {
     if (ImGui::Button("Record")) StartCapture();
     ImGui::SetItemTooltip(v.family == Family::Keyboard
                               ? "Press one key or mouse button, or hold several in order (the last one is the "
@@ -382,11 +416,6 @@ void DrawEditor(const SView& v) {
                                 "last one is the trigger), then release them all. Esc cancels.");
     ImGui::SameLine();
   }
-  ImGui::SetNextItemWidth(-FLT_MIN);
-  ImGui::InputTextWithHint("##inputs", "pad:leftshoulder + pad:a", sInputsText, sizeof(sInputsText));
-  ImGui::SetItemTooltip("Inputs, joined with +: key:<name>, mouse:left, wheel:up, pad:<button>, "
-                        "axis:<name>+/-, touch:<control> (a, fire, missile...), gyro:yaw+ ... (docs/NATIVE_PORT.md). "
-                        "Append @<percent> for an axis threshold.");
   if (!sCapture.active) {
     if (v.family == Family::Touch) {
       ImGui::SetNextItemWidth(260.f);
@@ -408,8 +437,39 @@ void DrawEditor(const SView& v) {
     if (ImGui::Button("Clear")) sInputsText[0] = '\0';
   }
 
-  Binding parsed = sDraft;
-  const bool inputsOk = InputsFromText(sInputsText, parsed);
+  // Everything past the action and its input, open by itself when the binding uses it.
+  if (sAdvancedSync) {
+    ImGui::SetNextItemOpen(UsesAdvanced(sDraft), ImGuiCond_Always);
+    sAdvancedSync = false;
+  }
+  if (ImGui::TreeNode("Advanced##edit")) {
+    DrawAdvancedEditor(parsed, inputsOk);
+    ImGui::TreePop();
+  }
+
+  const bool familyOk = inputsOk && PortInput::BindingFamily(parsed) == v.family;
+  if (inputsOk && !familyOk) {
+    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "This page binds %s inputs only.", kFamilies[int(v.family)]);
+  }
+  const bool valid = familyOk && sDraft.action != Action::None && sDraft.contexts != 0;
+  ImGui::BeginDisabled(!valid);
+  if (ImGui::Button("Save")) {
+    SaveDraft(v, parsed);
+  }
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  if (ImGui::Button("Cancel")) {
+    sEditing = kEditNone;
+    EndCapture();
+  }
+}
+
+void DrawAdvancedEditor(const Binding& parsed, bool inputsOk) {
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  ImGui::InputTextWithHint("##inputs", "pad:leftshoulder + pad:a", sInputsText, sizeof(sInputsText));
+  ImGui::SetItemTooltip("Inputs, joined with +: key:<name>, mouse:left, wheel:up, pad:<button>, "
+                        "axis:<name>+/-, touch:<control> (a, fire, missile...), gyro:yaw+ ... (docs/NATIVE_PORT.md). "
+                        "Append @<percent> for an axis threshold.");
   if (!inputsOk && sInputsText[0] != '\0') ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "Unknown input text.");
   if (parsed.count > 1) {
     ImGui::Checkbox("Any order", &sDraft.anyOrder);
@@ -452,13 +512,14 @@ void DrawEditor(const SView& v) {
     ImGui::Checkbox("Invert", &sDraft.invert);
   }
 
-  ImGui::TextUnformatted("Active in");
   bool everywhere = sDraft.contexts == PortInput::kCtxAll;
-  ImGui::SameLine();
-  if (ImGui::Checkbox("Everywhere", &everywhere)) {
+  if (ImGui::Checkbox("Works everywhere", &everywhere)) {
     sDraft.contexts = everywhere ? PortInput::kCtxAll : PortInput::kCtxGameplay;
   }
+  ImGui::SetItemTooltip("Off: the binding works only where you tick below, so the same input can do "
+                        "different things on the map, in menus or in Morph Ball.");
   if (!everywhere) {
+    ImGui::TextUnformatted("Only in:");
     for (size_t i = 0; i < std::size(kContexts); ++i) {
       bool on = (sDraft.contexts & kContexts[i].bit) != 0;
       if (i % 5 != 0) ImGui::SameLine();
@@ -466,61 +527,51 @@ void DrawEditor(const SView& v) {
         sDraft.contexts = uint16_t(on ? sDraft.contexts | kContexts[i].bit : sDraft.contexts & ~kContexts[i].bit);
       }
     }
-    ImGui::TextDisabled("A layer applies while its \"Layer n (hold)\" binding is held.");
+    ImGui::TextDisabled("Layer n: only while the input bound to \"Layer n (hold)\" is held, like a shift "
+                        "key. There it wins over the input's normal binding.");
   }
+}
 
-  const bool familyOk = inputsOk && PortInput::BindingFamily(parsed) == v.family;
-  if (inputsOk && !familyOk) {
-    ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "This page binds %s inputs only.", kFamilies[int(v.family)]);
-  }
-  const bool valid = familyOk && sDraft.action != Action::None && sDraft.contexts != 0;
-  ImGui::BeginDisabled(!valid);
-  if (ImGui::Button("Save")) {
-    parsed.action = sDraft.action;
-    parsed.anyOrder = parsed.count > 1 && sDraft.anyOrder;
-    parsed.trigger = sDraft.trigger;
-    parsed.tapMs = sDraft.tapMs;
-    parsed.holdMs = sDraft.holdMs;
-    parsed.doubleMs = sDraft.doubleMs;
-    parsed.turboHz = sDraft.turboHz;
-    parsed.scale = sDraft.scale;
-    parsed.invert = sDraft.invert;
-    parsed.contexts = sDraft.contexts;
-    UserProfile& profile = EditedProfile(v);
-    const Family family = v.family;
-    if (sEditing == kEditNew) {
-      // Keep the other built-in bindings of this action: a user binding drops them all.
-      PortInput::Materialize(profile, parsed.action, family, v.inherited);
-      PortInput::AddUserBinding(profile, parsed);
-    } else if (sEditing == kEditInherited) {
-      PortInput::Materialize(profile, sEditOrig.action, family, v.inherited);
-      PortInput::Materialize(profile, parsed.action, family, v.inherited);
-      const auto it = std::find(profile.bindings.begin(), profile.bindings.end(), sEditOrig);
-      if (it != profile.bindings.end()) {
-        const size_t index = size_t(it - profile.bindings.begin());
-        PortInput::RemoveUserBinding(profile, index);
-      }
-      PortInput::AddUserBinding(profile, parsed);
-    } else if (sEditing >= 0 && sEditing < int(profile.bindings.size())) {
-      const Binding& old = profile.bindings[size_t(sEditing)];
-      if (old.action == parsed.action && PortInput::BindingFamily(old) == family) {
-        profile.bindings[size_t(sEditing)] = parsed;
-      } else {
-        PortInput::RemoveUserBinding(profile, size_t(sEditing));
-        PortInput::Materialize(profile, parsed.action, family, v.inherited);
-        PortInput::AddUserBinding(profile, parsed);
-      }
+void SaveDraft(const SView& v, Binding parsed) {
+  using PortInput::Family;
+  parsed.action = sDraft.action;
+  parsed.anyOrder = parsed.count > 1 && sDraft.anyOrder;
+  parsed.trigger = sDraft.trigger;
+  parsed.tapMs = sDraft.tapMs;
+  parsed.holdMs = sDraft.holdMs;
+  parsed.doubleMs = sDraft.doubleMs;
+  parsed.turboHz = sDraft.turboHz;
+  parsed.scale = sDraft.scale;
+  parsed.invert = sDraft.invert;
+  parsed.contexts = sDraft.contexts;
+  UserProfile& profile = EditedProfile(v);
+  const Family family = v.family;
+  if (sEditing == kEditNew) {
+    // Keep the other built-in bindings of this action: a user binding drops them all.
+    PortInput::Materialize(profile, parsed.action, family, v.inherited);
+    PortInput::AddUserBinding(profile, parsed);
+  } else if (sEditing == kEditInherited) {
+    PortInput::Materialize(profile, sEditOrig.action, family, v.inherited);
+    PortInput::Materialize(profile, parsed.action, family, v.inherited);
+    const auto it = std::find(profile.bindings.begin(), profile.bindings.end(), sEditOrig);
+    if (it != profile.bindings.end()) {
+      const size_t index = size_t(it - profile.bindings.begin());
+      PortInput::RemoveUserBinding(profile, index);
     }
-    sEditing = kEditNone;
-    EndCapture();
-    Commit();
+    PortInput::AddUserBinding(profile, parsed);
+  } else if (sEditing >= 0 && sEditing < int(profile.bindings.size())) {
+    const Binding& old = profile.bindings[size_t(sEditing)];
+    if (old.action == parsed.action && PortInput::BindingFamily(old) == family) {
+      profile.bindings[size_t(sEditing)] = parsed;
+    } else {
+      PortInput::RemoveUserBinding(profile, size_t(sEditing));
+      PortInput::Materialize(profile, parsed.action, family, v.inherited);
+      PortInput::AddUserBinding(profile, parsed);
+    }
   }
-  ImGui::EndDisabled();
-  ImGui::SameLine();
-  if (ImGui::Button("Cancel")) {
-    sEditing = kEditNone;
-    EndCapture();
-  }
+  sEditing = kEditNone;
+  EndCapture();
+  Commit();
 }
 
 void DrawBindingRow(const Binding& b, bool inherited = false) {
@@ -594,6 +645,105 @@ void ApplyPending(const SView& v, const SPending& pending) {
   Commit();
 }
 
+// The table's sections. Layers are for shift-key setups, so they start closed.
+struct SGroup {
+  const char* label;
+  std::vector<Action> actions;
+  bool open;
+};
+
+const std::vector<SGroup>& Groups() {
+  static const std::vector<SGroup> groups = [] {
+    std::vector<SGroup> g = {
+        {"Game buttons",
+         {Action::PadA, Action::PadB, Action::PadX, Action::PadY, Action::PadZ, Action::PadStart, Action::PadL,
+          Action::PadR, Action::LAnalog, Action::RAnalog},
+         true},
+        {"Move and aim",
+         {Action::MainUp, Action::MainDown, Action::MainLeft, Action::MainRight, Action::AimUp, Action::AimDown,
+          Action::AimLeft, Action::AimRight, Action::LookX, Action::LookY},
+         true},
+        {"Beams",
+         {Action::CUp, Action::CDown, Action::CLeft, Action::CRight, Action::BeamShift, Action::BeamPower,
+          Action::BeamWave, Action::BeamIce, Action::BeamPlasma},
+         true},
+        {"Visors",
+         {Action::PadUp, Action::PadDown, Action::PadLeft, Action::PadRight, Action::VisorCombat, Action::VisorScan,
+          Action::VisorThermal, Action::VisorXray},
+         true},
+        {"Morph Ball", {Action::SpringBall}, true},
+        {"Port", {Action::PortMenu, Action::SaveState, Action::LoadState, Action::Screenshot, Action::ToggleOriginal}, true},
+        {"Layers (shift keys, advanced)", {Action::Layer1, Action::Layer2, Action::Layer3, Action::Layer4}, false},
+    };
+    // An action added to the engine but not sorted here still gets a row.
+    SGroup other{"Other", {}, true};
+    for (int i = 1; i < PortInput::kActionCount; ++i) {
+      const bool listed = std::any_of(g.begin(), g.end(), [&](const SGroup& s) {
+        return std::find(s.actions.begin(), s.actions.end(), Action(i)) != s.actions.end();
+      });
+      if (!listed) other.actions.push_back(Action(i));
+    }
+    if (!other.actions.empty()) g.push_back(other);
+    return g;
+  }();
+  return groups;
+}
+
+// What a GameCube button does in the game, next to its name.
+const char* GameHint(Action a) {
+  switch (a) {
+  case Action::PadA: return "Fire";
+  case Action::PadB: return "Jump";
+  case Action::PadX: return "Morph Ball";
+  case Action::PadY: return "Missile";
+  case Action::PadZ: return "Map";
+  case Action::PadStart: return "Pause";
+  case Action::PadL:
+  case Action::LAnalog: return "Lock on, scan";
+  case Action::PadR:
+  case Action::RAnalog: return "Free aim";
+  case Action::MainUp:
+  case Action::MainDown:
+  case Action::MainLeft:
+  case Action::MainRight: return "Move";
+  case Action::CUp:
+  case Action::CDown:
+  case Action::CLeft:
+  case Action::CRight: return "Pick a beam";
+  case Action::PadUp:
+  case Action::PadDown:
+  case Action::PadLeft:
+  case Action::PadRight: return "Pick a visor";
+  case Action::AimUp:
+  case Action::AimDown:
+  case Action::AimLeft:
+  case Action::AimRight: return "Twin-stick aim";
+  default: return nullptr;
+  }
+}
+
+// A binding's non-default settings, in words ("" when it has none).
+std::string Notes(const Binding& b) {
+  std::string out;
+  const auto add = [&](const std::string& s) {
+    if (!out.empty()) out += ", ";
+    out += s;
+  };
+  if (b.trigger != Trigger::Press) add(TriggerLabel(b.trigger));
+  if (b.turboHz != 0) add("turbo " + std::to_string(b.turboHz) + "/s");
+  if (b.IsChord() && b.anyOrder) add("any order");
+  if (b.contexts != PortInput::kCtxAll) {
+    std::string where;
+    for (const SContextInfo& c : kContexts) {
+      if ((b.contexts & c.bit) == 0) continue;
+      if (!where.empty()) where += ", ";
+      where += c.label;
+    }
+    add("only in " + where);
+  }
+  return out;
+}
+
 void DrawTable(const SView& v) {
   ImGui::SetNextItemWidth(220.f);
   ImGui::InputTextWithHint("##filter", "Filter actions", sFilter, sizeof(sFilter));
@@ -602,17 +752,20 @@ void DrawTable(const SView& v) {
 
   const UserProfile* user = Find(v.match);
   SPending pending;
-  if (ImGui::BeginTable("bindings", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Action");
-    ImGui::TableSetupColumn("Inputs");
-    ImGui::TableSetupColumn("Trigger");
-    ImGui::TableSetupColumn("Where");
+  for (const SGroup& group : Groups()) {
+    // A filter opens every section, so a match is never hidden in a closed one.
+    if (sFilter[0] != '\0') ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+    if (!ImGui::CollapsingHeader(group.label, group.open ? ImGuiTreeNodeFlags_DefaultOpen : 0)) continue;
+    if (!ImGui::BeginTable(group.label, 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) continue;
+    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 1.2f);
+    ImGui::TableSetupColumn("Input", ImGuiTableColumnFlags_WidthStretch, 1.4f);
+    ImGui::TableSetupColumn("Notes", ImGuiTableColumnFlags_WidthStretch, 1.f);
     ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableHeadersRow();
-    for (int i = 1; i < PortInput::kActionCount; ++i) {
-      const Action action = Action(i);
+    for (const Action action : group.actions) {
       const std::string label(PortInput::Info(action).label);
-      if (!Contains(label, sFilter)) continue;
+      const char* hint = GameHint(action);
+      if (!Contains(label, sFilter) && (hint == nullptr || !Contains(hint, sFilter))) continue;
       const bool overridden = user != nullptr && PortInput::Overridden(*user, action, v.family);
       // (binding, index into the user's bindings or -1 for an inherited one)
       std::vector<std::pair<Binding, int>> rows;
@@ -626,30 +779,34 @@ void DrawTable(const SView& v) {
       }
       if (rows.empty() && sOnlyBound) continue;
 
-      ImGui::PushID(i);
+      ImGui::PushID(int(action));
+      const auto actionCell = [&](bool first) {
+        ImGui::TableNextColumn();
+        if (!first) return;
+        ImGui::TextUnformatted(label.c_str());
+        if (hint != nullptr) {
+          ImGui::SameLine();
+          ImGui::TextDisabled("%s", hint);
+        }
+      };
       const auto buttons = [&](bool last) {
-        if (last) {
-          if (ImGui::SmallButton("+")) {
-            BeginEdit(kEditNew, Binding{action});
+        if (!last) return;
+        if (ImGui::SmallButton("+")) BeginEdit(kEditNew, Binding{action});
+        ImGui::SetItemTooltip("Add another input for this action.");
+        if (overridden) {
+          ImGui::SameLine();
+          if (ImGui::SmallButton("Revert")) {
+            pending.op = SPending::Op::Revert;
+            pending.action = action;
           }
-          ImGui::SetItemTooltip("Add a binding for this action.");
-          if (overridden) {
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Revert")) {
-              pending.op = SPending::Op::Revert;
-              pending.action = action;
-            }
-            ImGui::SetItemTooltip("Back to what this device inherits.");
-          }
+          ImGui::SetItemTooltip("Back to the default inputs.");
         }
       };
       if (rows.empty()) {
         ImGui::TableNextRow();
+        actionCell(true);
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted(label.c_str());
-        ImGui::TableNextColumn();
-        ImGui::TextDisabled(overridden ? "(unbound)" : "-");
-        ImGui::TableNextColumn();
+        ImGui::TextDisabled(overridden ? "(removed)" : "-");
         ImGui::TableNextColumn();
         ImGui::TableNextColumn();
         buttons(true);
@@ -659,9 +816,20 @@ void DrawTable(const SView& v) {
         const int userIndex = rows[r].second;
         ImGui::PushID(int(r));
         ImGui::TableNextRow();
-        if (userIndex < 0) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        DrawBindingRow(b, userIndex < 0);
-        if (userIndex < 0) ImGui::PopStyleColor();
+        actionCell(r == 0);
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(InputsToText(b).c_str());
+        ImGui::TableNextColumn();
+        const std::string notes = Notes(b);
+        if (!notes.empty()) {
+          ImGui::TextUnformatted(notes.c_str());
+          ImGui::SameLine();
+        }
+        if (userIndex < 0) {
+          ImGui::TextDisabled("default");
+          ImGui::SetItemTooltip("This device gets it without you. Edit or x makes the action's inputs yours; "
+                                "Revert gives the default back.");
+        }
         ImGui::TableNextColumn();
         if (ImGui::SmallButton("Edit")) {
           BeginEdit(userIndex < 0 ? kEditInherited : userIndex, b);
@@ -678,7 +846,7 @@ void DrawTable(const SView& v) {
             pending.index = size_t(userIndex);
           }
         }
-        ImGui::SetItemTooltip("Remove this binding.");
+        ImGui::SetItemTooltip("Remove this input.");
         ImGui::SameLine();
         buttons(r + 1 == rows.size());
         ImGui::PopID();
@@ -731,7 +899,7 @@ void DrawReset(const SView& v) {
   } else if (v.family == Family::Touch) {
     ImGui::TextUnformatted("Remove every touch binding of yours?");
   } else {
-    ImGui::TextUnformatted("Remove this device's own bindings, so it uses All controllers again?");
+    ImGui::TextUnformatted("Remove this device's own bindings, so it uses Controllers again?");
   }
   if (ImGui::Button("Reset")) {
     sEditing = kEditNone;
@@ -767,7 +935,7 @@ void DrawProfileOptions(const SView& v) {
       EditedProfile(v).replace = replace;
       Commit();
     }
-    ImGui::SetItemTooltip("On: only this device's bindings apply (with All controllers'). Off: they are "
+    ImGui::SetItemTooltip("On: only this device's bindings apply (with Controllers'). Off: they are "
                           "added on top, replacing what the other bindings give the same action.");
   }
   int window = user != nullptr ? user->chordWindowMs : 0;
@@ -815,10 +983,8 @@ void Draw() {
     sLoaded = true;
   }
 
-  ImGui::TextWrapped("Bind any action to a key, mouse button, controller input or touch control, or to a "
-                     "chord of up to four of them, for each device. Greyed rows are what the device gets "
-                     "without you; changing one makes it yours, and Revert gives it back. Saved in "
-                     "controls.toml in the user folder.");
+  ImGui::TextWrapped("Pick a device, then press Edit next to an action and Record its new input. Rows marked "
+                     "\"default\" are what the device does out of the box; Revert brings them back.");
   if (!sError.empty()) ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f), "%s", sError.c_str());
 
   const std::vector<SDeviceEntry> entries = DeviceEntries();
@@ -839,8 +1005,8 @@ void Draw() {
     }
     ImGui::EndCombo();
   }
-  ImGui::SetItemTooltip("Keyboard & mouse, touch and All controllers apply to every device of that kind. "
-                        "A controller kind or model is added on top of All controllers.");
+  ImGui::SetItemTooltip("Keyboard & mouse, Touch and Controllers apply to every device of that kind. A "
+                        "controller kind or model (Advanced, below) is added on top of Controllers.");
 
   const SView view = MakeView();
   UpdateCapture(view.family);
@@ -852,8 +1018,14 @@ void Draw() {
   if (sEditing != kEditNone) DrawEditor(view);
   DrawTable(view);
   ImGui::Separator();
-  DrawProfileOptions(view);
-  DrawEffective();
+  if (ImGui::TreeNode("Advanced##page")) {
+    ImGui::Checkbox("Separate bindings per controller kind or model", &sPadProfiles);
+    ImGui::SetItemTooltip("Adds the connected controllers' kinds and models to the Device list, each with "
+                          "bindings added on top of Controllers.");
+    DrawProfileOptions(view);
+    DrawEffective();
+    ImGui::TreePop();
+  }
 }
 
 } // namespace PortInputRemap
