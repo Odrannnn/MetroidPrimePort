@@ -1,5 +1,5 @@
 pkgname=metroid-prime-port-bin
-pkgver=0.21.0
+pkgver=0.22.0
 pkgrel=1
 pkgdesc="Native Linux port of Metroid Prime"
 arch=('x86_64')
@@ -10,7 +10,7 @@ source=(
     "https://raw.githubusercontent.com/Odrannnn/MetroidPrimePort/v${pkgver}/packaging/io.github.odrannnn.metroidprimeport.desktop"
     "https://raw.githubusercontent.com/Odrannnn/MetroidPrimePort/v${pkgver}/packaging/metroid_prime_port.png"
 )
-sha256sums=('20ea64915d5c27c9465fa8146633d0956254ba6c8c8557e303e5b63dc123bc17'
+sha256sums=('6b50bb5691297a6cc3b3805ce57fad4f2a81eba3dc3db283546938a74791866b'
             '6ad8e78e4dfc27cd5aec8082de65166fbf8cfbd6e9580dfd7eb47ac514f7cd51'
             '3350d8fb6a19d38b5ef6c9835829ee5f12783c8030563d5fda7d6dca0e7313a8')
 
