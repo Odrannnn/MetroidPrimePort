@@ -35,7 +35,11 @@
 #include "GuiSys/CGuiCamera.hpp"
 #include "GuiSys/CGuiFrame.hpp"
 #include "GuiSys/CGuiModel.hpp"
+#include "GuiSys/CGuiTextSupport.hpp"
 #include "Kyoto/CDependencyGroup.hpp"
+#include "Kyoto/CResFactory.hpp"
+#include "Kyoto/CSimplePool.hpp"
+#include "Kyoto/Text/CStringTable.hpp"
 #include "Kyoto/Math/CMatrix3f.hpp"
 #include "rstl/algorithm.hpp"
 
@@ -312,13 +316,43 @@ void CInGameGuiManager::PublishMinimapRect(bool shown, bool drawn, const CTransf
   PortDebug::SetMinimapRect(true, drawn, x0 - padX, y0 - padY, x1 + padX, y1 + padY);
 }
 
+void CInGameGuiManager::PortDrawScanZoomReticles(const CStateManager& mgr) const {
+  // What Draw draws before the visor's copy, then the visor's own part of it.
+  if (!x3c_pauseScreenBlur->IsGameDraw())
+    return;
+  x34_samusHud->GetTargetingManager().Draw(mgr, true);
+  CGraphics::SetDepthRange(1.f / 64.f, 1.f / 32.f);
+  const CTargetingManager* targeting =
+      x1e4_enableTargetingManager != 0 ? &x34_samusHud->GetTargetingManager() : nullptr;
+  x30_playerVisor->PortDrawScanOverlay(mgr, targeting);
+}
+
+bool CInGameGuiManager::PortPlayerVisorDrawn(const CStateManager& mgr) const {
+  return x3c_pauseScreenBlur->IsGameDraw() && !mgr.GetCameraManager()->IsInCinematicCamera() &&
+         IsInOrTransitioningToOrFromState(kIGGS_InGame) && x1f0_enablePlayerVisor != 0;
+}
+
 void CInGameGuiManager::Draw(const CStateManager& mgr) const {
   if (!GetIsGameDraw()) {
     gpRender->SetRequestRGBA6(true);
   }
   // Re-published below if the minimap is drawn this frame.
   PortDebug::SetMinimapRect(false, false, 0.f, 0.f, 0.f, 0.f);
-  if (x1d8_onScreenTexAlpha > 0.f && x1dc_onScreenTexTok->GetObject() != nullptr) {
+#ifdef TARGET_PC
+  // Draw the HUD lag/bob blended to the presented time; the tick state is
+  // restored when the draw ends.
+  struct HudLagScope {
+    const CSamusHud* hud;
+    ~HudLagScope() {
+      if (hud)
+        hud->PortPresentHudLag(false);
+    }
+  } hudLagScope = {x34_samusHud.get()};
+  if (hudLagScope.hud)
+    hudLagScope.hud->PortPresentHudLag(true);
+#endif
+  if (x1d8_onScreenTexAlpha > 0.f && !x1dc_onScreenTexTok.null() &&
+      x1dc_onScreenTexTok->GetObject() != nullptr) {
     const CTexture& tex = *x1dc_onScreenTexTok->GetObject();
     gpRender->SetDepthReadWrite(false, false);
     gpRender->SetBlendMode_AlphaBlended();
@@ -331,6 +365,7 @@ void CInGameGuiManager::Draw(const CStateManager& mgr) const {
     const int y = viewport.mTop + (viewport.mHeight - h) / 2 - x1c4_onScreenTex.xc_offset.GetY();
     CGraphics::Render2D(tex, x, y, w, h, CColor::White().WithAlphaOf(x1d8_onScreenTexAlpha));
   }
+  PortDrawSubtitle();
 
   float staticAlpha = 0.f;
   const float deathTime = mgr.GetPlayer()->GetDeathTime();
@@ -527,6 +562,65 @@ void CInGameGuiManager::PreDraw(CStateManager& mgr, bool isCameraActive) {
   }
 }
 
+// Port: on PAL discs the intro's billboard names a STRG (its subtitle) instead of a TXTR. PAL
+// draws string 0 in FONT_Deface18O; the USA path read the string table as a texture and
+// crashed. This follows PAL's CInGameGuiManager::Update.
+void CInGameGuiManager::PortUpdateSubtitle(const SOnScreenTex& pending, float dt) {
+  if (pending.x0_id == x1c4_onScreenTex.x0_id) {
+    if (!xPortSubtitle.null()) {
+      x1d8_onScreenTexAlpha = rstl::min_val(1.f, x1d8_onScreenTexAlpha + dt);
+    }
+    return;
+  }
+  xPortSubtitle = nullptr;
+  x1d8_onScreenTexAlpha = 0.f;
+  x1c4_onScreenTex.x0_id = kInvalidAssetId;
+  if (pending.x0_id == kInvalidAssetId ||
+      gpResourceFactory->GetResourceTypeById(pending.x0_id) != 'STRG') {
+    return; // A texture takes the USA path on the next update.
+  }
+  x1c4_onScreenTex.x0_id = pending.x0_id;
+  x1c4_onScreenTex.x4_extent = pending.x4_extent;
+  x1c4_onScreenTex.xc_offset = pending.xc_offset;
+  const bool atBottom = pending.xc_offset == CVector2i(0, 0);
+  const SObjectTag* font = gpResourceFactory->GetResourceIdByName("FONT_Deface18O");
+  xPortSubtitle = rs_new CGuiTextSupport(
+      font != nullptr ? font->GetId() : kInvalidAssetId,
+      CGuiTextProperties(true, true, kJustification_Left,
+                         atBottom ? kVerticalJustification_Bottom : kVerticalJustification_Center),
+      CColor::White(), CColor::Black(), CColor::White(), CGraphics::GetViewport().mWidth - 64, 0,
+      gpSimplePool);
+  const TLockedToken< CStringTable > strings(
+      gpSimplePool->GetObj(SObjectTag('STRG', pending.x0_id)));
+  xPortSubtitle->SetText(rstl::wstring(strings->GetString(0)));
+  x1d8_onScreenTexAlpha = atBottom ? 1.f : FLT_EPSILON;
+}
+
+void CInGameGuiManager::PortDrawSubtitle() const {
+  if (xPortSubtitle.null() || x1d8_onScreenTexAlpha <= 0.f) {
+    return;
+  }
+  gpRender->SetViewportOrtho(false, -4096.f, 4096.f);
+  gpRender->SetDepthReadWrite(false, false);
+  gpRender->SetBlendMode_AlphaBlended();
+  CGraphics::SetTevOp(kTS_Stage0, CGraphics::kEnvPassthru);
+  CGraphics::SetTevOp(kTS_Stage1, CGraphics::kEnvPassthru);
+  float x = 32.f;
+  float y = static_cast< float >(xPortSubtitle->GetTextBoundingHeight() + 28);
+  if (!(x1c4_onScreenTex.xc_offset == CVector2i(0, 0))) {
+    const CViewport& viewport = CGraphics::GetViewport();
+    x = static_cast< float >(viewport.mLeft + (viewport.mWidth - x1c4_onScreenTex.x4_extent[0]) / 2 +
+                             x1c4_onScreenTex.xc_offset.GetX());
+    y = static_cast< float >(viewport.mTop + (viewport.mHeight - x1c4_onScreenTex.x4_extent[1]) / 2 +
+                             20 - x1c4_onScreenTex.xc_offset.GetY());
+  }
+  gpRender->SetModelMatrix(CTransform4f::Translate(x, 0.f, y));
+  CGraphics::SetCullMode(kCM_None);
+  xPortSubtitle->SetGeometryColor(CColor::White().WithAlphaOf(x1d8_onScreenTexAlpha));
+  xPortSubtitle->Render();
+  CGraphics::SetCullMode(kCM_Front);
+}
+
 void CInGameGuiManager::Update(const CStateManager& mgr, float dt, CArchitectureQueue& queue,
                                bool cameraActive) {
   EnsureStates(mgr);
@@ -537,7 +631,12 @@ void CInGameGuiManager::Update(const CStateManager& mgr, float dt, CArchitecture
     x1dc_onScreenTexTok = nullptr;
   }
   const SOnScreenTex& pending = mgr.GetPendingScreenTex();
-  if (pending.x0_id != x1c4_onScreenTex.x0_id) {
+  if (!xPortSubtitle.null() ||
+      (pending.x0_id != x1c4_onScreenTex.x0_id && pending.x0_id != kInvalidAssetId &&
+       x1dc_onScreenTexTok.null() &&
+       gpResourceFactory->GetResourceTypeById(pending.x0_id) == 'STRG')) {
+    PortUpdateSubtitle(pending, dt);
+  } else if (pending.x0_id != x1c4_onScreenTex.x0_id) {
     if (x1dc_onScreenTexTok.null()) {
       x1c4_onScreenTex.x0_id = pending.x0_id;
       x1c4_onScreenTex.x4_extent = pending.x4_extent;

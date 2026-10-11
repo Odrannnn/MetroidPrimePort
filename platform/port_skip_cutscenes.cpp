@@ -128,6 +128,22 @@ std::vector< uint8_t > TempleOps() {
   return std::move(w.ops);
 }
 
+const uint32_t kGeothermalCore = 0xC0498676;
+
+// PAL's Geothermal Core puts a Power Bomb rock and a door blocker in front of
+// Plasma Processing, which USA 1.00 (and so the randomizer logic, built from
+// USA) reaches without Power Bombs. Drop the rock's whole set (generator,
+// debris, effect, rumble, memory relay, scan point, blocker), so a PAL disc
+// plays this room as the USA one; the missile drops added next to it stay.
+std::vector< uint8_t > GeothermalCorePalOps() {
+  OpWriter w;
+  for (uint32_t id = 0x001403AA; id <= 0x001403B5; ++id)
+    w.remove(id);
+  return std::move(w.ops);
+}
+
+bool PatchScripts(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out);
+
 } // namespace
 
 bool Forced() { return PortRandomizer::Enabled() || PortAp::RandomizedGame(); }
@@ -136,8 +152,24 @@ bool Active() { return PortDebug::SkippableCutscenes() || Forced(); }
 
 bool PatchArea(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out) {
   out.clear();
-  if (!Active())
-    return false;
+  if (Active())
+    PatchScripts(mreaId, scly, size, out);
+  if (mreaId == kGeothermalCore && PortDisc::Current() == PortDisc::Version::Pal) {
+    const std::vector< uint8_t > ops = GeothermalCorePalOps();
+    const bool patched = !out.empty();
+    std::vector< uint8_t > fixed;
+    if (ApplyOps(patched ? out.data() : scly, patched ? out.size() : size, ops.data(), ops.size(),
+                 fixed) == 0)
+      out.swap(fixed);
+    else
+      PortLog::Write("PAL: Geothermal Core Power Bomb rock doesn't match, left as is\n");
+  }
+  return !out.empty();
+}
+
+namespace {
+
+bool PatchScripts(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out) {
   // PAL lays some rooms out differently: its own streams, where the USA one
   // doesn't do the same there.
   const SkipRoom* room = nullptr;
@@ -235,6 +267,8 @@ bool PatchArea(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< u
   }
   return !out.empty();
 }
+
+} // namespace
 
 bool PickupModel(int key, PortRandomizer::PickupModel& out) {
   for (const PickupModelEntry& entry : kPickupModels) {

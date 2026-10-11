@@ -4,6 +4,7 @@
 
 #include "port_debug.h"
 #include "port_embedded.h"
+#include "port_input_devices.h"
 #include "port_textures.h"
 
 #include <dolphin/gx.h>
@@ -62,7 +63,9 @@ struct PromptKey {
 };
 constexpr PromptKey kKeys[] = {
     {PAD_BUTTON_A, 32, 32, 0xbb21e8755f36b2f0ull, "5"},   // AButtonIn
+    {PAD_BUTTON_A, 32, 32, 0x7a49be0e828a6d9aull, "14"},  // AButtonOut, the scan box's and message screen's model
     {PAD_BUTTON_B, 32, 32, 0xe6dbfd18d4666ee7ull, "5"},   // BButtonIn
+    {PAD_BUTTON_B, 32, 32, 0xcf85aefc93af603full, "14"},  // BButtonOut
     {PAD_BUTTON_X, 32, 32, 0x818890ce3f3a949bull, "5"},   // XButtonOut, "Press X to ... Morph Ball"
     {PAD_BUTTON_Y, 32, 32, 0x281ae5aa517797edull, "5"},   // YButtonOut, the pause and map screens
     {PAD_BUTTON_START, 32, 32, 0x1ff9d2b310c0b706ull, "14"},  // StartButtonOut, the pause Return
@@ -244,6 +247,17 @@ constexpr GameCubeButton kNsoGameCubeButtons[] = {
     {PAD_NATIVE_BUTTON_TRIGGER_RIGHT, PAD_TRIGGER_R, "gamecube_r"},
 };
 
+// The mapping a prompt for `button` follows: port 0's pad mapping, or the pad
+// type's defaults for the buttons "Standard buttons in menus" puts back while a
+// menu or the map is open (Start and Z keep the gameplay mapping there).
+PADButtonMapping* PromptButtonMappings(PADButton button, u32* count, PADDefaultMapping& scratch) {
+  if (button != PAD_BUTTON_START && button != PAD_TRIGGER_Z && PortInputDevices::MenuButtonMapping(scratch)) {
+    *count = PAD_BUTTON_COUNT;
+    return scratch.buttons;
+  }
+  return PADGetButtonMappings(PAD_CHAN0, count);
+}
+
 // The icon for `button` on a GameCube pad, or empty to leave the game's own art,
 // which is already right for a GC pad on its default mapping. So only an action
 // moved to another button gets an icon. The GameCube touch layout also resolves
@@ -262,7 +276,8 @@ std::string GameCubeStemForButton(PADButton button) {
     return {};
   }
   u32 count = 0;
-  PADButtonMapping* mappings = PADGetButtonMappings(PAD_CHAN0, &count);
+  PADDefaultMapping scratch;
+  PADButtonMapping* mappings = PromptButtonMappings(button, &count, scratch);
   for (u32 i = 0; mappings != nullptr && i < count; ++i) {
     if (mappings[i].padButton != button) {
       continue;
@@ -545,7 +560,8 @@ std::string IconStemForButton(PADButton button, const char* device) {
   // name per action.
   const bool trigger = button == PAD_TRIGGER_L || button == PAD_TRIGGER_R;
   const std::string triggerStem = std::string(device) + (button == PAD_TRIGGER_L ? "_lt" : "_rt");
-  PADButtonMapping* mappings = PADGetButtonMappings(PAD_CHAN0, &count);
+  PADDefaultMapping scratch;
+  PADButtonMapping* mappings = PromptButtonMappings(button, &count, scratch);
   for (u32 i = 0; mappings != nullptr && i < count; ++i) {
     if (mappings[i].padButton != button) {
       continue;
@@ -773,6 +789,9 @@ const char* ActiveDevice() {
   // Original experience shows the disc's own prompts, whatever is being pressed.
   if (PortDebug::OriginalExperience()) {
     return "gamecube";
+  }
+  if (const char* forced = PortDebug::PromptGlyphs()) {
+    return forced;
   }
   switch (sActiveInput.load(std::memory_order_relaxed)) {
   case ActiveInput::Keyboard:

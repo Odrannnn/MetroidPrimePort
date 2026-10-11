@@ -34,6 +34,11 @@
 
 namespace fs = std::filesystem;
 
+// CStateManager.cpp: keep the music through a state load, then start the
+// area's once Samus is placed.
+void PortKeepMusicForStateLoad(bool sameWorld);
+void PortStartStateLoadMusic(CStateManager& mgr);
+
 namespace PortSaveState {
 namespace {
 
@@ -209,6 +214,8 @@ void QuitToPending(CStateManager& mgr) {
   // As the debug world warp: stop the outgoing world's loads, retire its PAKs
   // and quit to CMainFlow, which starts the next game (InstallPending).
   const_cast< CWorld* >(mgr.GetWorld())->SetLoadPauseState(true);
+  PortKeepMusicForStateLoad(static_cast< uint32_t >(mgr.GetWorld()->IGetWorldAssetId()) ==
+                            sPendingHeader.worldId);
   gpGameState->SetCurrentWorldId(static_cast< CAssetId >(sPendingHeader.worldId));
   gpMain->SetRestartMode(CMain::kRM_None);
   mgr.QuitGame();
@@ -382,6 +389,7 @@ bool Tick(CStateManager& mgr) {
     if (static_cast< uint32_t >(mgr.GetWorld()->IGetWorldAssetId()) == sPendingHeader.worldId) {
       Place(mgr);
     }
+    PortStartStateLoadMusic(mgr);
   }
   if (sInstallPending) {
     // Still in the outgoing game, whose PAKs are retired: run nothing more

@@ -210,7 +210,8 @@
 #   define FAR
 #endif
 
-#if !defined(MACOS) && !defined(TARGET_OS_MAC)
+/* Port: TARGET_OS_MAC meant classic Mac OS (Byte from MacTypes.h); macOS defines it too. */
+#if !defined(MACOS) && !(defined(TARGET_OS_MAC) && !defined(__APPLE__))
 typedef unsigned char  Byte;  /* 8 bits */
 #endif
 typedef unsigned int   uInt;  /* 16 bits or more */

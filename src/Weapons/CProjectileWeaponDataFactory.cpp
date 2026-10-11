@@ -7,10 +7,41 @@
 #include <Kyoto/Particles/CParticleDataFactory.hpp>
 #include <rstl/vector.hpp>
 
+#ifdef TARGET_PC
+#include "port_mods.h"
+
+namespace {
+// The WPSC being built on this thread, for PortEffectId().
+thread_local uint32_t sPortOwner = 0;
+
+// The id a mod's effectids.map gives this WPSC's field (a retail effect id two projectiles share).
+CAssetId PortEffectId(uint32_t field, CAssetId id) {
+  return CAssetId(PortMods::RemapEffectId(sPortOwner, field, uint32_t(id)));
+}
+
+// CParticleDataFactory::GetChildGeneratorDesc(in, ...) with the remap applied.
+rstl::optional_object< TToken< CGenDescription > >
+PortChildGenerator(CInputStream& in, CSimplePool* pool, const rstl::vector< CAssetId >& assets,
+                   uint32_t field) {
+  if (CParticleDataFactory::GetClassID(in) == 'NONE') {
+    return rstl::optional_object_null();
+  }
+  const CAssetId id = in.Get< CAssetId >();
+  if (id == 0) {
+    return rstl::optional_object_null();
+  }
+  return CParticleDataFactory::GetChildGeneratorDesc(PortEffectId(field, id), pool, assets);
+}
+} // namespace
+#endif
+
 const CFactoryFnReturn FProjectileWeaponDataFactory(const SObjectTag& tag, CInputStream& in,
                                                     const CVParamTransfer& xfer) {
   rstl::rc_ptr< IVParamObj > obj = xfer.x0_obj;
   CSimplePool* pool = static_cast< TObjOwnerParam< CSimplePool* >* >(obj.GetPtr())->GetData();
+#ifdef TARGET_PC
+  sPortOwner = tag.GetId();
+#endif
   return CProjectileWeaponDataFactory::GetGeneratorDesc(in, pool);
 }
 
@@ -59,8 +90,13 @@ bool CProjectileWeaponDataFactory::CreateWPSM(CWeaponDescription* desc, CInputSt
       break;
     case 'APSM': {
       rstl::vector< CAssetId > assets;
+#ifdef TARGET_PC
+      rstl::optional_object< TToken< CGenDescription > > child =
+          PortChildGenerator(in, pool, assets, 'APSM');
+#else
       rstl::optional_object< TToken< CGenDescription > > child =
           CParticleDataFactory::GetChildGeneratorDesc(in, pool, assets);
+#endif
       if (child) {
         desc->x34_APSM = TLockedToken< CGenDescription >(*child);
       } else {
@@ -73,8 +109,13 @@ bool CProjectileWeaponDataFactory::CreateWPSM(CWeaponDescription* desc, CInputSt
       break;
     case 'APS2': {
       rstl::vector< CAssetId > assets;
+#ifdef TARGET_PC
+      rstl::optional_object< TToken< CGenDescription > > child =
+          PortChildGenerator(in, pool, assets, 'APS2');
+#else
       rstl::optional_object< TToken< CGenDescription > > child =
           CParticleDataFactory::GetChildGeneratorDesc(in, pool, assets);
+#endif
       if (child) {
         desc->x44_APS2 = TLockedToken< CGenDescription >(*child);
       } else {
@@ -91,6 +132,9 @@ bool CProjectileWeaponDataFactory::CreateWPSM(CWeaponDescription* desc, CInputSt
     case 'ASW1': {
       if (CParticleDataFactory::GetClassID(in) != 'NONE') {
         CAssetId id = in.ReadLong();
+#ifdef TARGET_PC
+        id = PortEffectId('ASW1', id);
+#endif
         desc->x54_ASW1 = TLockedToken< CSwooshDescription >(pool->GetObj(SObjectTag('SWHC', id)));
       }
       break;
@@ -101,6 +145,9 @@ bool CProjectileWeaponDataFactory::CreateWPSM(CWeaponDescription* desc, CInputSt
     case 'ASW2': {
       if (CParticleDataFactory::GetClassID(in) != 'NONE') {
         CAssetId id = in.ReadLong();
+#ifdef TARGET_PC
+        id = PortEffectId('ASW2', id);
+#endif
         desc->x64_ASW2 = TLockedToken< CSwooshDescription >(pool->GetObj(SObjectTag('SWHC', id)));
       }
       break;
@@ -111,6 +158,9 @@ bool CProjectileWeaponDataFactory::CreateWPSM(CWeaponDescription* desc, CInputSt
     case 'ASW3': {
       if (CParticleDataFactory::GetClassID(in) != 'NONE') {
         CAssetId id = in.ReadLong();
+#ifdef TARGET_PC
+        id = PortEffectId('ASW3', id);
+#endif
         desc->x74_ASW3 = TLockedToken< CSwooshDescription >(pool->GetObj(SObjectTag('SWHC', id)));
       }
       break;

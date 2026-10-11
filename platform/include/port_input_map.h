@@ -113,16 +113,4 @@ inline unsigned MouseButtonsFor(const int* actions, unsigned pad) {
   return mask;
 }
 
-// With the shift held the D-pad stands in for the C-stick: its directions pick
-// beams instead of visors. Positive X is right and positive Y is up, as on the
-// stick, so each direction picks the beam the C-stick would.
-inline void ShiftDPadToCStick(unsigned& buttons, int& substickX, int& substickY) {
-  if ((buttons & kPadDirections) == 0) {
-    return;
-  }
-  substickX = ((buttons & kPadRight) != 0 ? 127 : 0) - ((buttons & kPadLeft) != 0 ? 127 : 0);
-  substickY = ((buttons & kPadUp) != 0 ? 127 : 0) - ((buttons & kPadDown) != 0 ? 127 : 0);
-  buttons &= ~kPadDirections;
-}
-
 } // namespace PortInputMap

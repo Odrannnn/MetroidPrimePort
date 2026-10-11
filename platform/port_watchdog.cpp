@@ -22,8 +22,12 @@
 #include <vector>
 
 #if !defined(_WIN32)
-#include <sys/syscall.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <pthread.h>
+#else
+#include <sys/syscall.h>
+#endif
 #endif
 
 namespace PortWatchdog {
@@ -121,7 +125,12 @@ void Heartbeat(unsigned frame) {
 #if defined(_WIN32)
     sMainThread.store(0);
 #else
+#if defined(__APPLE__)
+    // PortCrash::RequestStack takes the pthread_t here (no tgkill on macOS).
+    sMainThread.store(reinterpret_cast< long >(pthread_self()));
+#else
     sMainThread.store(static_cast< long >(syscall(SYS_gettid)));
+#endif
 #endif
     std::thread(Watch).detach();
   });

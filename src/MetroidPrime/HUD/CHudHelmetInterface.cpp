@@ -80,5 +80,14 @@ void CHudHelmetInterface::Update(float dt) {
     x3c_28_hudLagDirty = false;
     x44_BaseWidget_Pivot->SetIdleXform(
         CTransform4f(x0_hudLagRotation, x24_pivotPosition + x30_hudLagPosition));
+#ifdef TARGET_PC
+    // The helmet lags by moving its pivot, not the camera: the spread warp follows the move,
+    // taken into the camera's view space.
+    const CTransform4f view = x40_camera->GetWorldTransform();
+    const CTransform4f move =
+        CTransform4f(x0_hudLagRotation, x24_pivotPosition + x30_hudLagPosition) *
+        CTransform4f::Translate(-x24_pivotPosition);
+    x40_camera->SetSpreadLag(view.GetQuickInverse() * move * view);
+#endif
   }
 }

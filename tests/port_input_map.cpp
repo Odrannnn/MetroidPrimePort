@@ -43,21 +43,6 @@ int main() {
   Check(MouseButtonsFor(actions, kPadA | kPadB) == ((1u << 0) | (1u << 3)), "buttons for A and B");
   Check(MouseButtonsFor(actions, 0) == 0, "buttons for nothing");
 
-  // Shift: the D-pad becomes the C-stick and is consumed; a stick is left alone
-  // when no direction is pressed.
-  unsigned buttons = kPadUp | kPadA;
-  int x = 0, y = 0;
-  ShiftDPadToCStick(buttons, x, y);
-  Check(buttons == kPadA && x == 0 && y == 127, "up");
-  buttons = kPadLeft | kPadDown;
-  ShiftDPadToCStick(buttons, x, y);
-  Check(buttons == 0 && x == -127 && y == -127, "left and down");
-  buttons = kPadB;
-  x = 40;
-  y = -40;
-  ShiftDPadToCStick(buttons, x, y);
-  Check(buttons == kPadB && x == 40 && y == -40, "no direction");
-
   std::puts("input map tests passed");
   return 0;
 }

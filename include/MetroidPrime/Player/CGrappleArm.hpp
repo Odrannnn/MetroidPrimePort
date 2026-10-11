@@ -10,6 +10,10 @@
 #include "MetroidPrime/CEntityInfo.hpp"
 #include "MetroidPrime/CModelData.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
+#ifdef TARGET_PC
+#include "Kyoto/Math/CVector3f.hpp"
+#include "port_tick_pair.h"
+#endif
 
 #include <rstl/optional_object.hpp>
 #include <rstl/pair.hpp>
@@ -155,6 +159,14 @@ private:
   bool x3b2_27_armMoving : 1;
   bool x3b2_28_isGrappling : 1;
   bool x3b2_29_suitLoading : 1;
+#ifdef TARGET_PC
+  // Port: the beam's gun and air ends at the last two ticks, so frames drawn
+  // between ticks can place the segment particles where the swoosh is drawn.
+  CVector3f xPortBeamGunPos;
+  CVector3f xPortBeamAirPos;
+  mutable PortTickPair< CVector3f > xPortBeamGunEnd;
+  mutable PortTickPair< CVector3f > xPortBeamAirEnd;
+#endif
 };
 CHECK_SIZEOF(CGrappleArm, 0x3b4)
 

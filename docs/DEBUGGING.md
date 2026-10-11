@@ -143,7 +143,8 @@ vars can be set without a rebuild:
 Paths for `shader dump` / `shader override` / `drawlog dump` go under
 `/sdcard/Android/data/org.metroidprime.port/files`. `pick` doesn't work (it looks for a local
 screenshot): use `drawlog` plus `adb exec-out screencap -p`. `MP_OPENGLES=0/1` forces the backend
-for one run. `MP_DAWN_ENABLE` / `MP_DAWN_DISABLE` take comma-separated Dawn toggle names. Clear the
+for one run. `MP_DAWN_ENABLE` / `MP_DAWN_DISABLE` take comma-separated Dawn toggle names. `MP_PIPELINE_THREADS=<n>` sets
+how many threads compile pipelines (default half the cores, at most 8; GL always 1). Clear the
 properties (`setprop debug.mport.env ''`) when you're done.
 
 ## Particles

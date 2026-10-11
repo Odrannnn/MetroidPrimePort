@@ -2,6 +2,9 @@
 
 #include "Kyoto/Animation/CSkinnedModel.hpp"
 #ifdef TARGET_PC
+#include "MetroidPrime/CActor.hpp"
+#include "MetroidPrime/Player/CPlayerGun.hpp"
+#include "port_debug.h"
 #include "port_room_env.h"
 #endif
 #include "Kyoto/Animation/CVertexMorphEffect.hpp"
@@ -95,7 +98,14 @@ CGrappleArm::CGrappleArm(const CVector3f& scale)
 , x3b2_26_grappleHit(false)
 , x3b2_27_armMoving(false)
 , x3b2_28_isGrappling(false)
-, x3b2_29_suitLoading(false) {
+, x3b2_29_suitLoading(false)
+#ifdef TARGET_PC
+, xPortBeamGunPos(CVector3f::Zero())
+, xPortBeamAirPos(CVector3f::Zero())
+, xPortBeamGunEnd(CVector3f::Zero())
+, xPortBeamAirEnd(CVector3f::Zero())
+#endif
+{
   x0_grappleArmModel->SetSortThermal(true);
   xa0_grappleGearModel.SetSortThermal(true);
   xec_grapNoz1Model.SetSortThermal(true);
@@ -187,9 +197,35 @@ void CGrappleArm::RenderGrappleBeam(const CStateManager& mgr, const CVector3f& p
       }
       x394_grappleClawGen->Render();
       x3a0_grappleSwooshGen->Render();
+#ifdef TARGET_PC
+      // Port: the segment particles are emitted along the beam each tick, so
+      // between ticks the newest ones are moved by the ends' blend, as the
+      // swoosh's own segments are (its gen's spawn offset would apply the air
+      // end's motion to the whole line).
+      {
+        const uint gen = CActor::PortTickGeneration();
+        const bool gunValid = xPortBeamGunEnd.Note(xPortBeamGunPos, gen);
+        const bool airValid = xPortBeamAirEnd.Note(xPortBeamAirPos, gen);
+        const float t = CCameraManager::GetPresentationInterpolation();
+        if (gunValid && airValid && t >= 0.f && t < 1.f && PortDebug::ParticleInterpolation()) {
+          const CVector3f gunShift = (xPortBeamGunEnd.prev - xPortBeamGunEnd.cur) * (1.f - t);
+          const CVector3f airShift = (xPortBeamAirEnd.prev - xPortBeamAirEnd.cur) * (1.f - t);
+          if (gunShift.MagSquared() <= 256.f && airShift.MagSquared() <= 256.f) {
+            x390_grappleSegmentGen->PortSetNewbornLineShift(
+                xPortBeamGunEnd.cur, xPortBeamAirEnd.cur, gunShift, airShift);
+          }
+        }
+      }
+#endif
       x390_grappleSegmentGen->Render();
       const CTransform4f viewMatrix = CGraphics::GetViewMatrix();
+#ifdef TARGET_PC
+      // Port: the muzzle sits on the drawn nozzle, so it takes the gun's view.
+      CGraphics::SetViewPointMatrix(xf.GetInverse() *
+                                    mgr.GetPlayer()->GetPlayerGun()->PortGunView(mgr, viewMatrix));
+#else
       CGraphics::SetViewPointMatrix(xf.GetInverse() * viewMatrix);
+#endif
       gpRender->SetModelMatrix(CTransform4f::Identity());
       x39c_grappleMuzzleGen->Render();
       CGraphics::SetViewPointMatrix(viewMatrix);
@@ -363,6 +399,10 @@ const bool CGrappleArm::UpdateGrappleBeam(float dt, const CTransform4f& beamLoc,
 
 void CGrappleArm::UpdateGrappleBeamFX(const CVector3f& beamGunPos, const CVector3f& beamAirPos,
                                       CStateManager& mgr) {
+#ifdef TARGET_PC
+  xPortBeamGunPos = beamGunPos;
+  xPortBeamAirPos = beamAirPos;
+#endif
   x394_grappleClawGen->SetTranslation(beamAirPos);
   x390_grappleSegmentGen->SetParticleEmission(true);
   CVector3f segmentDelta = beamAirPos - beamGunPos;
@@ -517,6 +557,14 @@ void CGrappleArm::DoUserAnimEvent(CStateManager& mgr, const CInt32POINode& node,
     x340_anglePhase = 0.f;
     x344_xAmplitude = kAmplitudeX;
     x348_zAmplitude = kAmplitudeZ;
+#ifdef TARGET_PC
+    // Port: CGrappleArmMP1 ignores the tweak's wave amplitudes (0.25/0.125) and uses fixed
+    // 0.098/0.024, so the Remastered segment effect follows a flatter wave.
+    if (x390_grappleSegmentGen->PortIsRemastered()) {
+      x344_xAmplitude = 0.098f;
+      x348_zAmplitude = 0.024f;
+    }
+#endif
     x398_grappleHitGen->SetParticleEmission(false);
     x394_grappleClawGen->SetParticleEmission(true);
     NWeaponTypes::play_sfx(0x5f6, false, false, 0x36);

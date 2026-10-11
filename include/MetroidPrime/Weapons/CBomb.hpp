@@ -23,6 +23,9 @@ public:
   void AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId sender, CStateManager& mgr) override;
   rstl::optional_object< CAABox > GetTouchBounds() const override;
   void UpdateLight(float dt, CStateManager& mgr);
+  // Remastered's third generator (BombAttract); its presence selects Remastered's think/render.
+  void SetAttractEffect(TToken< CGenDescription > attract);
+  void ThinkRemastered(float dt, CStateManager& mgr);
 
   void SetVelocityWR(const CVector3f& velocity) { mVelocity = velocity; }
   void SetConstantAccelerationWR(const CVector3f& acceleration) { mAcceleration = acceleration; }
@@ -42,6 +45,8 @@ private:
   float mFuseTime;
   rstl::single_ptr< CElementGen > mParticle1;
   rstl::single_ptr< CElementGen > mParticle2;
+  rstl::single_ptr< CElementGen > mParticle3;
+  bool mAttractStarted;
   TUniqueId mLightId;
   CAssetId mParticle2Ptr;
   bool mIsNotDetonated : 1;

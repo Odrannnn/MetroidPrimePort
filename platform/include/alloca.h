@@ -9,4 +9,7 @@
 #endif
 #else
 #include_next <alloca.h>
+#ifndef alloca
+#define alloca __builtin_alloca
+#endif
 #endif

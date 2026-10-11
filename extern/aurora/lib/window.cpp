@@ -216,11 +216,6 @@ void process_event(SDL_Event& event) {
   }
 
   switch (event.type) {
-  case SDL_EVENT_KEY_DOWN:
-    if (primaryWindow && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F12) {
-      request_screenshot();
-    }
-    break;
   case SDL_EVENT_WINDOW_MOVED: {
     if (!primaryWindow) {
       break;

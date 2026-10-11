@@ -37,11 +37,19 @@ inline void WriteValue(COutputStream& out, uint value, int maxSize) {
 }
 
 void CGameOptions::InitSoundMode() {
+#ifdef TARGET_PC
+  // Preserve valid stored modes (0=Mono, 1=Stereo, 2=Surround); clamp invalid to stereo.
+  if (x44_soundMode < 0 || x44_soundMode > 2) {
+    x44_soundMode = CAudioSys::kSM_Stereo;
+  }
+#else
+  // Console path: honour the system's sound mode if present.
   if (OSGetSoundMode() == 0) {
     x44_soundMode = 0;
   } else {
     x44_soundMode = (x44_soundMode != 0) ? x44_soundMode : 1;
   }
+#endif
 }
 
 CGameOptions::CGameOptions()

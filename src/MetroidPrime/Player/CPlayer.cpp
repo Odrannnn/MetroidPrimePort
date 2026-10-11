@@ -1,5 +1,6 @@
 #include "MetroidPrime/Player/CPlayer.hpp"
 
+#include "port_console.h"
 #include "port_debug.h"
 #include "port_freecam.h"
 
@@ -1764,6 +1765,11 @@ void CPlayer::PreThink(float dt, CStateManager& mgr) {
   x560_prevDamageAmt = 0.f;
   x564_damageLocation = CVector3f::Zero();
   xa04_preThinkDt = dt;
+#ifdef TARGET_PC
+  if (const float hurt = PortConsoleTakePendingHurt(); hurt > 0.f) {
+    TakeDamage(true, GetTranslation(), hurt, kWT_AI, mgr);
+  }
+#endif
 }
 
 void CPlayer::AdjustEyeOffset(CStateManager& mgr) {
@@ -2726,8 +2732,10 @@ void CPlayer::UpdateScanningState(const CFinalInput& input, CStateManager& mgr, 
       if (const CActor* act = TCastToConstPtr< CActor >(mgr.ObjectById(GetOrbitTargetId()))) {
         if (const CScannableObjectInfo* scanInfo = act->GetScannableObjectInfo()) {
           float totalTime = scanInfo->GetTotalDownloadTime();
-          x3ac_scanningTime = rstl::min_val(x3ac_scanningTime + dt, totalTime);
-          x3b0_curScanTime += dt;
+          // Port: F1 Scan speed runs the bar and the scan's minimum time faster.
+          const float scanDt = dt * PortDebug::ScanSpeed();
+          x3ac_scanningTime = rstl::min_val(x3ac_scanningTime + scanDt, totalTime);
+          x3b0_curScanTime += scanDt;
           mgr.PlayerState()->SetScanTime(scanInfo->GetScannableObjectId(),
                                          x3ac_scanningTime / totalTime);
           if (x3ac_scanningTime >= totalTime &&

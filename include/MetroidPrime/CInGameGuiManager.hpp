@@ -32,6 +32,7 @@ class CSaveGameScreen;
 class CGuiWidget;
 class CGuiModel;
 class CGuiCamera;
+class CGuiTextSupport;
 
 class CStateManager;
 class CArchitectureQueue;
@@ -69,6 +70,11 @@ public:
   // Port: the fade-in filter (StartFadeIn) is still black or lifting; for the debug console.
   bool PortIsFading() const { return xf8_camFilter.PortIsActive(); }
   static const CInGameGuiManager* PortCurrent() { return sPortCurrent; }
+  const CPlayerVisor* PortPlayerVisor() const { return x30_playerVisor.get(); }
+  // The target reticles a scan window's screen copy holds, for the zoomed pass that replaces it.
+  void PortDrawScanZoomReticles(const CStateManager& mgr) const;
+  // Whether Draw would draw the player visor this frame (same prerequisites).
+  bool PortPlayerVisorDrawn(const CStateManager& mgr) const;
   bool IsInSaveUI() const { return x1f8_27_inSaveUI; }
 
 private:
@@ -140,6 +146,10 @@ private:
   bool x1f8_25_playerAlive : 1;
   bool x1f8_26_deferTransition : 1;
   bool x1f8_27_inSaveUI : 1;
+  // Port: PAL billboards name a STRG (an intro subtitle), drawn as text as PAL does.
+  rstl::single_ptr< CGuiTextSupport > xPortSubtitle;
+  void PortUpdateSubtitle(const SOnScreenTex& pending, float dt);
+  void PortDrawSubtitle() const;
 };
 CHECK_SIZEOF(CInGameGuiManager, 0x1fc)
 #endif

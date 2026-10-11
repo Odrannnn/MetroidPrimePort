@@ -599,11 +599,29 @@ void CCompoundTargetReticle::Draw(const CStateManager& mgr, bool hideLockon) con
 
     CGraphics::SetCullMode(kCM_None);
 
+#ifdef TARGET_PC
+    // The groups were placed at the tick's poses. While smooth frames draw
+    // actors and the camera between ticks, carry a lock-on with its target to
+    // where it is drawn, and an idle (camera-placed) group with the camera,
+    // else they shake against what they mark (issue #76). Restored below.
+    CTargetReticleRenderState& curr = const_cast< CTargetReticleRenderState& >(x10c_currGroupInterp);
+    CTargetReticleRenderState& next = const_cast< CTargetReticleRenderState& >(x174_nextGroupInterp);
+    const CVector3f savedCurr = curr.GetTargetPositionWorld();
+    const CVector3f savedNext = next.GetTargetPositionWorld();
+    PortPresentGroup(curr, mgr);
+    PortPresentGroup(next, mgr);
+#endif
+
     if (!hideLockon) {
       DrawCurrLockOnGroup(rot, mgr);
       DrawNextLockOnGroup(rot, mgr);
       DrawOrbitZoneGroup(rot, mgr);
     }
+
+#ifdef TARGET_PC
+    curr.SetTargetPositionWorld(savedCurr);
+    next.SetTargetPositionWorld(savedNext);
+#endif
 
     DrawGrappleGroup(rot, mgr, hideLockon);
 
@@ -1044,6 +1062,9 @@ void CCompoundTargetReticle::DrawNextLockOnGroup(const CMatrix3f& rot,
   float radius = x174_nextGroupInterp.GetRadiusWorld();
   float factor = x174_nextGroupInterp.GetFactor();
   float visorFactor = mgr.GetPlayerState()->GetVisorTransitionFactor();
+  // Port: F1 "Secondary crosshairs" off hides the seeker and the X-ray/thermal next-target
+  // reticles; the scan visor's box below stays (it shows what a scan would pick).
+  const bool portSecondary = PortDebug::SecondaryCrosshairs();
 
   bool scanRet = false;
   bool xrayRet = false;
@@ -1067,7 +1088,7 @@ void CCompoundTargetReticle::DrawNextLockOnGroup(const CMatrix3f& rot,
 
   float minVpClampScale = x174_nextGroupInterp.GetMinViewportClampScale();
 
-  if (!xrayRet && factor > 0.f) {
+  if (portSecondary && !xrayRet && factor > 0.f) {
     const_cast< TCachedToken< CModel >& >(x40_seeker).TryCache();
     if (CModel* const model = x40_seeker.GetObject()) {
       float scale = CalculateClampedScale(position, radius,
@@ -1087,7 +1108,7 @@ void CCompoundTargetReticle::DrawNextLockOnGroup(const CMatrix3f& rot,
     }
   }
 
-  if (xrayRet) {
+  if (portSecondary && xrayRet) {
     const_cast< TCachedToken< CModel >& >(xac_xrayRetRing).TryCache();
     if (CModel* const model = xac_xrayRetRing.GetObject()) {
       float scale = CalculateClampedScale(position, radius,
@@ -1108,7 +1129,7 @@ void CCompoundTargetReticle::DrawNextLockOnGroup(const CMatrix3f& rot,
     }
   }
 
-  if (thermalRet) {
+  if (portSecondary && thermalRet) {
     const_cast< TCachedToken< CModel >& >(xb8_thermalReticle).TryCache();
     if (CModel* const model = xb8_thermalReticle.GetObject()) {
       float scale = CalculateClampedScale(position, radius,
@@ -1209,8 +1230,20 @@ void CCompoundTargetReticle::DrawOrbitZoneGroup(const CMatrix3f& rot,
 #endif
     gpRender->SetModelMatrix(CTransform4f(rot, targetPos) * CTransform4f::Scale(scale));
 
-    model->Draw(CModelFlags::Additive(
-                    tweak->x1c0_crosshairsColor.WithAlphaModulatedBy(x1e8_crosshairsScale))
+    CColor color = tweak->x1c0_crosshairsColor;
+#ifdef TARGET_PC
+    float rgb[3];
+    if (PortDebug::CrosshairColor(rgb)) {
+      color = CColor(rgb[0], rgb[1], rgb[2], color.GetAlpha());
+    }
+    // The tweak's alpha is 0.19, so the additive strokes barely show on a modern screen. Outside
+    // Original experience the opacity setting is the alpha itself (100% = full strength).
+    const float opacity = static_cast< float >(PortDebug::CrosshairOpacity()) / 100.f;
+    color = PortDebug::OriginalExperience()
+                ? color.WithAlphaModulatedBy(opacity)
+                : CColor(color.GetRed(), color.GetGreen(), color.GetBlue(), opacity);
+#endif
+    model->Draw(CModelFlags::Additive(color.WithAlphaModulatedBy(x1e8_crosshairsScale))
                     .DepthCompareUpdate(false, false));
   }
 }
@@ -1229,6 +1262,23 @@ void CCompoundTargetReticle::UpdateTargetParameters(CTargetReticleRenderState& s
                                      : xf4_targetPos);
   }
 }
+
+#ifdef TARGET_PC
+void CCompoundTargetReticle::PortPresentGroup(CTargetReticleRenderState& state,
+                                              const CStateManager& mgr) {
+  // Same sources as UpdateTargetParameters: an actor's point moves with the
+  // actor's drawn pose, the idle point with the drawn camera (see issue #24).
+  if (const CActor* act = TCastToConstPtr< CActor >(
+          mgr.GetObjectListById(kOL_All).GetObjectById(state.GetTargetId()))) {
+    state.SetTargetPositionWorld(act->PortPresentedPoint(state.GetTargetPositionWorld()));
+  } else if (state.GetIsOrbitZoneIdlePosition()) {
+    const CCameraManager* camMgr = mgr.GetCameraManager();
+    state.SetTargetPositionWorld(
+        camMgr->GetCurrentCameraTransform(mgr) *
+        (camMgr->GetSimulationCameraTransform(mgr).GetInverse() * state.GetTargetPositionWorld()));
+  }
+}
+#endif
 
 float CCompoundTargetReticle::CalculateRadiusWorld(const CActor& actor,
                                                    const CStateManager& mgr) const {
@@ -1351,9 +1401,15 @@ void CTargetingManager::Draw(const CStateManager& mgr, bool hideLockon) const {
   CFrustumPlanes frustum(camXf, curCam.GetRenderFov() * 0.01745329238474369f, curCam.GetAspectRatio(),
                          1.f, false, 100.f);
   gpRender->SetClippingPlanes(frustum);
+#ifdef TARGET_PC
+  gpRender->SetPerspective(CStateManager::PortZoomedFov(curCam.GetRenderFov()), static_cast< float >(CGraphics::GetViewport().mWidth),
+                           static_cast< float >(CGraphics::GetViewport().mHeight),
+                           curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#else
   gpRender->SetPerspective(curCam.GetRenderFov(), static_cast< float >(CGraphics::GetViewport().mWidth),
                            static_cast< float >(CGraphics::GetViewport().mHeight),
                            curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#endif
   x0_targetReticle.Draw(mgr, hideLockon);
 }
 
@@ -1493,10 +1549,17 @@ void COrbitPointMarker::Draw(const CStateManager& mgr) const {
         CFrustumPlanes frustum(camXf, curCam.GetRenderFov() * 0.01745329238474369f,
                                curCam.GetAspectRatio(), 1.f, false, 100.f);
         gpRender->SetClippingPlanes(frustum);
+#ifdef TARGET_PC
+        gpRender->SetPerspective(CStateManager::PortZoomedFov(curCam.GetRenderFov()),
+                                 static_cast< float >(CGraphics::GetViewport().mWidth),
+                                 static_cast< float >(CGraphics::GetViewport().mHeight),
+                                 curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#else
         gpRender->SetPerspective(curCam.GetRenderFov(),
                                  static_cast< float >(CGraphics::GetViewport().mWidth),
                                  static_cast< float >(CGraphics::GetViewport().mHeight),
                                  curCam.GetNearClipDistance(), curCam.GetFarClipDistance());
+#endif
       }
 
       float scale;

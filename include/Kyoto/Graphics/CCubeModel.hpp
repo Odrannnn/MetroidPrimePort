@@ -154,6 +154,9 @@ public:
   // The beam's charge, 0 to 1, which the Ice Beam cannon's frost shell (kind 12) dissolves
   // with: Remastered's DisintegrationAmount. At 0 the shell is not drawn.
   static void PortSetChargeShell(float amount);
+  // The Remastered Phazon Beam's DisintegrationAmount, 0 to 1 (CPhazonBeamMP1::Update), which
+  // the veins material (kind 35) eats its mask with. Reset to 0 when the beam unloads.
+  static void PortSetDisintegration(float amount);
   // The CMDL this model was loaded from (0 for an area's models), for diagnostics.
   void PortSetAssetId(uint id) { xPort_assetId = id; }
   uint PortAssetId() const { return xPort_assetId; }

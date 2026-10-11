@@ -293,7 +293,11 @@ void CFlickerBat::Render(const CStateManager& mgr) const {
     }
     if (strength > 0.f && strength < 1.f) {
       strength = CMath::FastSinR(strength * M_PIF) * 0.3f;
+#ifdef TARGET_PC
+      mgr.DrawSpaceWarp(PortPresentedPoint(GetTranslation()), strength);
+#else
       mgr.DrawSpaceWarp(GetTranslation(), strength);
+#endif
     }
   }
 

@@ -586,7 +586,7 @@ void TestSwooshElectric() {
 
 // Remastered's spawn tables merge into retail's one KSSM: generators by frame
 // with the 16-byte entries retail reads, the first swoosh and electric child
-// as SSWH/SSSD and SELC/SESD; a second swoosh is left out.
+// as SSWH/SSSD and SELC/SESD; further swooshes go to the port-only PSWX.
 void TestSpawnTable() {
   std::vector<uint8_t> out(0x3c, 0);
   std::memcpy(out.data(), "RFRM", 4);
@@ -665,9 +665,10 @@ void TestSpawnTable() {
   root.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD);
   root.f("SSWH").f("CNST").w(0x0000B002).f("SSSD").f("CNST").w(3);
   root.f("SELC").f("CNST").w(0x0000B003).f("SESD").f("CNST").w(3);
+  root.f("PSWX").f("CNST").w(1).w(0x0000B004).w(7);  // the second swoosh, port-only
   root.end();
-  Check(parts[0].part == root.bytes, "tables merge into retail's KSSM, SSWH and SELC");
-  Check(parts[0].dropped.size() == 1 && parts[0].droppedRetail == 1, "the second swoosh is left out");
+  Check(parts[0].part == root.bytes, "tables merge into retail's KSSM, SSWH, SELC and PSWX");
+  Check(parts[0].dropped.empty() && parts[0].droppedRetail == 0, "the second swoosh is kept as PSWX");
   bool merged = false;
   bool selected = false;
   bool conditional = false;
@@ -678,7 +679,7 @@ void TestSpawnTable() {
   }
   Check(merged && selected && conditional, "merge, selector and condition noted");
   std::vector<RetailPartProperty> properties;
-  Check(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error) && properties.size() == 7,
+  Check(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error) && properties.size() == 8,
         "converted spawn table reads as retail");
 }
 

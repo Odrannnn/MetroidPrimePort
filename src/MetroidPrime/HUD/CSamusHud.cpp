@@ -47,6 +47,11 @@
 #include "MetroidPrime/Weapons/CGameProjectile.hpp"
 #include "rstl/math.hpp"
 
+#ifdef TARGET_PC
+#include "MetroidPrime/CActor.hpp"
+#include "port_debug.h"
+#endif
+
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
@@ -1054,6 +1059,33 @@ void CSamusHud::UpdateHudDamage(float dt, const CStateManager& mgr, uint helmetV
           : x3f4_damageFilterAmt / peak;
   colorGain *= x3f8_damageFilterAmtGain;
   colorGain = CMath::Clamp(0.f, colorGain, 1.f);
+#ifdef TARGET_PC
+  // Remastered's UpdateHudDamage (0xcad714) takes the tint from its own colour tables (LDTA
+  // TweakGuiColorsMP1: foot 0x398 = (1, 0x3ececedd, 0x3ca0a0f5, 0x3e4ccccd), ball 0x3a8 =
+  // (1, 0x3ececedd, 0, 1), pulse 0x428 = (1, 0.25, 0, 1) x alpha 1), scales the tail of a short
+  // flash by 0.25, tests the summed alpha as a float and has no 0.75 ball factor.
+  const bool remasteredTint =
+      (x274_loadedFrmeBaseHud != nullptr && x274_loadedFrmeBaseHud->PortHasHudInterference()) ||
+      (x288_loadedSelectedHud != nullptr && x288_loadedSelectedHud->PortHasHudInterference());
+  const bool ball = mgr.GetPlayer()->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed;
+  const CColor color0 = remasteredTint
+                            ? (ball ? CColor(1.f, 0x1.9d9dbap-2f, 0.f, 1.f)
+                                    : CColor(1.f, 0x1.9d9dbap-2f, 0x1.4141eap-6f, 0x1.99999ap-3f))
+                                  .WithAlphaModulatedBy(colorGain)
+                            : ambientColor.WithAlphaModulatedBy(colorGain);
+  const CColor color1 = remasteredTint ? CColor(1.f, 0.25f, 0.f, 1.f)
+                                             .WithAlphaModulatedBy(x3ec_damageLightPulser)
+                                       : gpTweakGuiColors->GetDamageAmbientPulseColor()
+                                             .WithAlphaModulatedBy(x3ec_damageLightPulser);
+  CColor filterColor = CColor::Add(color0, color1);
+  if (remasteredTint && x3f0_damageFilterAmtInit - peak < 2.f * dt) {
+    filterColor = filterColor.WithAlphaModulatedBy(0.25f);
+  }
+  if (remasteredTint ? filterColor.GetAlpha() > 0.f : filterColor.GetAlphau8()) {
+    if (!remasteredTint && ball) {
+      filterColor = filterColor.WithAlphaModulatedBy(0.75f);
+    }
+#else
   const CColor color0 = ambientColor.WithAlphaModulatedBy(colorGain);
   const CColor color1 =
       gpTweakGuiColors->GetDamageAmbientPulseColor().WithAlphaModulatedBy(x3ec_damageLightPulser);
@@ -1062,6 +1094,7 @@ void CSamusHud::UpdateHudDamage(float dt, const CStateManager& mgr, uint helmetV
     if (mgr.GetPlayer()->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed) {
       filterColor = filterColor.WithAlphaModulatedBy(0.75f);
     }
+#endif
     x3a8_camFilter.SetFilter(CCameraFilterPass::kFT_Add, CCameraFilterPass::kFS_Fullscreen, 0.f,
                              filterColor, kInvalidAssetId);
   } else {
@@ -1802,9 +1835,19 @@ void CSamusHud::UpdateHudLag(float dt, const CStateManager& mgr) {
     }
     x588_base_basewidget_pivot->SetIdleXform(
         CTransform4f(CMatrix3f::Identity(), x588_base_basewidget_pivot->GetWorldPosition()));
-    x274_loadedFrmeBaseHud->GetFrameCamera()->SetO2WTransform(BuildFinalCameraTransform(
-        CQuaternion::NoRotation(), x304_basewidgetIdlePos, x310_cameraPos));
+    x274_loadedFrmeBaseHud->GetFrameCamera()->SetHudO2WTransform(
+        BuildFinalCameraTransform(CQuaternion::NoRotation(), x304_basewidgetIdlePos,
+                                  x310_cameraPos),
+        x310_cameraPos);
     x8_targetingMgr.CompoundTargetReticle().SetLeadingOrientation(CQuaternion::NoRotation());
+#ifdef TARGET_PC
+    xPortLag[0] = xPortLag[1];
+    xPortLag[1] = SPortHudLag();
+    xPortLag[1].yaw = mgr.GetPlayer()->GetYaw();
+    xPortLag[1].valid = true;
+    xPortLagPrevGeneration = xPortLagGeneration;
+    xPortLagGeneration = CActor::PortTickGeneration();
+#endif
   } else {
     CUnitVector3f cameraDirection(x2f8_fpCamDir, CUnitVector3f::kN_No);
     if (const CFirstPersonCamera* camera =
@@ -1835,11 +1878,90 @@ void CSamusHud::UpdateHudLag(float dt, const CStateManager& mgr) {
       x29c_decoIntf->SetHudRotation(lagRotation);
       x29c_decoIntf->SetHudOffset(lagOffset);
     }
-    x274_loadedFrmeBaseHud->GetFrameCamera()->SetO2WTransform(
-        BuildFinalCameraTransform(lagRotation, x304_basewidgetIdlePos + lagOffset, x310_cameraPos));
+    x274_loadedFrmeBaseHud->GetFrameCamera()->SetHudO2WTransform(
+        BuildFinalCameraTransform(lagRotation, x304_basewidgetIdlePos + lagOffset, x310_cameraPos),
+        x310_cameraPos);
     x2f8_fpCamDir = cameraDirection;
+#ifdef TARGET_PC
+    xPortLag[0] = xPortLag[1];
+    xPortLag[1].rotation = lagRotation;
+    xPortLag[1].inverse = x32c_invHudLag;
+    xPortLag[1].offset = lagOffset;
+    xPortLag[1].yaw = mgr.GetPlayer()->GetYaw();
+    xPortLag[1].lag = true;
+    xPortLag[1].valid = true;
+    xPortLagPrevGeneration = xPortLagGeneration;
+    xPortLagGeneration = CActor::PortTickGeneration();
+#endif
   }
 }
+
+#ifdef TARGET_PC
+void CSamusHud::PortApplyHudLag(const SPortHudLag& state) {
+  if (!x29c_decoIntf.null()) {
+    x29c_decoIntf->SetDecoRotation(state.yaw);
+  }
+  if (!state.lag) {
+    return;
+  }
+  if (!x2a0_helmetIntf.null()) {
+    x2a0_helmetIntf->SetHudLagRotation(state.rotation.BuildTransform());
+    x2a0_helmetIntf->SetHudLagOffset(state.offset);
+    x2a0_helmetIntf->Update(0.f);
+  }
+  if (!x29c_decoIntf.null()) {
+    x29c_decoIntf->SetReticuleTransform(state.inverse.BuildTransform());
+    x29c_decoIntf->SetHudRotation(state.rotation);
+    x29c_decoIntf->SetHudOffset(state.offset);
+    x29c_decoIntf->PortApplyHudLag();
+  }
+  x274_loadedFrmeBaseHud->GetFrameCamera()->SetHudO2WTransform(
+      BuildFinalCameraTransform(state.rotation, x304_basewidgetIdlePos + state.offset,
+                                x310_cameraPos),
+      x310_cameraPos);
+}
+
+void CSamusHud::PortPresentHudLag(bool present) const {
+  CSamusHud& self = const_cast< CSamusHud& >(*this);
+  if (!present) {
+    if (xPortLagPresented) {
+      self.xPortLagPresented = false;
+      self.PortApplyHudLag(xPortLag[1]);
+    }
+    return;
+  }
+  if (x274_loadedFrmeBaseHud == nullptr) {
+    return;
+  }
+  const float t = CCameraManager::GetPresentationInterpolation();
+  const SPortHudLag& prev = xPortLag[0];
+  const SPortHudLag& cur = xPortLag[1];
+  if (!(t >= 0.f && t < 1.f) || !PortDebug::ActorInterpolation() ||
+      xPortLagGeneration != CActor::PortTickGeneration() ||
+      xPortLagPrevGeneration + 1 != xPortLagGeneration || !prev.valid || !cur.valid ||
+      prev.lag != cur.lag) {
+    return;
+  }
+  SPortHudLag blend = cur;
+  if (cur.lag) {
+    blend.rotation = CQuaternion::Slerp(prev.rotation, cur.rotation, t);
+    blend.inverse = CQuaternion::Slerp(prev.inverse, cur.inverse, t);
+    blend.offset = prev.offset + (cur.offset - prev.offset) * t;
+  }
+  // A turn of more than ~30 degrees in a tick is a snap (respawn, warp): keep it.
+  float dyaw = cur.yaw - prev.yaw;
+  if (dyaw > M_PIF) {
+    dyaw -= 2.f * M_PIF;
+  } else if (dyaw < -M_PIF) {
+    dyaw += 2.f * M_PIF;
+  }
+  if (CMath::AbsF(dyaw) < 0.5f) {
+    blend.yaw = cur.yaw - (1.f - t) * dyaw;
+  }
+  self.xPortLagPresented = true;
+  self.PortApplyHudLag(blend);
+}
+#endif
 
 void CSamusHud::ApplyClassicLag(const CUnitVector3f& lookDir, CQuaternion& rotation,
                                 const CStateManager& mgr, float dt, bool invert) {

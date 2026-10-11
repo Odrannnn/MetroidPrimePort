@@ -1046,7 +1046,8 @@ void CPlayer::UpdateAimTarget(CStateManager& mgr) {
     x48c_aimTargetTimer = 0.f;
     return;
   }
-  if (!gkAutoAim && gkAutoAimAtOrbitedObject) {
+  // Port: with auto-aim off (F1), aim only at a locked target, as the build-time switch does.
+  if ((!gkAutoAim && gkAutoAimAtOrbitedObject) || !PortDebug::AutoAim()) {
     SetAimTargetId(kInvalidUniqueId);
     x48c_aimTargetTimer = 0.f;
     if (x304_orbitState == kOS_OrbitObject || x304_orbitState == kOS_ForcedOrbitObject) {

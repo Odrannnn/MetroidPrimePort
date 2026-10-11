@@ -299,6 +299,14 @@ public:
     append(&obj, sizeof(T));
   }
 
+  // Grows the buffer by size bytes left for the caller to fill.
+  [[nodiscard]] uint8_t* append_uninit(size_t size) {
+    resize(m_length + size, false);
+    uint8_t* out = m_data + m_length;
+    m_length += size;
+    return out;
+  }
+
   void append_zeroes(size_t size) {
     resize(m_length + size, true);
     m_length += size;
@@ -315,6 +323,8 @@ public:
   }
 
   void clear() { m_length = 0; }
+  // Drops everything past size bytes.
+  void truncate(size_t size) noexcept { m_length = std::min(m_length, size); }
   void reserve_extra(size_t size) { resize(m_length + size, true); }
 
   ByteBuffer clone() const {

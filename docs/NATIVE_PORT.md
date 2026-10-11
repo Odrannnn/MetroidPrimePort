@@ -27,11 +27,28 @@ ctest --test-dir build/native -L port --output-on-failure
 
 For Windows, run from an MSVC developer shell and add
 `-DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl` to configure.
-Plain MSVC `cl.exe`, MinGW, macOS, and ARM builds are not currently validated.
+Plain MSVC `cl.exe` and MinGW builds are not currently validated.
+
+macOS (Apple Silicon, macOS 13+) is experimental: `.github/workflows/macos.yml`
+builds it on `macos-15` with Homebrew's `ninja` and `openssl@3` and renders
+through Metal, but nobody has played it on a real Mac yet. Configure as that
+workflow does (static SDL3/nod/OpenSSL, and
+`-DCMAKE_DISABLE_FIND_PACKAGE_{xxHash,zstd,PkgConfig}=ON` so Homebrew's copies
+are not linked). The workflow packages an ad-hoc signed
+`Metroid Prime Port.app` with the small `ffmpeg` in `Contents/MacOS`. It is
+not notarised, so on first launch macOS refuses it: right-click > Open, or
+`xattr -dr com.apple.quarantine "Metroid Prime Port.app"`.
 
 If `ccache` is installed, configure compiles through it, and on Linux `mold`
 links when it is installed. Turn them off with `-DMP_USE_CCACHE=OFF` /
-`-DMP_USE_MOLD=OFF`. The cache is shared between build directories in the same
+`-DMP_USE_MOLD=OFF`.
+
+On Linux, Abseil, fmt, SQLite, libpng and FreeType are built from source and
+linked statically even when the system has them (`MP_BUNDLED_DEPS`, on by
+default), so a distro update can't stop the binary starting. It then needs only
+OpenSSL 3 and the C/C++ runtime. `-DMP_BUNDLED_DEPS=OFF` uses system copies.
+
+The cache is shared between build directories in the same
 checkout, so a new `build/<name>` mostly fills from it instead of recompiling.
 One configuration takes about 0.5 GB of cache (`ccache -M` sets the limit).
 
@@ -75,7 +92,7 @@ remembers the answer as `disc_path` in the settings file. There is no prompt
 when the port has no window to show one on, or with `MP_NO_DISC_DIALOG=1`
 (for scripted runs that do have a window, as on a build runner). The disc must
 identify as **GM8E01, disc 0, revision 0** (USA 1.00) or **GM8P01** (PAL).
-A PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port
+PAL support is experimental: a PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port
 feature (Remastered import, randomizer, Archipelago, cutscene skips) and its
 languages; its saves are kept apart from USA ones. USA 1.01 and 1.02 are only
 taken with `MP_DISC_ANY_VERSION=1` (untested); Japanese, Korean and Wii discs
@@ -226,7 +243,8 @@ Two things to know when reproducing this:
 
 - **The card follows the executable, not `MP_USER_PATH`.** `CARDSetBasePath` is
   given `SDL_GetBasePath()`, so each build directory has its own card. A save
-  written by one build is invisible to another.
+  written by one build is invisible to another. Inside a macOS app bundle it is
+  kept in the user folder instead.
 - **A single press at a guessed frame is not enough.** The title takes ~2000
   frames to fade in on this path, and a press during the fade is silently
   ignored, which is indistinguishable from "the button does not work". Use
@@ -351,7 +369,9 @@ is connected; the Android touch overlay's layout), so in-game button prompts
 match what is in the player's hands. Only deliberate input switches it: a key
 press, a mouse move or click, a pad button, or a stick or trigger pushed past
 half way; the touch overlay's virtual pad does not count. The set is swapped
-automatically, and `MP_TEXTURE_DEVICE` forces the name. A folder with no subfolders is used as a
+automatically. F1 Controls > Options "Button glyphs" (`prompt_glyphs=`) pins
+one set (Xbox, PlayStation, Nintendo Switch, GameCube or keyboard & mouse), and
+`MP_TEXTURE_DEVICE` forces any name. A folder with no subfolders is used as a
 single device-agnostic pack; a folder that has device subfolders but not the one
 selected loads nothing rather than mixing packs. `MP_DUMP_TEXTURES=1` writes
 every source texture to `<cachePath>/texture_dumps` as DDS, for authoring
@@ -420,7 +440,7 @@ to another button gets a GameCube icon, named after the button's default action.
 The binding icons register above the static set, so reloading that set never
 hides them. The chosen icon is logged when it changes ("prompt A keyboard_x").
 `MP_SMOKE_BIND_A=<scancode>` (negative for mouse buttons, -3 is middle) rebinds
-the A action once, for checking this without going through the Controls page; it
+the A action once, for checking this without going through the Controls > Remap page; it
 needs a `-DMP_ENABLE_SMOKE_DRIVER=ON` build such as `build/smoke-gcc`, and
 `MP_FAST_BOOT=1 MP_SKIP_CUTSCENES=1 MP_SMOKE_PAUSE=<ticks>` reaches the pause
 screen quickly to see the result.
@@ -784,7 +804,8 @@ drawn model's bounds. Rendering is not affected.
 
 ### Platforms
 
-The port is built and tested on Linux and Windows. Its own platform code is
+The port is built and tested on Linux and Windows (macOS builds and passes
+its tests in CI, see Build). Its own platform code is
 portable - SDL3 and `std::filesystem` throughout - and the CMake keeps the MSVC
 linker paths from the template. The Windows build is exercised by
 `.github/workflows/windows.yml` on `windows-latest`, which only runs when
@@ -825,7 +846,7 @@ unpacks to a temporary directory instead of mounting.
 - Keyboard defaults: WASD / IJKL for sticks, X/Z/C/V for A/B/X/Y, Return for
   Start, arrows for D-pad, Q/E for L/R, and F for Z. Existing mappings take
   precedence. SDL controllers are supported.
-- F1: debug overlay. F10: 60 FPS cap/unlimited presentation. F11: fullscreen.
+- F1: debug overlay. F10: 60 FPS cap on/off (off: F1 Video > Frame rate "FPS cap", `fps_cap=`, `MP_FPS_CAP`; 0 = unlimited). F11: fullscreen.
   F12: screenshot.
 - Fullscreen (F1 > Video > Display, persisted as `fullscreen`): a borderless window over
   the whole screen on desktop, toggled with F11; on Android it hides the status
@@ -837,12 +858,28 @@ unpacks to a temporary directory instead of mounting.
   path and has a **Save settings now** button. Environment variables still
   override the file for that run, and are written back into it if any setting is
   changed during that run.
+- F1 > System > Settings > **Reset configuration...** puts every port setting and
+  control mapping back to its default: after a confirmation it saves the current
+  settings, moves `port_settings.ini`, `controls.toml`, `imgui.ini`,
+  `controller_ports.dat`, `keyboard_bindings.dat` and the `*.controller` mapping
+  files into a new `config-backup-<date>-<time>/` folder inside the user folder
+  (older backups are never reused), and exits; the next launch starts from
+  defaults (`platform/include/port_config_reset.h`, test `port_config_reset_tests`).
+  Only those names are touched, a symlink among them makes it refuse, and a failed
+  move is rolled back and the error shown without quitting (if the rollback itself fails, the message names the files left in the backup folder). After a successful reset every later config write (settings, `imgui.ini`, Aurora's controller/keyboard files) is blocked for the process (`aurora_disable_config_persistence`). A fresh
+  `port_settings.ini` keeps just `disc_path`, `remastered_nsp` and `remastered_keys`,
+  so the disc isn't asked for again. Saves, save states, mods, caches, the disc and
+  the data folder location are not touched. Game options that retail keeps inside
+  a save file (invert Y, volumes...) come back when that save loads; the port's
+  global copy (`game_options=`) is in the reset settings. After the reset nothing
+  writes the settings (`SaveSettings` is disabled, ImGui's ini off) until the
+  process exits. To undo, copy the files back from the backup folder.
 - Original experience (top of F1 > Game and the pause-menu options, persisted as
   `original_experience`, `MP_ORIGINAL=1`, console `original [on|off]`): plays the
   game as retail without touching the saved settings, so turning it off restores
   them. It forces 640x480 (EFB scale 1x, no dynamic resolution, MSAA and
   anisotropy off), 4:3 without the widescreen HUD or Vert+, FOV 55, HUD scale
-  100, the helmet and visor effects, cutscene bars, unskippable cutscenes and
+  100, the game's crosshair, the helmet and visor effects, cutscene bars, unskippable cutscenes and
   elevator rides, a 60 Hz simulation with the frame cap and no interpolation,
   the disc's font and GameCube button prompts, no mods, unlocks or revealed map,
   and retail controls (no spring ball, fast morph, sticky or rapid charge,
@@ -866,9 +903,8 @@ unpacks to a temporary directory instead of mounting.
   on, go up to 8100)
   and is consumed, so it no longer drives the game's free-look. Under mouse aim
   a C-stick held from the keyboard is not consumed, so keyboard beam keys still
-  pick beams, and an L from a key or mouse button stays lock-on (not a beam
-  modifier). Fire
-  stays on whatever is bound to A; remap it on the Controls page.
+  pick beams, and an L from a key or mouse button stays lock-on. Fire
+  stays on whatever is bound to A; remap it in Controls > Remap.
 - Spring Ball (Controls > Options, persisted as `spring_ball`, off by default): C-stick
   up in morph ball jumps, as in Metroid Prime Trilogy and the randomprime discs
   the Archipelago world makes, once the Morph Ball Bombs are held. It is a bomb
@@ -920,15 +956,19 @@ unpacks to a temporary directory instead of mounting.
   stick). Console: `mappan <dx> <dy> [hold s]` (dp, view height taken as 400 dp; the finger counts as down for `hold` seconds, which stops the map drifting back to its area; ignored
   while the map is closed). A second finger pinches to zoom (finger spread doubles: camera distance halves, same clamp as L/R) while the midpoint pans; when one finger lifts the other carries on panning. Twisting the two fingers rotates the map's yaw with them (a clockwise twist turns the content clockwise; pitch is left alone). Console: `mapzoom <ratio>`, `maprotate <degrees>` (positive turns the content clockwise, as the stick's right does; both ignored while the map is closed).
   A press of the beam shift springs too (beams don't change in morph ball), as
-  X does in Remastered; jump (B) stays the Boost Ball's alone. A shift held from
-  before the ball formed has to be let go first.
-- Beam shift (Controls > Options): while it is held, the D-pad picks beams the way the
-  C-stick does, and visors stay on the plain D-pad, so both are reachable without
-  a C-stick. It has two key slots (`shift_key`, `shift_key_alt`; default left
-  shift, which already did this under twin stick), a pad slot (`shift_pad`, a
-  button or trigger, default none, because Aurora maps LB on many pads to L), and
-  it can go on a mouse button. Twin stick keeps left shift as its own modifier,
-  and L and LB too while `shift_pad` is unbound.
+  X does in Remastered; jump (B) stays the Boost Ball's alone: every shift input is
+  bound to the Spring Ball action alone in the Morph Ball context.
+- Beam shift (Controls > Options): there is no hidden modifier. Each shift input
+  forms default chords with the D-pad inputs of its own family (shift + up = Power,
+  down = Ice, left = Plasma, right = Wave), which fire the direct beam actions
+  (not the visor) and show in Controls > Remap; the plain D-pad still picks visors.
+  Shifts: two key slots (`shift_key`, `shift_key_alt`; default left shift under
+  twin stick), a pad slot (`shift_pad`, a button or trigger, default none, because
+  Aurora maps LB on many pads to L; under twin stick LB is the shift while
+  `shift_pad` is unbound and LB presses no other pad button), a mouse button, and the
+  touch Beam button (`touch:beam_shift`, with the touch D-pad). The L trigger is no
+  longer a shift. A saved `controls.toml` row for the retired `beam_shift`
+  action is skipped (and logged) when loaded.
 - Turbo fire (Controls > Options, "Turbo fire (hold)"): while it is held, A is
   pressed and released on alternate ticks, as if fire were mashed, so each beam
   shoots as fast as its own shot delay allows (it doesn't charge). Two key slots
@@ -936,12 +976,12 @@ unpacks to a temporary directory instead of mounting.
   default; presets leave them alone. On Android, F1 Touch controls "Turbo fire
   button" (`touch_turbo=`, off by default) adds a "T" button to either touch
   layout, movable and resizable in the layout editor (issue #10).
-- Alt controller buttons (Controls > Controller, "Alt button" column, persisted as
+- Alt controller buttons (the pad buttons' second binding in Controls > Remap, persisted as
   `pad_alt`, 16 comma-separated native codes indexed by the PAD bit, -1 for
   none): a second controller button or trigger per GameCube button. Aurora maps
   one native button to each PAD button, so the port reads the alt one itself and
   ORs it in (`PortControls::HeldAltPadButtons`, from `CDolphinController`).
-- Control presets (Controls page). Keyboard: **Classic** (the first-run layout)
+- Control presets (Controls > Remap, "Reset..." beside the device list: Keyboard & mouse and Controllers). Keyboard: **Classic** (the first-run layout)
   and **Mouse & keyboard** (WASD, E fire, Space jump, left ctrl/C morph, F
   missile, Q lock on, left alt free look, Tab/M map, 1-4 beams and 5-8 visors
   through whichever C-stick direction or D-pad button the disc's tweak gives
@@ -950,8 +990,7 @@ unpacks to a temporary directory instead of mounting.
   (Remastered's Dual Sticks: RT or right face button fire, LT lock on, bottom
   face button or LB jump, left
   morph, RB missile, Start map, Back pause, right stick click free look, top
-  face button as the pad beam shift (which springs in morph ball, as any bound
-  beam shift does), Scan and X-Ray swapped; twin stick on),
+  face button as the pad beam shift (which springs in morph ball), Scan and X-Ray swapped; twin stick on),
   **Modern** and **Southpaw**. Only Remastered sets `shift_pad`, `pad_alt` and
   `swap_scan_xray`; the others clear them. Remastered and Modern are off for a
   GameCube adapter.
@@ -967,22 +1006,69 @@ unpacks to a temporary directory instead of mounting.
   the transition flash while the camera eases out, and an unmorph cuts to first
   person behind the transition filter.
 - Toggle Lock-On (Controls > Options and pause Options > Controller, persisted as
-  `lock_on_toggle`, off by default): a press of L latches it held (lock-on,
-  scan, strafe, grapple) and the next press lets go. The latch also lets go by
-  itself when a lock the player had ends (target dead or out of range). Sticky
+  `lock_on_toggle`, off by default): a press of L that locks on (target, scan
+  point, grapple point) latches it held and the next press lets go. With nothing
+  to lock on, L is a plain hold (strafe while held). The latch also lets go by
+  itself when its lock ends (target dead or out of range). Sticky
   Charge (`sticky_charge`, off by default, needs the Charge Beam): holding fire
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
   input is disabled. The console's `status` prints the game's L/A and the charge.
-- The overlay's **Controls** page rebinds pad 1: click Bind, then press the input.
-  "Keyboard & mouse" assigns a key or mouse button to each pad button and stick
-  axis; "Controller" assigns a physical controller button or axis. Bindings are
-  saved by Aurora next to the other controller data, with buttons to clear the
-  keyboard bindings and restore the controller defaults. The beam shift and the
-  mouse buttons are rows here too (port settings, not Aurora's).
+- The overlay's **Controls** page keeps settings only: "Mouse settings" (inversion,
+  crosshair) and "Controller settings" (stick aim and dead
+  zones). **Remap > Active controller** selects any detected gamepad, including
+  one assigned to player 2 or later; the choice is saved and restored on reconnect.
+  Select it here before recording its bindings in Remap. Remap's "Controller bindings for" selects
+  binding profiles, not the controller used to play. Every binding is on **Controls > Remap**, below.
+- **Controls > Remap** lists all devices' bindings together, with keyboard, mouse, controller
+  and touch icons. "Controller bindings for" selects all controllers or a controller kind/model
+  profile, including saved profiles. Actions are grouped (game buttons,
+  move and aim, beams, visors, Morph Ball, port, layers) with the GameCube button's game function
+  beside it; default inputs are greyed out. Click an input to edit it, or **+** to open a new
+  binding editor beneath that action and start recording. The action is fixed to the row:
+  press an input and release it, then **Save** (or **Cancel**); **Record** captures again.
+  Record accepts keyboard, mouse or controller input; repeated identical
+  mappings are ignored. Editing a default makes it yours, and "Revert" gives the default back. Keyboard &
+  mouse, Touch and Controllers are the Default profile restricted to that family of input;
+  a kind or model is its own profile on top. "Reset..." restores a preset (after a confirmation).
+  "Standard buttons in menus" (on by default; `menu_standard_buttons=`,
+  `MP_MENU_STANDARD_BUTTONS`) makes a controller use its own A/B/X/Y, shoulders, triggers and
+  D-pad in the pause screen, front end and map whatever they do in game (A confirms, B backs
+  out, the triggers page and zoom), and the prompts there show those buttons. Start and the
+  map button keep their gameplay inputs; bindings set for Menu or Map under Advanced still
+  apply; keyboard and touch are unchanged.
+  It binds any action to an input or a chord of up to four
+  (hold the first ones, press the last; or "Any order" within the chord window). The editor's
+  Advanced section holds the typed input text, the trigger (press, tap, hold, double tap,
+  toggle), turbo, a scale/invert for analog actions and where it works (everywhere, or only in
+  gameplay, morph ball, map, menus, scan visor, or one of four layers: a layer is active while
+  its "Layer n (hold)" binding is held, like a shift key, and its bindings win over the same
+  input's normal ones). Actions are the pad's buttons and stick halves, plus beam and
+  visor picks (direct or next/previous), Spring Ball, the port menu, save/load state,
+  screenshot and Original experience. Bindings are layered over the other pages:
+  binding an action from one kind of device (keyboard & mouse, controller,
+  touch) replaces what the other pages bind to it from that kind only, and
+  "Removed built-in bindings" drops one without adding another. A profile can
+  follow the connected controller's kind (SDL type) or that controller model
+  (SDL GUID); it goes on top of the default profile, GUID before type. Saved as
+  `controls.toml` in the user folder (format in
+  `platform/include/port_input_bindings.h`). Edits to the file are picked up
+  within a second; a file that doesn't parse is logged and the last good
+  bindings stay. Touch inputs are named after the overlay controls (`touch:a`,
+  `touch:fire`, `touch:missile`, `touch:morph`, ..., plus `touch:beam_shift`,
+  `touch:turbo_held`, `touch:map_tap`); a bound touch control no longer sends
+  its own button. The overlay hides while F1 is open, so Record can't see touch
+  controls: the editor's "Add a touch control..." list picks them instead.
+  The D-pad, the sticks and the menu button can't be remapped.
 - `MP_CINEMA_BARS=0|1` (Video > Display "Cutscene black bars", persisted as `cinema_bars`,
   default off): the scripted 16:9 cutscene letterbox. Off, cutscenes narrower than 16:9
   show the cinematic camera's full shot (Vert+); elevator rides and credits keep theirs.
+- `MP_SHARP_SCAN_WINDOW=0|1` (Video > Display "Sharp scan window", persisted as
+  `sharp_scan_window`, default off; off under Original experience): the scan visor's
+  magnifier renders the world a second time through a zoomed camera instead of
+  stretching a copy of the screen centre, so it stays sharp at high resolution and with
+  HD textures. Costs a second world render while the scan visor is up; the faceplate
+  decor isn't magnified.
 - `MP_HUD_WIDE=0|1` (Video > Display, persisted as `hud_wide`, default on): widescreen HUD. The
   aspect-matched in-game HUD frames keep each element's shape but move it away
   from the screen centre, so edge elements (scan panels, energy bar, map) reach
@@ -1010,6 +1096,24 @@ unpacks to a temporary directory instead of mounting.
   menus and the minimap toward the screen centre, each frame as a whole so the
   pieces stay on the visor frame. The helmet is not scaled. The minimap eases
   back to full size as it opens into the map screen.
+- Crosshair opacity and colour (Video > Display, persisted as `crosshair_opacity`,
+  0-100 percent, default 100, and `crosshair_color`, `RRGGBB` or empty for the
+  game's own colour): the centre crosshair of free aim, mouse aim and twin stick.
+  The opacity is the crosshair's alpha, so 100% draws it at full strength (the
+  game's own alpha is 19%).
+  Original experience ignores both.
+- Secondary crosshairs (Video > Display, `secondary_crosshairs`, `MP_SECONDARY_CROSSHAIRS`,
+  default on): off hides the next-target reticles: the combat visor's seeker and the
+  X-ray ring and thermal crosshair on the target Lock-On would pick. The lock-on
+  reticle and the scan visor's target box stay. On under Original experience.
+- Scan speed (Game > Cutscenes, `scan_speed`, `MP_SCAN_SPEED`, 100-500, default
+  100): percent speed of the scan visor's progress bar and the scan's minimum
+  time. 100 under Original experience.
+- Auto-aim (Controls > Options > Aiming, `auto_aim`, `MP_AUTO_AIM`, default on):
+  off clears the gun's aim target unless Lock-On holds one, so free-aimed shots go
+  straight to where you aim instead of turning toward the enemy nearest the screen
+  centre (the decomp's `gkAutoAimAtOrbitedObject` behaviour). On under Original
+  experience.
 - Hide helmet and hide visor effects (Video > Display and pause Options > Visor,
   persisted as `hide_helmet` and `hide_visor_effects`, off by default): the
   first drops the helmet frame (the dome and the lights at the bottom); the
@@ -1192,10 +1296,10 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   Mouse aim replaces the R-button free look, so switching it on in F1 also
   switches on twin stick (still its own setting): the mouse and a pad's right
   stick then add into the same aim.
-- In mouse mode the five mouse buttons act as pad buttons, set in the Controls > Keyboard & mouse
-  sub-tab's "Mouse buttons" list (`mouse_left`, `mouse_middle`, `mouse_right`,
-  `mouse_x1`, `mouse_x2`: none, a pad button, a D-pad direction or the beam
-  shift). By default **left-click fires / holds a charge / releases a charged
+- In mouse mode the five mouse buttons act as pad buttons. They're bound on
+  Controls > Remap (Keyboard & mouse); the saved `mouse_left`, `mouse_middle`,
+  `mouse_right`, `mouse_x1`, `mouse_x2` lines (none, a pad button, a D-pad
+  direction or the beam shift) are only its default rows. By default **left-click fires / holds a charge / releases a charged
   shot** (A), **right-click holds lock-on** (L) and **middle-click fires
   missiles** (Y); the side buttons are unset. Either keyboard
   preset restores them too. They feed the normal PAD/gun input path, preserving charge
@@ -1205,6 +1309,11 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   ball, text boxes, menus) only the buttons set to A or B count, so the left
   button still lays bombs and advances text. Every mouse button only counts
   after it has been seen released.
+- The mouse wheel cycles beams (up: previous, down: next; off under Original
+  experience), as PrimeHack does, in the pause screen's order (Power, Wave,
+  Ice, Plasma), skipping beams not yet found. Remap also has "Next/Previous
+  visor" (Combat, Scan, Thermal, X-ray), unbound by default; bind them, or the
+  beam ones, to any input, such as the side mouse buttons or `wheel:left|right`.
 - Outside lock-on, A/D (the left-stick lateral axis) strafe in mouse mode rather
   than applying the console's turning torque. Movement uses the current mouse
   heading and the game's acceleration, friction, surface restraints and collision
@@ -1212,8 +1321,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   behavior; closing F1 does not require reacquiring a lock to strafe.
 - Mouse mode requests the GC aiming crosshair without holding R or entering the
   console's movement-restricting free-look mode. `MP_DISABLE_MOUSE_CROSSHAIR=1`
-  opts out. The Controls > Keyboard & mouse sub-tab exposes inversion, weapon-button and crosshair toggles.
-- Crosshair size (Controls > Keyboard & mouse and pause Options > Controller, persisted as
+  opts out. The Controls > Mouse settings sub-tab exposes inversion, weapon-button and crosshair toggles.
+- Crosshair size (Controls > Mouse settings and pause Options > Controller, persisted as
   `crosshair_size`, 25-100 percent, default 50): scales the free-aim crosshair
   under mouse aim and twin stick, where it is always shown and the retail size
   covers much of the view. Holding R without either keeps the retail size.
@@ -1289,7 +1398,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   gyro rates in rad/s), `shot` (prints the bmp path), `present
   <0..1|cycle|tick|off>`, `hold <0|1>` (stop ticking), `step [ticks]` (run
   that many ticks while held), `interp [actor|pose|particle|all <0|1>]`,
-  `aspect <4:3|16:9|window>`, `original [on|off]`, `keypreset classic|mouse` (applies and saves a keyboard preset, as the Controls page's buttons), `fov <45..90>`, `window [<w> <h>]` (resizes the window, leaving fullscreen, e.g. for square screenshots; prints the size), `msaa <1|4>`, `aniso <1..16>`, `hudscale <50..100>`, `helmet <0|1>`, `visorfx <0|1>`, `crosshair <25..100>`, `reveal <0|1>`, `pickups <0|1>`, `tracker`, `state list | last | save [n] | load [n] | undo | slot <n>`, `viewmodel <cmdl> [dist] [yaw] [pitch] | off | status | light <0|1>` (draws any model, retail or a mod's, in front of the camera with the arm cannon hidden; dist 0 fits its bounds; `light 1` swaps the flat white ambient for a key light, which PBR mod materials need to shade), `probe [off|on|mirror|window]` (the PBR reflection probe, live: `mirror` and `window` show the probe itself on PBR materials, as a reflection and looked straight through; no argument prints the mode), `remastered [start <image.nsp> [key file] | cancel]` (the Remastered model import and its progress), `mods [reload]` (what is loaded; `reload` reads the mods folder again), `roomgeo [on|off|overlay | at <x> <y> <z> [margin] | hide <cmdl> | show [cmdl]]` (a mod's room geometry: in place of the retail area, off, or drawn over it; `at` lists the instances whose box holds a point and `hide` stops drawing a model, for finding which one a surface belongs to; no argument prints what is loaded and drawn), `roomgeo lights on|off` (light room geometry with the area's lights even where the room has baked light), `roomgeo script` (Remastered's own visibility scripts in each loaded area: the camera in area space, each camera zone, counter and relay, and how much of each geometry group is shown), `roomgeo group <n> show|hide` (sets that group in every loaded area until its script next changes it), `roomgeo minpx <n>` (skip room geometry instances smaller than n pixels; see `MP_ROOM_GEO_MIN_PX`), `roomgeo lod <scale>` (see `MP_ROOM_GEO_LOD`), `roomgeo pick` (the instances the middle of the view looks through, nearest first, with each model's materials), `roomgeo mats <cmdl>` (a model's materials: flags, PBR or TEV, the PBR record; any CMDL drawn since `drawlog on` or `view drawid`, not just room geometry), `roomgeo mat <cmdl> <material> <field> <value...> | mat clear` (changes a value of a material's PBR record as drawn, until cleared or the next start; fields `emissive`, `backlight`, `height`, `mode`, `kind`, `strength`, `p0`-`p3`, or an index 0 to 18; emissive multiplies the emissive map, so it shows only on a material that has one), `roomliquid [on|off]` (a mod's liquid surfaces in place of the retail fluid planes; no argument prints what is loaded and drawn), `collision [off|overlay|only]` (draws what Samus collides with: the areas' static collision shaded by facing, walls grey, floors blue, ceilings red, lava orange, phazon cyan, grates yellow, with each triangle's edges, and active solid actors such as gates and platforms as orange boxes; `only` hides the world but Samus, so walls with no surface on them show), `colldump <x0> <y0> <z0> <x1> <y1> <z1> <file.obj>` (the current area's collision triangles touching a box, as an OBJ with each face's material bits in a comment), `roomenv [on|off|exposure on|off|bloom on|off|grade on|off|volume on|off|ambient <scale>|show off|coords|light|info [<x> <y> <z>]|balllight on|off|<scale>]` (room environments: `volume` is the baked light per pixel, `ambient` scales the baked ambient, `show` draws the grid's coordinates or light in place of the surface, `info` prints exposure, tone curve, probe and baked ambient at the view or a point), `view [off|albedo|normal|rough|metal|ao|ambient|reflection|glow|exposure|kind|sun|drawid]` (what PBR surfaces show: one input of the shading in place of the result), `drawlog [on|off|dump <file>]` (numbers every model surface drawn and records it; `dump` writes the last frame as TSV: serial, CMDL, material, owner, record, PBR or TEV, shader hash), `pick <x> <y>` (the draw at a window pixel, top-left origin, by way of `view drawid`), `shader dump <dir>|override <dir>|off|reload` (the generated WGSL as `<hash>.wgsl` plus `index.tsv`, also `MP_WGSL_DUMP`; compile edited copies in place of the generated ones, also `MP_WGSL_OVERRIDE`; see `docs/DEBUGGING.md` "Shaders"), `gpuselftest` (GPU self-test: known patterns rendered offscreen through the game's GX path, read back and logged as `gpu selftest: <case>: PASS|FAIL`; also F1 > Video > Compatibility "GPU self-test" and `MP_GPU_SELFTEST=1` once after the first frames; see `docs/DEBUGGING.md` "GPU self-test"), `gputimes on|off|show` (per-render-pass GPU times from timestamp queries, 60-frame averages: ms and passes per frame for each pass name, plus the total and first-begin-to-last-end span; also F1 > Debug > Remastered "GPU pass times"; free while off), `stats` (the last frame's draws and buffers, the heap, room geometry and environments), `hdfont [on|off]`, `touchpad [attach|detach|stick <x> <y>]` (a virtual gamepad of the kind Android's touch overlay uses, to test controller hotplug against it on any platform), `minimap` (the minimap's screen rect as 0..1 fractions of the window, top-left origin, or `invalid` when it is not drawn: morph ball, map screen, hidden HUD), `maptap` (queues one Z press, as a tap on the minimap does on Android), `mappan <dx> <dy> [hold s]` (drags the open map screen by dx,dy dp, as a finger would), `mapzoom <ratio>` (pinch zoom of the open map screen; above 1 zooms in), `maprotate <degrees>` (twist of the open map screen's yaw; positive is clockwise), `freecam [on|off|freeze on|off|player on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]` (see below), `timer <0|1>`, `igt <seconds>`, `livesplit <0|1> | addr <host:port> | send <command> | status`, `discord <0|1> | status`, `gci list | import <path> | export <dir or .raw> | dolphin import|export`, `ap [connect <server> <slot> [password] | disconnect | recent | resume <n> | say <text> | chat]`, `rando [gen [seedtext] | play <name> | delete <name> | list]` (the built-in randomizer: `gen` makes a seed from the F1 Randomizer page's saved options and plays it, or only saves it while a game is loaded, an empty seed text picks one at random; `play` replays a saved seed, from the title screen or file select once a game is loaded; `delete` removes a seed with its progress and save card, not the one being played; `list` names the saved seeds), `wait <frames>`, `quit`, `title` (quits the game to the title screen, through the attract sequence as after a game over); `help` lists them. Ids are hex editor ids, `u<n>`
+  `aspect <4:3|16:9|window>`, `original [on|off]`, `keypreset classic|mouse` (applies and saves a keyboard preset, as the Controls page's buttons), `padpreset gamecube|remastered|modern|southpaw` (the same for pad 1's controller presets), `fov <45..90>`, `window [<w> <h>]` (resizes the window, leaving fullscreen, e.g. for square screenshots; prints the size), `msaa <1|4>`, `aniso <1..16>`, `hudscale <50..100>`, `helmet <0|1>`, `visorfx <0|1>`, `crosshair <25..100>`, `reveal <0|1>`, `pickups <0|1>`, `tracker`, `state list | last | save [n] | load [n] | undo | slot <n>`, `viewmodel <cmdl> [dist] [yaw] [pitch] | off | status | light <0|1>` (draws any model, retail or a mod's, in front of the camera with the arm cannon hidden; dist 0 fits its bounds; `light 1` swaps the flat white ambient for a key light, which PBR mod materials need to shade), `probe [off|on|mirror|window]` (the PBR reflection probe, live: `mirror` and `window` show the probe itself on PBR materials, as a reflection and looked straight through; no argument prints the mode), `remastered [start <image.nsp> [key file] | cancel]` (the Remastered model import and its progress), `mods [reload]` (what is loaded; `reload` reads the mods folder again), `roomgeo [on|off|overlay | at <x> <y> <z> [margin] | hide <cmdl> | show [cmdl]]` (a mod's room geometry: in place of the retail area, off, or drawn over it; `at` lists the instances whose box holds a point and `hide` stops drawing a model, for finding which one a surface belongs to; no argument prints what is loaded and drawn), `roomgeo lights on|off` (light room geometry with the area's lights even where the room has baked light), `roomgeo script` (Remastered's own visibility scripts in each loaded area: the camera in area space, each camera zone, counter and relay, and how much of each geometry group is shown), `roomgeo group <n> show|hide` (sets that group in every loaded area until its script next changes it), `roomgeo minpx <n>` (skip room geometry instances smaller than n pixels; see `MP_ROOM_GEO_MIN_PX`), `roomgeo lod <scale>` (see `MP_ROOM_GEO_LOD`), `roomgeo pick` (the instances the middle of the view looks through, nearest first, with each model's materials), `roomgeo mats <cmdl>` (a model's materials: flags, PBR or TEV, the PBR record; any CMDL drawn since `drawlog on` or `view drawid`, not just room geometry), `roomgeo mat <cmdl> <material> <field> <value...> | mat clear` (changes a value of a material's PBR record as drawn, until cleared or the next start; fields `emissive`, `backlight`, `height`, `mode`, `kind`, `strength`, `p0`-`p3`, or an index 0 to 18; emissive multiplies the emissive map, so it shows only on a material that has one), `roomliquid [on|off]` (a mod's liquid surfaces in place of the retail fluid planes; no argument prints what is loaded and drawn), `collision [off|overlay|only]` (draws what Samus collides with: the areas' static collision shaded by facing, walls grey, floors blue, ceilings red, lava orange, phazon cyan, grates yellow, with each triangle's edges, and active solid actors such as gates and platforms as orange boxes; `only` hides the world but Samus, so walls with no surface on them show), `colldump <x0> <y0> <z0> <x1> <y1> <z1> <file.obj>` (the current area's collision triangles touching a box, as an OBJ with each face's material bits in a comment), `roomenv [on|off|exposure on|off|bloom on|off|grade on|off|volume on|off|ambient <scale>|show off|coords|light|info [<x> <y> <z>]|balllight on|off|<scale>]` (room environments: `volume` is the baked light per pixel, `ambient` scales the baked ambient, `show` draws the grid's coordinates or light in place of the surface, `info` prints exposure, tone curve, probe and baked ambient at the view or a point), `view [off|albedo|normal|rough|metal|ao|ambient|reflection|glow|exposure|kind|sun|drawid]` (what PBR surfaces show: one input of the shading in place of the result), `drawlog [on|off|dump <file>]` (numbers every model surface drawn and records it; `dump` writes the last frame as TSV: serial, CMDL, material, owner, record, PBR or TEV, shader hash), `pick <x> <y>` (the draw at a window pixel, top-left origin, by way of `view drawid`), `shader dump <dir>|override <dir>|off|reload` (the generated WGSL as `<hash>.wgsl` plus `index.tsv`, also `MP_WGSL_DUMP`; compile edited copies in place of the generated ones, also `MP_WGSL_OVERRIDE`; see `docs/DEBUGGING.md` "Shaders"), `gpuselftest` (GPU self-test: known patterns rendered offscreen through the game's GX path, read back and logged as `gpu selftest: <case>: PASS|FAIL`; also F1 > Video > Compatibility "GPU self-test" and `MP_GPU_SELFTEST=1` once after the first frames; see `docs/DEBUGGING.md` "GPU self-test"), `gputimes on|off|show` (per-render-pass GPU times from timestamp queries, 60-frame averages: ms and passes per frame for each pass name, plus the total and first-begin-to-last-end span; also F1 > Debug > Remastered "GPU pass times"; free while off), `stats` (the last frame's draws and buffers, the heap, room geometry and environments), `hdfont [on|off]`, `touchpad [attach|detach|stick <x> <y>]` (a virtual gamepad of the kind Android's touch overlay uses, to test controller hotplug against it on any platform), `minimap` (the minimap's screen rect as 0..1 fractions of the window, top-left origin, or `invalid` when it is not drawn: morph ball, map screen, hidden HUD), `maptap` (queues one Z press, as a tap on the minimap does on Android), `mappan <dx> <dy> [hold s]` (drags the open map screen by dx,dy dp, as a finger would), `mapzoom <ratio>` (pinch zoom of the open map screen; above 1 zooms in), `maprotate <degrees>` (twist of the open map screen's yaw; positive is clockwise), `freecam [on|off|freeze on|off|player on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]` (see below), `timer <0|1>`, `igt <seconds>`, `livesplit <0|1> | addr <host:port> | send <command> | status`, `discord <0|1> | status`, `gci list | import <path> | export <dir or .raw> | dolphin import|export`, `ap [connect <server> <slot> [password] | disconnect | recent | resume <n> | say <text> | chat]`, `rando [gen [seedtext] | play <name> | delete <name> | list]` (the built-in randomizer: `gen` makes a seed from the F1 Randomizer page's saved options and plays it, or only saves it while a game is loaded, an empty seed text picks one at random; `play` replays a saved seed, from the title screen or file select once a game is loaded; `delete` removes a seed with its progress and save card, not the one being played; `list` names the saved seeds), `wait <frames>`, `quit`, `title` (quits the game to the title screen, through the attract sequence as after a game over); `help` lists them. Ids are hex editor ids, `u<n>`
   unique ids or exact debug names. Every reply ends with `=> ok` or
   `=> err: <why>`, and the client exits 1 if any command failed. Game commands
   run inside the state manager tick, so they fail with "not ticking" on the

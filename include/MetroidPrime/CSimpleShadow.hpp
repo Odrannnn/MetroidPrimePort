@@ -5,6 +5,9 @@
 
 #include "Kyoto/Math/CTransform4f.hpp"
 #include "Kyoto/TToken.hpp"
+#ifdef TARGET_PC
+#include "port_tick_pair.h"
+#endif
 
 class CAABox;
 class CStateManager;
@@ -36,6 +39,10 @@ private:
   bool x48_24_collision : 1;
   bool x48_25_alwaysCalculateRadius : 1;
   bool x48_26_radiusCalculated : 1;
+#ifdef TARGET_PC
+  // The blob placed at the last two ticks, so it follows its presented actor.
+  mutable PortTickPair< CTransform4f > xPortXf{CTransform4f::Identity()};
+#endif
 };
 CHECK_SIZEOF(CSimpleShadow, 0x4c)
 

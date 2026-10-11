@@ -78,8 +78,9 @@ DEVICE_ICONS = {
                     "l": "playstation_trigger_l2.png", "r": "playstation_trigger_r2.png",
                     "z": "playstation_trigger_r1.png",
                     **pad_sticks_and_dpad("playstation")},
-    "switch": {"a": "switch_button_b.png", "b": "switch_button_a.png",
-               "x": "switch_button_y.png", "y": "switch_button_x.png",
+    # Nintendo pads map by label (pad.cpp's Pro Controller default), so A is A.
+    "switch": {"a": "switch_button_a.png", "b": "switch_button_b.png",
+               "x": "switch_button_x.png", "y": "switch_button_y.png",
                "start": "switch_button_plus.png",
                "l": "switch_button_zl.png", "r": "switch_button_zr.png",
                "z": "switch_button_r.png",

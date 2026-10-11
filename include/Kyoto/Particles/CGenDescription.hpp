@@ -4,6 +4,7 @@
 #include "Kyoto/CToken.hpp"
 #include "types.h"
 
+#include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "Kyoto/Particles/CSpawnSystemKeyframeData.hpp"
 #include "Kyoto/Particles/IElement.hpp"
 #include "Kyoto/TToken.hpp"
@@ -135,8 +136,18 @@ public:
   u8 xPortXfmd = kPortXfmdRetail;
   // port-only PIRN: a converted Remastered effect, whose nested IRND elements are stable per particle
   bool xPortIrnd = false;
+  // port-only PVRT: Remastered particle variables (names, types, defaults)
+  std::unique_ptr< CPortVarTable > xPortVars;
   // port-only PFCM: each model particle is turned to face the camera before PMRT
   bool xPortFaceCamera = false;
+  // port-only PSHP: Remastered SSHP sprite mesh (0 quad; 3 triangle, 4 pentagon, 5 hexagon, 6 octagon)
+  u8 xPortSpriteShape = 0;
+  // port-only PSWX: swooshes started beyond SSWH's one, each with its start frame
+  struct PortExtraSwoosh {
+    TCachedToken< CSwooshDescription > swoosh;
+    int frame;
+  };
+  std::vector< PortExtraSwoosh > xPortExtraSwooshes;
 #endif
   CVectorElement* x58_PMOP;
   CVectorElement* x5c_PMRT;

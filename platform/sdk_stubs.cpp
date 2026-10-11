@@ -116,7 +116,7 @@ extern "C" void OSGetSavedRegion(void** start, void** end) {
     }
 }
 extern "C" u32 OSGetSoundMode(void) {
-    return 0;
+    return OS_SOUND_MODE_STEREO;
 }
 extern "C" BOOL OSLink(OSModuleInfo* newModule, void* bss) {
     (void)newModule;

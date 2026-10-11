@@ -363,7 +363,29 @@ const bool UpdatePatch(float time, CFluidPlaneCPURender::SPatchInfo& info,
 
   if (rippleManager) {
     const rstl::vector< CRipple >& ripples = rippleManager->GetRipples();
+#ifdef TARGET_PC
+    // Port: ripples are drawn at their presented age (the last tick's minus
+    // the presented lag), so their rings spread between ticks. The infos
+    // point at these copies.
+    const float lag = CFluidPlaneManager::PortPresentLag();
+    rstl::reserved_vector< CRipple, 32 > presented;
+#endif
     for (AUTO(ripple, ripples.begin()); ripple != ripples.end(); ++ripple) {
+#ifdef TARGET_PC
+      if (lag > 0.f) {
+        const float age = ripple->GetTime() - lag;
+        if (age < 0.f || age >= ripple->GetTimeFalloff() || presented.size() == presented.capacity())
+          continue;
+        presented.push_back(*ripple);
+        presented.back().SetTime(age);
+        const CRipple* shown = &presented.back();
+        SRippleInfo rippleInfo(*shown, fromX, toX, fromY, toY);
+        if (PrepareRipple(*shown, info, rippleInfo)) {
+          rippleInfos.push_back(rippleInfo);
+        }
+        continue;
+      }
+#endif
       if (ripple->GetTime() >= ripple->GetTimeFalloff())
         continue;
       SRippleInfo rippleInfo(*ripple, fromX, toX, fromY, toY);
@@ -445,6 +467,9 @@ void CFluidPlaneCPU::RenderSetup(const CStateManager& mgr, float alpha, const CT
   }
 
   float uvT = mgr.GetFluidPlaneManager()->GetTime();
+#ifdef TARGET_PC
+  uvT -= CFluidPlaneManager::PortPresentLag();
+#endif
   bool hasBumpMap = HasBumpMap() && gkWaterBumpMapping;
   bool hasDoubleLightmap = false;
   const bool hasLightmap = HasLightMap();
@@ -954,6 +979,9 @@ void CFluidPlaneCPU::Render(const CStateManager& mgr, float alpha, const CAABox&
   RenderSetup(mgr, alpha, xf, areaXf, aabb, waterPtr);
 
   float time = mgr.GetFluidPlaneManager()->GetTime();
+#ifdef TARGET_PC
+  time -= CFluidPlaneManager::PortPresentLag();
+#endif
   CGX::ResetVtxDescv();
 
   int normalMode;

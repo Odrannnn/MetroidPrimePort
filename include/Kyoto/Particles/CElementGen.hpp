@@ -3,6 +3,7 @@
 
 #include "types.h"
 
+#include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "Kyoto/CRandom16.hpp"
 #include "Kyoto/Graphics/CColor.hpp"
 #include "Kyoto/Graphics/CLight.hpp"
@@ -69,6 +70,7 @@ public:
     // port-only VMAT material (CPortVfxData), evaluated where SIZE/COLR are
     float xPortSsze;       // SSZE: secondary size (= SIZE when the PART has none)
     float xPortIten;       // ITEN: colour intensity
+    float xPortColor[4];   // COLR unclamped (HDR), for the VFX paths; x34_color is the clamped one
     float xPortVpmt[4][4]; // VPMT rows
     CVector3f xPortLaunchDir; // unit launch velocity (zero if it launched at rest), for VORN 1
 #endif
@@ -82,6 +84,7 @@ public:
     , xPortSeed(0)
     , xPortSsze(0.f)
     , xPortIten(1.f)
+    , xPortColor{1.f, 1.f, 1.f, 1.f}
     , xPortVpmt{}
     , xPortLaunchDir(CVector3f::Zero())
 #endif
@@ -185,6 +188,30 @@ public:
   CVector3f PortSystemOrigin() const { return PortWorldFromLocal(xdc_translation); }
   // True for a converted Remastered PART (its PIRN marker).
   bool PortIsRemastered() const;
+  // Remastered particle variables (PVRT): a handle is looked up once and then binds are cheap.
+  // Binds are generator-wide, persist until rebound, and are no-ops when the variable is absent.
+  u16 PortGetRealHandle(const PortGuid& g) const { return xPortVars.Find(g, EPortVarType::Real); }
+  u16 PortGetIntHandle(const PortGuid& g) const { return xPortVars.Find(g, EPortVarType::Int); }
+  u16 PortGetColorHandle(const PortGuid& g) const { return xPortVars.Find(g, EPortVarType::Color); }
+  u16 PortGetVectorHandle(const PortGuid& g) const {
+    return xPortVars.Find(g, EPortVarType::Vector);
+  }
+  void PortBindReal(u16 h, float v) { xPortVars.BindReal(h, v); }
+  void PortBindInt(u16 h, int v) { xPortVars.BindInt(h, v); }
+  void PortBindColor(u16 h, const CColor& v) { xPortVars.BindColor(h, v); }
+  void PortBindVector(u16 h, const CVector3f& v) { xPortVars.BindVector(h, v); }
+  void PortBindReal(const PortGuid& g, float v) { xPortVars.BindReal(PortGetRealHandle(g), v); }
+  void PortBindInt(const PortGuid& g, int v) { xPortVars.BindInt(PortGetIntHandle(g), v); }
+  void PortBindColor(const PortGuid& g, const CColor& v) {
+    xPortVars.BindColor(PortGetColorHandle(g), v);
+  }
+  void PortBindVector(const PortGuid& g, const CVector3f& v) {
+    xPortVars.BindVector(PortGetVectorHandle(g), v);
+  }
+  const CPortVarMemory& PortVars() const { return xPortVars; }
+  // The global translation just set is already the presented one (placed from
+  // the presented camera on every drawn frame): draw it as is, unblended.
+  void PortGlobalIsPresented();
 #endif
 
 private:
@@ -273,11 +300,36 @@ private:
   // Presentation smoothing (particle_interpolation): the tick generation of
   // the last single-step update, and the global translation before this
   // tick's first move.
+  CPortVarMemory xPortVars; // PVRT variables, initialised from the description's defaults
   uint xPortStepGeneration;
   uint xPortGlobalGeneration;
   CVector3f xPortPrevGlobalTranslation;
   bool xPortPresenting;
   bool PortBeginPresent(CVector3f& savedGlobal);
+  // A moving local emitter (projectile trails): the local translation at the
+  // last two single-step updates, and the particles born in the last one moved
+  // back to the presented emitter while drawn (saved pos/prevPos pairs).
+  CVector3f xPortSpawnTranslation;
+  CVector3f xPortPrevSpawnTranslation;
+  uint xPortSpawnGeneration;
+  uint xPortPrevSpawnGeneration;
+  rstl::vector< CVector3f > xPortNewbornSaved;
+  bool PortSpawnOffset(CVector3f& offset) const;
+  void PortShiftNewborns(const CVector3f& shift);
+  void PortRestoreNewborns();
+  // Particles emitted along a line each tick (grapple beam): the next Render
+  // moves the newborns by the blend of the two ends' shifts, by where each
+  // lies between them (world space ends).
+  CVector3f xPortLineEnd[2];
+  CVector3f xPortLineShift[2];
+  bool xPortLineShiftSet;
+  void PortShiftNewbornsAlongLine();
+
+public:
+  void PortSetNewbornLineShift(const CVector3f& firstEnd, const CVector3f& lastEnd,
+                               const CVector3f& firstShift, const CVector3f& lastShift);
+
+private:
   // VMAT material: VSMT results for this frame (port_vfx_particles.cpp). Bit n of the
   // mask = slot n was written; slots 0..10 are the Src values, 11+2*tex+k the warp scales.
   float xPortVsmt[19];

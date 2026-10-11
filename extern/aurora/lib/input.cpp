@@ -174,6 +174,9 @@ void ensure_port_preferences_loaded() {
 }
 
 void save_port_preferences() {
+  if (io::config_persistence_disabled()) {
+    return;
+  }
   const auto path = port_preferences_path();
   if (path.empty()) {
     return;

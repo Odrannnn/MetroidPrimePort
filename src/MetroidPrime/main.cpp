@@ -4,6 +4,7 @@
 // Port: Aurora owns the application/window/GPU loop; the game entry is renamed
 // and driven by platform/main.cpp.
 #include <algorithm>
+#include <chrono>
 #include <aurora/aurora.h>
 #include <aurora/event.h>
 #include <aurora/phase.hpp>
@@ -525,7 +526,26 @@ bool CGameArchitectureSupport::UpdateTicks() {
   PortDebug::SetTickPeriod(tickPeriod);
   sTicksAdvanced = 0;
   x4_archQueue.Push(MakeMsg::CreateFrameBegin(kAMT_Game, x78_gameFrameCount));
+  // Catching up must not cost more wall time than it recovers: when ticks are
+  // slower than real time (front-end THP decode on a slow CPU, issue #54), each
+  // long frame queued more ticks and the menu spiralled into multi-second
+  // frames. Past ~2 periods of tick work, drop the rest and run slow instead.
+  const bool budgeted = !PortDebug::Turbo() && !PortDebug::TickHold();
+  const double tickBudget = std::max(2.0 * period, 1.0 / 30.0);
+  const auto tickStart = std::chrono::steady_clock::now();
   for (unsigned tick = 0; tick < ticks; ++tick) {
+    if (budgeted && tick > 0 &&
+        std::chrono::duration< double >(std::chrono::steady_clock::now() - tickStart).count() >
+            tickBudget) {
+      static unsigned sDroppedLogs = 0;
+      if (sDroppedLogs < 5) {
+        ++sDroppedLogs;
+        PortLog::Write("MP ticks: ran %u of %u ticks, dropped the rest "
+                       "(ticks are slower than real time)\n",
+                       tick, ticks);
+      }
+      break;
+    }
     PortDebug::BeginFrameMouse();
     // A tick that doesn't reach CStateManager::Update (paused) leaves every
     // actor's snapshot stale, so actors don't blend between old transforms.
@@ -880,9 +900,10 @@ int CMain::RsMain(int argc, const char* const* argv) {
       gpGameState->GameOptions().EnsureOptions();
       lbl_805A6BC0 = stream.ReadBits(1);
     }
+    // Port: there is no save region across launches; the settings file keeps the options.
+    PortDebug::RestoreGameOptions();
 
     double dt = 1.0 / 60.0;
-    constexpr uint64_t framePeriodNs = 1000000000ull / 60;
     uint64_t nextFrameDeadline = SDL_GetTicksNS();
     // When the first frame was actually presented, and when the process started.
     // Startup is a number people ask about and the frame log is only a counter,
@@ -933,8 +954,11 @@ int CMain::RsMain(int argc, const char* const* argv) {
                      !event->sdl.key.repeat && event->sdl.key.scancode == SDL_SCANCODE_F10) {
             PortDebug::SetFrameLimitEnabled(!PortDebug::FrameLimitEnabled());
             nextFrameDeadline = SDL_GetTicksNS();
-            fprintf(stderr, "Frame limit: %s\n",
-                    PortDebug::FrameLimitEnabled() ? "60 FPS" : "unlimited");
+            if (PortDebug::FrameRateCap() > 0) {
+              fprintf(stderr, "Frame limit: %d FPS\n", PortDebug::FrameRateCap());
+            } else {
+              fprintf(stderr, "Frame limit: unlimited\n");
+            }
           } else if (event->type == AURORA_WINDOW_RESIZED ||
                      event->type == AURORA_DISPLAY_SCALE_CHANGED) {
             ApplyAspectMode();
@@ -1084,9 +1108,16 @@ int CMain::RsMain(int argc, const char* const* argv) {
           interpolation = -1.f;
         PortDebug::PresentOverride(interpolation);
         CCameraManager::SetPresentationInterpolation(interpolation);
+        // The render clock steps 1/60 s per tick (TickRenderTimings above).
+        CGraphics::SetRenderTimePresentLag(
+            interpolation >= 0.f && interpolation < 1.f && PortDebug::ParticleInterpolation()
+                ? (1.f - interpolation) / 60.f
+                : 0.f);
         aurora::phase::set(aurora::phase::Main, "game draw");
         archSupport->GetIOWinManager().Draw();
         CCameraManager::SetPresentationInterpolation(-1.f);
+        CGraphics::SetSimTimePresentLag(0.f);
+        CGraphics::SetRenderTimePresentLag(0.f);
         PortSpeedrunTimer::Draw();
         DrawDebugMetrics(t1, archSupport->GetStopwatch2());
 
@@ -1162,7 +1193,10 @@ int CMain::RsMain(int argc, const char* const* argv) {
       // when a frame overruns its budget.
       const uint64_t workEndNs = SDL_GetTicksNS();
       aurora::phase::set(aurora::phase::Main, "frame pacing");
-      if (PortDebug::FrameLimitEnabled() && !PortDebug::Turbo()) {
+      // 60 under the 60 FPS cap, else the FPS cap setting (0 = unlimited).
+      const int frameRateCap = PortDebug::FrameRateCap();
+      if (frameRateCap > 0 && !PortDebug::Turbo()) {
+        const uint64_t framePeriodNs = 1000000000ull / static_cast< uint64_t >(frameRateCap);
         nextFrameDeadline += framePeriodNs;
         const uint64_t now = SDL_GetTicksNS();
         if (nextFrameDeadline > now) {
@@ -1409,10 +1443,18 @@ void CMain::PortLoadGameState(CInputStream& in) {
 
 void CMain::StreamNewGameState(CInputStream& in, int saveIdx) {
   bool hasFusion = gpGameState->SystemState().GetHasFusion();
+#ifdef TARGET_PC
+  // Port: the options are global (the settings file), not the save file's.
+  CGameOptions gameOptions = gpGameState->GameOptions();
+#endif
   x128_gameGlobalObjects->GameState() = nullptr;
   gpGameState = nullptr;
   x128_gameGlobalObjects->GameState() = rs_new CGameState(in, saveIdx);
   gpGameState = x128_gameGlobalObjects->GameState().get();
+#ifdef TARGET_PC
+  gpGameState->GameOptions() = gameOptions;
+  gpGameState->GameOptions().EnsureOptions();
+#endif
   gpGameState->SystemState().SetHasFusion(hasFusion);
   gpGameState->PlayerState()->SetIsFusionEnabled(gpGameState->SystemState().GetHasFusion());
   gpGameState->HintOptions().SetHintNextTime();

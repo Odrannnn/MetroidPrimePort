@@ -35,6 +35,9 @@ void CFluidPlaneDoor::RenderSetup(const CStateManager& mgr, float alpha, const C
                                   const CAABox& bounds, const bool noNormals) const {
   static GXColor white = {255, 255, 255, 255};
   float uvT = mgr.GetFluidPlaneManager()->GetUVTime();
+#ifdef TARGET_PC
+  uvT -= CFluidPlaneManager::PortPresentLag();
+#endif
   gpRender->SetModelMatrix(xf);
   CGX::SetChanMatColor(CGX::Channel0, white);
   CGX::SetChanCtrl(CGX::Channel0, false, GX_SRC_REG, GX_SRC_REG, GX_LIGHT_NULL, GX_DF_NONE,

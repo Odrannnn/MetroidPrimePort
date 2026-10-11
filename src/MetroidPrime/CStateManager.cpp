@@ -120,6 +120,11 @@
 
 const int gkPVSEnabled = 1;
 
+#ifdef TARGET_PC
+// Tick generation (CActor::PortTickGeneration) of the last TickSimTime.
+static uint sPortSimTimeGeneration = 0;
+#endif
+
 namespace {
 class area_sorter {
 public:
@@ -300,7 +305,27 @@ bool PortStartAreaMusic(CStateManager& mgr) {
 }
 } // namespace
 
-bool PortWarpKeepsMusic() { return sPortWarpMusicPending; }
+// Port: a save-state load (PortSaveState) quits like a world warp and then
+// places Samus away from the spawn point, so it keeps the track the same way
+// and starts the area's music once she is placed. With none found, the old
+// track plays on in the same world and stops in another.
+bool sPortStateLoadMusic = false;
+bool sPortStateLoadSameWorld = false;
+
+bool PortWarpKeepsMusic() { return sPortWarpMusicPending || sPortStateLoadMusic; }
+
+void PortKeepMusicForStateLoad(bool sameWorld) {
+  sPortStateLoadMusic = true;
+  sPortStateLoadSameWorld = sameWorld;
+}
+
+void PortStartStateLoadMusic(CStateManager& mgr) {
+  if (!sPortStateLoadMusic)
+    return;
+  sPortStateLoadMusic = false;
+  if (!PortStartAreaMusic(mgr) && !sPortStateLoadSameWorld)
+    CStreamAudioManager::StopAll();
+}
 
 namespace {
 
@@ -1441,6 +1466,7 @@ void CStateManager::Update(float dt) {
     return;
   }
   CGraphics::TickSimTime(dt);
+  sPortSimTimeGeneration = CActor::PortTickGeneration();
 #endif
 
 #ifdef TARGET_PC
@@ -2596,6 +2622,18 @@ void CStateManager::PreRender() {
   xf7c_projectedShadow = nullptr;
 
   x850_world->PreRender();
+#ifdef TARGET_PC
+  {
+    // Port: Remastered's shader clock (wind, Phazon) reads the presented time
+    // between ticks; main.cpp clears it after the draw.
+    const float t = CCameraManager::GetPresentationInterpolation();
+    float lag = 0.f;
+    if (t >= 0.f && t < 1.f && sPortSimTimeGeneration == CActor::PortTickGeneration() &&
+        PortDebug::ParticleInterpolation())
+      lag = (1.f - t) * CGraphics::GetLastSimTimeStep();
+    CGraphics::SetSimTimePresentLag(lag);
+  }
+#endif
   BuildDynamicLightListForWorld();
 
   const CGameCamera& curCam = x870_cameraManager->GetCurrentCamera(*this);
@@ -2653,7 +2691,12 @@ CFrustumPlanes CStateManager::SetupViewForDraw(const CViewport& viewport) const 
   const int left = viewport.mLeft + (viewport.mWidth - width) / 2;
   const int top = viewport.mTop + (viewport.mHeight - height) / 2;
 
+#ifdef TARGET_PC
+  const float tangent =
+      CMath::SlowTangentR(CMath::Deg2Rad(0.5f * cam.GetRenderFov())) / sPortViewZoom;
+#else
   const float tangent = CMath::SlowTangentR(CMath::Deg2Rad(0.5f * cam.GetRenderFov()));
+#endif
   const float fov = 2.f * CMath::ArcTangentR(tangent * xf30_viewportScaleY);
 
   gpRender->SetViewport(left, top, width, height);
@@ -3168,11 +3211,34 @@ void CStateManager::PortCaptureProbeFace() const {
 }
 #endif
 
+#ifdef TARGET_PC
+float CStateManager::sPortViewZoom = 1.f;
+
+float CStateManager::PortZoomedFov(float fov) {
+  if (sPortViewZoom == 1.f)
+    return fov;
+  const float tangent = CMath::SlowTangentR(CMath::Deg2Rad(0.5f * fov)) / sPortViewZoom;
+  return 2.f * CMath::Rad2Deg(CMath::ArcTangentR(tangent));
+}
+#endif
+
 void CStateManager::DrawWorld() const {
 #ifdef TARGET_PC
-  PortCaptureProbeFace();
+  // A zoomed pass (sharp scan window) draws before the frame's own: the frame's captures and
+  // the gun belong to that one.
+  const bool portZoomed = sPortViewZoom != 1.f;
+  if (!portZoomed)
+    PortCaptureProbeFace();
 #endif
+#ifdef TARGET_PC
+  // Port: material UV animations read the presented time between ticks (smooth frames).
+  float portPresentedTime = xf14_curTimeMod900 - CGraphics::GetSimTimePresentLag();
+  if (portPresentedTime < 0.f)
+    portPresentedTime += 900.f;
+  const CTimeProvider timeProvider(portPresentedTime);
+#else
   const CTimeProvider timeProvider(xf14_curTimeMod900);
+#endif
   const CViewport backupViewport = CGraphics::GetViewport();
   const CFrustumPlanes frustum = SetupViewForDraw(backupViewport);
   const CTransform4f backupViewMatrix = CGraphics::GetViewMatrix();
@@ -3288,6 +3354,10 @@ void CStateManager::DrawWorld() const {
   // Remastered fogs the opaque world and sky full-screen, then the actors and transparents as
   // they draw (up to GXPortVolumetricFogEnd).
   PortDrawVolumetricFog(*this, backupViewMatrix, frustum);
+  // Remastered's X-ray distortion of the opaque world (pass A of its visor post).
+  if (GetPlayerState()->GetActiveVisor(*this) == CPlayerState::kPV_XRay) {
+    PortRoomEnv::XRayPass(true);
+  }
 #endif
   bool morphingPlayerVisible = false;
   rstl::reserved_vector< const CActor*, 1024 > thermalActors;
@@ -3418,6 +3488,9 @@ void CStateManager::DrawWorld() const {
       }
       CGraphics::SetDepthRange(0.125f, 1.f);
     }
+#ifdef TARGET_PC
+    if (!PortRoomEnv::ThermalPass(false, xf28_thermColdScale2 + xf24_thermColdScale1))
+#endif
     gpRender->DoThermalBlendCold();
     xf34_thermalFlag = kTD_Hot;
     for (const TUniqueId* it = renderFirst.begin(); it != renderFirst.end(); ++it) {
@@ -3466,10 +3539,18 @@ void CStateManager::DrawWorld() const {
 
   x87c_fluidPlaneManager->EndFrame();
   gpRender->SetWorldFog(kRFM_None, 0.f, 1.f, CColor::Black());
+#ifdef TARGET_PC
+  if (gkWorldOnlyReflection && !portZoomed) {
+#else
   if (gkWorldOnlyReflection) {
+#endif
     const_cast< CStateManager* >(this)->CacheReflection();
   }
+#ifdef TARGET_PC
+  if (x84c_player != nullptr && !portZoomed) {
+#else
   if (x84c_player != nullptr) {
+#endif
 #ifdef TARGET_PC
     // Port: with the FOV slider off retail, draw the arm cannon at the retail
     // FOV (a view-model FOV), so a wide view doesn't shrink it or push it off
@@ -3496,7 +3577,8 @@ void CStateManager::DrawWorld() const {
 #endif
   }
 #ifdef TARGET_PC
-  PortViewModel::Draw(*this);
+  if (!portZoomed)
+    PortViewModel::Draw(*this);
 #endif
   if (!renderLast.empty()) {
     CGraphics::SetDepthRange(0.015625f, 0.03125f);
@@ -3513,6 +3595,9 @@ void CStateManager::DrawWorld() const {
     CGraphics::SetDepthRange(0.125f, 1.f);
   }
   if (thermal) {
+#ifdef TARGET_PC
+    if (!PortRoomEnv::ThermalPass(true, xf28_thermColdScale2 + xf24_thermColdScale1))
+#endif
     gpRender->DoThermalBlendHot();
     gpRender->SetThermal(false, 0.f, CColor::Black());
     xf34_thermalFlag = kTD_Bypass;
@@ -3607,7 +3692,20 @@ void CStateManager::BuildDynamicLightListForWorld() {
   for (int idx = list.GetFirstObjectIndex(); idx != -1; idx = list.GetNextObjectIndex(idx)) {
     const CGameLight* light = static_cast< const CGameLight* >(list[idx]);
     if (light && light->GetActive()) {
+#ifdef TARGET_PC
+      // Port: lights follow their actor's presented pose, so moving lights
+      // (the morph ball's glow, projectile lights) glide between ticks.
+      CLight l = light->GetLight();
+      CTransform4f toCur = CTransform4f::Identity();
+      if (light->PortPresentedView(CTransform4f::Identity(), toCur)) {
+        const CTransform4f toPresented = toCur.GetQuickInverse();
+        l.SetPosition(toPresented * l.GetPosition());
+        if (l.GetType() != kLT_Point)
+          l.SetDirection(toPresented.Rotate(l.GetDirection()).AsNormalized());
+      }
+#else
       const CLight& l = light->GetLight();
+#endif
       if (l.GetIntensity() > FLT_EPSILON && l.GetRadius() > FLT_EPSILON) {
         // TODO: This shouldn't be inlined, but currently is.
         x8e0_dynamicLights.push_back(l);
@@ -3669,7 +3767,17 @@ void CStateManager::DrawSpaceWarp(const CVector3f& point, float strength) const 
   }
 
   const CGameCamera& curCam = x870_cameraManager->GetCurrentCamera(*this);
+#ifdef TARGET_PC
+  // The scene is drawn from the presented camera: carry the point into the
+  // sim camera's frame as the presented one sees it, so the warp stays on it
+  // between ticks. Identity when frames aren't blended.
+  const CVector3f simPoint = x870_cameraManager->GetSimulationCameraTransform(*this) *
+                             (x870_cameraManager->GetCurrentCameraTransform(*this).GetQuickInverse() *
+                              point);
+  gpRender->DrawSpaceWarp(curCam.ConvertToScreenSpace(simPoint), strength);
+#else
   gpRender->DrawSpaceWarp(curCam.ConvertToScreenSpace(point), strength);
+#endif
 }
 
 void CStateManager::TouchSky() const { x850_world->TouchSky(); }

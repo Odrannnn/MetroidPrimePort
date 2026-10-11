@@ -129,14 +129,28 @@ void CVisorFlare::Render(const CVector3f& inPos, const CStateManager& mgr) const
   CGraphics::DisableAllLights();
   gpRender->SetDepthReadWrite(false, false);
   const CGameCamera& cam = mgr.GetCameraManager()->GetCurrentCamera(mgr);
+#ifdef TARGET_PC
+  // The view is the presented camera; face and place the flares from it too, so they don't
+  // wobble at the tick rate. Identity when frames aren't blended.
+  const CCameraManager& camMgr = *mgr.GetCameraManager();
+  const CTransform4f camXf = camMgr.GetCurrentCameraTransform(mgr) *
+                             camMgr.GetSimulationCameraTransform(mgr).GetQuickInverse() *
+                             cam.GetTransform();
+  CVector3f camPos = camXf.GetTranslation();
+#else
   CVector3f camPos = cam.GetTranslation();
+#endif
   CVector3f inPosCopy = inPos;
 
   CTransform4f viewMatrix = CGraphics::GetViewMatrix();
   CVector3f invPos = viewMatrix.GetInverse() * inPosCopy;
   invPos = CVector3f(-invPos.GetX(), invPos.GetY(), -invPos.GetZ());
   const CVector3f invPos2 = viewMatrix * invPos;
+#ifdef TARGET_PC
+  CVector3f camFront = camXf.GetForward();
+#else
   CVector3f camFront = cam.GetTransform().GetForward();
+#endif
   CVector3f toFlare = inPosCopy - camPos;
   if (!close_enough(x24_intensity, 0.f)) {
     float angle = 0.f;

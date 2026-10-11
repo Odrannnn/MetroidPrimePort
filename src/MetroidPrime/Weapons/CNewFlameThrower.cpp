@@ -1,6 +1,11 @@
 #include "MetroidPrime/Weapons/CNewFlameThrower.hpp"
 #include "MetroidPrime/Weapons/CWeaponAssetInfo.hpp"
 #include "port_debug.h"
+#ifdef TARGET_PC
+#include "port_synthetic_effect.h"
+#include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "MetroidPrime/Cameras/CGameCamera.hpp"
+#endif
 
 #include "Collision/CCollidableAABox.hpp"
 #include "Collision/CCollidableSphere.hpp"
@@ -218,6 +223,10 @@ void CNewFlameThrower::UpdateFx(const CTransform4f& xf, float dt, CStateManager&
       }
     }
     UpdateLights(mgr);
+#ifdef TARGET_PC
+    PortUpdateEndCaps(mgr, dt);
+    PortUpdateLights(dt);
+#endif
   }
 }
 
@@ -242,6 +251,19 @@ void CNewFlameThrower::Render(const CStateManager& mgr) const {
     if (x304_mainFire->xPortIrnd) {
       gens[1] = x360_secondarySmokeGen.get();
       CElementGen::RenderParticlesFlameThrower(gens, 2);
+      for (int i = 0; i < 4; ++i) {
+        if (!xPortSourceCaps[i].null()) {
+          xPortSourceCaps[i]->Render();
+        }
+        if (!xPortTargetCaps[i].null()) {
+          xPortTargetCaps[i]->Render();
+        }
+      }
+      for (int i = 0; i < 5; ++i) {
+        if (!xPortLightGens[i].null()) {
+          xPortLightGens[i]->Render();
+        }
+      }
       return;
     }
 #endif
@@ -272,6 +294,9 @@ void CNewFlameThrower::Reset(CStateManager& mgr, bool deactivate) {
   x35c_mainSmokeGen->SetParticleEmission(false);
   x36c_swooshCenterGen->SetParticleEmission(false);
   x370_swooshFireGen->SetParticleEmission(false);
+#ifdef TARGET_PC
+  PortStopGens();
+#endif
 }
 
 void CNewFlameThrower::CreateFlameParticles(CStateManager& mgr) {
@@ -285,6 +310,9 @@ void CNewFlameThrower::CreateFlameParticles(CStateManager& mgr) {
   x36c_swooshCenterGen->SetRenderGaps(true);
   x370_swooshFireGen = rs_new CParticleSwoosh(x34c_swooshFire, 0);
   x370_swooshFireGen->SetRenderGaps(true);
+#ifdef TARGET_PC
+  PortCreateGens();
+#endif
   if (!x358_mainFireGen.null() && x358_mainFireGen->SystemHasLight() && x3b8_lightIds.empty()) {
     CreateLights(mgr);
   }
@@ -361,6 +389,12 @@ bool CNewFlameThrower::DoCollisionCheck(CStateManager& mgr,
               contacts);
           hit |= DynamicObjectCollision(mgr, nearList, primitive, firstCollision, contacts);
           if (hit && contacts.GetCount() != 0) {
+#ifdef TARGET_PC
+            while (xPortImpactType.size() < swooshes.size()) {
+              xPortImpactType.push_back(0);
+            }
+            xPortImpactType[i] = 2;
+#endif
             swoosh.mActive = false;
             collided = true;
             CCollisionInfoList filteredContacts;
@@ -380,7 +414,29 @@ bool CNewFlameThrower::DoCollisionCheck(CStateManager& mgr,
                 x360_secondarySmokeGen->SetOrientation(rotation);
                 x364_secondaryFireGen->SetOrientation(rotation);
                 x368_secondarySparksGen->SetOrientation(rotation);
+#ifdef TARGET_PC
+                if (x304_mainFire->xPortIrnd) {
+                  // Remastered re-places its one SecondarySmoke module at the adjusted
+                  // impact position (CalculateAdjustedImpactPosition 0x0101f638) and flags
+                  // points that hit a surface edge-on (angle to the normal 75..105 deg).
+                  const CVector3f velocity = swoosh.mVelocity;
+                  if (velocity.IsNonZero()) {
+                    const float dot = rstl::min_val(
+                        1.f, rstl::max_val(-1.f, CVector3f::Dot(velocity.AsNormalized(),
+                                                                info.GetNormalLeft())));
+                    const float degrees = CMath::ArcCosineR(dot) * (180.f / 3.14159265f);
+                    if (degrees > 75.f && degrees < 105.f) {
+                      xPortImpactType[i] = 1;
+                    }
+                  }
+                  x360_secondarySmokeGen->SetTranslation(
+                      PortAdjustedImpactPosition(mgr, info.GetPoint(), swoosh));
+                } else {
+                  x360_secondarySmokeGen->SetTranslation(info.GetPoint());
+                }
+#else
                 x360_secondarySmokeGen->SetTranslation(info.GetPoint());
+#endif
                 x364_secondaryFireGen->SetTranslation(info.GetPoint());
                 x368_secondarySparksGen->SetTranslation(info.GetPoint());
                 x360_secondarySmokeGen->ForceParticleCreation(1);
@@ -518,6 +574,21 @@ const bool CNewFlameThrower::AreEffectsFinished() const {
   if (finished && !x368_secondarySparksGen.null()) {
     finished = x368_secondarySparksGen->GetParticleCount() == 0;
   }
+#ifdef TARGET_PC
+  for (int i = 0; i < 4 && finished; ++i) {
+    if (!xPortSourceCaps[i].null()) {
+      finished = xPortSourceCaps[i]->GetParticleCount() == 0;
+    }
+    if (finished && !xPortTargetCaps[i].null()) {
+      finished = xPortTargetCaps[i]->GetParticleCount() == 0;
+    }
+  }
+  for (int i = 0; i < 5 && finished; ++i) {
+    if (!xPortLightGens[i].null()) {
+      finished = xPortLightGens[i]->GetParticleCount() == 0;
+    }
+  }
+#endif
   return finished;
 }
 
@@ -680,3 +751,219 @@ bool CNewFlameThrower::CanDamage(CActor& actor, CStateManager& mgr) {
 }
 
 CNewFlameThrower::~CNewFlameThrower() {}
+
+#ifdef TARGET_PC
+// Remastered CalculateAdjustedImpactPosition (0x0101f638): ray from the swoosh point along its
+// velocity (length = speed) to the surface; result = 0.25 * hit (else contact) + 0.75 * point.
+CVector3f CNewFlameThrower::PortAdjustedImpactPosition(
+    const CStateManager& mgr, const CVector3f& contact,
+    const CParticleSwoosh::SSwooshData& swoosh) const {
+  CVector3f hit = contact;
+  if (swoosh.mVelocity.IsNonZero()) {
+    const float length = swoosh.mVelocity.Magnitude();
+    const CRayCastResult result = CGameCollision::RayStaticIntersection(
+        mgr, swoosh.mTranslation, swoosh.mVelocity.AsNormalized(), length,
+        skExcludeProjectilePassthrough);
+    if (result.IsValid()) {
+      hit = result.GetPoint();
+    }
+  }
+  return hit * 0.25f + swoosh.mTranslation * 0.75f;
+}
+
+static CElementGen* PortMakeFlameGen(const char* name) {
+  const SObjectTag tag('PART', PortRemastered::SyntheticEffectId(name));
+  if (!gpResourceFactory->CanBuild(tag)) {
+    return nullptr;
+  }
+  return rs_new CElementGen(gpSimplePool->GetObj(tag));
+}
+
+void CNewFlameThrower::PortCreateGens() {
+  for (int i = 0; i < 4; ++i) {
+    xPortSourceCaps[i] = PortMakeFlameGen("nftsourceendcap");
+    xPortTargetCaps[i] = PortMakeFlameGen("nfttargetendcap");
+    xPortTargetScale[i] = 1.f;
+    if (!xPortSourceCaps[i].null()) {
+      xPortSourceCaps[i]->SetParticleEmission(false);
+    }
+    if (!xPortTargetCaps[i].null()) {
+      xPortTargetCaps[i]->SetParticleEmission(false);
+    }
+  }
+  for (int i = 0; i < 5; ++i) {
+    xPortLightGens[i] = PortMakeFlameGen("nftlight");
+    if (!xPortLightGens[i].null()) {
+      xPortLightGens[i]->SetParticleEmission(false);
+    }
+  }
+  xPortImpactType.clear();
+}
+
+void CNewFlameThrower::PortStopGens() {
+  for (int i = 0; i < 4; ++i) {
+    if (!xPortSourceCaps[i].null()) {
+      xPortSourceCaps[i]->SetParticleEmission(false);
+    }
+    if (!xPortTargetCaps[i].null()) {
+      xPortTargetCaps[i]->SetParticleEmission(false);
+    }
+  }
+  for (int i = 0; i < 5; ++i) {
+    if (!xPortLightGens[i].null()) {
+      xPortLightGens[i]->SetParticleEmission(false);
+    }
+  }
+}
+
+// Remastered UpdateEndCaps (0x0101d2fc): walk the fire swoosh ring back from the emitter point,
+// collecting up to four runs of active points. A source cap sits on each run's newest point
+// (skipped for the emitter point while firing starts/runs), a target cap on its oldest point when
+// the next-older point is the emitter point or was flagged as an edge-on hit. Target caps fade
+// their scale by the point's distance from the screen centre.
+void CNewFlameThrower::PortUpdateEndCaps(CStateManager& mgr, float dt) {
+  if (xPortSourceCaps[0].null() && xPortTargetCaps[0].null()) {
+    return;
+  }
+  const rstl::vector< CParticleSwoosh::SSwooshData >& swooshes = x370_swooshFireGen->GetSwooshes();
+  const int n = swooshes.size();
+  if (n == 0) {
+    PortStopGens();
+    return;
+  }
+  while (xPortImpactType.size() < n) {
+    xPortImpactType.push_back(0);
+  }
+  const int emitter = (x370_swooshFireGen->GetCurParticle() + n - 1) % n;
+  const auto prev = [n](int i) { return (i - 1 + n) % n; };
+  int runs[4][2];
+  int runCount = 0;
+  int index = emitter;
+  while (runCount != 4) {
+    int start = index;
+    if (!swooshes[index].mActive) {
+      do {
+        start = prev(start);
+        if (start == emitter || start == index) {
+          goto done;
+        }
+      } while (!swooshes[start].mActive);
+    }
+    int end = start;
+    int next = prev(end);
+    if (next != emitter && next != start) {
+      while (swooshes[next].mActive) {
+        end = next;
+        next = prev(end);
+        if (next == emitter || next == start) {
+          break;
+        }
+      }
+    }
+    if (start != end) {
+      runs[runCount][0] = start;
+      runs[runCount][1] = end;
+      ++runCount;
+    }
+    index = prev(end);
+    if (index == emitter) {
+      break;
+    }
+  }
+done:
+  const CGameCamera& camera = mgr.GetCameraManager()->GetCurrentCamera(mgr);
+  int sources = 0;
+  int targets = 0;
+  for (int r = 0; r < runCount; ++r) {
+    const CParticleSwoosh::SSwooshData& head = swooshes[runs[r][0]];
+    if (runs[r][0] != emitter || (x374_flameState != kFS_FireStart && x374_flameState != kFS_FireActive)) {
+      if (sources < 4 && !xPortSourceCaps[sources].null()) {
+        CElementGen& gen = *xPortSourceCaps[sources];
+        gen.SetOrientation(head.mOrientation);
+        gen.SetTranslation(head.mTranslation);
+        gen.SetParticleEmission(true);
+      }
+      ++sources;
+    }
+    const int older = prev(runs[r][1]);
+    if (older == emitter || xPortImpactType[older] == 1) {
+      const CParticleSwoosh::SSwooshData& tail = swooshes[runs[r][1]];
+      if (targets < 4 && !xPortTargetCaps[targets].null()) {
+        CElementGen& gen = *xPortTargetCaps[targets];
+        gen.SetOrientation(tail.mOrientation);
+        gen.SetTranslation(tail.mTranslation);
+        gen.SetParticleEmission(true);
+        // CDisplayManager::ConvertToNormalizedSpace: NDC xy, (-1, -1) when off screen.
+        float ndcX = -1.f;
+        float ndcY = -1.f;
+        const CVector3f view = camera.GetTransform().TransposeMultiply(tail.mTranslation);
+        if (view.GetY() > 0.f) {
+          const CVector3f ndc = camera.ConvertToScreenSpace(tail.mTranslation);
+          if (ndc.GetX() >= -1.f && ndc.GetX() < 1.f && ndc.GetY() >= -1.f && ndc.GetY() <= 1.f) {
+            ndcX = ndc.GetX();
+            ndcY = ndc.GetY();
+          }
+        }
+        float m = CMath::SqrtF(ndcX * ndcX + ndcY * ndcY) * 100.f;
+        m = rstl::min_val(rstl::max_val(m, 0.f), 100.f);
+        float target = 1.f;
+        if (m > 4.5f) {
+          target = 0.01f;
+        } else if (m > 2.5f) {
+          target = rstl::min_val(rstl::max_val((4.5f - m) * 0.5f, 0.01f), 1.f);
+        }
+        float scale = target;
+        if (target > xPortTargetScale[targets]) {
+          scale = rstl::min_val(xPortTargetScale[targets] + dt * 4.f, target);
+        }
+        xPortTargetScale[targets] = scale;
+        gen.SetGlobalScale(CVector3f(scale, scale, scale));
+      }
+      ++targets;
+    }
+  }
+  for (int i = sources; i < 4; ++i) {
+    if (!xPortSourceCaps[i].null()) {
+      xPortSourceCaps[i]->SetParticleEmission(false);
+    }
+  }
+  for (int i = targets; i < 4; ++i) {
+    if (!xPortTargetCaps[i].null()) {
+      xPortTargetCaps[i]->SetParticleEmission(false);
+    }
+  }
+  for (int i = 0; i < 4; ++i) {
+    if (!xPortSourceCaps[i].null()) {
+      xPortSourceCaps[i]->Update(dt);
+    }
+    if (!xPortTargetCaps[i].null()) {
+      xPortTargetCaps[i]->Update(dt);
+    }
+  }
+}
+
+// Remastered UpdateLights (0x0101d854): each NFTLight gen sits on the fire swoosh point
+// i * max(2, count / lights) back from the emitter point, emitting while that point is active.
+void CNewFlameThrower::PortUpdateLights(float dt) {
+  if (xPortLightGens[0].null()) {
+    return;
+  }
+  const int n = x370_swooshFireGen->GetSwooshCount();
+  if (n == 0) {
+    return;
+  }
+  const int stride = rstl::max_val(2, n / 5);
+  const int base = (x370_swooshFireGen->GetCurParticle() + n - 1) % n;
+  for (int i = 0; i < 5; ++i) {
+    CElementGen& gen = *xPortLightGens[i];
+    const int offset = i * stride;
+    const CParticleSwoosh::SSwooshData& swoosh = x370_swooshFireGen->GetSwooshes()[(base + offset) % n];
+    const bool active = offset < n && swoosh.mActive;
+    gen.SetParticleEmission(active);
+    if (active) {
+      gen.SetTranslation(swoosh.mTranslation);
+      gen.Update(dt);
+    }
+  }
+}
+#endif

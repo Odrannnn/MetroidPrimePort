@@ -201,7 +201,12 @@ public:
   void EndFrame() const;
 
   void CreateSplash(TUniqueId splasher, CStateManager& mgr, const CScriptWater& water,
-                    const CVector3f& pos, float factor, bool sfx);
+                    const CVector3f& pos, float factor, bool sfx
+#ifdef TARGET_PC
+                    ,
+                    bool effect = true // Remastered's 8th argument: false skips the splash particles
+#endif
+  );
 
   CRippleManager& RippleManager() { return x0_rippleManager; }
   const CRippleManager& GetRippleManager() const { return x0_rippleManager; }
@@ -216,6 +221,13 @@ public:
   void SetTime(float t) { x11c_uvT = t; }
 
   float GetUVTime() const { return x11c_uvT; }
+
+#ifdef TARGET_PC
+  // Port: how far the presented frame trails the last tick's water clocks
+  // ((1 - t) * that tick's dt), so draws can subtract it and ripples, UV
+  // scroll and turbulence move between ticks. 0 when not blending.
+  static float PortPresentLag();
+#endif
 
   static uint GetFreqTableIndex(float);
   static void SetupRippleMap();

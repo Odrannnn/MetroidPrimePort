@@ -48,7 +48,7 @@
 #include <android/log.h>
 #include <sys/system_properties.h>
 #endif
-#if defined(__linux__) && !defined(__ANDROID__)
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__APPLE__)
 #include <sys/utsname.h>
 #endif
 
@@ -363,10 +363,10 @@ std::string FindUnreadableDiscFile() {
 }
 
 constexpr const char* kSupportedDisc =
-    "Metroid Prime for the GameCube is supported: USA 1.00\n(GM8E01, revision 0) and PAL (GM8P01).";
+    "Metroid Prime for the GameCube is supported: USA 1.00\n(GM8E01, revision 0), and PAL (GM8P01, experimental).";
 // Shown instead while other releases are opted into (MP_DISC_ANY_VERSION).
 constexpr const char* kSupportedDiscAny =
-    "Metroid Prime for the GameCube is supported: USA 1.00, 1.01\nand 1.02 (GM8E01) and PAL (GM8P01).";
+    "Metroid Prime for the GameCube is supported: USA 1.00, 1.01\nand 1.02 (GM8E01), and PAL (GM8P01, experimental).";
 
 const char* SupportedDiscText() {
     return PortDisc::IsAccepted(PortDisc::Version::Usa101) ? kSupportedDiscAny : kSupportedDisc;
@@ -698,7 +698,7 @@ std::string AskForDiscImage(bool* cancelled = nullptr) {
     SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 2);
     SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
     SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING,
-                          "Select your Metroid Prime disc image (GameCube, USA v1.00 or PAL)");
+                          "Select your Metroid Prime disc image (GameCube, USA v1.00, or PAL: experimental)");
     SDL_ShowFileDialogWithProperties(
         SDL_FILEDIALOG_OPENFILE,
         [](void*, const char* const* files, int) {
@@ -988,7 +988,7 @@ int main(int argc, char** argv) {
         }
         PortLog::Write("port: device:%s\n", deviceInfo.empty() ? " (no properties)" : deviceInfo.c_str());
     }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
     {
         struct utsname uts = {};
         if (uname(&uts) == 0) {
@@ -1047,6 +1047,8 @@ int main(int argc, char** argv) {
         // An embedded seed wins over a stale initial_pipeline_cache.db beside the executable.
         .pipelineCacheSeedData = embeddedSeed.data(),
         .pipelineCacheSeedSize = embeddedSeed.size(),
+        // MP_PIPELINE_SEED=0: start from an empty cache (tools/pipeline_seed.py tour records with it).
+        .pipelineCacheNoSeed = !port::EnvFlag("MP_PIPELINE_SEED", true),
         // Set below when a custom Vulkan driver (port_gpu_driver.h) is loaded.
         .vulkanLibraryDir = nullptr,
         // Aurora's Null backend draws nothing: the game would play its sound behind
@@ -1074,8 +1076,9 @@ int main(int argc, char** argv) {
     // process spins at 100% before the first frame is ever presented. Nothing in
     // the port can fix that, so whenever an X display is available ask for the X11
     // backend instead. SDL_VIDEODRIVER still wins, which is also how anyone who
-    // wants Wayland opts back in.
-#if !defined(_WIN32) && !defined(__ANDROID__)
+    // wants Wayland opts back in. macOS has neither backend (its SDL build has
+    // no x11 driver, and XQuartz sets DISPLAY), so it is left to SDL's default.
+#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__APPLE__)
     {
         const char* requested = SDL_GetHint(SDL_HINT_VIDEO_DRIVER);
         const char* x11 = std::getenv("DISPLAY");
@@ -1217,7 +1220,7 @@ int main(int argc, char** argv) {
     if (discImage.empty()) {
         PortLog::Write(
                      "metroid_prime_port: no disc image given.\n"
-                     "  usage: %s <path to Metroid Prime (USA v1.00 or PAL).iso>\n"
+                     "  usage: %s <path to Metroid Prime (USA v1.00, or PAL: experimental).iso>\n"
                      "  or set MP_DISC, or place the image next to the executable.\n", argv[0]);
         aurora_shutdown();
         return 1;
@@ -1271,7 +1274,8 @@ int main(int argc, char** argv) {
         discPath = discImage.c_str();
     }
     std::printf("metroid_prime_port: disc mounted: %s\n", discPath);
-    PortLog::Write("metroid_prime_port: disc is %s\n", PortDisc::Name(PortDisc::Current()));
+    PortLog::Write("metroid_prime_port: disc is %s%s\n", PortDisc::Name(PortDisc::Current()),
+                   PortDisc::Current() == PortDisc::Version::Pal ? " (experimental support)" : "");
     // Saves are the disc's region's (a PAL save's worlds are laid out
     // differently): its game code and Dolphin's card for that region.
     PortGci::SetGameCode(PortDisc::Current() == PortDisc::Version::Pal ? "GM8P" : "GM8E");
@@ -1308,12 +1312,13 @@ int main(int argc, char** argv) {
             std::snprintf(scale, sizeof(scale), "%.2fx", static_cast<double>(PortDebug::RenderScale()));
         }
         PortLog::Write("port: settings: backend %s, msaa %d, anisotropy %d, scale %s, dynamic-res %s, "
-                       "smoothing %s (interp %s), vsync %s, frame-cap %s, remastered-models %s\n",
+                       "smoothing %s (interp %s), vsync %s, frame-cap %d, remastered-models %s\n",
                        config.desiredBackend == BACKEND_OPENGLES ? "opengles" : "auto", PortDebug::Msaa(),
                        PortDebug::Anisotropy(), scale, dynamicRes,
                        PortDebug::SmoothFrames() ? "on" : "off", PortDebug::FrameInterpolation() ? "on" : "off",
-                       PortDebug::VsyncEnabled() ? "on" : "off", PortDebug::FrameLimitEnabled() ? "60" : "off",
+                       PortDebug::VsyncEnabled() ? "on" : "off", PortDebug::FrameRateCap(),
                        remastered ? "on" : "off");
+        PortDebug::LogSettings();
     }
     // The index that gives solid actors their disc model's collision box reads
     // the base disc, so it belongs to the disc's lifecycle rather than to a

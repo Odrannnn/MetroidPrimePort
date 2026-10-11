@@ -174,10 +174,19 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
 , xPortGlobalGeneration(0)
 , xPortPrevGlobalTranslation(CVector3f::Zero())
 , xPortPresenting(false)
+, xPortSpawnTranslation(CVector3f::Zero())
+, xPortPrevSpawnTranslation(CVector3f::Zero())
+, xPortSpawnGeneration(0)
+, xPortPrevSpawnGeneration(0)
+, xPortLineShiftSet(false)
 , xPortVsmt{}
 , xPortVsmtMask(0)
 #endif
 {
+#ifdef TARGET_PC
+  xPortVars.Init(x28_loadedGenDesc->xPortVars.get());
+  CPortVarScope portVarScope(&xPortVars);
+#endif
   CGlobalRandom gr(x27c_randState);
 
   if (CIntElement* seed = x28_loadedGenDesc->x10_SEED) {
@@ -444,6 +453,17 @@ void CElementGen::SetGlobalTranslation(const CVector3f& translation) {
   }
 }
 
+#ifdef TARGET_PC
+void CElementGen::PortGlobalIsPresented() {
+  xPortPrevGlobalTranslation = xe8_globalTranslation;
+  xPortGlobalGeneration = CActor::PortTickGeneration();
+  for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
+    if ((*it)->Get4CharId() == 'PART')
+      static_cast< CElementGen* >(*it)->PortGlobalIsPresented();
+  }
+}
+#endif
+
 void CElementGen::SetModulationColor(const CColor& col) {
   x338_moduColor = col;
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
@@ -537,6 +557,9 @@ const bool CElementGen::Update(double dt) {
   dt = fxScope.dt;
 #endif
   CParticleGlobals::SParticleSystem thisSystem('PART', this);
+#ifdef TARGET_PC
+  CPortVarScope portVarScope(&xPortVars);
+#endif
 
   if (x28_loadedGenDesc->x4_PSWT && !x26d_25_warmedUp) {
     int pswt = 0;
@@ -640,6 +663,12 @@ bool CElementGen::InternalUpdate(double dt) {
     xPortStepGeneration = CActor::PortTickGeneration();
   } else if (frameUpdateCount != 0 || x80_timeDeltaScale != 1.0f) {
     xPortStepGeneration = 0;
+  }
+  if (frameUpdateCount != 0) {
+    xPortPrevSpawnTranslation = xPortSpawnTranslation;
+    xPortPrevSpawnGeneration = xPortSpawnGeneration;
+    xPortSpawnTranslation = xdc_translation;
+    xPortSpawnGeneration = frameUpdateCount == 1 ? xPortStepGeneration : 0;
   }
 #endif
 
@@ -818,6 +847,11 @@ void CElementGen::UpdateExistingParticles() {
     }
     if (CColorElement* colr = x28_loadedGenDesc->x24_COLR) {
       colr->GetValue(particleFrame, p->x34_color);
+#ifdef TARGET_PC
+      if (x28_loadedGenDesc->xPortVfx) {
+        colr->GetValueHdr(particleFrame, p->xPortColor);
+      }
+#endif
     }
 #ifdef TARGET_PC
     if (x28_loadedGenDesc->xPortVfx) {
@@ -916,6 +950,11 @@ void CElementGen::CreateNewParticles(int count) {
 
     if (CColorElement* colr = x28_loadedGenDesc->x24_COLR) {
       colr->GetValue(0, particle.x34_color);
+#ifdef TARGET_PC
+      if (x28_loadedGenDesc->xPortVfx) {
+        colr->GetValueHdr(0, particle.xPortColor);
+      }
+#endif
     } else {
       particle.x34_color = CColor(0xFFFFFFFF);
     }
@@ -1102,6 +1141,26 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
     x290_activePartChildren.push_back(swoosh);
   }
 
+#ifdef TARGET_PC
+  // PSWX - the further swooshes a converted Remastered effect starts
+  if (x84_prevFrame != x74_curFrame) {
+    for (auto& extra : x28_loadedGenDesc->xPortExtraSwooshes) {
+      if (x74_curFrame != extra.frame) {
+        continue;
+      }
+      CParticleSwoosh* swoosh = rs_new CParticleSwoosh(extra.swoosh, 0);
+      swoosh->SetGlobalTranslation(xe8_globalTranslation);
+      swoosh->SetGlobalScale(x100_globalScale);
+      swoosh->SetLocalScale(x16c_localScale);
+      swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
+      swoosh->SetOrientation(x1d8_orientation);
+      swoosh->SetParticleEmission(x88_particleEmission);
+      x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
+      x290_activePartChildren.push_back(swoosh);
+    }
+  }
+#endif
+
   // SELC - electric child particle system
   if (x28_loadedGenDesc->xd8_SELC && x84_prevFrame != x74_curFrame && x74_curFrame == x2bc_SESD) {
     CParticleElectric* electric = rs_new CParticleElectric(*x28_loadedGenDesc->xd8_SELC);
@@ -1140,6 +1199,9 @@ void CElementGen::SetParticleEmission(bool emission) {
 
 void CElementGen::ForceParticleCreation(int amount) {
   CParticleGlobals::SParticleSystem thisSystem('PART', this);
+#ifdef TARGET_PC
+  CPortVarScope portVarScope(&xPortVars);
+#endif
   CParticleGlobals::SetEmitterTime(x74_curFrame);
   CreateNewParticles(amount);
 }
@@ -1200,11 +1262,30 @@ void CElementGen::Render() {
 #endif
 
   CParticleGlobals::SParticleSystem sys('PART', this);
+#ifdef TARGET_PC
+  CPortVarScope portVarScope(&xPortVars);
+#endif
 
 #ifdef TARGET_PC
+  // A trail left by a moving local emitter (projectiles) is in world space: an
+  // enclosing actor shift would drag it back and forth every tick, so it drops
+  // that shift and moves only its newborn particles with the emitter instead.
+  const bool portLineShift = xPortLineShiftSet;
+  xPortLineShiftSet = false;
+  CVector3f portSpawnOffset;
+  const bool portSpawnMoved = !portLineShift && PortSpawnOffset(portSpawnOffset);
+  CPortRenderScopeSuspend portScopeSuspend(portSpawnMoved);
   CVector3f portSavedGlobal = xe8_globalTranslation;
   const float portSavedScale = x80_timeDeltaScale;
   xPortPresenting = PortBeginPresent(portSavedGlobal);
+  if (!xPortPresenting)
+    portScopeSuspend.Resume();
+  if (portLineShift) {
+    PortShiftNewbornsAlongLine();
+    xPortPresenting = true;
+  } else if (xPortPresenting && portSpawnMoved) {
+    PortShiftNewborns(portSpawnOffset * (x80_timeDeltaScale - 1.f));
+  }
 #endif
 
   if (x30_particles.size() > 0) {
@@ -1220,6 +1301,7 @@ void CElementGen::Render() {
 
 #ifdef TARGET_PC
   if (xPortPresenting) {
+    PortRestoreNewborns();
     xe8_globalTranslation = portSavedGlobal;
     x80_timeDeltaScale = portSavedScale;
     xPortPresenting = false;
@@ -1256,6 +1338,92 @@ bool CElementGen::PortBeginPresent(CVector3f& savedGlobal) {
     presenting = true;
   }
   return presenting;
+}
+
+// How far (in particle space) the local emitter moved in this tick's step, when
+// it stepped in this tick and the last one. Particles born in the step sit at
+// the new emitter position, a tick ahead of the presented actor.
+bool CElementGen::PortSpawnOffset(CVector3f& offset) const {
+  const float t = CCameraManager::GetPresentationInterpolation();
+  if (t < 0.f || t >= 1.f || !PortDebug::ParticleInterpolation() || PortFollowsEmitter())
+    return false;
+  const uint gen = CActor::PortTickGeneration();
+  if (gen <= 1 || xPortStepGeneration != gen || x80_timeDeltaScale != 1.f ||
+      xPortSpawnGeneration != gen || xPortPrevSpawnGeneration != gen - 1)
+    return false;
+  const CVector3f delta = xPortSpawnTranslation - xPortPrevSpawnTranslation;
+  // Same snap rule as actors: a jump of more than 4 units is a teleport.
+  const float magSq = delta.MagSquared();
+  if (magSq == 0.f || magSq > 16.f)
+    return false;
+  offset = (x13c_globalScaleTransformInverse * x1a8_localScaleTransformInverse).Rotate(delta);
+  return true;
+}
+
+void CElementGen::PortShiftNewborns(const CVector3f& shift) {
+  xPortNewbornSaved.clear();
+  const int born = x74_curFrame - 1;
+  for (int i = 0; i < x30_particles.size(); ++i) {
+    CParticle& particle = x30_particles[i];
+    if (particle.x28_startFrame != born)
+      continue;
+    xPortNewbornSaved.push_back(particle.x4_pos);
+    xPortNewbornSaved.push_back(particle.x10_prevPos);
+    particle.x4_pos += shift;
+    particle.x10_prevPos += shift;
+  }
+}
+
+void CElementGen::PortSetNewbornLineShift(const CVector3f& firstEnd, const CVector3f& lastEnd,
+                                          const CVector3f& firstShift,
+                                          const CVector3f& lastShift) {
+  xPortLineEnd[0] = firstEnd;
+  xPortLineEnd[1] = lastEnd;
+  xPortLineShift[0] = firstShift;
+  xPortLineShift[1] = lastShift;
+  xPortLineShiftSet = true;
+}
+
+void CElementGen::PortShiftNewbornsAlongLine() {
+  xPortNewbornSaved.clear();
+  // Same world → particle space mapping as the spawn position.
+  const CTransform4f toLocal = x13c_globalScaleTransformInverse * x1a8_localScaleTransformInverse;
+  const CVector3f first = toLocal * xPortLineEnd[0];
+  const CVector3f line = toLocal * xPortLineEnd[1] - first;
+  const float lenSq = line.MagSquared();
+  const CVector3f firstShift = toLocal.Rotate(xPortLineShift[0]);
+  const CVector3f lastShift = toLocal.Rotate(xPortLineShift[1]);
+  const int born = x74_curFrame - 1;
+  for (int i = 0; i < x30_particles.size(); ++i) {
+    CParticle& particle = x30_particles[i];
+    if (particle.x28_startFrame != born)
+      continue;
+    float s = 0.f;
+    if (lenSq > 0.f) {
+      s = CVector3f::Dot(particle.x4_pos - first, line) / lenSq;
+      s = s < 0.f ? 0.f : (s > 1.f ? 1.f : s);
+    }
+    const CVector3f shift = firstShift + (lastShift - firstShift) * s;
+    xPortNewbornSaved.push_back(particle.x4_pos);
+    xPortNewbornSaved.push_back(particle.x10_prevPos);
+    particle.x4_pos += shift;
+    particle.x10_prevPos += shift;
+  }
+}
+
+void CElementGen::PortRestoreNewborns() {
+  if (xPortNewbornSaved.empty())
+    return;
+  const int born = x74_curFrame - 1;
+  int saved = 0;
+  for (int i = 0; i < x30_particles.size() && saved < xPortNewbornSaved.size(); ++i) {
+    CParticle& particle = x30_particles[i];
+    if (particle.x28_startFrame != born)
+      continue;
+    particle.x4_pos = xPortNewbornSaved[saved++];
+    particle.x10_prevPos = xPortNewbornSaved[saved++];
+  }
+  xPortNewbornSaved.clear();
 }
 #endif
 

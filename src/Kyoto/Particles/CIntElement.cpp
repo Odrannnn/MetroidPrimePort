@@ -207,6 +207,50 @@ CIEClamp::~CIEClamp() {
   delete xc_val;
 }
 
+#ifdef TARGET_PC
+CIEFrameIndexFromAnimationTime::CIEFrameIndexFromAnimationTime(CIntElement* start, CIntElement* count,
+                                                               CIntElement* divisor, bool loop)
+: x4_start(start), x8_count(count), xc_divisor(divisor), x10_loop(loop) {}
+
+CIEFrameIndexFromAnimationTime::~CIEFrameIndexFromAnimationTime() {
+  delete x4_start;
+  delete x8_count;
+  delete xc_divisor;
+}
+
+bool CIEFrameIndexFromAnimationTime::GetValue(int frame, int& valOut) const {
+  int start = 0;
+  int count = 0;
+  int divisor = 0;
+  x4_start->GetValue(frame, start);
+  x8_count->GetValue(frame, count);
+  if (count == 0) {
+    valOut = 0;
+    return false;
+  }
+  xc_divisor->GetValue(frame, divisor);
+  int index = start;
+  if (divisor != 0) {
+    index = static_cast< int >(static_cast< float >(frame) * static_cast< float >(count) / static_cast< float >(divisor) +
+                               static_cast< float >(start));
+  }
+  if (!x10_loop) {
+    if (index >= count) {
+      index = count - 1;
+    }
+  } else {
+    if (index < 0) {
+      index = 0;
+    }
+    if (index >= count) {
+      index %= count;
+    }
+  }
+  valOut = index;
+  return false;
+}
+#endif
+
 bool CIEClamp::GetValue(int frame, int& valOut) const {
   int a, b;
   x4_min->GetValue(frame, a);

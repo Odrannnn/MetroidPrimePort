@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <initializer_list>
 #include <limits>
 
 namespace {
@@ -21,6 +22,39 @@ int main() {
   Check(PortMouse::AxisForce(1.f, 0.f, 12.f, 0.1f, 90.f, 1.f / 60.f, 1000.f) > 0.f);
   Check(PortMouse::AxisForce(-1.f, 0.f, 12.f, 0.1f, 90.f, 1.f / 60.f, 1000.f) < 0.f);
   Check(PortMouse::AxisForce(0.f, 5.f, 12.f, 0.1f, 90.f, 1.f / 60.f, 1000.f) == 0.f);
+  // The player's map per tick (friction f*s, then the force over dt) reaches
+  // the 60 Hz top speed and ramp at any tick rate.
+  const auto run = [](float rate, float seconds) {
+    const float dt = 1.f / rate;
+    const float tickScale = dt * 60.f;
+    float v = 0.f;
+    for (int tick = 0; tick < int(seconds * rate + 0.5f); ++tick) {
+      v = std::fmax(0.f, v - 0.1f * tickScale);
+      v += PortMouse::AxisForce(1.f, v, 12.f, 0.1f, 90.f, dt, 1000.f, tickScale) / 90.f * dt;
+    }
+    return v;
+  };
+  for (const float rate : {30.f, 90.f, 120.f, 240.f}) {
+    Check(std::fabs(run(rate, 20.f) - run(60.f, 20.f)) < 0.01f);
+    Check(std::fabs(run(rate, 1.f) - run(60.f, 1.f)) < 0.05f);
+  }
+  // Without friction (a jump's rise), a diagonal stick heads for the same top
+  // speed as a straight one, not faster.
+  const auto planar = [](float right, float forward) {
+    const float dt = 1.f / 60.f;
+    const float length = std::hypot(right, forward);
+    float vr = 0.f, vf = 0.f;
+    for (int tick = 0; tick < 1200; ++tick) {
+      const auto force = PortMouse::ClampPlanar(
+          {PortMouse::AxisForce(right, vr, 12.f, 0.1f, 90.f, dt, 1000.f, 1.f, false, right / length),
+           PortMouse::AxisForce(forward, vf, 12.f, 0.1f, 90.f, dt, 1000.f, 1.f, false, forward / length)},
+          1000.f);
+      vr += force.right / 90.f * dt;
+      vf += force.forward / 90.f * dt;
+    }
+    return std::hypot(vr, vf);
+  };
+  Check(std::fabs(planar(0.7071068f, 0.7071068f) - planar(0.f, 1.f)) < 0.01f);
   const auto speed = PortMouse::ClampPlanar({20.f, 20.f}, 12.f);
   Check(std::hypot(speed.right, speed.forward) <= 12.0001f);
   PortMouse::AimState aim;

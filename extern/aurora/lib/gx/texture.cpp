@@ -154,6 +154,11 @@ void do_clear_static_texture_cache() noexcept {
 }
 
 void apply_pending_invalidations() noexcept {
+  // Plain loads first: this runs several times per draw, and an exchange is a locked write.
+  if (s_pendingCacheClears.load(std::memory_order_acquire) == 0 &&
+      s_pendingInvalidations.load(std::memory_order_acquire) == 0) {
+    return;
+  }
   const uint64_t pendingCacheClears = s_pendingCacheClears.exchange(0, std::memory_order_acq_rel);
   const uint64_t pendingInvalidations = s_pendingInvalidations.exchange(0, std::memory_order_acq_rel);
   if (pendingCacheClears != 0) {

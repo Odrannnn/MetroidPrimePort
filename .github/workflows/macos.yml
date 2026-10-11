@@ -1,0 +1,175 @@
+name: macos
+
+# Experimental Apple Silicon build. Start it by hand like windows.yml.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: brew install ninja openssl@3
+
+      - uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: macos-arm64
+
+      # Configure downloads and unpacks about a dozen dependencies. Keep the
+      # unpacked sources and the stamps that say they are current; the build
+      # directories beside them are left out, since ccache covers those.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build-mac/_deps/*-src
+            build-mac/_deps/*-subbuild
+          key: deps-macos-${{ hashFiles('CMakeLists.txt', 'extern/aurora/**/CMakeLists.txt', 'extern/aurora/**/*.cmake') }}
+
+      # SDL3, nod, OpenSSL and the bundled libraries are linked in statically,
+      # so the app needs nothing from Homebrew on a player's Mac. The runner's
+      # Homebrew xxhash/zstd would otherwise be found and linked dynamically.
+      - name: Configure
+        run: >
+          cmake -S . -B build-mac -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DAURORA_ENABLE_TESTS=ON
+          -DMP_BUILD_TESTS=ON
+          -DBUILD_SHARED_LIBS=OFF
+          -DAURORA_SDL3_PROVIDER=vendor
+          -DAURORA_SDL3_LINKAGE=static
+          -DAURORA_NOD_LINKAGE=static
+          -DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)
+          -DOPENSSL_USE_STATIC_LIBS=TRUE
+          -DCMAKE_DISABLE_FIND_PACKAGE_xxHash=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_zstd=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=ON
+
+      - name: Build
+        # -k 0: report every failing file in one run while the port is brought up.
+        run: cmake --build build-mac -j -- -k 0
+
+      - name: Test
+        run: ctest --test-dir build-mac -L port --output-on-failure
+
+      - name: Show the TLS handshake result
+        run: ./build-mac/port_ws_tests
+
+      - name: Build FIFO regressions
+        run: cmake --build build-mac --target gx_fifo_tests -j
+
+      - name: Test FIFO regressions
+        run: ./build-mac/extern/aurora/tests/gx_fifo_tests --gtest_brief=1
+
+      # The Remastered import decodes that game's H.264 movies with ffmpeg, run
+      # as a separate program, and macOS has none of its own. The app carries
+      # the same small LGPL build as the Windows package (see windows.yml).
+      - uses: actions/cache@v4
+        id: ffmpeg
+        with:
+          path: ffmpeg-min/out
+          key: ffmpeg-min-macos-arm64-${{ hashFiles('tools/build_ffmpeg_min.sh') }}
+
+      - name: Build ffmpeg
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          bash tools/build_ffmpeg_min.sh ffmpeg-min --extra-cflags=-mmacosx-version-min=13.0 --extra-ldflags=-mmacosx-version-min=13.0
+          mkdir -p ffmpeg-min/out
+          cp ffmpeg-min/ffmpeg ffmpeg-min/COPYING.LGPLv2.1 ffmpeg-min/ffmpeg-build.txt ffmpeg-min/out/
+
+      # An unsigned arm64 binary does not run at all, so the bundle is signed
+      # ad hoc. Players still have to clear the quarantine flag (or right-click
+      # > Open) until it is signed with a Developer ID and notarised.
+      - name: Package
+        run: |
+          app="dist/Metroid Prime Port.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp build-mac/metroid_prime_port "$app/Contents/MacOS/"
+          cp ffmpeg-min/out/ffmpeg "$app/Contents/MacOS/"
+          version=$(sed -n 's/.*versionName "\(.*\)".*/\1/p' android/app/build.gradle)
+          iconset=$(mktemp -d)/icon.iconset
+          mkdir -p "$iconset"
+          for size in 16 32 128 256; do
+            sips -z $size $size packaging/metroid_prime_port.png --out "$iconset/icon_${size}x${size}.png" > /dev/null
+          done
+          cp packaging/metroid_prime_port.png "$iconset/icon_128x128@2x.png"
+          iconutil -c icns "$iconset" -o "$app/Contents/Resources/metroid_prime_port.icns"
+          cat > "$app/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>metroid_prime_port</string>
+            <key>CFBundleIdentifier</key><string>io.github.odrannnn.metroidprimeport</string>
+            <key>CFBundleName</key><string>Metroid Prime Port</string>
+            <key>CFBundleDisplayName</key><string>Metroid Prime Port</string>
+            <key>CFBundleIconFile</key><string>metroid_prime_port</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>$version</string>
+            <key>CFBundleVersion</key><string>$version</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>GCSupportsControllerUserInteraction</key><true/>
+          </dict>
+          </plist>
+          EOF
+          sed -i '' 's/^          //' "$app/Contents/Info.plist"
+          plutil -lint "$app/Contents/Info.plist"
+          codesign --force --sign - "$app/Contents/MacOS/ffmpeg"
+          codesign --force --sign - "$app"
+          mkdir -p dist/licenses
+          cp ffmpeg-min/out/COPYING.LGPLv2.1 dist/licenses/ffmpeg-LGPLv2.1.txt
+          cp ffmpeg-min/out/ffmpeg-build.txt dist/licenses/ffmpeg-build.txt
+          cp LICENSE dist/licenses/port-license.txt
+          cp NOTICE dist/licenses/port-notice.txt
+          cp extern/aurora/LICENSE dist/licenses/aurora.txt
+          cp extern/musyx/LICENSE dist/licenses/musyx.txt
+          cp extern/astcenc/LICENSE.txt dist/licenses/astcenc.txt
+          cp "$(brew --prefix openssl@3)/LICENSE.txt" dist/licenses/openssl.txt 2>/dev/null ||
+            curl -fsSL -o dist/licenses/openssl.txt https://raw.githubusercontent.com/openssl/openssl/openssl-3.5/LICENSE.txt
+          curl -fsSL -o dist/licenses/nod-MIT.txt https://raw.githubusercontent.com/encounter/nod/v2.0.0-alpha.12/LICENSE-MIT
+          curl -fsSL -o dist/licenses/nod-Apache-2.0.txt https://raw.githubusercontent.com/encounter/nod/v2.0.0-alpha.12/LICENSE-APACHE
+          (cd build-mac/_deps && find . -type f \( -name 'LICENSE*' -o -name 'COPYING*' -o -name 'NOTICE*' \) -not -path '*/build/*' |
+            while read -r f; do mkdir -p "../../dist/licenses/$(dirname "$f")"; cp "$f" "../../dist/licenses/$f"; done)
+          cp docs/NATIVE_PORT.md dist/README.md
+
+      # Fail if a library that should be static is linked dynamically again:
+      # only the system's own libraries and frameworks may be referenced.
+      - name: Check the executable's libraries
+        run: |
+          for exe in metroid_prime_port ffmpeg; do
+            otool -L "dist/Metroid Prime Port.app/Contents/MacOS/$exe" | tee libs.txt
+            if tail -n +2 libs.txt | grep -vE '^\s*(/usr/lib/|/System/Library/)'; then
+              echo "$exe links libraries outside the system" >&2; exit 1
+            fi
+          done
+          "dist/Metroid Prime Port.app/Contents/MacOS/ffmpeg" -hide_banner -version | head -n 1
+          codesign --verify --deep --strict "dist/Metroid Prime Port.app"
+
+      - name: Check packaged startup
+        run: |
+          set +e
+          MP_NO_DISC_DIALOG=1 "dist/Metroid Prime Port.app/Contents/MacOS/metroid_prime_port" 2> startup-error.log
+          code=$?
+          set -e
+          cat startup-error.log
+          [ "$code" = 1 ] || { echo "Unexpected exit code: $code" >&2; exit 1; }
+          grep -q 'no disc image given' startup-error.log || { echo 'Packaged executable did not reach main' >&2; exit 1; }
+          # The data folder must be outside the bundle, or the signature breaks.
+          [ ! -e "dist/Metroid Prime Port.app/Contents/Resources/user" ] || { echo 'Startup wrote into the app bundle' >&2; exit 1; }
+          codesign --verify --deep --strict "dist/Metroid Prime Port.app"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metroid_prime_port-macos
+          path: dist

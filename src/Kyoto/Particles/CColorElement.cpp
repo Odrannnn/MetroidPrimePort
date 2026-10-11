@@ -36,6 +36,12 @@ CCEFastConstant::CCEFastConstant(const float r, const float g, const float b, co
    float cb = CMath::Clamp(0.f, b, 1.f);
    float ca = CMath::Clamp(0.f, a, 1.f);
    x4_val.Set(cr, cg, cb, ca);
+#ifdef TARGET_PC
+   xPortHdr[0] = r;
+   xPortHdr[1] = g;
+   xPortHdr[2] = b;
+   xPortHdr[3] = a;
+#endif
 }
 
 CCEFastConstant::~CCEFastConstant() {}
@@ -174,7 +180,29 @@ CCEKeyframeEmitter::CCEKeyframeEmitter(CInputStream& in)
 , xd_unk2(in.ReadBool())
 , x10_loopEnd(in.ReadLong())
 , x14_loopStart(in.ReadLong())
-, x18_keys(in) {
+#ifdef TARGET_PC
+, x18_keys()
+#else
+, x18_keys(in)
+#endif
+{
+#ifdef TARGET_PC
+  // Same stream layout as rstl::vector< CColor >(in): a count, then four floats per key. The
+  // floats are kept unclamped for GetValueHdr.
+  const int keyCount = in.ReadLong();
+  x18_keys.reserve(keyCount);
+  xPortKeys.reserve(keyCount > 0 ? keyCount : 0);
+  for (int i = 0; i < keyCount; ++i) {
+    std::array< float, 4 > k;
+    for (float& c : k) {
+      c = in.ReadFloat();
+    }
+    CColor key;
+    key.Set(k[0], k[1], k[2], k[3]); // as CColor(CInputStream&)
+    x18_keys.push_back(key);
+    xPortKeys.push_back(k);
+  }
+#endif
   if (x14_loopStart >= x10_loopEnd) {
     x14_loopStart = 0;
   }
@@ -213,3 +241,135 @@ bool CCEParticleColor::GetValue(int frame, CColor& colorOut) const {
   colorOut = CParticleGlobals::GetCurrentParticle()->x34_color;
   return false;
 }
+
+#ifdef TARGET_PC
+bool CColorElement::GetValueHdr(int frame, float out[4]) const {
+  CColor c;
+  const bool ret = GetValue(frame, c);
+  c.Get(out[0], out[1], out[2], out[3]);
+  return ret;
+}
+
+bool CCEConstant::GetValueHdr(int frame, float out[4]) const {
+  out[0] = out[1] = out[2] = out[3] = 0.f;
+  x4_r->GetValue(frame, out[0]);
+  x8_g->GetValue(frame, out[1]);
+  xc_b->GetValue(frame, out[2]);
+  x10_a->GetValue(frame, out[3]);
+  return false;
+}
+
+bool CCEFastConstant::GetValueHdr(int, float out[4]) const {
+  for (int i = 0; i < 4; ++i) {
+    out[i] = xPortHdr[i];
+  }
+  return false;
+}
+
+bool CCEFade::GetValueHdr(int frame, float out[4]) const {
+  float c;
+  xc_endFrame->GetValue(frame, c);
+
+  float t = static_cast< float >(frame) * (1.f / c);
+  if (t >= 1.f) {
+    x8_b->GetValueHdr(frame, out);
+  } else {
+    float a[4], b[4];
+    x4_a->GetValueHdr(frame, a);
+    x8_b->GetValueHdr(frame, b);
+    float nt = 1.f - t;
+    for (int i = 0; i < 4; ++i) {
+      out[i] = a[i] * nt + b[i] * t;
+    }
+  }
+  return false;
+}
+
+bool CCEFadeEnd::GetValueHdr(int frame, float out[4]) const {
+  float start;
+  xc_startFrame->GetValue(frame, start);
+
+  float frameF = static_cast< float >(frame);
+  if (frameF < start) {
+    x4_a->GetValueHdr(frame, out);
+    return false;
+  }
+
+  float end;
+  x10_endFrame->GetValue(frame, end);
+
+  float a[4], b[4];
+  x4_a->GetValueHdr(frame, a);
+  x8_b->GetValueHdr(frame, b);
+
+  float t = (frameF - start) / (end - start);
+  float nt = 1.f - t;
+  for (int i = 0; i < 4; ++i) {
+    out[i] = a[i] * nt + b[i] * t;
+  }
+  return false;
+}
+
+bool CCETimeChain::GetValueHdr(int frame, float out[4]) const {
+  int v;
+  xc_swFrame->GetValue(frame, v);
+  if (frame < v) {
+    return x4_a->GetValueHdr(frame, out);
+  }
+  return x8_b->GetValueHdr(frame - v, out);
+}
+
+bool CCEPulse::GetValueHdr(int frame, float out[4]) const {
+  int a, b;
+  x4_aDuration->GetValue(frame, a);
+  x8_bDuration->GetValue(frame, b);
+  int cv = a + b + 1;
+  if (cv < 0) {
+    cv = 1;
+  }
+
+  if (b >= 1 && frame % cv > a) {
+    x10_bVal->GetValueHdr(frame, out);
+  } else {
+    xc_aVal->GetValueHdr(frame, out);
+  }
+  return false;
+}
+
+bool CCEKeyframeEmitter::GetValueHdr(int frame, float out[4]) const {
+  auto key = [&](int i, float dst[4]) {
+    for (int c = 0; c < 4; ++c) {
+      dst[c] = xPortKeys[i][c];
+    }
+  };
+  if (x4_percent == 0) {
+    int emitterTime = CParticleGlobals::GetEmitterTime();
+    if (xc_loop) {
+      if (emitterTime >= x10_loopEnd) {
+        emitterTime -= x14_loopStart;
+        emitterTime = emitterTime % (x10_loopEnd - x14_loopStart);
+        emitterTime += x14_loopStart;
+      }
+    } else {
+      emitterTime = rstl::min_val(emitterTime, x10_loopEnd - 1);
+    }
+    key(emitterTime, out);
+    return false;
+  }
+
+  const int pct = CParticleGlobals::GetParticleLifetimePercentage();
+  if (pct == 100) {
+    key(pct, out);
+  } else {
+    float a[4], b[4];
+    key(pct, a);
+    key(pct + 1, b);
+    const float t = CParticleGlobals::GetParticleLifetimePercentageRemainder();
+    const float omt = 1.f - t;
+    for (int i = 0; i < 4; ++i) {
+      out[i] = omt * a[i] + t * b[i];
+    }
+  }
+  return false;
+}
+#endif

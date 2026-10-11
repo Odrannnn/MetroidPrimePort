@@ -744,6 +744,21 @@ void SetProbeBlend(bool on);
 bool ProbeBlend();
 // The camera's position, once a frame: the probe blend follows it.
 void SetViewPoint(const float pos[3]);
+// Remastered's X-ray visor post (shader 00089f0): pass A (distortion = true) after the opaque
+// world, pass B (ramp and vignette) after the post-FX. xrayTime is dt accumulated while the
+// X-ray visor is active (XRayTick). False when the gate (Remastered rooms exposed, not
+// Original experience) is closed; the caller then draws retail's.
+bool XRayPass(bool distortion);
+void XRayTick(float dt, bool xrayActive);
+// Remastered's thermal visor post (NRenderThermalVisor, kb topic/thermal-post.md): the cold pass
+// (heat haze, after the cold actors) and the hot pass (heat gradient, ghost and stripe upscale,
+// after the hot actors). `areaHeat` is the CStateManager's thermal cold scale sum. False when
+// the gate (Remastered rooms exposed with its imported gradient, not Original experience,
+// MP_THERMAL_POST) is closed; the caller then draws retail's blend. ThermalTick accumulates the
+// thermal time (dt while the thermal visor is active).
+bool ThermalPass(bool hot, float areaHeat);
+void ThermalTick(float dt, bool thermalActive);
+
 // The frame's tone curve, for GXSetPBRTone; false when rooms are not exposed or the
 // camera's room has no environment.
 bool Tone(float rows[3][4]);

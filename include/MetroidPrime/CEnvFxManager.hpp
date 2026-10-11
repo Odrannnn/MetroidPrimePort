@@ -190,6 +190,15 @@ private:
   rstl::optional_object< TLockedToken< CTexture > > xb74_txtrSnowFlake;
   rstl::reserved_vector< CVector3f, 16 > xb84_snowZDeltas;
   rstl::optional_object< TLockedToken< CTexture > > xc48_underwaterFlake;
+#ifdef TARGET_PC
+  // Presentation smoothing: each particle's world motion in the last step
+  // (without the grid's follow-the-camera compensation), and the tick it ran in.
+  uint xPortStepGeneration;
+  EEnvFxType xPortStepType;
+  CVectorFixed8_8 xPortStep;                                 // rain, underwater: every particle
+  rstl::reserved_vector< CVectorFixed8_8, 256 > xPortSnowSteps; // snow: by force index
+  int xPortSnowFirst;
+#endif
 };
 CHECK_SIZEOF(CEnvFxManager, 0xc58);
 

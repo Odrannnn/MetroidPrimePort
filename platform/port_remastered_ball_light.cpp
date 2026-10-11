@@ -9,7 +9,6 @@ namespace PortRemasteredBallLight {
 namespace {
 int sEnabled = -1;
 float sScale = -1.f;
-float sWater = 0.f;
 
 // Remastered's intensity table, per glow index: { dry, fully in water } normally and while
 // boosting.
@@ -42,27 +41,13 @@ float Scale() {
 
 void SetScale(float scale) { sScale = std::max(scale, 0.f); }
 
-void Reset() { sWater = 0.f; }
-
 void Update(const Inputs& in, float outLinearColor[3]) {
-  float target = -1.f;
-  if (in.submerged) {
-    target = 1.f;
-  } else if (in.inNormalWater && in.ballRadius > 0.f) {
-    target = std::clamp(0.5f * in.depthUnderWater / in.ballRadius, 0.f, 1.f);
-  }
-  if (target >= 0.f) {
-    // As Remastered: rises towards the target, but drops to it at once.
-    sWater = std::min(sWater + 2.f * in.dt, target);
-  } else {
-    sWater = std::max(sWater - 4.f * in.dt, 0.f);
-  }
-
+  const float water = std::clamp(in.water, 0.f, 1.f);
   const int g = std::clamp(in.glowIndex, 0, 4);
   const float boost = std::clamp(in.boost, 0.f, 1.f);
   const float dry = kIntensity[g][0] + (kBoostIntensity - kIntensity[g][0]) * boost;
   const float wet = kIntensity[g][1] + (kBoostIntensity - kIntensity[g][1]) * boost;
-  const float intensity = (dry + (wet - dry) * sWater) / kPi * std::clamp(in.fade, 0.f, 1.f) * Scale();
+  const float intensity = (dry + (wet - dry) * water) / kPi * std::clamp(in.fade, 0.f, 1.f) * Scale();
   for (int i = 0; i < 3; ++i) {
     outLinearColor[i] = SrgbToLinear(in.srgb[i]) * intensity;
   }

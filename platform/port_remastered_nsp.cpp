@@ -814,6 +814,14 @@ bool ExtractBrdfLut(const Nsp& nsp, std::vector<uint8_t>& out, std::string& erro
   return true;
 }
 
+bool ExtractThermalNoise(const Nsp& nsp, std::vector<uint8_t>& out, std::string& error) {
+  std::vector<uint8_t> nso;
+  if (!nsp.ReadExefsFile("main", nso, error)) {
+    return false;
+  }
+  return NsoReadImage(nso, kThermalNoiseMemOffset, kThermalNoiseSize, out, error);
+}
+
 #else // !MP_HAVE_OPENSSL
 
 Nsp::~Nsp() = default;
@@ -853,6 +861,11 @@ bool Nsp::ReadExefsFile(const std::string&, std::vector<uint8_t>&, std::string& 
 bool IsKnownBrdfLut(const uint8_t*, size_t) { return false; }
 
 bool ExtractBrdfLut(const Nsp&, std::vector<uint8_t>&, std::string& error) {
+  error = "built without OpenSSL";
+  return false;
+}
+
+bool ExtractThermalNoise(const Nsp&, std::vector<uint8_t>&, std::string& error) {
   error = "built without OpenSSL";
   return false;
 }

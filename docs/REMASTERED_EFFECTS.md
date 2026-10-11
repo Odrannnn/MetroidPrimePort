@@ -304,6 +304,16 @@ those back to retail PARTs (checked 2026-10-05):
   16 PARTs, Sheegoth's 18 against 19) whose Remastered events carry no frames,
   on one bone, with look-alike textures; or groups with no free PART at all.
 
+### Projectile weapons (WPSM)
+
+A Remastered WPSM has the name of the disc's WPSC (PowerBeam, WaveBall, SuperMissile...;
+`Retail::WpscId`, lower-case). Its APSM/APS2 GENP and ASW1-3 SWSH refs (`<reversed tag> 00 <guid>`)
+replace the PART/SWHC the WPSC's field of that name holds (`ProjectilePairings` in
+`port_remastered_import.cpp`, fed to the converter as `EffectImportIO::pairings`, method `wpsm`).
+PowerAuxMuzzle and BusterSwoosh1/2 are paired by name. Beam and ball share some retail ids (Ice/Wave
+APS2, Ice ASW1): the later one converted wins. The disc has no PART for the `*MuzzleFlash`es or
+BusterImpact, so those stay unpaired.
+
 ## Converting to retail PART
 
 `platform/port_remastered_effect_convert.cpp` writes a parsed effect as retail

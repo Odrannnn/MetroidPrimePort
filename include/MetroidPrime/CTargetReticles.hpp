@@ -105,6 +105,9 @@ public:
   bool GetIsOrbitZoneIdlePosition() const { return x10c_currGroupInterp.GetIsOrbitZoneIdlePosition(); }
 
 private:
+#ifdef TARGET_PC
+  static void PortPresentGroup(CTargetReticleRenderState& state, const CStateManager& mgr);
+#endif
   CQuaternion x0_leadingOrientation;
   CQuaternion x10_laggingOrientation;
   EReticleState x20_prevState;

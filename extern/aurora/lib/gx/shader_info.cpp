@@ -350,9 +350,9 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
   if (config.pbr) {
     info.usesPbr = true;
     info.usesLightmap = config.pbrLightmapAttr != GX_VA_NULL;
-    // 7 single + ambient 6 + volume 6 + tone 3 + backlight 3 + light skip + light scale, then the linear light
-    // colours, then 3 HDR rows per light, then the lightmap and the room lights
-    info.uniformSize += sizeof(Mat3x4<float>) + sizeof(Vec4<float>) * (32 + GX::MaxLights * 4);
+    // The probe, 7 single + ambient 6 + volume 6 + tone 3 + backlight 3 + light skip + light scale, then the
+    // linear light colours, then 3 HDR rows per light, then shield 8, the lightmap 4 and the room lights
+    info.uniformSize += sizeof(Mat3x4<float>) + sizeof(Vec4<float>) * (27 + GX::MaxLights * 4 + 8 + 4 + 1);
   }
   if (config.hudSample >= 2) {
     info.usesHudDyin = true;
@@ -499,10 +499,18 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
     Vec4<float> lightScale = g_gxState.pbrLightScale;
     lightScale.z() = g_gxState.pbrBrdfLut ? 1.f : 0.f;
     buf.append(lightScale);
-    // The lights' colours made linear here once, not per light in every pixel.
-    for (const auto& light : g_gxState.lights) {
-      const auto linear = [](float c) { return std::pow(std::max(c, 0.f), 2.2f); };
-      buf.append(Vec4<float>{linear(light.color.x()), linear(light.color.y()), linear(light.color.z()), 0.f});
+    // The lights' colours made linear here once, not per light in every pixel. Lights rarely change
+    // between draws, so the last colours seen per slot are kept with their linear values.
+    static std::array<Vec4<float>, GX::MaxLights> lastColor{};
+    static std::array<Vec4<float>, GX::MaxLights> lastLinear{};
+    for (size_t i = 0; i < g_gxState.lights.size(); ++i) {
+      const auto& color = g_gxState.lights[i].color;
+      if (color.x() != lastColor[i].x() || color.y() != lastColor[i].y() || color.z() != lastColor[i].z()) {
+        const auto linear = [](float c) { return std::pow(std::max(c, 0.f), 2.2f); };
+        lastColor[i] = color;
+        lastLinear[i] = Vec4<float>{linear(color.x()), linear(color.y()), linear(color.z()), 0.f};
+      }
+      buf.append(lastLinear[i]);
     }
     for (const auto& v : g_gxState.pbrLightHdr) {
       buf.append(v);
@@ -575,9 +583,16 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
 
 gfx::Range build_uniform(const ShaderInfo& info) noexcept {
   ZoneScoped;
-  static ByteBuffer buf;
-  buf.clear();
+  // Filled in place in the frame's uniform buffer, inside a MaxUniformSize window (build_shader_info
+  // refuses anything larger), then trimmed to what was written.
+  uint8_t* out = nullptr;
+  auto range = gfx::map_uniform(out);
+  if (out == nullptr) {
+    return range;
+  }
+  ByteBuffer buf{out, MaxUniformSize};
   fill_uniform(buf, info);
-  return gfx::push_uniform(buf.data(), buf.size());
+  gfx::unmap_uniform(range, buf.size());
+  return range;
 }
 } // namespace aurora::gx

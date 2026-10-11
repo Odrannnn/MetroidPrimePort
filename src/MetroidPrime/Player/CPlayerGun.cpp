@@ -1,11 +1,14 @@
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "port_debug.h"
 #include "port_room_env.h"
+#include "port_synthetic_effect.h"
 #ifdef MP_ENABLE_SMOKE_DRIVER
 #include "port_smoke.h"
 #endif
 
 #include "Kyoto/Math/CTransform4f.hpp"
+#include "MetroidPrime/CExplosion.hpp"
+#include "Kyoto/CResFactory.hpp"
 #include "Kyoto/Math/CVector3f.hpp"
 #include "MetroidPrime/CAnimData.hpp"
 #include "MetroidPrime/CAnimRes.hpp"
@@ -164,6 +167,10 @@ static const SPortRapidCharge* PortRapidChargeFor(CPlayerState::EBeamId beam) {
              ? &skPortRapidCharge[int(beam)]
              : nullptr;
 }
+
+// Port: set each frame when the gun runs Remastered's effects (its holo
+// transition PART is the Remastered one), so the gun moves as there too.
+static bool sPortRemasteredGun = false;
 #endif
 
 static const CPlayerState::EItemType skItemArr[2] = {
@@ -582,6 +589,33 @@ void CPlayerGun::PortSnapshotPresentedPose(const CStateManager& mgr) const {
   sPortGunPrevRel = PortGunRelativePose(mgr, GetGunMotionTransform());
   sPortGunPrevGeneration = CActor::PortTickGeneration();
 }
+
+CTransform4f CPlayerGun::PortGunView(const CStateManager& mgr,
+                                     const CTransform4f& worldView) const {
+  if (!mgr.GetCameraManager()->IsInFPCamera() ||
+      mgr.GetPlayer()->GetCameraState() != CPlayer::kCS_FirstPerson ||
+      mgr.GetPlayer()->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed) {
+    return worldView;
+  }
+  // The held weapon and its muzzle effects are cached at simulation time.
+  // Render their relative pose against that same camera, not an interpolated
+  // world camera from a different tick. Projectile simulation is unchanged.
+  const CTransform4f simView = mgr.GetCameraManager()->GetSimulationCameraTransform(mgr);
+  // Between ticks, blend the gun's pose relative to the camera (bob, sway,
+  // recoil) from the last tick's. The view moves instead of the gun, so the
+  // arm, beam and muzzle effects all follow.
+  const float t = CCameraManager::GetPresentationInterpolation();
+  if (t >= 0.f && t < 1.f && PortDebug::ActorInterpolation() &&
+      sPortGunPrevGeneration == CActor::PortTickGeneration()) {
+    CTransform4f blend = CTransform4f::Identity();
+    CTransform4f cur = CTransform4f::Identity();
+    if (CActor::PortBlendRigid(sPortGunPrevRel, PortGunRelativePose(mgr, GetGunMotionTransform()),
+                               t, blend, cur)) {
+      return simView * cur * blend.GetQuickInverse();
+    }
+  }
+  return simView;
+}
 #endif
 
 void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
@@ -592,30 +626,18 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   const PortRoomEnv::ProbeOverrideScope probeScope(probeXyz);
 #endif
   const CTransform4f worldView = CGraphics::GetViewMatrix();
+#ifdef TARGET_PC
+  CGraphics::SetViewPointMatrix(PortGunView(mgr, worldView));
+#else
   if (mgr.GetCameraManager()->IsInFPCamera() &&
       mgr.GetPlayer()->GetCameraState() == CPlayer::kCS_FirstPerson &&
       mgr.GetPlayer()->GetMorphballTransitionState() == CPlayer::kMS_Unmorphed) {
     // The held weapon and its muzzle effects are cached at simulation time.
     // Render their relative pose against that same camera, not an interpolated
     // world camera from a different tick. Projectile simulation is unchanged.
-    const CTransform4f simView = mgr.GetCameraManager()->GetSimulationCameraTransform(mgr);
-    CGraphics::SetViewPointMatrix(simView);
-#ifdef TARGET_PC
-    // Port: between ticks, blend the gun's pose relative to the camera (bob,
-    // sway, recoil) from the last tick's. The view moves instead of the gun,
-    // so the arm, beam and muzzle effects all follow.
-    const float t = CCameraManager::GetPresentationInterpolation();
-    if (t >= 0.f && t < 1.f && PortDebug::ActorInterpolation() &&
-        sPortGunPrevGeneration == CActor::PortTickGeneration()) {
-      CTransform4f blend = CTransform4f::Identity();
-      CTransform4f cur = CTransform4f::Identity();
-      if (CActor::PortBlendRigid(sPortGunPrevRel, PortGunRelativePose(mgr, GetGunMotionTransform()),
-                                 t, blend, cur)) {
-        CGraphics::SetViewPointMatrix(simView * cur * blend.GetQuickInverse());
-      }
-    }
-#endif
+    CGraphics::SetViewPointMatrix(mgr.GetCameraManager()->GetSimulationCameraTransform(mgr));
   }
+#endif
   const CGraphics::CProjectionState projState = CGraphics::GetProjectionState();
 #ifdef MP_ENABLE_SMOKE_DRIVER
   PortSmokeMouseGunView(mgr, *this, worldView);
@@ -649,6 +671,10 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
       (x38c_muzzleEffectVisTimer > 0.f || x32c_chargePhase > kCP_AnimAndSfx)) {
     x72c_currentBeam->DrawMuzzleFx(mgr);
   }
+
+#ifdef TARGET_PC
+  PortRenderFlashes();
+#endif
 
   if (gunState == CGunMorph::kGS_InWipe || gunState == CGunMorph::kGS_OutWipe) {
     x774_holoTransitionGen->Render();
@@ -887,10 +913,10 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   }
 
   if (x32c_chargePhase != kCP_NotCharging && !player.GetFrozenState()) {
-    x34c_shakeX =
-        chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * x340_chargeBeamFactor;
-    x350_shakeZ =
-        chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * x340_chargeBeamFactor;
+    // Remastered (0xc93950): the factor is 0 unless the charging flag is set.
+    const float shakeFactor = (sPortRemasteredGun && !x834_24_charging) ? 0.f : x340_chargeBeamFactor;
+    x34c_shakeX = chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * shakeFactor;
+    x350_shakeZ = chargeShakeTbl[static_cast< int >(mgr.Random()->Next()) % 3] * shakeFactor;
   }
 
   if (!x72c_currentBeam->IsLoaded()) {
@@ -909,6 +935,9 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
     UpdateLeftArmTransform(beamModel, mgr);
   }
 
+#ifdef TARGET_PC
+  sPortRemasteredGun = x774_holoTransitionGen->PortIsRemastered();
+#endif
   x6a0_motionState.Update((x2f0_pressedFireButtonStates & 1) != 0 && x832_28_readyForShot &&
                               x32c_chargePhase < kCP_AnimAndSfx && !player.IsInFreeLook(),
                           advDt, x4a8_gunWorldXf, mgr);
@@ -962,6 +991,14 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
     x800_auxMuzzleGenerators[x320_currentAuxBeam]->Update(advDt);
   }
 
+#ifdef TARGET_PC
+  {
+    // Same scale as the muzzle flash (Remastered updates them together).
+    const float flashScale = x832_26_comboFiring ? (x344_comboXferTimer < 1.f ? 1.f - x344_comboXferTimer : 0.f) * 2.f : 2.f;
+    PortUpdateFlashes(advDt, CVector3f(flashScale, flashScale, flashScale));
+  }
+#endif
+
   if (x748_rainSplashGenerator.get()) {
     x748_rainSplashGenerator->Update(advDt, mgr);
   }
@@ -997,8 +1034,26 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   }
 #ifdef TARGET_PC
   // Port: the Remastered Ice Beam cannon's frost shell dissolves in with the charge, as
-  // CGunWeaponMP1::UpdateChargeEffects drives it.
-  CCubeModel::PortSetChargeShell(x340_chargeBeamFactor);
+  // CGunWeaponMP1::UpdateChargeEffects drives it. Its drive isn't the charge factor but
+  // CPlayerGunMP1::Update's own accumulator: past the charge FX start (warm-up) it rises
+  // at 1/1.45 per second, otherwise it falls at 1 per second. Ice keeps retail's timing,
+  // so the warm-up is kChargeFxStart.
+  {
+    static float sShellFactor = 0.f;
+    const bool charging = x32c_chargePhase >= kCP_AnimAndSfx && x32c_chargePhase <= kCP_FxGrown;
+    if (charging && x340_chargeBeamFactor >= kChargeFxStart) {
+      sShellFactor += advDt / 1.45f;
+      if (sShellFactor > 1.f) {
+        sShellFactor = 1.f;
+      }
+    } else {
+      sShellFactor -= advDt;
+      if (sShellFactor < 0.f) {
+        sShellFactor = 0.f;
+      }
+    }
+    CCubeModel::PortSetChargeShell(sShellFactor);
+  }
 #endif
 
   UpdateAuxWeapons(advDt, beamTargetXf, mgr);
@@ -1273,6 +1328,11 @@ void CPlayerGun::UpdateNormalShotCycle(float dt, CStateManager& mgr) {
 #ifdef MP_ENABLE_SMOKE_DRIVER
   PortSmokeMouseShot(x330_chargeState == kCS_Charged, false);
 #endif
+#ifdef TARGET_PC
+  if (x330_chargeState != kCS_Normal) {
+    PortStartFlash(3 + int(x310_currentBeam));
+  }
+#endif
   x72c_currentBeam->Fire(
       x834_27_underwater, dt, CPlayerState::EChargeStage(x330_chargeState), xf, mgr,
       static_cast< const TUniqueId& >(targetHoming ? GetTargetId(mgr) : kInvalidUniqueId),
@@ -1333,6 +1393,16 @@ void CPlayerGun::FireSecondary(float dt, CStateManager& mgr) {
 #ifdef MP_ENABLE_SMOKE_DRIVER
     PortSmokeMouseShot(x330_chargeState == kCS_Charged, true);
 #endif
+#ifdef TARGET_PC
+    // Missile flash, or the combo's (only Power's super missile and Ice's combo have one).
+    if (x330_chargeState != kCS_Charged) {
+      PortStartFlash(0);
+    } else if (x310_currentBeam == CPlayerState::kBI_Power) {
+      PortStartFlash(1);
+    } else if (x310_currentBeam == CPlayerState::kBI_Ice) {
+      PortStartFlash(2);
+    }
+#endif
     x744_auxWeapon->Fire(dt, x834_27_underwater, CPlayerState::EBeamId(x310_currentBeam),
                          CPlayerState::EChargeStage(x330_chargeState), xf, mgr,
                          x72c_currentBeam->GetType(), targetId);
@@ -1370,6 +1440,9 @@ void CPlayerGun::DropBomb(CPlayerGun::EBWeapon weapon, CStateManager& mgr) {
                                      CTransform4f::Translate(mgr.GetPlayer()->GetTranslation() +
                                                              CVector3f(0.f, 0.f, ballHalfExtent)),
                                      gpTweakPlayerGun->GetBombInfo());
+    if (x784_bombEffects[weapon].size() > 2) {
+      bomb->SetAttractEffect(x784_bombEffects[weapon][2]);
+    }
     mgr.AddObject(*bomb);
 
     if (x308_bombCount == 3) {
@@ -1489,6 +1562,13 @@ void CPlayerGun::UpdateChargeState(float dt, CStateManager& mgr) {
     chargeSpeed = 60.f / float(beam->full);
   }
 #endif
+#ifdef TARGET_PC
+  // Remastered (UpdateChargeRumbleTriggered 0xc9b41c): one rumble once the charge time passes warmUp.
+  if (sPortRemasteredGun && x834_24_charging && x830_chargeRumbleHandle == -1 &&
+      x340_chargeBeamFactor > fxStart) {
+    x830_chargeRumbleHandle = mgr.GetRumbleManager()->Rumble(mgr, kRFX_PlayerGunCharge, 1.f, kRP_Three);
+  }
+#endif
   switch (x32c_chargePhase) {
   case kCP_ChargeRequested:
 #ifdef TARGET_PC
@@ -1514,7 +1594,7 @@ void CPlayerGun::UpdateChargeState(float dt, CStateManager& mgr) {
           x2e0_chargeSfx = NWeaponTypes::play_sfx(sBeamChargeUpSound[x310_currentBeam],
                                                   x834_27_underwater, true, 0x4a);
         }
-        if (x830_chargeRumbleHandle == -1) {
+        if (x830_chargeRumbleHandle == -1 && !sPortRemasteredGun) {
           x830_chargeRumbleHandle =
               mgr.GetRumbleManager()->Rumble(mgr, kRFX_PlayerGunCharge, 1.f, kRP_Three);
         }
@@ -1664,6 +1744,13 @@ void CPlayerGun::ChangeWeapon(const CPlayerState& playerState, CStateManager& mg
   x678_morph.StartWipe(CGunMorph::kD_In);
 }
 
+void CPlayerGun::PortForcePhazonBeam(const bool on) {
+  x835_24_canFirePhazon = on;
+  if (on) {
+    x835_25_inPhazonBeam = true;
+  }
+}
+
 void CPlayerGun::StartPhazonBeamTransition(bool active, CStateManager& mgr,
                                            CPlayerState& playerState) {
   if (x833_28_phazonBeamActive == active) {
@@ -1808,7 +1895,7 @@ void CPlayerGun::InitBeamData() {
 
 void CPlayerGun::InitBombData() {
   for (int i = 0; i < 2; ++i)
-    x784_bombEffects.push_back(rstl::reserved_vector< TLockedToken< CGenDescription >, 2 >());
+    x784_bombEffects.push_back(rstl::reserved_vector< TLockedToken< CGenDescription >, 3 >());
 
   TToken< CGenDescription > obj1 =
       gpSimplePool->GetObj(SObjectTag('PART', gpTweakGunRes->x28_bombSet));
@@ -1821,9 +1908,75 @@ void CPlayerGun::InitBombData() {
   x784_bombEffects[0].push_back(obj2);
   x784_bombEffects[1].push_back(obj3);
   x784_bombEffects[1].push_back(obj3);
+
+  // Remastered's extra bomb effects have no disc id; the import writes them under a name-derived
+  // one. Only when present do bombs use Remastered's three generators.
+  const SObjectTag attractTag('PART', PortRemastered::SyntheticEffectId("bombattract"));
+  const SObjectTag secondaryTag('PART', PortRemastered::SyntheticEffectId("powerbombsecondary"));
+  if (gpResourceFactory->CanBuild(attractTag) && gpResourceFactory->CanBuild(secondaryTag)) {
+    x784_bombEffects[0].push_back(gpSimplePool->GetObj(attractTag));
+    x784_bombEffects[1].push_back(gpSimplePool->GetObj(secondaryTag));
+  }
 }
 
+#ifdef TARGET_PC
+void CPlayerGun::PortInitFlashes() {
+  static const uint kIds[kPortFlashCount] = {
+      PortRemastered::SyntheticEffectId("missilemuzzleflash"),
+      PortRemastered::SyntheticEffectId("supermissilemuzzleflash"),
+      PortRemastered::SyntheticEffectId("icecombomuzzleflash"),
+      PortRemastered::SyntheticEffectId("powerchargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("icechargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("wavechargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("plasmachargemuzzleflash"),
+      PortRemastered::SyntheticEffectId("phazonchargemuzzleflash"),
+  };
+  mPortFlashTokens = rstl::reserved_vector< TLockedToken< CGenDescription >, kPortFlashCount >();
+  for (int i = 0; i < kPortFlashCount; ++i) {
+    mPortFlashToken[i] = -1;
+    const SObjectTag tag('PART', kIds[i]);
+    if (gpResourceFactory->CanBuild(tag)) {
+      mPortFlashToken[i] = int(mPortFlashTokens.size());
+      mPortFlashTokens.push_back(gpSimplePool->GetObj(tag));
+    }
+  }
+}
+
+void CPlayerGun::PortStartFlash(int slot) {
+  if (slot < 0 || slot >= kPortFlashCount || mPortFlashToken[slot] < 0) {
+    return;
+  }
+  mPortFlashGens[slot] = rs_new CElementGen(mPortFlashTokens[mPortFlashToken[slot]]);
+}
+
+void CPlayerGun::PortUpdateFlashes(float dt, const CVector3f& scale) {
+  for (int i = 0; i < kPortFlashCount; ++i) {
+    CElementGen* gen = mPortFlashGens[i].get();
+    if (gen == nullptr) {
+      continue;
+    }
+    gen->SetGlobalOrientAndTrans(x418_beamLocalXf);
+    gen->SetGlobalScale(scale);
+    gen->Update(dt);
+    if (gen->IsSystemDeletable()) {
+      mPortFlashGens[i] = rstl::auto_ptr< CElementGen >();
+    }
+  }
+}
+
+void CPlayerGun::PortRenderFlashes() const {
+  for (int i = 0; i < kPortFlashCount; ++i) {
+    if (mPortFlashGens[i].get() != nullptr) {
+      mPortFlashGens[i]->Render();
+    }
+  }
+}
+#endif
+
 void CPlayerGun::InitMuzzleData() {
+#ifdef TARGET_PC
+  PortInitFlashes();
+#endif
   for (int i = 0; i < 5; ++i) {
     x7c0_auxMuzzleEffects.push_back(gpSimplePool->GetObj(SObjectTag(
         'PART', gpTweakGunRes->GetAuxMuzzleResId(static_cast< CPlayerState::EBeamId >(i)))));
@@ -2204,6 +2357,14 @@ void CPlayerGun::CMotionState::Update(bool firing, float dt, CTransform4f& xf, C
     float extendT = xc_curExtendDist * (1.0f / gGunExtendDistance);
     CTransform4f other =
         CTransform4f::RotateZ(CRelAngle::FromDegrees(extendT * -4.f * (extendT - 1.f) * 15.f));
+#ifdef TARGET_PC
+    // Remastered pitches the gun 10 degrees on the lock-on extend instead of
+    // yawing it 15: RotateX(+a) in its swizzled gun space ((x,y,z) -> (-x,z,y))
+    // is RotateX(-a) here (kb func/gunmotion-state-sway-extend).
+    if (sPortRemasteredGun) {
+      other = CTransform4f::RotateX(CRelAngle::FromDegrees(extendT * 4.f * (extendT - 1.f) * 10.f));
+    }
+#endif
     other.SetTranslation(CVector3f(0.f, xc_curExtendDist, 0.f));
     xf = xf * other;
   } else if (x24_fireState == kFS_StartFire || x24_fireState == kFS_Firing) {
@@ -2756,6 +2917,12 @@ void CPlayerGun::UpdateGunLight(const CTransform4f& xf, CStateManager& mgr) {
         CLight genLight = chargeFx->GetLight();
         genLight.SetColor(
             CColor::Lerp(0, genLight.GetColor().GetColor_u32(), x340_chargeBeamFactor));
+#ifdef TARGET_PC
+        // Remastered has no charge-beam light: its charge effects light nothing.
+        if (chargeFx->PortIsRemastered()) {
+          genLight.SetColor(CColor::Black());
+        }
+#endif
         light->SetLight(genLight);
       }
     }
@@ -2862,8 +3029,21 @@ void CPlayerGun::ProcessGunMorph(float dt, CStateManager& mgr) {
     break;
   case CGunMorph::kGS_InWipe:
   case CGunMorph::kGS_OutWipe:
-    x774_holoTransitionGen->SetGlobalScale(kScaleVector);
-    x774_holoTransitionGen->SetGlobalTranslation(CVector3f(0.f, x678_morph.GetYLerp(), 0.f));
+#ifdef TARGET_PC
+    // Remastered grows its holo to 3 while wiping in and starts it 0.4 lower
+    // (morph range -0.2..1.292392, retail 0.2..; kb func/gunmorph-constants).
+    if (x774_holoTransitionGen->PortIsRemastered()) {
+      x774_holoTransitionGen->SetGlobalScale(gunState == CGunMorph::kGS_InWipe
+                                                 ? CVector3f(3.f, 3.f, 3.f)
+                                                 : kScaleVector);
+      x774_holoTransitionGen->SetGlobalTranslation(CVector3f(
+          0.f, x678_morph.GetYLerp() - 0.4f * (1.f - x678_morph.GetTransitionFactor()), 0.f));
+    } else
+#endif
+    {
+      x774_holoTransitionGen->SetGlobalScale(kScaleVector);
+      x774_holoTransitionGen->SetGlobalTranslation(CVector3f(0.f, x678_morph.GetYLerp(), 0.f));
+    }
     x774_holoTransitionGen->Update(dt);
     break;
   default:
@@ -3024,11 +3204,25 @@ TUniqueId CPlayerGun::DropPowerBomb(CStateManager& mgr) const {
 
   TUniqueId uid = mgr.AllocateUniqueId();
   float zero = 0.f;
+  const bool remastered = x784_bombEffects[1].size() > 2;
+  if (remastered) {
+    // Remastered spawns PBSecondaryVFX at the bomb before the bomb itself.
+    const CTransform4f bombXf = CTransform4f::Translate(
+        mgr.GetPlayer()->GetTranslation() + CVector3f(zero, zero, ballHalfExtent));
+    CExplosion* secondary = rs_new CExplosion(
+        x784_bombEffects[1][2], mgr.AllocateUniqueId(), true,
+        CEntityInfo(kInvalidAreaId, CEntity::NullConnectionList), rstl::string_l("PBSecondaryVFX"), bombXf,
+        0, CVector3f(1.f, 1.f, 1.f), CColor::White());
+    mgr.AddObject(secondary);
+  }
   CPowerBomb* pBomb =
       rs_new CPowerBomb(x784_bombEffects[1][0], uid, kInvalidAreaId, x538_playerId,
                         CTransform4f::Translate(mgr.GetPlayer()->GetTranslation() +
                                                 CVector3f(zero, zero, ballHalfExtent)),
                         dInfo);
+  if (remastered) {
+    pBomb->SetRemasteredFilter();
+  }
   mgr.AddObject(*pBomb);
   return uid;
 }

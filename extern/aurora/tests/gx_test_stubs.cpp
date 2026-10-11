@@ -5,6 +5,8 @@
 #include "gx/gx.hpp"
 #include "gfx/bloom.hpp"
 #include "gfx/volfog.hpp"
+#include "gfx/thermal.hpp"
+#include "gfx/xray.hpp"
 #include "gfx/shadow.hpp"
 #include "gfx/clear.hpp"
 #include "gfx/resources.hpp"
@@ -205,6 +207,8 @@ template <>
 PipelineRef pipeline_ref<gx::PipelineConfig>(const gx::PipelineConfig& config) {
   return 0;
 }
+// Never live, so the shader-info memo is rebuilt on every draw.
+bool touch_pipeline(PipelineRef ref) { return false; }
 gx::DrawData g_testLastDraw{};
 uint32_t g_testDrawCount = 0;
 std::atomic<uint32_t> g_testProcessedDrawCount{0};
@@ -298,6 +302,20 @@ bool ensure_task() { return false; }
 bool record(const Params& params) { return false; }
 void shutdown() {}
 } // namespace aurora::gfx::volfog
+
+namespace aurora::gfx::thermal {
+bool set_lut(const uint8_t*, uint32_t) { return false; }
+bool has_lut() { return false; }
+bool ensure_task() { return false; }
+bool record(const Params& params) { return false; }
+void shutdown() {}
+} // namespace aurora::gfx::thermal
+
+namespace aurora::gfx::xray {
+bool ensure_task() { return false; }
+bool record(const Params& params) { return false; }
+void shutdown() {}
+} // namespace aurora::gfx::xray
 
 namespace aurora::gfx::shadow {
 bool ensure_task() { return false; }

@@ -83,6 +83,13 @@ jobs:
             exit 1
           fi
           echo "needs at most glibc $MAX_GLIBC, GLIBCXX $MAX_GLIBCXX"
+          # Only libraries with stable sonames (MP_BUNDLED_DEPS, issue #27).
+          extra="$(readelf -d "$bin" | grep -oP 'NEEDED.*\[\K[^]]+' |
+            grep -vxE 'lib(ssl|crypto)\.so\.3|lib(z|zstd)\.so\.1|libstdc\+\+\.so\.6|lib(m|c)\.so\.6|libgcc_s\.so\.1|ld-linux-x86-64\.so\.2' || true)"
+          if [ -n "$extra" ]; then
+            echo "unexpected shared libraries:" $extra >&2
+            exit 1
+          fi
       - name: Package
         run: |
           export APPIMAGE_EXTRACT_AND_RUN=1

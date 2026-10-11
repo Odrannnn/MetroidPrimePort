@@ -140,7 +140,8 @@ static u32 mcmdWait(SYNTH_VOICE* svoice, MSTEP* cstep) {
 }
 
 static u32 mcmdWaitMs(SYNTH_VOICE* svoice, MSTEP* cstep) {
-  *((u8*)cstep->para + 6) = 1;
+  // Retail writes byte 6 of the big-endian step (bits 8-15 of para[1]).
+  cstep->para[1] = (cstep->para[1] & ~0xFF00u) | 0x100u;
   return mcmdWait(svoice, cstep);
 }
 

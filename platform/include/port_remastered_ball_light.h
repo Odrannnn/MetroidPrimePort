@@ -22,20 +22,13 @@ struct Inputs {
   int glowIndex;         // CMorphBall::x8_ballGlowColorIdx: 0 Power .. 4 Phazon
   const float* srgb;     // the suit's light colour (CMorphBall::skBallLightModulationColors), 0..1
   float boost;           // the boost's charge (or 1 - its drain), 0..1
-  bool submerged;        // the player moves as in water: full water intensity
-  bool inNormalWater;    // otherwise the depth below decides, in normal water only
-  float depthUnderWater; // CPlayer::GetDistanceUnderWater
-  float ballRadius;
+  float water;           // CMorphBall's water factor (Remastered's CMorphBallMP1 + 0x22a8), 0..1
   float fade;            // the morph transition's fade, 0..1
   float dt;
 };
 
-// Advances the water factor (it rises at 2/s to its target, or at 4/s back to 0 out of the
-// water) and writes the light's linear colour as the PBR shader takes it (its Lambert has no
-// 1/pi, so the intensity is divided by pi here).
+// Writes the light's linear colour as the PBR shader takes it (its Lambert has no 1/pi, so
+// the intensity is divided by pi here).
 void Update(const Inputs& in, float outLinearColor[3]);
-
-// Zeroes the water factor, for a new morph ball (Remastered keeps it per ball).
-void Reset();
 
 } // namespace PortRemasteredBallLight

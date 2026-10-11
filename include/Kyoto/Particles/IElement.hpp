@@ -61,6 +61,11 @@ public:
 class CColorElement : public IElement {
 public:
   virtual bool GetValue(int frame, CColor& colorOut) const = 0;
+#ifdef TARGET_PC
+  // port-only: unclamped RGBA for the Remastered VFX paths (HDR colours). The default is the
+  // byte colour as floats.
+  virtual bool GetValueHdr(int frame, float out[4]) const;
+#endif
 };
 
 class CEmitterElement : public IElement {

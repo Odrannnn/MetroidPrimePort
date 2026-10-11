@@ -21,6 +21,38 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "port_debug.h"
+#include "port_synthetic_effect.h"
+#endif
+
+#ifdef TARGET_PC
+namespace {
+PortGuid PortBusterGuid(const char* uuid) {
+  // Textual UUID -> bytes_le, as the PVRT stores them (as CMorphBall.cpp's PortBallGuid).
+  u8 raw[16];
+  int n = 0;
+  for (const char* p = uuid; *p != '\0' && n < 16; ++p) {
+    if (*p == '-') {
+      continue;
+    }
+    auto nib = [](char c) { return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10; };
+    raw[n++] = static_cast< u8 >(nib(p[0]) << 4 | nib(p[1]));
+    ++p;
+  }
+  PortGuid g;
+  static const int order[16] = {3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15};
+  for (int i = 0; i < 16; ++i) {
+    g.bytes[i] = raw[order[i]];
+  }
+  return g;
+}
+
+// The distance variable of BusterSwoosh1 / BusterSwoosh2 (CWaveBusterMP1 ctor 0x1025080).
+const PortGuid& PortBusterGuid(int i) {
+  static const PortGuid g[2] = {PortBusterGuid("44874012-58ff-4f3e-b6d3-99b34c1c0ba4"),
+                                PortBusterGuid("bd478bca-850e-4813-8d44-44499a014c13")};
+  return g[i];
+}
+} // namespace
 #endif
 
 static const CVector3f kTargetNodePosition(0.f, -3.f, -1.5f);
@@ -73,7 +105,18 @@ CWaveBuster::CWaveBuster(const TToken< CWeaponDescription >& desc, EWeaponType t
 #endif
 {
 #ifdef TARGET_PC
+  {
+    const SObjectTag impactTag('PART', PortRemastered::SyntheticEffectId("busterimpact"));
+    if (gpResourceFactory->CanBuild(impactTag)) {
+      xPortImpactGen = rs_new CElementGen(gpSimplePool->GetObj(impactTag));
+      xPortImpactGen->SetParticleEmission(false);
+    }
+  }
+#endif
+#ifdef TARGET_PC
   PortSetOwnPresentation();
+  xPortBusterVar[0] = x384_busterSwoosh1Gen->PortGetRealHandle(PortBusterGuid(0));
+  xPortBusterVar[1] = x388_busterSwoosh2Gen->PortGetRealHandle(PortBusterGuid(1));
 #endif
   const rstl::vector< CParticleSwoosh::SSwooshData >& swooshes =
       x384_busterSwoosh1Gen->GetSwooshes();
@@ -251,8 +294,30 @@ void CWaveBuster::Think(float dt, CStateManager& mgr) {
         x3d0_28_collidedWithWorld = true;
       }
       x3d0_27_collided = true;
+#ifdef TARGET_PC
+      if (!xPortImpactGen.null()) {
+        // T = n x d (n x forearm column when parallel), columns (T, n, n x T), at the hit point.
+        const CVector3f n = result.GetPlane().GetNormal();
+        CVector3f t = CVector3f::Cross(n, forward);
+        if (t.MagSquared() == 0.f) {
+          t = CVector3f::Cross(n, GetTransform().GetForward());
+        }
+        if (t.MagSquared() != 0.f) {
+          t.Normalize();
+        }
+        const CVector3f bRaw = CVector3f::Cross(n, t);
+        const CVector3f b = bRaw.MagSquared() != 0.f ? bRaw.AsNormalized() : bRaw;
+        xPortImpactGen->SetGlobalOrientAndTrans(
+            CTransform4f::FromColumns(t, n, b, result.GetPoint()));
+      }
+#endif
     }
   }
+#ifdef TARGET_PC
+  if (!xPortImpactGen.null()) {
+    xPortImpactGen->SetParticleEmission(x3d0_27_collided);
+  }
+#endif
   if (GetHomingTargetId() != kInvalidUniqueId && x3d0_26_trackingTarget) {
     UpdateTargetDamage(dt, mgr);
   } else {
@@ -303,6 +368,11 @@ void CWaveBuster::Think(float dt, CStateManager& mgr) {
     x3c8_innerSwooshColorT = 0.f;
   }
   x38c_busterSparksGen->Update(dt);
+#ifdef TARGET_PC
+  if (!xPortImpactGen.null()) {
+    xPortImpactGen->Update(dt);
+  }
+#endif
 }
 
 void CWaveBuster::UpdateFx(const CTransform4f& xf, float dt, CStateManager& mgr) {
@@ -323,6 +393,11 @@ void CWaveBuster::AddToRenderer(const CFrustumPlanes& planes, const CStateManage
 void CWaveBuster::Render(const CStateManager& mgr) const {
   RenderSwooshes();
   RenderElectricSpiral();
+#ifdef TARGET_PC
+  if (!xPortImpactGen.null()) {
+    xPortImpactGen->Render();
+  }
+#endif
   CWeapon::Render(mgr);
 }
 
@@ -331,6 +406,11 @@ void CWaveBuster::ResetBeam(bool deactivate) {
     SetActive(false);
     x3d0_24_firing = false;
     x38c_busterSparksGen->SetParticleEmission(false);
+#ifdef TARGET_PC
+    if (!xPortImpactGen.null()) {
+      xPortImpactGen->SetParticleEmission(false);
+    }
+#endif
     x398_spiralOffset = 2.f * M_PIF;
   } else {
     x38c_busterSparksGen->SetParticleEmission(false);
@@ -455,6 +535,15 @@ void CWaveBuster::RenderSwooshes() const {
   xPortSwooshGeneration = gen;
 #else
   const bool advance = true;
+#endif
+#ifdef TARGET_PC
+  {
+    // Remastered binds both swooshes to the distance between the actor and the beam's origin
+    // every update (UpdateSwooshesAndSparks 0x1026dac: |GetTransform().translation - xf@0x3fc.translation|).
+    const float distance = (GetTranslation() - origin).Magnitude();
+    x384_busterSwoosh1Gen->PortBindReal(xPortBusterVar[0], distance);
+    x388_busterSwoosh2Gen->PortBindReal(xPortBusterVar[1], distance);
+  }
 #endif
   float t = 0.f;
   float previousRot1 = swooshes1[swooshes1.size() - 1].mInitialRot;

@@ -29,9 +29,14 @@
 #else
 #include <cxxabi.h>
 #include <dlfcn.h>
+#include <unistd.h>
+#if defined(__APPLE__)
+#include <pthread.h>
+#include <sys/ucontext.h> // <ucontext.h> refuses to compile there without _XOPEN_SOURCE
+#else
 #include <sys/syscall.h>
 #include <ucontext.h>
-#include <unistd.h>
+#endif
 #include <unwind.h>
 #endif
 
@@ -370,7 +375,11 @@ void Describe(Line& line, uintptr_t pc) {
 
 uintptr_t FaultAddress(void* context) {
   const auto* user = static_cast< const ucontext_t* >(context);
-#if defined(__x86_64__)
+#if defined(__APPLE__) && defined(__aarch64__)
+  return static_cast< uintptr_t >(user->uc_mcontext->__ss.__pc);
+#elif defined(__APPLE__) && defined(__x86_64__)
+  return static_cast< uintptr_t >(user->uc_mcontext->__ss.__rip);
+#elif defined(__x86_64__)
   return static_cast< uintptr_t >(user->uc_mcontext.gregs[REG_RIP]);
 #elif defined(__aarch64__)
   return static_cast< uintptr_t >(user->uc_mcontext.pc);
@@ -511,7 +520,12 @@ bool RequestStack(long threadId) {
   if (threadId == 0 || sigaction(kStackSignal, nullptr, &current) != 0 || current.sa_sigaction != OnStackSignal) {
     return false;
   }
+#if defined(__APPLE__)
+  // macOS has no tgkill; the id the watchdog stores there is the thread's pthread_t.
+  return pthread_kill(reinterpret_cast< pthread_t >(threadId), kStackSignal) == 0;
+#else
   return syscall(SYS_tgkill, getpid(), static_cast< pid_t >(threadId), kStackSignal) == 0;
+#endif
 #endif
 }
 

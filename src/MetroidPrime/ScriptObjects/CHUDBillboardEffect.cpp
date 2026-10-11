@@ -83,6 +83,11 @@ void CHUDBillboardEffect::PreRender(CStateManager& mgr, const CFrustumPlanes& fr
     CTransform4f camXf = mgr.GetCameraManager()->GetCurrentCameraTransform(mgr);
     xe8_generator->SetGlobalTranslation(camXf * xec_translation);
     xe8_generator->SetGlobalOrientation(camXf);
+#ifdef TARGET_PC
+    // camXf is the presented camera: blending it again would trail a frame behind.
+    if (x104_26_isElementGen)
+      static_cast< CElementGen& >(*xe8_generator).PortGlobalIsPresented();
+#endif
     x104_25_enableRender = true;
   } else {
     x104_25_enableRender = false;

@@ -5,11 +5,18 @@
 
 #include "port_debug.h"
 
+#include <atomic>
+#ifdef __ANDROID__
+#include <jni.h>
+#endif
+
 // Tracks whether an Aurora frame is currently open. GXInit (CGraphics::Startup)
 // submits register writes the Aurora worker processes, so a frame must be open
 // before it runs; the first EndScene closes it.
 namespace {
 bool s_auroraFrameOpen = false;
+// Set once the first frame is presented: Android's startup cover waits for it.
+std::atomic< bool > s_framePresented{false};
 bool AuroraFrameBegin() {
   if (!s_auroraFrameOpen && aurora_begin_frame()) {
     // Only mark open when Aurora actually begins a frame; otherwise a later
@@ -22,9 +29,19 @@ void AuroraFrameEnd() {
   if (s_auroraFrameOpen) {
     aurora_end_frame();
     s_auroraFrameOpen = false;
+    s_framePresented.store(true, std::memory_order_relaxed);
   }
 }
 } // namespace
+
+#ifdef __ANDROID__
+// Polled by MetroidPrimeActivity's startup cover, which hides the black
+// surface during init (the mod scan alone takes ~1 s on a phone).
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_metroidprime_port_MetroidPrimeActivity_nativeFramePresented(JNIEnv*, jclass) {
+  return s_framePresented.load(std::memory_order_relaxed) ? JNI_TRUE : JNI_FALSE;
+}
+#endif
 
 #include "Kyoto/Alloc/CMemory.hpp"
 #include "Kyoto/Basics/COsContext.hpp"
@@ -1432,18 +1449,46 @@ void CGraphics::TickRenderTimings(uint ticks) {
 
 // Remastered's CScene::SimulateScene adds floor(dt * 600 + 0.5) ticks (1/600 s) and wraps the
 // total at floor(15120 * 600 + 0.5) = 9,072,000 ticks.
+namespace {
+uint sLastSimTickAdd = 0;
+double sSimTimePresentLag = 0.0;
+double sRenderTimePresentLag = 0.0;
+} // namespace
+
 void CGraphics::TickSimTime(float dt) {
   const uint add = static_cast< uint >(static_cast< double >(dt) * 600.0 + 0.5);
   mSimTicks = (mSimTicks + add) % 9072000u;
+  sLastSimTickAdd = add;
 }
 
 float CGraphics::GetSimTime() {
-  return static_cast< float >(static_cast< double >(mSimTicks) / 600.0);
+  double t = static_cast< double >(mSimTicks) / 600.0 - sSimTimePresentLag;
+  if (t < 0.0)
+    t += 15120.0;
+  return static_cast< float >(t);
+}
+
+void CGraphics::SetSimTimePresentLag(float seconds) { sSimTimePresentLag = seconds; }
+
+float CGraphics::GetSimTimePresentLag() { return static_cast< float >(sSimTimePresentLag); }
+
+void CGraphics::SetRenderTimePresentLag(float seconds) { sRenderTimePresentLag = seconds; }
+
+float CGraphics::GetLastSimTimeStep() {
+  return static_cast< float >(static_cast< double >(sLastSimTickAdd) / 600.0);
 }
 
 float CGraphics::GetSecondsMod900() {
   if (mpExternalTimeProvider != nullptr) {
     return mpExternalTimeProvider->GetSecondsMod900();
+  }
+  // Port: during a smooth-frames draw the GUI/HUD clock is read where the
+  // presented frame sits, (1 - t) ticks behind the last tick.
+  if (sRenderTimePresentLag > 0.0) {
+    double s = static_cast< double >(mSecondsMod900) - sRenderTimePresentLag;
+    if (s < 0.0)
+      s += 900.0;
+    return static_cast< float >(s);
   }
   return mSecondsMod900;
 }

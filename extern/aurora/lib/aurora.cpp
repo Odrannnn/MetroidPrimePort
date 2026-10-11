@@ -5,6 +5,7 @@
 #ifdef AURORA_ENABLE_GX
 #include "gfx/resources.hpp"
 #include "gfx/frame.hpp"
+#include "gfx/pipeline_cache.hpp"
 #include "gfx/recording.hpp"
 #include "gfx/render_worker.hpp"
 #include "gx/command_processor.hpp"
@@ -12,6 +13,7 @@
 #include "gx/gx.hpp"
 #include "gx/texture.hpp"
 #include "imgui.hpp"
+#include "io.hpp"
 #include "webgpu/gpu.hpp"
 #include "webgpu/gpu_prof.hpp"
 #include <webgpu/webgpu_cpp.h>
@@ -611,6 +613,8 @@ bool aurora_is_suspended() {
          aurora::window::is_surface_changing();
 }
 void aurora_end_frame() { aurora::end_frame(); }
+void aurora_set_background_pipelines_paused(bool paused) { aurora::gfx::set_background_pipelines_paused(paused); }
+void aurora_disable_config_persistence() { aurora::io::disable_config_persistence(); }
 AuroraBackend aurora_get_backend() { return aurora::g_config.desiredBackend; }
 const char* aurora_get_gpu_driver() {
   static std::string driver;

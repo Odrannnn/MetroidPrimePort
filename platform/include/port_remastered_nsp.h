@@ -124,4 +124,10 @@ bool ExtractBrdfLut(const Nsp& nsp, std::vector<uint8_t>& out, std::string& erro
 // False unless `data` is the table of the supported version (SHA-256 check).
 bool IsKnownBrdfLut(const uint8_t* data, size_t size);
 
+// The thermal visor's 64x64 R8 noise texture (GetNoiseTexture(4)), 4096 bytes of the executable's
+// image at kThermalNoiseMemOffset (kb topic/thermal-post.md).
+constexpr uint32_t kThermalNoiseMemOffset = 0x2068900;
+constexpr size_t kThermalNoiseSize = 64 * 64;
+bool ExtractThermalNoise(const Nsp& nsp, std::vector<uint8_t>& out, std::string& error);
+
 } // namespace PortRemastered

@@ -34,6 +34,11 @@ public:
   virtual void UpdateHudAlpha() = 0;
   virtual float GetMessageTextAlpha() const { return 1.f; }
   virtual ~IHudDecoInterface() {}
+#ifdef TARGET_PC
+  // Smooth frames: re-pose the camera and reticle from the HUD lag set
+  // above, without the timers and fades Update runs.
+  virtual void PortApplyHudLag() {}
+#endif
 };
 
 class CHudDecoInterfaceCombat : public IHudDecoInterface {
@@ -45,6 +50,9 @@ public:
   void SetDamageTransform(const CMatrix3f& rotation, const CVector3f& position) override;
   void SetFrameColorValue(float value) override;
   void Update(float dt, const CStateManager& mgr) override;
+#ifdef TARGET_PC
+  void PortApplyHudLag() override;
+#endif
   void UpdateCameraDebugSettings(float fov, float y, float z) override;
   void UpdateHudAlpha() override;
   ~CHudDecoInterfaceCombat() override;
@@ -78,6 +86,9 @@ public:
   void SetDamageTransform(const CMatrix3f& rotation, const CVector3f& position) override;
   void SetFrameColorValue(float value) override;
   void Update(float dt, const CStateManager& mgr) override;
+#ifdef TARGET_PC
+  void PortApplyHudLag() override;
+#endif
   void Draw() const override;
   void ProcessInput(const CFinalInput& input) override;
   void UpdateCameraDebugSettings(float fov, float y, float z) override;
@@ -140,6 +151,9 @@ public:
   void SetDamageTransform(const CMatrix3f& rotation, const CVector3f& position) override;
   void SetFrameColorValue(float value) override;
   void Update(float dt, const CStateManager& mgr) override;
+#ifdef TARGET_PC
+  void PortApplyHudLag() override;
+#endif
   void UpdateCameraDebugSettings(float fov, float y, float z) override;
   void UpdateHudAlpha() override;
   ~CHudDecoInterfaceXRay() override;
@@ -174,6 +188,9 @@ public:
   void SetReticuleTransform(const CMatrix3f& transform) override;
   void SetDamageTransform(const CMatrix3f& rotation, const CVector3f& position) override;
   void Update(float dt, const CStateManager& mgr) override;
+#ifdef TARGET_PC
+  void PortApplyHudLag() override;
+#endif
   void UpdateCameraDebugSettings(float fov, float y, float z) override;
   void UpdateHudAlpha() override;
   ~CHudDecoInterfaceThermal() override;

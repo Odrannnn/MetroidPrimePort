@@ -26,6 +26,11 @@
 
 namespace PortDiscord {
 namespace {
+#if !defined(_WIN32) && defined(MSG_NOSIGNAL)
+constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+constexpr int kSendFlags = 0; // macOS: SO_NOSIGPIPE on the socket instead
+#endif
 
 const auto kRetryDelay = std::chrono::seconds(5);
 // Discord allows about five activity updates per 20 seconds.
@@ -108,6 +113,12 @@ struct Pipe {
       fd = socket(AF_UNIX, SOCK_STREAM, 0);
       if (fd < 0)
         break;
+#ifdef SO_NOSIGPIPE
+      {
+        const int on = 1;
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+      }
+#endif
       if (connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0) {
         const int flags = fcntl(fd, F_GETFL, 0);
         if (flags >= 0)
@@ -123,7 +134,7 @@ struct Pipe {
   bool Write(const std::string& data) {
     size_t sent = 0;
     while (sent < data.size()) {
-      const ssize_t n = send(fd, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
+      const ssize_t n = send(fd, data.data() + sent, data.size() - sent, kSendFlags);
       if (n > 0) {
         sent += static_cast<size_t>(n);
         continue;

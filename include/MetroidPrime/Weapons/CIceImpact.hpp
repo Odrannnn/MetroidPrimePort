@@ -96,6 +96,12 @@ private:
   rstl::reserved_vector< SImpactSphere, 3 > x540_impactSpheres;
   bool x598_24_followPlayerArea : 1;
   bool x598_25_hasRenderBounds : 1;
+#ifdef TARGET_PC
+  // Remastered's impact has three gens (floor, wall, ceiling), picked per
+  // particle by the surface normal; xe8_elementGen is the floor one.
+  rstl::single_ptr< CElementGen > xPortWallGen;
+  rstl::single_ptr< CElementGen > xPortCeilingGen;
+#endif
 };
 CHECK_SIZEOF(CIceImpact, (VERSION >= VERSION_GM8P_00 ? 0x5b0 : 0x5a0))
 

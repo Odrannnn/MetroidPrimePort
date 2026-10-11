@@ -11,6 +11,7 @@
 #include "MetaRender/CCubeRenderer.hpp"
 
 CColor CPowerBomb::kFadeColor(0xffffff7f);
+static const CColor kRemasteredFadeColor(0.21404114f, 0.19466488f, 0.16375835f, 1.f);
 const float CPowerBomb::kEndingTime = 4.25f;
 
 CPowerBomb::CPowerBomb(TToken< CGenDescription > particle, TUniqueId uid, TAreaId aid,
@@ -27,7 +28,8 @@ CPowerBomb::CPowerBomb(TToken< CGenDescription > particle, TUniqueId uid, TAreaI
 , x160_curRadius(0.f)
 , x164_radiusIncrement(dInfo.GetRadius() / 2.5f)
 , x168_particle(rs_new CElementGen(particle))
-, x16c_radius(dInfo.GetRadius()) {
+, x16c_radius(dInfo.GetRadius())
+, x170_remasteredFilter(false) {
   x168_particle->SetGlobalTranslation(xf.GetTranslation());
 }
 
@@ -60,7 +62,7 @@ void CPowerBomb::Think(float dt, CStateManager& mgr) {
     if (x15c_curTime > 1.f && x158_25_filterEnabled != true) {
       mgr.CameraFilterPass(CStateManager::kCFS_Six)
           .SetFilter(CCameraFilterPass::kFT_Add, CCameraFilterPass::kFS_Fullscreen, 1.5f,
-                     kFadeColor, kInvalidAssetId);
+                     x170_remasteredFilter ? kRemasteredFadeColor : kFadeColor, kInvalidAssetId);
       x158_25_filterEnabled = true;
     }
 

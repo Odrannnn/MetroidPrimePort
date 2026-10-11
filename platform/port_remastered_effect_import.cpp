@@ -3,6 +3,7 @@
 
 #include "port_remastered_effect_convert.h"
 #include "port_remastered_image.h"
+#include "port_synthetic_effect.h"
 
 #include <algorithm>
 #include <atomic>
@@ -703,7 +704,10 @@ constexpr MatchedEffect kMatchedEffects[] = {
 // elsewhere: the stub replaces them rather than the disc's being kept. Retail's
 // Artifact Temple laser hit spawns the same five PARTs as Ridley's 2D16014C
 // (which carries them now, as c3a53327), so retail draws them twice.
-const std::set<uint32_t> kStubReplaces = {0x53861B29};
+// Remastered shows no particle flash on a plasma shot: PlasmaMuzzle and
+// PlasmaAuxMuzzle are stubs and no other code draws one (kb
+// topic/nil-texture-placeholder).
+const std::set<uint32_t> kStubReplaces = {0x53861B29, 0x8D7BBFB2, 0xB0F9DBE6};
 
 // A retail PART an effect replaces, and the rule that paired them.
 struct Pairing {
@@ -713,7 +717,7 @@ struct Pairing {
 
 // The retail PARTs an effect replaces: the id it carried over, else its
 // matches' (one effect can stand for several PARTs).
-std::vector<Pairing> RetailEffects(const EffectGuid& id) {
+std::vector<Pairing> RetailEffects(const EffectGuid& id, const std::vector<EffectPairing>& found) {
   if (const std::optional<uint32_t> retail = EffectRetailId(Swap(id))) {
     return {{*retail, "carried-over"}};
   }
@@ -725,6 +729,15 @@ std::vector<Pairing> RetailEffects(const EffectGuid& id) {
       method = matched.id + 1;
     } else if (text == matched.id) {
       out.push_back({matched.retail, method});
+    }
+  }
+  for (const EffectPairing& pairing : found) {
+    if (pairing.id != id) {
+      continue;
+    }
+    const bool known = std::any_of(out.begin(), out.end(), [&](const Pairing& have) { return have.retail == pairing.retail; });
+    if (!known) {
+      out.push_back({pairing.retail, pairing.method});
     }
   }
   return out;
@@ -1014,19 +1027,23 @@ public:
     row.genp = EffectGuidString(Swap(id));
     row.retail = retail;
     row.method = pairing.method;
-    if (!m_io.retailId(retail)) {
+    // A synthetic id (port_synthetic_effect.h) stands for no disc PART; it must not be one.
+    const bool synthetic = IsSyntheticEffectId(retail);
+    if (synthetic ? m_io.retailId(retail) : !m_io.retailId(retail)) {
       Report(row, "no-disc-part");
       return;
     }
     ++m_result.candidates;
-    // A standalone swoosh (SWSH) replaces a retail SWHC, a GENP a PART.
-    const bool swoosh = m_io.typeOf && m_io.typeOf(id) == kSwsh;
-    const uint32_t rootType = swoosh ? EffectFourCC("SWHC") : kPart;
+    // A standalone swoosh (SWSH) replaces a retail SWHC, an ELSM/ELC2 an ELSC, a GENP a PART.
+    const uint32_t stored = m_io.typeOf ? m_io.typeOf(id) : 0;
+    const bool swoosh = stored == kSwsh;
+    const bool electric = stored == EffectFourCC("ELSM") || stored == EffectFourCC("ELC2");
+    const uint32_t rootType = swoosh ? EffectFourCC("SWHC") : electric ? EffectFourCC("ELSC") : kPart;
     const std::string name = Hex(retail) + "." + EffectFourCCString(rootType);
     std::vector<uint8_t> data;
     std::string error;
     EffectNode effect;
-    if (!m_io.read(swoosh ? kSwsh : kGenp, id, data, error) || !ParseEffect(data.data(), data.size(), effect, error)) {
+    if (!m_io.read(swoosh || electric ? stored : kGenp, id, data, error) || !ParseEffect(data.data(), data.size(), effect, error)) {
       ++m_result.failed;
       Log(name + ": " + error);
       Report(row, "failed", "parse: " + error);
@@ -1094,7 +1111,7 @@ public:
       }
     }
     // An effect drawn only by placeholder materials would replace the disc's with
-    // an invisible one (PlasmaMuzzle, PlasmaAuxMuzzle): keep the disc's.
+    // an invisible one: keep the disc's unless Remastered draws nothing there too.
     if (kStubReplaces.count(retail) == 0 && std::any_of(parts.begin(), parts.end(), [](const ConvertedPart& part) { return part.placeholder; }) &&
         std::all_of(parts.begin(), parts.end(), [](const ConvertedPart& part) { return part.drawsNothing; })) {
       ++m_result.failed;
@@ -1141,7 +1158,7 @@ public:
 
   EffectImportResult Run() {
     for (const EffectGuid& id : m_io.effects) {
-      const std::vector<Pairing> pairings = RetailEffects(id);
+      const std::vector<Pairing> pairings = RetailEffects(id, m_io.pairings);
       if (pairings.empty() && m_io.report) {
         EffectReportRow row;
         row.genp = EffectGuidString(Swap(id));

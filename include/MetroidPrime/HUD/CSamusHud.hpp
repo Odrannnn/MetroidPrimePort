@@ -58,6 +58,11 @@ public:
   void Draw(const CStateManager& mgr, float alpha, uint helmetVis, bool hudVis,
             bool targetingManager) const;
   void DrawHelmet(const CStateManager& mgr, float camYOff);
+#ifdef TARGET_PC
+  // Smooth frames: true poses the HUD lag/bob at the presented time, false
+  // puts the last tick's back.
+  void PortPresentHudLag(bool present) const;
+#endif
   void ProcessControllerInput(const CFinalInput& input);
   void UpdateStateTransition(float dt, const CStateManager& mgr);
   bool CheckLoadComplete(const CStateManager& mgr);
@@ -218,6 +223,29 @@ private:
   float x62c_camYTweaks[64];
   float x72c_camZTweaks[32];
   mutable rstl::reserved_vector< SProfileInfo, 15 > x7ac_profileInfo;
+#ifdef TARGET_PC
+  // Smooth frames: the HUD lag/bob of the last two ticks, blended while the GUI draws.
+  struct SPortHudLag {
+    CQuaternion rotation;
+    CQuaternion inverse;
+    CVector3f offset;
+    float yaw;
+    bool lag;
+    bool valid;
+    SPortHudLag()
+    : rotation(CQuaternion::NoRotation())
+    , inverse(CQuaternion::NoRotation())
+    , offset(CVector3f::Zero())
+    , yaw(0.f)
+    , lag(false)
+    , valid(false) {}
+  };
+  SPortHudLag xPortLag[2];
+  uint xPortLagGeneration = 0;     // tick of xPortLag[1]
+  uint xPortLagPrevGeneration = 0; // tick of xPortLag[0]
+  bool xPortLagPresented = false;
+  void PortApplyHudLag(const SPortHudLag& state);
+#endif
 
   rstl::reserved_vector< bool, 4 > BuildPlayerHasVisors(const CStateManager& mgr) const;
   rstl::reserved_vector< bool, 4 > BuildPlayerHasBeams(const CStateManager& mgr) const;

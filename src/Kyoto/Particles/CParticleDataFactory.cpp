@@ -13,6 +13,7 @@
 #include "Kyoto/Particles/CIntElement.hpp"
 #include "Kyoto/Particles/CModVectorElement.hpp"
 #include "Kyoto/Particles/CParticleGen.hpp"
+#include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "Kyoto/Particles/CRealElement.hpp"
 #include "Kyoto/Particles/CSpawnSystemKeyframeData.hpp"
 #include "Kyoto/Particles/CSwooshDescription.hpp"
@@ -132,6 +133,11 @@ void CParticleDataFactory::LoadGPSMTokens(CGenDescription* desc) {
   if (desc->xc0_SSWH) {
     desc->xc0_SSWH->ForceCache();
   }
+#ifdef TARGET_PC
+  for (auto& extra : desc->xPortExtraSwooshes) {
+    extra.swoosh.ForceCache();
+  }
+#endif
 }
 
 #ifdef TARGET_PC
@@ -523,10 +529,37 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
                             ? static_cast< u8 >(mode)
                             : static_cast< u8 >(kPortXfmdRetail);
     } break;
+    // Port-only Remastered particle variables (PVRT); a malformed table leaves none.
+    case SBIG('PVRT'):
+      GetClassID(in);
+      desc->xPortVars.reset(PortReadVarTable(in));
+      break;
     // Port-only marker of a converted Remastered PART (xPortIrnd).
     case SBIG('PIRN'):
       GetClassID(in);
       desc->xPortIrnd = in.ReadLong() != 0;
+      break;
+    // Port-only: the swooshes a converted effect starts beyond SSWH's one (xPortExtraSwooshes).
+    case SBIG('PSWX'): {
+      GetClassID(in);
+      const u32 count = in.ReadLong();
+      if (count > kPortVfxMaxElems) {
+        return false;
+      }
+      for (u32 i = 0; i < count; ++i) {
+        const CAssetId id = in.Get< CAssetId >();
+        const int frame = int(in.ReadLong());
+        if (id != 0) {
+          desc->xPortExtraSwooshes.push_back(
+              {TCachedToken< CSwooshDescription >(TToken< CSwooshDescription >(pool->GetObj(SObjectTag(SBIG('SWHC'), id)))), frame});
+        }
+      }
+      break;
+    }
+    // Port-only: Remastered's sprite polygon (SSHP 3-6; xPortSpriteShape).
+    case SBIG('PSHP'):
+      GetClassID(in);
+      desc->xPortSpriteShape = u8(in.ReadLong());
       break;
     // Port-only: converted Remastered model particles that face the camera (xPortFaceCamera).
     case SBIG('PFCM'):
@@ -735,6 +768,11 @@ float CParticleDataFactory::GetReal(CInputStream& in) { return in.ReadFloat(); }
 CIntElement* CParticleDataFactory::GetIntElement(CInputStream& in) {
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  // Port-only VARI: a Remastered particle variable of the system being evaluated (PVRT index).
+  case SBIG('VARI'):
+    return rs_new CIEPortVar(in.ReadLong());
+#endif
   case SBIG('CNST'): {
     return rs_new CIEConstant(GetInt(in));
   }
@@ -799,6 +837,15 @@ CIntElement* CParticleDataFactory::GetIntElement(CInputStream& in) {
     CIntElement* c = GetIntElement(in);
     return rs_new CIEClamp(a, b, c);
   }
+#ifdef TARGET_PC
+  case SBIG('FIAT'): {
+    CIntElement* start = GetIntElement(in);
+    CIntElement* count = GetIntElement(in);
+    CIntElement* divisor = GetIntElement(in);
+    const bool loop = GetBool(in);
+    return rs_new CIEFrameIndexFromAnimationTime(start, count, divisor, loop);
+  }
+#endif
   case SBIG('PULS'): {
     CIntElement* a = GetIntElement(in);
     CIntElement* b = GetIntElement(in);
@@ -835,6 +882,11 @@ CIntElement* CParticleDataFactory::GetIntElement(CInputStream& in) {
 CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  // Port-only VARF: a Remastered particle variable of the system being evaluated (PVRT index).
+  case SBIG('VARF'):
+    return rs_new CREPortVar(in.ReadLong());
+#endif
   case SBIG('CNST'): {
     return rs_new CREConstant(GetReal(in));
   }
@@ -1029,6 +1081,11 @@ CVectorElement* CParticleDataFactory::GetVectorElement(CInputStream& in) {
   CVectorElement* ret;
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  case SBIG('VARV'):
+    ret = rs_new CVEPortVar(in.ReadLong());
+    break;
+#endif
   case SBIG('NONE'):
     ret = nullptr;
     break;
@@ -1354,6 +1411,23 @@ CColorElement* CParticleDataFactory::GetColorElement(CInputStream& in) {
   CColorElement* ret;
   FourCC clsId = GetClassID(in);
   switch (clsId) {
+#ifdef TARGET_PC
+  case SBIG('VARC'):
+    ret = rs_new CCEPortVar(in.ReadLong());
+    break;
+  case SBIG('MULT'): {
+    CColorElement* a = GetColorElement(in);
+    CColorElement* b = GetColorElement(in);
+    ret = rs_new CCEPortMultiply(a, b);
+    break;
+  }
+  case SBIG('MDAO'): {
+    CColorElement* c = GetColorElement(in);
+    CRealElement* a = GetRealElement(in);
+    ret = rs_new CCEPortModifyAlpha(c, a);
+    break;
+  }
+#endif
   case SBIG('CNST'): {
     CElementAllocationChunk* allocationContext = IElement::CElementAllocator::GetCurrentChunk();
     uint initialSize = IElement::CElementAllocator::GetCurrentAllocatedSize();

@@ -1,6 +1,7 @@
 #ifndef METROID_PRIME_PORT_PORT_DEBUG_H
 #define METROID_PRIME_PORT_PORT_DEBUG_H
 
+#include "port_input_settings.h"
 #include "port_rando_gen.h"
 
 #include <cstdint>
@@ -136,6 +137,9 @@ float TickFrames();
 
 // Presentation
 bool FrameLimitEnabled();
+// Frames a second the main loop is paced to: 60 under the 60 FPS cap, else the
+// FPS cap setting (fps_cap=, MP_FPS_CAP); 0 = unlimited.
+int FrameRateCap();
 void SetFrameLimitEnabled(bool enabled);
 void RecordFrame(uint64_t durationNs, unsigned ticks, bool presented);
 bool VsyncEnabled();
@@ -180,6 +184,13 @@ void SetHudWide(bool enabled);
 // below 16:9 the cinematic camera already renders the full shot, so it fills the
 // screen instead.
 bool CinemaBars();
+// The scan visor's magnifier draws the world a second time through a camera zoomed by the
+// window's magnification (CMFGame::Draw), instead of stretching a copy of the screen. Off by
+// default and under Original experience.
+bool SharpScanWindow();
+// The glyph set the on-screen prompts are forced to ("xbox", "playstation", "switch", "gamecube",
+// "keyboard"), or nullptr to follow the input in use. Thread-safe.
+const char* PromptGlyphs();
 // HUD scale in percent (50-100). Compact HUD elements shrink toward the nearest
 // screen edge or corner; screen-spanning decoration keeps its size. Only the
 // combat/scan/ball HUD frames and the minimap, not the helmet or menus.
@@ -187,6 +198,26 @@ const int kHudScaleMin = 50;
 const int kHudScaleMax = 100;
 int HudScale();
 void SetHudScale(int percent);
+// The centre crosshair (free aim, mouse aim, twin stick): opacity in percent,
+// and an optional colour that replaces the game's (false = the game's own).
+const int kCrosshairOpacityMin = 0;
+const int kCrosshairOpacityMax = 100;
+int CrosshairOpacity();
+bool CrosshairColor(float rgb[3]);
+// Auto-aim: without Lock-On the gun picks the target nearest the screen centre
+// (CPlayer::UpdateAimTarget). Off = aim only at a locked target. On under Original experience.
+bool AutoAim();
+// Scan visor speed in percent (scan_speed=, MP_SCAN_SPEED); ScanSpeed() is the factor on the
+// scan timer in CPlayer::UpdateScanningState. 1 under Original experience.
+const int kScanSpeedMin = 100;
+const int kScanSpeedMax = 500;
+float ScanSpeed();
+// The next-target reticles (combat seeker, X-ray ring, thermal crosshair). Off hides them;
+// lock-on and scan reticles stay. On under Original experience.
+bool SecondaryCrosshairs();
+// Menus and the map read a remapped pad's standard buttons (F1 Controls > Remap).
+bool MenuStandardButtons();
+void SetMenuStandardButtons(bool enabled);
 // Hide the helmet frame (the visor rim and its glow and lights).
 bool HideHelmet();
 void SetHideHelmet(bool enabled);
@@ -293,12 +324,8 @@ void SetTwinStick(bool enabled);
 // 0 when twin-stick is off (the game input still carries it then).
 float TwinStickRightY();
 void SetTwinStickRightY(float y);
-// The bound beam shift is held in game this poll (no overlay, window focused),
-// which springs the Spring Ball in morph ball, as X does in Remastered.
-bool BeamShiftHeld();
-// The touch twin layout's Beam button is held: the D-pad picks beams (false off Android / without touch).
+// The touch overlay's Beam button is held: the input engine's touch:beam_shift.
 bool TouchBeamShift();
-void SetBeamShiftHeld(bool held);
 // The touch overlay's Turbo button is held (false off Android / without touch).
 bool TouchTurboFire();
 // Spring Ball (C-stick up in morph ball, as in Metroid Prime Trilogy) once the
@@ -309,19 +336,20 @@ void SetSpringBall(bool enabled);
 // layout), off by default.
 bool SwapScanXray();
 void SetSwapScanXray(bool enabled);
-// The beam shift's bindings (PortControls::ShiftHeld): slots 0 and 1 are keys
+// The beam shift's bindings (read by PortInputDevices, which pairs each with the D-pad
+// into the beam chords): slots 0 and 1 are keys
 // or mouse buttons (scancode or PAD_KEY_MOUSE_*), slot 2 a controller button
 // (SDL gamepad button or PAD_NATIVE_BUTTON_TRIGGER_*); -1 for none.
 int ShiftBinding(int slot);
 void SetShiftBinding(int slot, int code);
-// The turbo fire's bindings (PortControls::TurboHeld), laid out as ShiftBinding's
+// The turbo fire's bindings (read by PortInputDevices), laid out as ShiftBinding's
 // (slot 2 reads -1 while touch is in use); all -1 (none) by default.
 int TurboBinding(int slot);
 void SetTurboBinding(int slot, int code);
 // A second controller button for a GameCube button (Aurora maps one each),
 // ORed in by CDolphinController: `bit` is the PAD_BUTTON_* / PAD_TRIGGER_* bit's
 // position, the code as ShiftBinding's slot 2; -1 for none.
-constexpr int kPadAltCount = 16;
+constexpr int kPadAltCount = PortInput::kPadAltCount;
 int PadAltButton(int bit);
 void SetPadAltButton(int bit, int code);
 // What mouse button `button` (0 left, 1 middle, 2 right, 3 X1, 4 X2) does under
@@ -380,8 +408,9 @@ void SetLogFile(bool enabled);
 // momentum (capped at walking speed when unmorphing on the ground).
 bool FastMorph();
 void SetFastMorph(bool enabled);
-// Toggle Lock-On: L latches until pressed again (lock-on, scan, strafe,
-// grapple), and a lock that ends lets go by itself. Sticky Charge: letting go
+// Toggle Lock-On: an L press that locks on (target, scan, grapple) latches
+// until pressed again, a press without a lock is a plain hold, and a lock that
+// ends lets go by itself. Sticky Charge: letting go
 // of a long A hold keeps the beam charging until the next press fires it. Both
 // apply only unmorphed, in gameplay (port_hold_toggle.h).
 bool LockOnToggle();
@@ -396,6 +425,10 @@ bool RapidCharge();
 // The Randomizer page's saved options (rando_settings= in the settings file).
 PortRandoGen::Settings RandoSettings();
 void SetRapidCharge(bool enabled);
+// Remastered movement under twin stick/mouse aim: one force along the stick and
+// Remastered's planar friction and air drag (CPlayer::ComputeMovement, issue #46).
+bool RemasteredMovement();
+void SetRemasteredMovement(bool enabled);
 // Spring Ball on a gyro flick (pad or phone tilted up sharply, like Trilogy's
 // nunchuk flick), on top of C-stick up. Rate is the pitch speed in rad/s a flick
 // must pass. The gyro source is the aim's.
@@ -439,9 +472,9 @@ bool MouseCrosshair();
 // Crosshair size in percent while mouse aim or twin stick is on (the retail
 // free-aim crosshair is sized for a held R, and it stays up the whole time
 // under those modes). Retail R free-aim keeps 100.
-const int kCrosshairSizeMin = 25;
-const int kCrosshairSizeMax = 100;
-const int kCrosshairSizeDefault = 50;
+const int kCrosshairSizeMin = PortInput::kCrosshairSizeMin;
+const int kCrosshairSizeMax = PortInput::kCrosshairSizeMax;
+const int kCrosshairSizeDefault = PortInput::kCrosshairSizeDefault;
 int CrosshairSize();
 void SetCrosshairSize(int percent);
 unsigned MouseWeaponButtons(unsigned held);
@@ -513,6 +546,11 @@ void RequestBeam(int beam);
 void CaptureWheelIcons(int wheel, CGuiModel* const* icons);
 bool VisorRequested(int visor);
 bool BeamRequested(int beam);
+// The binding engine's direct actions (PortInputDevices): one Spring Ball, and the
+// save-state hotkeys (1 save, 2 load; F5/F9 send the same).
+void RequestSpringBall();
+bool SpringBallRequested();
+void RequestSaveStateHotkey(int which);
 bool TouchMapTap();
 void SetTouchMapTap(bool on);
 void SetMinimapRect(bool valid, bool drawn, float x0, float y0, float x1, float y1);
@@ -555,6 +593,12 @@ bool Visible();
 // Writes the settings file now instead of waiting for the next overlay frame,
 // so a disc chosen during startup is remembered even if no frame is drawn yet.
 void SaveSettingsNow();
+// Puts the game's own options (Reverse Y Axis, rumble, volumes...) saved in the
+// settings file back into the game state. Until it runs, they aren't recorded.
+void RestoreGameOptions();
+// Copies every setting and any MP_* variable into the log; settings changed
+// later in the session are logged as they're saved.
+void LogSettings();
 // The last session ended because a read of the disc image failed: the overlay
 // shows a red alert for a while once the game runs.
 void NoteDiscReadFailedLastSession();

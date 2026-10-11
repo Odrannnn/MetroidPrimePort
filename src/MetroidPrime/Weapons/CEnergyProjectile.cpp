@@ -235,7 +235,11 @@ void CEnergyProjectile::Render(const CStateManager& mgr) const {
   if (visor == CPlayerState::kPV_Combat && (HasAttrib(kPA_Charged) || HasAttrib(kPA_ComboShot))) {
     const float warpTime = 1.f - CCast::ToReal32(GetProjectile().GameTime());
     if (warpTime > 0.f) {
+#ifdef TARGET_PC
+      mgr.DrawSpaceWarp(PortPresentedPoint(GetTranslation()), 0.75f * warpTime);
+#else
       mgr.DrawSpaceWarp(GetTranslation(), 0.75f * warpTime);
+#endif
     }
   }
   if (visor == CPlayerState::kPV_XRay) {

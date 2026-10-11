@@ -7,3 +7,6 @@ class CStateManager;
 bool PortConsoleEnabled();
 bool PortConsoleFrame(unsigned frame);
 void PortConsoleTick(CStateManager& mgr);
+// Damage queued by the console `hurt` command; PreThink clears the player's damage flags, so the
+// hit is applied right after it. Returns 0 when none is pending.
+float PortConsoleTakePendingHurt();

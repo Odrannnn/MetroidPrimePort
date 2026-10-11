@@ -22,12 +22,23 @@ class CTexture;
 class CPlayerVisor {
   struct SScanObjectIndicatorInfo {
     SScanObjectIndicatorInfo(TUniqueId id, float timer, float inRangeTimer)
-    : x0_objId(id), x4_timer(timer), x8_inRangeTimer(inRangeTimer), xc_inBox(false) {}
+    : x0_objId(id), x4_timer(timer), x8_inRangeTimer(inRangeTimer), xc_inBox(false)
+#ifdef TARGET_PC
+    , xPort_t(0.f)
+    , xPort_visible(false)
+#endif
+    {}
 
     TUniqueId x0_objId;
     float x4_timer;
     float x8_inRangeTimer;
     bool xc_inBox;
+#ifdef TARGET_PC
+    // Port: Remastered's per-entry pop-in (entry +0xc), 0..1 at 3/s toward "in the box".
+    float xPort_t;
+    // Port: IsScanOrGrapplePointVisibleToRender as of the previous update (one frame of lag).
+    bool xPort_visible;
+#endif
   };
 
   enum EScanWindowState {
@@ -45,6 +56,17 @@ public:
   void Touch() const;
   float GetDesiredViewportScaleX(const CStateManager& mgr) const;
   float GetDesiredViewportScaleY(const CStateManager& mgr) const;
+#ifdef TARGET_PC
+  // Port (sharp scan window): the magnification and the screen-copy size (logical pixels) the
+  // scan window shows this frame; false when it shows nothing magnified.
+  bool PortScanZoom(const CStateManager& mgr, float& zoom, int& width, int& height) const;
+  // Copies the centre of a view drawn zoomed by `zoom` as the window's picture (in place of
+  // the width x height screen copy) and clears the EFB for the frame's own world.
+  static void PortCopyScanZoom(int width, int height, float zoom);
+  static void PortDropScanZoom();
+  // What DrawScanEffect draws before its copy (scan shield, icons, target reticle).
+  void PortDrawScanOverlay(const CStateManager& mgr, const CTargetingManager* tgtMgr) const;
+#endif
 
 private:
   void BeginTransitionOut();
@@ -55,6 +77,8 @@ private:
   void DrawThermalEffect(const CStateManager& mgr) const;
   void DrawXRayEffect(const CStateManager& mgr) const;
   void DrawScanEffect(const CStateManager& mgr, const CTargetingManager* tgtMgr) const;
+  float ScanWindowCopySize(const CStateManager& mgr, int vpWidth, int vpHeight, int& width,
+                           int& height) const;
   void LockUnlockAssets();
   EScanWindowState GetDesiredScanWindowState(const CStateManager& mgr) const;
   void UpdateScanWindow(float dt, const CStateManager& mgr);

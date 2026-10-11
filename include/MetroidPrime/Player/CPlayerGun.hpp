@@ -112,6 +112,9 @@ public:
   // Port: records the gun's camera-relative pose before a tick, so frames
   // drawn between ticks can blend the bob and sway (FRAME_INTERPOLATION.md).
   void PortSnapshotPresentedPose(const CStateManager&) const;
+  // Port: the view the gun is drawn under (sim camera, blended pose) in first
+  // person, else worldView.
+  CTransform4f PortGunView(const CStateManager&, const CTransform4f& worldView) const;
 #endif
   void GetLctrWithShake(CTransform4f& xfOut, const CModelData&, const rstl::string&, bool, bool);
   void PlayAnim(NWeaponTypes::EGunAnimType type, bool);
@@ -133,6 +136,8 @@ public:
   void ResetBeamParams(CStateManager&, const CPlayerState&, bool);
   void ChangeWeapon(const CPlayerState&, CStateManager&);
   void StartPhazonBeamTransition(bool, CStateManager&, CPlayerState&);
+  // Port: console `phazongun`: sets the same flags standing in phazon with the Phazon Suit does.
+  void PortForcePhazonBeam(bool on);
   void HandleWeaponChange(const CFinalInput&, CStateManager&);
   void HandleBeamChange(const CFinalInput&, CStateManager&);
 #ifdef TARGET_PC
@@ -418,7 +423,7 @@ private:
   rstl::reserved_vector< CGunWeapon*, 4 > x760_selectableBeams;
   rstl::auto_ptr< CElementGen > x774_holoTransitionGen;
   rstl::auto_ptr< CElementGen > x77c_comboXferGen;
-  rstl::reserved_vector< rstl::reserved_vector< TLockedToken< CGenDescription >, 2 >, 2 >
+  rstl::reserved_vector< rstl::reserved_vector< TLockedToken< CGenDescription >, 3 >, 2 >
       x784_bombEffects;
   rstl::reserved_vector< TLockedToken< CGenDescription >, 5 > x7c0_auxMuzzleEffects;
   rstl::reserved_vector< rstl::auto_ptr< CElementGen >, 5 > x800_auxMuzzleGenerators;
@@ -470,6 +475,18 @@ private:
   bool mPortRapidCharge;
   int mPortRapidShots;
   float mPortRapidTimer;
+
+  // Port: Remastered's muzzle flashes with no retail counterpart (missile, super missile, ice
+  // combo, the per-beam charged-shot flashes), imported as synthetic PARTs. Slot 0 missile,
+  // 1 super missile, 2 ice combo, 3..7 charged shot of beam 0..4; absent = not imported.
+  enum { kPortFlashCount = 8 };
+  void PortInitFlashes();
+  void PortStartFlash(int slot);
+  void PortUpdateFlashes(float dt, const CVector3f& scale);
+  void PortRenderFlashes() const;
+  rstl::reserved_vector< TLockedToken< CGenDescription >, kPortFlashCount > mPortFlashTokens;
+  int mPortFlashToken[kPortFlashCount];
+  rstl::auto_ptr< CElementGen > mPortFlashGens[kPortFlashCount];
 #endif
 };
 CHECK_SIZEOF(CPlayerGun, 0x838)
