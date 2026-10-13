@@ -1723,6 +1723,55 @@ TEST_F(GXFifoTest, PBRBakedLightModulation_PropagatesAndResets) {
   EXPECT_EQ(g_gxState.pbrBakedLightModulation.z(), 1.f);
 }
 
+// The model modulation (GXSetPBRModelModulation) carries full diffuse and incandescence vectors and a
+// coverage apart from the diffuse alpha; defaults are neutral, a repeat is dropped, and null arrays
+// reset each vector on its own.
+TEST_F(GXFifoTest, PBRModelModulation_PropagatesDedupsAndResets) {
+  EXPECT_EQ(g_gxState.pbrModelDiffuse, (aurora::Vec4<float>{1.f, 1.f, 1.f, 1.f}));
+  EXPECT_EQ(g_gxState.pbrModelIncan, (aurora::Vec4<float>{0.f, 0.f, 0.f, 1.f}));
+  EXPECT_EQ(g_gxState.pbrModelCoverage.x(), 1.f);
+
+  const f32 diffuse[4] = {0.25f, 0.5f, 0.75f, 0.125f};
+  const f32 incan[4] = {2.f, 3.f, 4.f, 0.5f};
+  GXSetPBRModelModulation(diffuse, incan, 0.375f);
+  auto bytes = capture_fifo();
+  EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_SET_PBR_MODEL_MODULATION));
+  reset_gx_state();
+  decode_fifo(bytes);
+  EXPECT_EQ(g_gxState.pbrModelDiffuse, (aurora::Vec4<float>{0.25f, 0.5f, 0.75f, 0.125f}));
+  EXPECT_EQ(g_gxState.pbrModelIncan, (aurora::Vec4<float>{2.f, 3.f, 4.f, 0.5f}));
+  // The coverage is its own carrier: not the diffuse alpha (0.125), not the incandescence alpha.
+  EXPECT_EQ(g_gxState.pbrModelCoverage, (aurora::Vec4<float>{0.375f, 0.f, 0.f, 0.f}));
+
+  GXSetPBRModelModulation(diffuse, incan, 0.375f);
+  EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_PBR_MODEL_MODULATION));
+
+  // Only the coverage changes: still a command.
+  GXSetPBRModelModulation(diffuse, incan, 0.5f);
+  bytes = capture_fifo();
+  EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_SET_PBR_MODEL_MODULATION));
+  decode_fifo(bytes);
+  EXPECT_EQ(g_gxState.pbrModelCoverage.x(), 0.5f);
+
+  // A null diffuse is neutral while the incandescence stays.
+  GXSetPBRModelModulation(nullptr, incan, 0.5f);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.pbrModelDiffuse, (aurora::Vec4<float>{1.f, 1.f, 1.f, 1.f}));
+  EXPECT_EQ(g_gxState.pbrModelIncan, (aurora::Vec4<float>{2.f, 3.f, 4.f, 0.5f}));
+
+  // A null incandescence is neutral while the diffuse stays.
+  GXSetPBRModelModulation(diffuse, nullptr, 0.5f);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.pbrModelDiffuse, (aurora::Vec4<float>{0.25f, 0.5f, 0.75f, 0.125f}));
+  EXPECT_EQ(g_gxState.pbrModelIncan, (aurora::Vec4<float>{0.f, 0.f, 0.f, 1.f}));
+
+  GXSetPBRModelModulation(nullptr, nullptr, 1.f);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.pbrModelDiffuse, (aurora::Vec4<float>{1.f, 1.f, 1.f, 1.f}));
+  EXPECT_EQ(g_gxState.pbrModelIncan, (aurora::Vec4<float>{0.f, 0.f, 0.f, 1.f}));
+  EXPECT_EQ(g_gxState.pbrModelCoverage, (aurora::Vec4<float>{1.f, 0.f, 0.f, 0.f}));
+}
+
 // The character backlight's plane, back direction and strengths propagate, a repeat is
 // dropped, and null turns it off (zero strengths).
 TEST_F(GXFifoTest, PBRBacklight_PropagatesAndTurnsOff) {

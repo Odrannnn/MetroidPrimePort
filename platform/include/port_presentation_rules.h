@@ -18,12 +18,23 @@ enum class PortRigidBlendKind {
 };
 
 // Shared snap rule. `dist2` = squared centre distance between the two ticks,
-// `rotDot` = |dot| of their unit quaternions. A teleport (over 4 units) always
-// cuts. A turn over 45 degrees cuts an ordinary actor; a pivoted body (the
-// rolling morph ball) keeps interpolating its centre, because its rotation is
-// its roll and spinning past 45 degrees a tick must not drop the translation.
-inline PortRigidBlendKind PortClassifyRigidBlend(float dist2, float rotDot, bool pivoted) {
-  if (dist2 > 16.f)
+// `rotDot` = |dot| of their unit quaternions. A teleport always cuts. A turn
+// over 45 degrees cuts an ordinary actor; a pivoted body (the rolling morph
+// ball) keeps interpolating its centre, because its rotation is its roll and
+// spinning past 45 degrees a tick must not drop the translation.
+//
+// A teleport is a step over 4 units that is also over three times the step
+// of the tick before (`lastStep2`, squared; 0 when unknown). Without the
+// second test anything moving faster than 4 units a tick (Meta Ridley's
+// fly-in and the camera chasing him, issue #99) flips between blended and
+// snapped as its speed crosses the limit, and the view jitters by a tick.
+inline bool PortIsTeleport(float dist2, float lastStep2) {
+  return dist2 > 16.f && dist2 > 9.f * lastStep2;
+}
+
+inline PortRigidBlendKind PortClassifyRigidBlend(float dist2, float rotDot, bool pivoted,
+                                                 float lastStep2 = 0.f) {
+  if (PortIsTeleport(dist2, lastStep2))
     return PortRigidBlendKind::Cut;
   if (rotDot < 0.9238795f)
     return pivoted ? PortRigidBlendKind::TranslateOnly : PortRigidBlendKind::Cut;
@@ -37,7 +48,7 @@ inline PortRigidBlendKind PortClassifyRigidBlend(float dist2, float rotDot, bool
 // visual centre; that centre lerps and the turn happens about it.
 template <class Xf, class Vec, class Quat, class Ops>
 bool PortBlendRigidGeneric(const Ops& ops, const Xf& from, const Xf& to, float t, Xf& blend,
-                           Xf& cur, const Vec& pivot, bool pivoted) {
+                           Xf& cur, const Vec& pivot, bool pivoted, float lastStep2 = 0.f) {
   const Vec prevPos = ops.Translation(from) + pivot;
   const Vec curPos = ops.Translation(to) + pivot;
   Quat prevRot, curRot;
@@ -45,7 +56,8 @@ bool PortBlendRigidGeneric(const Ops& ops, const Xf& from, const Xf& to, float t
   cur = ops.Rigid(to, curRot);
   ops.SetTranslation(cur, curPos);
   const PortRigidBlendKind kind =
-      PortClassifyRigidBlend((curPos - prevPos).MagSquared(), ops.AbsDot(prevRot, curRot), pivoted);
+      PortClassifyRigidBlend((curPos - prevPos).MagSquared(), ops.AbsDot(prevRot, curRot), pivoted,
+                             lastStep2);
   if (kind == PortRigidBlendKind::Cut)
     return false;
   const Vec centre = prevPos + (curPos - prevPos) * t;

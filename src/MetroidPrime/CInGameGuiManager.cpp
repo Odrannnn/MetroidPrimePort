@@ -348,8 +348,13 @@ void CInGameGuiManager::Draw(const CStateManager& mgr) const {
         hud->PortPresentHudLag(false);
     }
   } hudLagScope = {x34_samusHud.get()};
-  if (hudLagScope.hud)
-    hudLagScope.hud->PortPresentHudLag(true);
+  if (hudLagScope.hud) {
+    // #97: the X-ray and thermal reticles must follow the world camera, which
+    // keeps this tick's rotation while mouse look is free.
+    const CPlayerState::EPlayerVisor visor = mgr.GetPlayerState()->GetActiveVisor(mgr);
+    const bool reticleVisor = visor == CPlayerState::kPV_XRay || visor == CPlayerState::kPV_Thermal;
+    hudLagScope.hud->PortPresentHudLag(true, reticleVisor && mgr.GetPlayer()->MouseLookIsFree(mgr));
+  }
 #endif
   if (x1d8_onScreenTexAlpha > 0.f && !x1dc_onScreenTexTok.null() &&
       x1dc_onScreenTexTok->GetObject() != nullptr) {
@@ -625,8 +630,10 @@ void CInGameGuiManager::Update(const CStateManager& mgr, float dt, CArchitecture
                                bool cameraActive) {
   EnsureStates(mgr);
   // Port: the touch overlay shows R in the pause menu, where it changes screens.
-  PortDebug::SetPauseScreenOpen(x1c0_nextState == kIGGS_PauseGame ||
-                                x1c0_nextState == kIGGS_PauseLogBook);
+  // Save stations and upgrade messages read the Menu bindings too (issue #93).
+  PortDebug::SetPauseScreenOpen(
+      x1c0_nextState == kIGGS_PauseGame || x1c0_nextState == kIGGS_PauseLogBook,
+      x1c0_nextState == kIGGS_PauseSaveGame || x1c0_nextState == kIGGS_PauseHUDMessage);
   if (x1d8_onScreenTexAlpha == 0.f) {
     x1dc_onScreenTexTok = nullptr;
   }

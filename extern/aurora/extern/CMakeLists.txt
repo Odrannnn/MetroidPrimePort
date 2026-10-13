@@ -247,8 +247,11 @@ if (AURORA_ENABLE_GX)
       ${imgui_SOURCE_DIR}/imgui_tables.cpp
       ${imgui_SOURCE_DIR}/imgui_widgets.cpp
       ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+      # Port: item hooks, so the settings search can find a widget by label.
+      ${CMAKE_CURRENT_SOURCE_DIR}/imgui_item_hook.cpp
     )
     target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+    target_compile_definitions(imgui PUBLIC IMGUI_ENABLE_TEST_ENGINE)
 
     add_library(imgui_backends STATIC
       ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp

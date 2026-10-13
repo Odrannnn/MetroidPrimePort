@@ -527,7 +527,7 @@ struct Selection {
   // For GXSetPBRLightmap, when the model was announced with SetLightmapHint: the area's baked
   // lightmap, which then lights it in place of the volume (0: none).
   uint32_t lightmap = 0;
-  float lightmapRect[4] = {};    // offU, offV, scale, level
+  float lightmapRect[4] = {};    // offU, offV, scale (0: one texel), level
   float worldToLightmap[9] = {}; // rows of world direction -> the lightmap's axes
 };
 // The room cube and baked ambient for a model at `pos`; false when no loaded area has

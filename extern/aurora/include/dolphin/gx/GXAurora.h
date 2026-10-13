@@ -237,6 +237,12 @@ extern "C" {
 //   f32 diffuse, f32 f0, f32 alpha, u32 alphaReplaces
 #define GX_AURORA_SET_PBR_LIGHT_SCALE 0x0053
 
+// Per-draw model colour modulation of the following PBR draws (see GXSetPBRModelModulation). Stays
+// in effect until changed; diffuse 1, 1, 1, 1, incandescence 0, 0, 0, 1 and coverage 1 are neutral.
+// Payload:
+//   f32 diffuse r, g, b, a, f32 incan r, g, b, a, f32 coverage
+#define GX_AURORA_SET_PBR_MODEL_MODULATION 0x006D
+
 // Port extension: Remastered's bloom, colour grade and frame average over the EFB as drawn so
 // far (see GXPortPostProcess). Queued, so the game thread does not wait for the FIFO to be
 // processed before it can record it.

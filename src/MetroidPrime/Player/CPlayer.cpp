@@ -788,6 +788,17 @@ void CPlayer::UpdateArmAndGunTransforms(float dt, CStateManager& mgr) {
     grappleOffset = x490_gun->GetGrappleArm().IsArmMoving()
                         ? CVector3f::Zero()
                         : gpTweakPlayerGun->x64_grapplingArmPosition;
+#ifdef TARGET_PC
+    // Port: the user's arm cannon offset (issue #72). It moves the real gun, so shots leave from
+    // the moved muzzle; the grapple arm follows so the two stay together.
+    float userOffset[3];
+    PortDebug::GunOffset(userOffset);
+    const CVector3f userGunOffset(userOffset[0], userOffset[1], userOffset[2]);
+    gunOffset += userGunOffset;
+    if (!x490_gun->GetGrappleArm().IsArmMoving()) {
+      grappleOffset += userGunOffset;
+    }
+#endif
     gunOffset[kDZ] += GetEyeHeight();
     grappleOffset[kDZ] += GetEyeHeight();
   }

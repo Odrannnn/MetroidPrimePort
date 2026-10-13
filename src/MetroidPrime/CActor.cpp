@@ -98,6 +98,7 @@ CActor::CActor(const TUniqueId uid, const bool active, const rstl::string& name,
 #ifdef TARGET_PC
 , xPortPrevTransform(xf)
 , xPortPrevGeneration(0)
+, xPortLastStep2(0.f)
 , xPortOwnPresentation(false)
 #endif
 {
@@ -412,6 +413,41 @@ void CActor::RenderInternal(const CStateManager& mgr) const {
   }
   GetModelData()->Render(which, x34_transform, x90_actorLights.get(), xb4_drawFlags);
 }
+
+#ifdef TARGET_PC
+namespace {
+// Caster-only drawing must not outlive the draw, whatever the draw does.
+struct PortCasterOnlyScope {
+  PortCasterOnlyScope() { GXPortSetShadowCasterOnly(true); }
+  ~PortCasterOnlyScope() { GXPortSetShadowCasterOnly(false); }
+};
+} // namespace
+
+bool CActor::PortRenderShadowCaster(const CStateManager& mgr) const {
+  if (!HasModelData() || NullModel() || !IsDrawEnabled() || !xe7_27_enableRender) {
+    return false;
+  }
+  const CAABox bounds = GetModelData()->GetBounds(GetTransform());
+  const float lo[3] = {bounds.GetMinPoint().GetX(), bounds.GetMinPoint().GetY(),
+                       bounds.GetMinPoint().GetZ()};
+  const float hi[3] = {bounds.GetMaxPoint().GetX(), bounds.GetMaxPoint().GetY(),
+                       bounds.GetMaxPoint().GetZ()};
+  if (!GXPortShadowBoxCasts(lo, hi)) {
+    return false;
+  }
+  PortCasterOnlyScope casterOnly;
+  if (xe5_29_globalTimeProvider) {
+    RenderInternal(mgr);
+  } else {
+    float timeSince = CGraphics::GetSecondsMod900() - xbc_time;
+    if (timeSince < 0.f && timeSince > -(1.f / 60.f))
+      timeSince = 0.f;
+    CTimeProvider tp(CMath::FastFmod(timeSince, 900.f));
+    RenderInternal(mgr);
+  }
+  return true;
+}
+#endif
 
 float CActor::GetYaw() const {
   float sq = sqrt(x34_transform.Get11() * x34_transform.Get11() +
@@ -927,6 +963,11 @@ uint CActor::PortTickGeneration() { return sPortTickGeneration; }
 bool CActor::PortRenderScopeActive() { return sPortRenderScopeActive; }
 
 void CActor::PortSnapshotRenderTransform() {
+  // The step the last tick made, if it was snapshotted (issue #99).
+  xPortLastStep2 =
+      xPortPrevGeneration != 0 && xPortPrevGeneration + 1 == sPortTickGeneration
+          ? (x34_transform.GetTranslation() - xPortPrevTransform.GetTranslation()).MagSquared()
+          : 0.f;
   xPortPrevTransform = x34_transform;
   xPortPrevGeneration = sPortTickGeneration;
 }
@@ -949,7 +990,7 @@ bool CActor::PortPresentedView(const CTransform4f& view, CTransform4f& out) cons
         player->GetMorphBall() != nullptr)
       pivot = CVector3f(0.f, 0.f, player->GetMorphBall()->GetBallRadius());
   }
-  if (!PortBlendRigid(xPortPrevTransform, x34_transform, t, blend, cur, pivot))
+  if (!PortBlendRigid(xPortPrevTransform, x34_transform, t, blend, cur, pivot, xPortLastStep2))
     return false;
   // Drawn eye position = view^-1 * blend * cur^-1 * world, so the model lands
   // at the blend while everything else about the draw stays the same.
@@ -983,9 +1024,10 @@ struct PortRigidOps {
 } // namespace
 
 bool CActor::PortBlendRigid(const CTransform4f& from, const CTransform4f& to, float t,
-                            CTransform4f& blend, CTransform4f& cur, const CVector3f& pivot) {
+                            CTransform4f& blend, CTransform4f& cur, const CVector3f& pivot,
+                            float lastStep2) {
   return PortBlendRigidGeneric< CTransform4f, CVector3f, CQuaternion >(
-      PortRigidOps(), from, to, t, blend, cur, pivot, pivot.MagSquared() > 0.f);
+      PortRigidOps(), from, to, t, blend, cur, pivot, pivot.MagSquared() > 0.f, lastStep2);
 }
 
 CPortActorRenderScope::CPortActorRenderScope(const CActor& actor)

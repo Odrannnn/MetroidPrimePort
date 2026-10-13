@@ -394,19 +394,21 @@ ModelMaterial LightmapMaterial(uint32_t shader, const char* name) {
   return fixture.material;
 }
 
-ModelVertexBuffer LightmapBuffer(float offset, bool hasCoord3) {
+ModelVertexBuffer LightmapBuffer(float offset, bool hasCoord3, size_t texcoordAttributes = 2) {
   ModelVertexBuffer vb;
   vb.vertexCount = 3;
-  vb.uvs.resize(2);
-  vb.uvsZw.resize(hasCoord3 ? 2 : 1);
+  vb.uvs.resize(texcoordAttributes);
+  vb.uvsZw.resize(hasCoord3 ? texcoordAttributes : 1);
   for (int vertex = 0; vertex < 3; ++vertex) {
     vb.positions.insert(vb.positions.end(), {offset + float(vertex), float(vertex * vertex), float(vertex * 2)});
     vb.normals.insert(vb.normals.end(), {0.f, 1.f, 0.f});
-    vb.uvs[0].insert(vb.uvs[0].end(), {0.25f, 0.5f});
-    vb.uvsZw[0].insert(vb.uvsZw[0].end(), {11.f, 12.f});
-    vb.uvs[1].insert(vb.uvs[1].end(), {21.f, 22.f});
-    if (hasCoord3) {
-      vb.uvsZw[1].insert(vb.uvsZw[1].end(), {31.f, 32.f});
+    for (size_t attribute = 0; attribute < texcoordAttributes; ++attribute) {
+      const float xy = 21.f + float(attribute) * 20.f;
+      vb.uvs[attribute].insert(vb.uvs[attribute].end(), {xy, xy + 1.f});
+      if (attribute < vb.uvsZw.size()) {
+        const float zw = 11.f + float(attribute) * 20.f;
+        vb.uvsZw[attribute].insert(vb.uvsZw[attribute].end(), {zw, zw + 1.f});
+      }
     }
   }
   return vb;
@@ -585,48 +587,91 @@ void TestConverter() {
 }
 
 void TestLightmapUv() {
-  constexpr uint32_t kProjectedBlend = 0xD6AA2A3A;
+  struct Coord3Family {
+    uint32_t shader;
+    const char* name;
+  };
+  constexpr Coord3Family kCoord3Families[] = {
+      {0x41A12C9E, "41a12c9e"}, {0x72B34E42, "72b34e42"}, {0x9AB899E7, "9ab899e7"},
+      {0xA978D507, "a978d507"}, {0xB9E899F3, "b9e899f3"}, {0xD363D694, "d363d694"},
+      {0xD37039F7, "d37039f7"}, {0xD6AA2A3A, "d6aa2a3a"}, {0xDF0677FF, "df0677ff"},
+      {0xDFEC1A87, "dfec1a87"}, {0xE538B757, "e538b757"}, {0xE9DF2188, "e9df2188"},
+      {0xF22FEB5B, "f22feb5b"}, {0x557A7DE4, "557a7de4"}, {0xF84AC32D, "f84ac32d"},
+  };
   constexpr uint32_t kOrdinaryPbr = 0xBFB300B6;
   std::vector<uint8_t> cmdl;
   std::vector<LightmapOutput> outputs;
   std::string error;
 
-  {  // d6aa2a3a samples TEXCOORD_1.zw (converter coord 3), not UV0.zw.
-    const Model model = LightmapModel({LightmapMaterial(kProjectedBlend, "projected")},
+  for (const Coord3Family& family : kCoord3Families) {
+    const std::string converted = std::string("converted lightmap family ") + family.name;
+    const std::string read = std::string("read LMUV for family ") + family.name;
+    const std::string selected = std::string("family ") + family.name + " selects TEXCOORD_1.zw";
+    const Model model = LightmapModel({LightmapMaterial(family.shader, family.name)},
                                       {LightmapBuffer(0.f, true)}, {{0, 0}});
-    Check(Convert(model, cmdl, error, true), "converted d6aa2a3a with lightmap UVs");
-    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read d6aa2a3a's emitted LMUV attribute");
+    cmdl.clear();
+    outputs.clear();
+    error.clear();
+    Check(Convert(model, cmdl, error, true), converted.c_str());
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), read.c_str());
     if (!outputs.empty()) {
-      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), "d6aa2a3a LMUV indices address TEXCOORD_1.zw data");
+      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), selected.c_str());
     }
   }
-  {  // The ordinary PBR path keeps TEXCOORD_0.zw (converter coord 1).
+
+  {  // A verbatim twin of a978d507 resolves to its family before selecting UVs.
+    constexpr uint32_t kSkinnedA978Twin = 0xB55635D2;
+    const Model model = LightmapModel({LightmapMaterial(kSkinnedA978Twin, "a978-twin")},
+                                      {LightmapBuffer(0.f, true)}, {{0, 0}});
+    cmdl.clear();
+    outputs.clear();
+    Check(Convert(model, cmdl, error, true), "converted the a978d507 shader twin");
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read the a978d507 twin's LMUV attribute");
+    if (!outputs.empty()) {
+      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), "the resolved a978d507 twin selects TEXCOORD_1.zw");
+    }
+  }
+
+  {  // The unlisted ordinary PBR family retains coord 1 even when coord 3 exists.
     const Model model = LightmapModel({LightmapMaterial(kOrdinaryPbr, "ordinary")},
+                                      {LightmapBuffer(0.f, true)}, {{0, 0}});
+    cmdl.clear();
+    outputs.clear();
+    Check(Convert(model, cmdl, error, true), "converted ordinary PBR with both lightmap channels");
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read ordinary PBR's LMUV attribute");
+    if (!outputs.empty()) {
+      Check(AllLightmapCoords(outputs[0], 11.f, 12.f), "ordinary PBR retains TEXCOORD_0.zw");
+    }
+  }
+
+  {  // No fallback to coord 1 when a confirmed family lacks its required coord 3.
+    const Model model = LightmapModel({LightmapMaterial(kCoord3Families[0].shader, "missing-coord3")},
                                       {LightmapBuffer(0.f, false)}, {{0, 0}});
     cmdl.clear();
     outputs.clear();
-    Check(Convert(model, cmdl, error, true), "converted ordinary PBR with lightmap UVs");
-    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read ordinary PBR's emitted LMUV attribute");
+    Check(Convert(model, cmdl, error, true), "converted a coord-3 family without coord 3");
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read coord-3 family without coord 3");
     if (!outputs.empty()) {
-      Check(AllLightmapCoords(outputs[0], 11.f, 12.f), "ordinary PBR LMUV indices address TEXCOORD_0.zw data");
+      Check(outputs[0].slot == -1 && outputs[0].coords.empty(),
+            "missing required coord 3 omits LMUV instead of substituting coord 1");
     }
   }
-  {  // One output material spans two buffers; a missing coord 3 must disable LMUV
-     // for the group rather than falling back to either buffer's UV0.
-    const Model model = LightmapModel({LightmapMaterial(kProjectedBlend, "mixed")},
+
+  {  // One output material spans two buffers; a missing coord 3 omits LMUV for the group.
+    const Model model = LightmapModel({LightmapMaterial(kCoord3Families[0].shader, "mixed")},
                                       {LightmapBuffer(0.f, true), LightmapBuffer(10.f, false)}, {{0, 0}, {0, 1}});
     cmdl.clear();
     outputs.clear();
-    Check(Convert(model, cmdl, error, true), "converted mixed-buffer d6aa2a3a");
-    Check(ReadLightmapOutputs(cmdl, 6, outputs), "read mixed-buffer d6aa2a3a material");
+    Check(Convert(model, cmdl, error, true), "converted mixed-buffer coord-3 family");
+    Check(ReadLightmapOutputs(cmdl, 6, outputs), "read mixed-buffer coord-3 material");
     if (!outputs.empty()) {
       Check(outputs[0].slot == -1 && outputs[0].coords.empty(),
-            "mixed buffers omit LMUV when any primitive buffer lacks the selected channel");
+            "mixed buffers omit LMUV when any primitive lacks the required coord 3");
     }
   }
-  {  // Material groups choose independently: coord 3 for d6aa2a3a, coord 1 for
-     // ordinary PBR, even though they share one model and the latter lacks coord 3.
-    const Model model = LightmapModel({LightmapMaterial(kProjectedBlend, "projected"),
+
+  {  // Material groups choose independently: coord 3 for a confirmed family, coord 1 by default.
+    const Model model = LightmapModel({LightmapMaterial(kCoord3Families[0].shader, "coord3-family"),
                                        LightmapMaterial(kOrdinaryPbr, "ordinary")},
                                       {LightmapBuffer(0.f, true), LightmapBuffer(10.f, false)}, {{0, 0}, {1, 1}});
     cmdl.clear();
@@ -634,8 +679,38 @@ void TestLightmapUv() {
     Check(Convert(model, cmdl, error, true), "converted mixed-family lightmap model");
     Check(ReadLightmapOutputs(cmdl, 6, outputs), "read mixed-family LMUV attributes");
     if (outputs.size() >= 2) {
-      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), "d6aa2a3a group emits coord 3 independently");
-      Check(AllLightmapCoords(outputs[1], 11.f, 12.f), "ordinary PBR group emits coord 1 independently");
+      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), "coord-3 family emits TEXCOORD_1.zw");
+      Check(AllLightmapCoords(outputs[1], 11.f, 12.f), "default family emits TEXCOORD_0.zw");
+    }
+  }
+
+  {  // Six existing slots plus one ANUV copy leave exactly slot 7 for LMUV.
+    Fixture fixture(0, 0, 0);
+    Model model = LightmapModel({LightmapMaterial(0xA978D507, "last-lightmap-slot")},
+                                {LightmapBuffer(0.f, true, 3)}, {{0, 0}});
+    model.materials[0].data[1].texture.texCoord = 1;
+    model.materials[0].unk1 |= kAuviFlag;
+    model.materials[0].data.push_back(fixture.Auvi(0, 0, 0, 0));
+    model.anuv.assign(kAnuvGun, kAnuvGun + sizeof(kAnuvGun));
+    cmdl.clear();
+    outputs.clear();
+    Check(Convert(model, cmdl, error, true), "converted lightmap with seven available attribute slots");
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read lightmap in the last attribute slot");
+    if (!outputs.empty()) {
+      Check(outputs[0].slot == 7, "LMUV uses slot 7 when ANUV has occupied slots 0 through 6");
+      Check(AllLightmapCoords(outputs[0], 31.f, 32.f), "slot-7 LMUV still addresses TEXCOORD_1.zw");
+    }
+  }
+
+  {  // All eight descriptor slots remain occupied; LMUV is omitted rather than overflowing.
+    const Model model = LightmapModel({LightmapMaterial(0xA978D507, "full-lightmap-slots")},
+                                      {LightmapBuffer(0.f, true, 4)}, {{0, 0}});
+    cmdl.clear();
+    outputs.clear();
+    Check(Convert(model, cmdl, error, true), "converted lightmap with all eight attribute slots occupied");
+    Check(ReadLightmapOutputs(cmdl, 3, outputs), "read fully occupied lightmap descriptor");
+    if (!outputs.empty()) {
+      Check(outputs[0].slot == -1 && outputs[0].coords.empty(), "full descriptor capacity omits LMUV");
     }
   }
 }

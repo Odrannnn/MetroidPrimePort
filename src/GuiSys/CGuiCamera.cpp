@@ -214,8 +214,7 @@ CTransform4f CGuiCamera::GetAspectSpreadTransform(const CVector3f& worldAnchor) 
   }
   // The horizontal spread: x += offset * depth is an exact image translation, so the widget keeps
   // its authored shape (turning it toward the eye squashed the side clusters at very wide ratios).
-  const float offset = GetAspectSliceOffset(eyePos.GetX() / eyePos.GetY(), false,
-                                            GetSliceCenter(eyePos.GetY()));
+  const float offset = GetLaggedSliceOffset(eyePos);
   return mSpreadView *
          CTransform4f(1.f, offset, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f) * invView;
 }
@@ -241,21 +240,30 @@ bool CGuiCamera::GetAspectSlices(float& inner, float& outer, bool curved) const 
 
 void CGuiCamera::SetHudO2WTransform(const CTransform4f& xf, const CVector3f& idlePos) {
   SetO2WTransform(xf);
-  mSpreadLag = xf.GetQuickInverse() * CTransform4f::Translate(idlePos);
+  SetSpreadLag(xf.GetQuickInverse() * CTransform4f::Translate(idlePos));
 }
 
-float CGuiCamera::GetSliceCenter(float depth) const {
-  const CVector3f center = mSpreadLag * CVector3f(0.f, depth, 0.f);
-  return center.GetY() > 0.f ? center.GetX() / center.GetY() : 0.f;
+float CGuiCamera::GetLaggedTangent(float tangent, float depth) const {
+  const CVector3f view = mSpreadLag * CVector3f(tangent * depth, depth, 0.f);
+  return view.GetY() > 0.f ? view.GetX() / view.GetY() : tangent;
 }
 
-float CGuiCamera::GetAspectSliceOffset(float tangent, bool curved, float center) const {
+float CGuiCamera::GetLaggedSliceOffset(const CVector3f& eye, bool curved) const {
+  const CVector3f idle = mSpreadLagInv * eye;
+  if (idle.GetY() <= 0.f || eye.GetY() <= 0.f) {
+    return 0.f;
+  }
+  const float warp = GetAspectSliceOffset(idle.GetX() / idle.GetY(), curved);
+  const CVector3f moved = mSpreadLag * (idle + CVector3f(warp * idle.GetY(), 0.f, 0.f));
+  return moved.GetY() > 0.f ? moved.GetX() / moved.GetY() - eye.GetX() / eye.GetY() : 0.f;
+}
+
+float CGuiCamera::GetAspectSliceOffset(float tangent, bool curved) const {
   float inner, outer;
   if (!GetAspectSlices(inner, outer, curved)) {
     return 0.f;
   }
   curved = IsSliceCurved(curved);
-  tangent -= center;
   // Past `outer` everything keeps its authored distance to the screen edge.
   const float shift = (mSpread - 1.f) * mSpreadHalfTan;
   const float a = std::fabs(tangent);

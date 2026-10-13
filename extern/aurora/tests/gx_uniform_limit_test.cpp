@@ -1,7 +1,11 @@
 #include <array>
+#include <cstring>
+#include <string>
 
 #include <gtest/gtest.h>
 
+#include "gfx/frame_packet.hpp"
+#include "gfx/recording.hpp"
 #include "gfx/resources.hpp"
 #include "gx/gx.hpp"
 #include "gx/shader_info.hpp"
@@ -82,6 +86,71 @@ TEST_F(GxUniformLimitTest, MaximalPbrConfigNoLongerAborts) {
   EXPECT_GT(pbr.uniformSize, OldLimit);
   EXPECT_GE(pbr.uniformSize - plain.uniformSize, sizeof(Mat3x4<float>) + sizeof(Vec4<float>) * 24);
   EXPECT_LE(pbr.uniformSize, MaxUniformSize);
+}
+
+// The three model modulation vectors follow pbr_room_lights in the PBR uniform, in the order the WGSL
+// struct declares them, so a PBR draw's block grew by exactly 3 vec4.
+TEST_F(GxUniformLimitTest, PbrModelModulationIsPackedAfterRoomLights) {
+  ShaderConfig config;
+  config.pbr = 1;
+  // Shader source generation needs a position attribute.
+  config.attrs[GX_VA_POS].attrType = GX_DIRECT;
+  config.attrs[GX_VA_POS].cnt = GX_POS_XYZ;
+  config.attrs[GX_VA_POS].compType = GX_F32;
+  config.tevStageCount = 1;
+  const std::string source = build_shader_source(config);
+  EXPECT_NE(source.find("pbr_room_lights: vec4f,\n    pbr_model_diffuse: vec4f,\n    pbr_model_incan: vec4f,\n"
+                        "    pbr_model_coverage: vec4f,"),
+            std::string::npos);
+  ShaderConfig plainConfig = config;
+  plainConfig.pbr = 0;
+  const std::string plainSource = build_shader_source(plainConfig);
+  EXPECT_EQ(plainSource.find("pbr_model_"), std::string::npos);
+
+  const auto info = build_shader_info(config);
+  ASSERT_TRUE(info.usesPbr);
+
+  gfx::detail::FramePacket frame;
+  gfx::detail::begin_recording(frame, 0);
+  // Restores the global state and ends the recording even when an ASSERT_* returns early.
+  struct Cleanup {
+    Vec4<float> room = g_gxState.pbrRoomLights;
+    Vec4<float> diffuse = g_gxState.pbrModelDiffuse;
+    Vec4<float> incan = g_gxState.pbrModelIncan;
+    Vec4<float> coverage = g_gxState.pbrModelCoverage;
+    ~Cleanup() {
+      g_gxState.pbrRoomLights = room;
+      g_gxState.pbrModelDiffuse = diffuse;
+      g_gxState.pbrModelIncan = incan;
+      g_gxState.pbrModelCoverage = coverage;
+      // No pass is encoded here: shutdown drops the packet, which ends the session.
+      gfx::detail::shutdown_recording();
+    }
+  } cleanup;
+  g_gxState.pbrRoomLights = {1234.5f, 0.f, 0.f, 0.f};
+  g_gxState.pbrModelDiffuse = {0.1f, 0.2f, 0.3f, 0.4f};
+  g_gxState.pbrModelIncan = {5.f, 6.f, 7.f, 0.8f};
+  g_gxState.pbrModelCoverage = {0.9f, 0.f, 0.f, 0.f};
+  const auto range = build_uniform(info);
+  const auto& bytes = frame.uniforms;
+  ASSERT_GE(bytes.size(), range.offset + range.size);
+  // Find the sentinel room-lights vec4, then the three vectors right after it.
+  const float sentinel[4] = {1234.5f, 0.f, 0.f, 0.f};
+  size_t at = range.offset;
+  bool found = false;
+  for (; at + sizeof(sentinel) + 48 <= range.offset + range.size; at += 4) {
+    if (std::memcmp(bytes.data() + at, sentinel, sizeof(sentinel)) == 0) {
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found);
+  float tail[12];
+  std::memcpy(tail, bytes.data() + at + sizeof(sentinel), sizeof(tail));
+  const float expected[12] = {0.1f, 0.2f, 0.3f, 0.4f, 5.f, 6.f, 7.f, 0.8f, 0.9f, 0.f, 0.f, 0.f};
+  for (u32 i = 0; i < 12; ++i) {
+    EXPECT_EQ(tail[i], expected[i]) << i;
+  }
 }
 
 TEST_F(GxUniformLimitTest, MaximalConfigFitsAtEveryAlignment) {

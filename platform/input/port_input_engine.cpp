@@ -413,7 +413,7 @@ void Runtime::ConsumeChangedOnContextSwitch(uint16_t before, uint16_t after) {
   }
 }
 
-const Output& Runtime::Poll(const RawState& raw, uint16_t contexts, double nowMs) {
+const Output& Runtime::Poll(const RawState& raw, uint16_t contexts, double nowMs, uint16_t quiet) {
   const auto prevHeld = mOut.held;
   mOut.value.fill(0.f);
   mOut.held.reset();
@@ -504,8 +504,8 @@ const Output& Runtime::Poll(const RawState& raw, uint16_t contexts, double nowMs
       active |= uint16_t(kCtxLayer1 << l);
     }
   }
-  if (mHavePolled && active != mContexts) {
-    ConsumeChangedOnContextSwitch(mContexts, active);
+  if (mHavePolled && (active & ~quiet) != (mContexts & ~quiet)) {
+    ConsumeChangedOnContextSwitch(mContexts & ~quiet, active & ~quiet);
   }
   mContexts = active;
   mHavePolled = true;

@@ -157,6 +157,82 @@ public:
   // The Remastered Phazon Beam's DisintegrationAmount, 0 to 1 (CPhazonBeamMP1::Update), which
   // the veins material (kind 35) eats its mask with. Reset to 0 when the beam unloads.
   static void PortSetDisintegration(float amount);
+  // The pause screen's visor (CSamusDoll::Draw), one pass at a time: while a pass is set, the
+  // visor's Remastered materials (kinds 36 and 37) draw by their shaders under the doll's
+  // blended and additive flags. Their colour is Remastered's DIFC, ICMC and coverage C (COVG),
+  // not the retail fade. Every other surface draws as it would without the pass, its PBR neutral.
+  struct PortInventoryPass {
+    bool additive;   // the second pass: the pulse, drawn additive
+    float visor[4];  // the first pass's colour (CSamusDoll's visorColor)
+    float pulse;     // the second pass's strength: drawAlpha * addBlend * the visor's pulse factor
+    float coverage;  // C: the doll's drawAlpha
+  };
+  // Sets a pass until it goes out of scope. Scopes do not nest: one pass at a time.
+  class PortInventoryScope {
+  public:
+    explicit PortInventoryScope(const PortInventoryPass& pass);
+    ~PortInventoryScope();
+
+  private:
+    PortInventoryScope(const PortInventoryScope&);
+    PortInventoryScope& operator=(const PortInventoryScope&);
+  };
+  static bool PortInventoryKind(float kind) { return kind > 35.5f && kind < 37.5f; }
+  // How a surface draws while a pass may be set. Outside: not the visor's (no pass, or not kind
+  // 36 or 37), it takes the usual path. Pbr: the visor's, by its shader. Tev: the visor's, on
+  // its TEV fallback with the doll's flags: drawn under another mode than the pass's (blended
+  // for the first, additive for the second), outside PortPBRAllowed, or the glass (36) without
+  // the screen copy.
+  enum EPortInventoryDraw { kPID_Outside, kPID_Pbr, kPID_Tev };
+  static EPortInventoryDraw PortInventoryDraw(bool active, const PortInventoryPass& pass, float kind, int trans,
+                                              bool pbrAllowed, bool screenCopy) {
+    if (!active || !PortInventoryKind(kind)) {
+      return kPID_Outside;
+    }
+    const int passTrans = pass.additive ? CModelFlags::kT_Additive : CModelFlags::kT_Blend;
+    return trans == passTrans && pbrAllowed && (kind > 36.5f || screenCopy) ? kPID_Pbr : kPID_Tev;
+  }
+  // The flags a surface is drawn with. The visor's own PBR draw is shaded as opaque and tests
+  // depth without writing it (Remastered's visor does not occlude what is drawn after it, and
+  // the doll's flags would write it); a solid alpha blend is shaded as opaque; else the doll's.
+  static CModelFlags PortDrawFlags(bool inventory, bool solidBlend, const CModelFlags& opaque,
+                                   const CModelFlags& model) {
+    if (inventory) {
+      return opaque.DepthCompareUpdate(true, false);
+    }
+    return solidBlend ? opaque : model;
+  }
+  // A pass's DIFC, ICMC and C. Remastered's CSamusDollMP1::RenderVisor draws the pulse in
+  // gpTweakGuiColors+0x818, (0.4, 0.1, 0, 1): as the incandescence where the visor is fully
+  // covered, else as the diffuse. False for a pulse of 0: that pass draws nothing.
+  static bool PortInventoryModulation(const PortInventoryPass& pass, float diffuse[4], float incan[4],
+                                      float& coverage) {
+    static const float kPulseRed = 0.4f;
+    static const float kPulseGreen = 0.1f;
+    static const float kFullCoverage = 1e-5f;
+    for (int i = 0; i < 4; ++i) {
+      diffuse[i] = pass.additive ? 1.f : pass.visor[i];
+      incan[i] = i == 3 ? 1.f : 0.f;
+    }
+    coverage = pass.coverage;
+    if (!pass.additive) {
+      return true;
+    }
+    if (!(pass.pulse > 0.f)) {
+      return false;
+    }
+    const float full = pass.coverage - 1.f;
+    if (full <= kFullCoverage && full >= -kFullCoverage) {
+      incan[0] = kPulseRed * pass.pulse;
+      incan[1] = kPulseGreen * pass.pulse;
+    } else {
+      diffuse[0] = kPulseRed * pass.pulse;
+      diffuse[1] = kPulseGreen * pass.pulse;
+      diffuse[2] = 0.f;
+      diffuse[3] = pass.pulse;
+    }
+    return true;
+  }
   // The CMDL this model was loaded from (0 for an area's models), for diagnostics.
   void PortSetAssetId(uint id) { xPort_assetId = id; }
   uint PortAssetId() const { return xPort_assetId; }

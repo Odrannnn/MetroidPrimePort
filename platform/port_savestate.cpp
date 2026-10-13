@@ -1,8 +1,10 @@
 #include "port_savestate.h"
 
+#include "port_apclient.h"
 #include "port_debug.h"
 #include "port_gci.h"
 #include "port_paths.h"
+#include "port_randomizer.h"
 #include "port_mods.h"
 #include "port_remastered_import.h"
 #include "port_tracker.h"
@@ -17,20 +19,26 @@
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
+#include "MetroidPrime/Player/CWorldTransManager.hpp"
 #include "MetroidPrime/Player/CWorldState.hpp"
 
 #include "port_discord.h"
 
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <sstream>
+#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -69,6 +77,56 @@ bool sInstallPending = false;
 bool sPlacePending = false;
 Header sPendingHeader;
 std::vector< uint8_t > sPendingBlob;
+
+// The room state of that load, applied area by area as the rebuilt areas come
+// up. Areas that load later than kRoomApplyFrames ticks after the place keep
+// the memory card load's fresh objects (the player may have left and come back).
+constexpr int kRoomApplyFrames = 600;
+bool sRoomPending = false;
+int sRoomFrames = 0;
+std::vector< int32_t > sRoomDone;
+RoomApplyStats sRoomStats;
+
+// Quick resume: a load that came from resume.mpss deletes the file once
+// Samus is placed. sResumeLoadRequest is the console's (or a hotkey's) load
+// from inside a game.
+bool sResumeLoading = false;
+bool sResumeLoadRequest = false;
+
+// The run marker ("running" next to resume.mpss): present while the game runs,
+// removed on a clean quit and while Android has the app in the background
+// (where it may be killed without warning). One left at launch means the last
+// run crashed or hung. It holds "resumed <savedAt>" once the run resumed, so a
+// crash before any newer snapshot shows as the same state crashing again.
+bool sLastRunCrashed = false;
+std::string sLastRunMarker;
+std::string sMarker;
+
+// The resume snapshot: the bytes resume.mpss will hold, built on the game
+// thread at a safe moment and written from wherever the quit or background
+// event arrives. Everything but the game-thread-only timers is under the mutex.
+using Clock = std::chrono::steady_clock;
+struct ResumeSnapshot {
+  bool valid = false;
+  std::string bytes;
+  fs::path path;
+  ResumeMeta meta;
+  std::string world;
+  std::string room;
+  uint32_t worldId = 0;
+  uint32_t areaId = 0;
+  Clock::time_point taken;
+  uint64_t gen = 0;
+  uint64_t writtenGen = 0;
+};
+std::mutex sSnapMutex;
+ResumeSnapshot sSnap;
+std::atomic< bool > sResumeEnabled{true};
+std::atomic< bool > sPumpSafe{false};
+std::thread::id sGameThread;
+// Game thread only: when the current room was first seen, and the snapshot's.
+uint64_t sRoomKey = 0;
+Clock::time_point sRoomSince;
 
 void SetMessage(const std::string& text) {
   sMessage = text;
@@ -188,6 +246,8 @@ bool Capture(CStateManager& mgr, Header& header, std::vector< uint8_t >& blob) {
   header.savedAt = static_cast< int64_t >(std::time(nullptr));
   header.world = WorldName(world.IGetWorldAssetId());
   header.room = RoomName(mgr, area.Value());
+  if (PortDebug::SaveStateRoomState())
+    CaptureRoomState(mgr, header.roomState);
   return true;
 }
 
@@ -210,6 +270,7 @@ void DoSave(CStateManager& mgr, int slot) {
 void QuitToPending(CStateManager& mgr) {
   sInstallPending = true;
   sPlacePending = false;
+  sRoomPending = false;
 
   // As the debug world warp: stop the outgoing world's loads, retire its PAKs
   // and quit to CMainFlow, which starts the next game (InstallPending).
@@ -285,6 +346,137 @@ void Place(CStateManager& mgr) {
   }
   mgr.CameraManager()->ResetCameras(mgr);
   sPendingBlob.clear();
+  sRoomPending = PortDebug::SaveStateRoomState() && !h.roomState.empty();
+  sRoomFrames = 0;
+  sRoomDone.clear();
+  sRoomStats = {};
+}
+
+// Puts the saved room objects on the rebuilt areas as each one finishes loading.
+void TickRoomState(CStateManager& mgr) {
+  if (!sRoomPending || mgr.GetWantsToQuit())
+    return;
+  const int waiting = ApplyRoomState(mgr, sPendingHeader.roomState, sRoomDone, sRoomStats);
+  if (waiting > 0 && ++sRoomFrames < kRoomApplyFrames)
+    return;
+  sRoomPending = false;
+  std::fprintf(stderr, "[savestate] room state: %d applied, %d removed, %d unmatched\n",
+               sRoomStats.applied, sRoomStats.removed, sRoomStats.unmatched);
+}
+
+
+fs::path ResumePath() {
+  const std::string folder = Folder();
+  if (folder.empty())
+    return {};
+  return PortGci::PathFromString(folder) / "resume.mpss";
+}
+
+// What ties a resume to one game: the randomizer seed, or the Archipelago
+// session (its save card directory and built-in seed). Retail is "".
+std::string CurrentIdentity() {
+  std::string id;
+  if (PortAp::Enabled()) {
+    id += "ap:" + PortAp::SaveCardDirectory() + "|" + PortAp::SoloSeedInPlay();
+  }
+  if (PortRandomizer::Enabled()) {
+    const char* seed = PortRandomizer::SeedName();
+    id += std::string("rando:") + (seed != nullptr ? seed : "");
+  }
+  return id;
+}
+
+void RemoveResumeFile() {
+  const fs::path path = ResumePath();
+  if (path.empty())
+    return;
+  std::error_code ec;
+  fs::remove(path, ec);
+}
+
+fs::path MarkerPath() {
+  const std::string folder = Folder();
+  if (folder.empty())
+    return {};
+  return PortGci::PathFromString(folder) / "running";
+}
+
+void WriteMarker() {
+  const fs::path path = MarkerPath();
+  if (path.empty())
+    return;
+  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  file << sMarker;
+}
+
+void RemoveMarker() {
+  const fs::path path = MarkerPath();
+  if (path.empty())
+    return;
+  std::error_code ec;
+  fs::remove(path, ec);
+}
+
+std::string ResumedMarker(int64_t savedAt) { return "resumed " + std::to_string(savedAt); }
+
+bool ReadResume(ResumeMeta& meta, Header& header, std::vector< uint8_t >& blob) {
+  const fs::path path = ResumePath();
+  if (path.empty())
+    return false;
+  std::ifstream file(path, std::ios::binary);
+  if (!file)
+    return false;
+  const std::string data((std::istreambuf_iterator< char >(file)), std::istreambuf_iterator< char >());
+  std::string state;
+  return DecodeResume(data, meta, state) && Decode(state, header, blob);
+}
+
+ResumeContext GatherResumeContext() {
+  ResumeContext ctx;
+  const CStateManager* mgr = PortDebug::StateManager();
+  if (mgr == nullptr || mgr->GetPlayer() == nullptr || mgr->GetWorld() == nullptr ||
+      gpGameState == nullptr) {
+    return ctx;
+  }
+  ctx.inGame = true;
+  ctx.initialized = mgr->IsFullyInitialized();
+  ctx.quitting = mgr->GetWantsToQuit() || sInstallPending || sPlacePending;
+  const CPlayer* player = mgr->GetPlayer();
+  ctx.dead = player->IsPlayerDeadEnough() || player->GetDeathTime() > 0.f ||
+             (mgr->GetPlayerState() != nullptr && mgr->GetPlayerState()->GetHealthInfo().GetHP() <= 0.f);
+  ctx.cinematic = mgr->GetCameraManager() != nullptr && mgr->GetCameraManager()->IsInCinematicCamera();
+  ctx.transition = mgr->GetWorldTransManager() != nullptr &&
+                   mgr->GetWorldTransManager()->GetTransType() != CWorldTransManager::kTT_Disabled;
+  ctx.saveUi = mgr->GetInSaveUI();
+  return ctx;
+}
+
+// The resume file survives a load that could not start.
+void DoResumeLoad(CStateManager& mgr) {
+  ResumeMeta meta;
+  Header header;
+  std::vector< uint8_t > blob;
+  if (!ReadResume(meta, header, blob)) {
+    SetMessage("No resume state to load");
+    return;
+  }
+  ResumeMeta current;
+  current.cardSerial = gpGameState != nullptr ? gpGameState->GetCardSerial() : 0;
+  current.identity = CurrentIdentity();
+  if (!ResumeMatches(meta, current) || (gpGameState != nullptr && meta.fileIdx != gpGameState->GetFileIdx())) {
+    SetMessage("The resume state belongs to another game");
+    return;
+  }
+  std::string why;
+  if (!PlayerCanSave(mgr, why)) {
+    SetMessage("Can't load the resume state: " + why);
+    return;
+  }
+  sPendingHeader = header;
+  sPendingBlob = std::move(blob);
+  sResumeLoading = true;
+  QuitToPending(mgr);
+  SetMessage("Loading the resume state: " + header.world + " - " + header.room);
 }
 
 } // namespace
@@ -389,13 +581,23 @@ bool Tick(CStateManager& mgr) {
     if (static_cast< uint32_t >(mgr.GetWorld()->IGetWorldAssetId()) == sPendingHeader.worldId) {
       Place(mgr);
     }
+    if (sResumeLoading) {
+      // The file stays until the next snapshot replaces it: a crash before
+      // then resumes here again, and the marker tells the prompt so.
+      sResumeLoading = false;
+      sMarker = ResumedMarker(sPendingHeader.savedAt);
+      WriteMarker();
+      SetMessage("Resumed");
+    }
     PortStartStateLoadMusic(mgr);
   }
+  TickRoomState(mgr);
   if (sInstallPending) {
     // Still in the outgoing game, whose PAKs are retired: run nothing more
     // until CMainFlow replaces it.
     return mgr.GetWantsToQuit();
   }
+  ResumeTick(mgr);
   if (sSaveRequest >= 0) {
     const int slot = sSaveRequest;
     sSaveRequest = -1;
@@ -405,6 +607,11 @@ bool Tick(CStateManager& mgr) {
     const int slot = sLoadRequest;
     sLoadRequest = -1;
     return DoLoad(mgr, slot);
+  }
+  if (sResumeLoadRequest) {
+    sResumeLoadRequest = false;
+    DoResumeLoad(mgr);
+    return sInstallPending;
   }
   if (sReloadRequest) {
     sReloadRequest = false;
@@ -423,6 +630,13 @@ void ReloadModsNow() {
 
 void SetInFrontEnd(bool inFrontEnd) {
   sInFrontEnd = inFrontEnd;
+  if (inFrontEnd) {
+    // Back at the title: the snapshot belongs to a game that was left.
+    std::lock_guard< std::mutex > lock(sSnapMutex);
+    sSnap.valid = false;
+    sSnap.bytes.clear();
+    sSnap.gen++;
+  }
   if (!inFrontEnd && sFrontEndReload) {
     // Left before CFrontEndUI got to it: the next game reads the new files.
     sFrontEndReload = false;
@@ -448,6 +662,385 @@ void InstallPending() {
   CMemoryInStream in(sPendingBlob.data(), sPendingBlob.size(), CMemoryInStream::kOS_NotOwned);
   gpMain->PortLoadGameState(in);
   sPlacePending = true;
+}
+
+namespace {
+
+bool SafeNow(CStateManager& mgr) {
+  const ResumeContext ctx = GatherResumeContext();
+  std::string why;
+  return ResumeSkipReason(ctx) == nullptr && PlayerCanSave(mgr, why);
+}
+
+uint64_t RoomKey(const CStateManager& mgr) {
+  return (static_cast< uint64_t >(static_cast< uint32_t >(mgr.GetWorld()->IGetWorldAssetId())) << 32) |
+         static_cast< uint32_t >(mgr.GetWorld()->GetCurrentAreaId().Value());
+}
+
+ResumeMeta CurrentMeta() {
+  ResumeMeta meta;
+  meta.fileIdx = gpGameState->GetFileIdx();
+  meta.cardSerial = gpGameState->GetCardSerial();
+  meta.identity = CurrentIdentity();
+  return meta;
+}
+
+// Builds the snapshot from the live game (caller checked SafeNow).
+bool TakeSnapshot(CStateManager& mgr) {
+  const auto start = Clock::now();
+  Header header;
+  std::vector< uint8_t > blob;
+  Capture(mgr, header, blob);
+  ResumeSnapshot snap;
+  snap.meta = CurrentMeta();
+  if (snap.meta.fileIdx > 2)
+    return false;
+  snap.path = ResumePath();
+  if (snap.path.empty())
+    return false;
+  snap.bytes = EncodeResume(snap.meta, Encode(header, blob));
+  snap.world = header.world;
+  snap.room = header.room;
+  snap.worldId = header.worldId;
+  snap.areaId = static_cast< uint32_t >(mgr.GetWorld()->GetCurrentAreaId().Value());
+  snap.taken = Clock::now();
+  snap.valid = true;
+  const double ms = std::chrono::duration< double, std::milli >(snap.taken - start).count();
+  std::fprintf(stderr, "[resume] snapshot %s - %s: %zu bytes in %.3f ms\n", snap.world.c_str(),
+               snap.room.c_str(), snap.bytes.size(), ms);
+  {
+    std::lock_guard< std::mutex > lock(sSnapMutex);
+    snap.gen = sSnap.gen + 1;
+    snap.writtenGen = sSnap.writtenGen;
+    sSnap = std::move(snap);
+  }
+  return true;
+}
+
+void DropSnapshot() {
+  std::lock_guard< std::mutex > lock(sSnapMutex);
+  sSnap.valid = false;
+  sSnap.bytes.clear();
+  sSnap.gen++;
+}
+
+bool HaveSnapshot() {
+  std::lock_guard< std::mutex > lock(sSnapMutex);
+  return sSnap.valid;
+}
+
+// SDL calls this on whichever thread sends the event. Android's game thread
+// pumps the lifecycle in SDL_PollEvent (SDL_androidevents.c Android_OnPause),
+// so this is the game thread, but it takes nothing from the game unless the
+// main loop marked the pump safe.
+bool SDLCALL ResumeEventWatch(void*, SDL_Event* event) {
+  switch (event->type) {
+  case SDL_EVENT_WILL_ENTER_BACKGROUND:
+    if (sResumeEnabled.load() && sPumpSafe.load() && std::this_thread::get_id() == sGameThread) {
+      CStateManager* mgr = const_cast< CStateManager* >(PortDebug::StateManager());
+      if (mgr != nullptr && mgr->GetPlayer() != nullptr && mgr->GetWorld() != nullptr &&
+          gpGameState != nullptr && SafeNow(*mgr)) {
+        TakeSnapshot(*mgr);
+      }
+    }
+    [[fallthrough]];
+  case SDL_EVENT_DID_ENTER_BACKGROUND:
+  case SDL_EVENT_TERMINATING:
+    if (sResumeEnabled.load()) {
+      ResumeFlush();
+    }
+    // Android may kill a background app at any time: that is no crash.
+    RemoveMarker();
+    break;
+  case SDL_EVENT_DID_ENTER_FOREGROUND:
+    WriteMarker();
+    break;
+  default:
+    break;
+  }
+  return true;
+}
+
+} // namespace
+
+namespace {
+
+bool FlushSnapshot(bool quiet) {
+  std::lock_guard< std::mutex > lock(sSnapMutex);
+  if (!sSnap.valid || sSnap.writtenGen == sSnap.gen)
+    return false;
+  fs::path temp = sSnap.path;
+  temp += ".tmp";
+  {
+    std::ofstream file(temp, std::ios::binary | std::ios::trunc);
+    if (!file)
+      return false;
+    file.write(sSnap.bytes.data(), static_cast< std::streamsize >(sSnap.bytes.size()));
+    file.flush();
+    if (!file)
+      return false;
+  }
+  std::error_code ec;
+  fs::rename(temp, sSnap.path, ec);
+  if (ec)
+    return false;
+  sSnap.writtenGen = sSnap.gen;
+  if (!quiet) {
+    const double age = std::chrono::duration< double >(Clock::now() - sSnap.taken).count();
+    std::fprintf(stderr, "[resume] written: %s - %s (snapshot %.1f s old)\n", sSnap.world.c_str(),
+                 sSnap.room.c_str(), age);
+  }
+  return true;
+}
+
+} // namespace
+
+bool ResumeFlush() { return FlushSnapshot(false); }
+
+void ResumeInstallEventWatch() {
+  sGameThread = std::this_thread::get_id();
+  SDL_AddEventWatch(ResumeEventWatch, nullptr);
+  const fs::path marker = MarkerPath();
+  std::error_code ec;
+  if (!marker.empty() && fs::exists(marker, ec)) {
+    sLastRunCrashed = true;
+    std::ifstream file(marker, std::ios::binary);
+    std::getline(file, sLastRunMarker);
+    std::fprintf(stderr, "[resume] the last run did not quit cleanly%s\n",
+                 sLastRunMarker.empty() ? "" : (" (" + sLastRunMarker + ")").c_str());
+  }
+  WriteMarker();
+  // Returning from main or exit() is a clean quit too; a crash or a kill is not.
+  std::atexit(ResumeQuitCleanly);
+}
+
+void ResumeQuitCleanly() { RemoveMarker(); }
+
+void SetEventPumpSafe(bool safe) { sPumpSafe.store(safe); }
+
+void ResumeTick(CStateManager& mgr) {
+  const bool enabled = PortDebug::QuickResume();
+  sResumeEnabled.store(enabled);
+  if (!enabled) {
+    if (HaveSnapshot())
+      DropSnapshot();
+    return;
+  }
+  if (sInFrontEnd || mgr.GetPlayer() == nullptr || mgr.GetWorld() == nullptr || gpGameState == nullptr) {
+    return;
+  }
+  const auto now = Clock::now();
+  const uint64_t key = RoomKey(mgr);
+  if (key != sRoomKey) {
+    sRoomKey = key;
+    sRoomSince = now;
+  }
+  bool haveSnap;
+  bool sameRoom = false;
+  double sinceSnap = 0.0;
+  {
+    std::lock_guard< std::mutex > lock(sSnapMutex);
+    haveSnap = sSnap.valid;
+    if (haveSnap) {
+      // Another card file or game since: that snapshot is no longer ours.
+      const ResumeMeta meta = CurrentMeta();
+      if (!(sSnap.meta.fileIdx == meta.fileIdx && ResumeMatches(sSnap.meta, meta))) {
+        sSnap.valid = false;
+        sSnap.gen++;
+        haveSnap = false;
+      } else {
+        sameRoom = ((static_cast< uint64_t >(sSnap.worldId) << 32) | sSnap.areaId) == key;
+        sinceSnap = std::chrono::duration< double >(now - sSnap.taken).count();
+      }
+    }
+  }
+  const bool safe = SafeNow(mgr);
+  if (ResumeRefreshDue(safe, haveSnap, sameRoom, std::chrono::duration< double >(now - sRoomSince).count(),
+                       sinceSnap)) {
+    // Written at once (a few KB): a crash leaves this snapshot to resume from.
+    if (TakeSnapshot(mgr))
+      FlushSnapshot(true);
+  }
+}
+
+bool ResumeSave(bool force) {
+  if (!force && !PortDebug::QuickResume())
+    return false;
+  CStateManager* mgr = const_cast< CStateManager* >(PortDebug::StateManager());
+  const bool inGame = mgr != nullptr && mgr->GetPlayer() != nullptr && mgr->GetWorld() != nullptr &&
+                      gpGameState != nullptr && !sInFrontEnd;
+  const bool safe = inGame && SafeNow(*mgr);
+  switch (ChooseResumeWrite(safe, HaveSnapshot())) {
+  case ResumeWriteChoice::kNothing:
+    SetMessage("No resume state written: no safe point yet");
+    return false;
+  case ResumeWriteChoice::kRefreshThenWrite:
+    if (!TakeSnapshot(*mgr)) {
+      SetMessage("Couldn't write the resume state in " + Folder());
+      return false;
+    }
+    break;
+  case ResumeWriteChoice::kWriteSnapshot:
+    break;
+  }
+  if (force) {
+    std::lock_guard< std::mutex > lock(sSnapMutex);
+    // A forced save writes again even when the snapshot was already written.
+    sSnap.writtenGen = 0;
+  }
+  if (!ResumeFlush()) {
+    std::lock_guard< std::mutex > lock(sSnapMutex);
+    if (sSnap.valid && sSnap.writtenGen == sSnap.gen) {
+      return true; // an event watch already wrote this snapshot
+    }
+    SetMessage("Couldn't write the resume state in " + Folder());
+    return false;
+  }
+  std::lock_guard< std::mutex > lock(sSnapMutex);
+  SetMessage(std::string("Resume state written") + (safe ? "" : " from the last safe point") + ": " +
+             sSnap.world + " - " + sSnap.room);
+  return true;
+}
+
+bool ResumeOffer(ResumeInfo& info) {
+  if (!PortDebug::QuickResume())
+    return false;
+  ResumeMeta meta;
+  Header header;
+  std::vector< uint8_t > blob;
+  // Polled while the title waits: say why once, not every poll.
+  static std::string sLastReason;
+  const auto note = [](const std::string& reason) {
+    if (reason != sLastReason) {
+      sLastReason = reason;
+      fprintf(stderr, "[resume] %s\n", reason.c_str());
+    }
+  };
+  if (!ReadResume(meta, header, blob)) {
+    std::error_code ec;
+    note(fs::exists(ResumePath(), ec) ? "no offer: " + ResumePath().string() + " is unreadable"
+                                      : "no offer: no resume state");
+    return false;
+  }
+  ResumeMeta current = meta;
+  current.identity = CurrentIdentity();
+  if (!ResumeMatches(meta, current)) {
+    note("no offer yet: saved for '" + meta.identity + "', running '" + current.identity + "'");
+    return false;
+  }
+  note("offering " + header.world + " - " + header.room);
+  info.exists = true;
+  info.fileIdx = meta.fileIdx;
+  info.cardSerial = meta.cardSerial;
+  info.world = header.world;
+  info.room = header.room;
+  info.playTime = header.playTime;
+  info.savedAt = header.savedAt;
+  info.afterCrash = sLastRunCrashed;
+  info.crashedAgain = sLastRunCrashed && sLastRunMarker == ResumedMarker(header.savedAt);
+  return true;
+}
+
+bool ResumeAccept(uint64_t cardSerial, uint32_t& fileIdx) {
+  ResumeMeta meta;
+  Header header;
+  std::vector< uint8_t > blob;
+  if (!ReadResume(meta, header, blob))
+    return false;
+  ResumeMeta current;
+  current.cardSerial = cardSerial;
+  current.identity = CurrentIdentity();
+  if (!ResumeMatches(meta, current)) {
+    fprintf(stderr, "[resume] mismatch: card %016llx/%016llx identity '%s'/'%s' file %u\n",
+            static_cast< unsigned long long >(meta.cardSerial), static_cast< unsigned long long >(current.cardSerial),
+            meta.identity.c_str(), current.identity.c_str(), meta.fileIdx);
+    SetMessage("The resume state belongs to another game");
+    return false;
+  }
+  sPendingHeader = header;
+  sPendingBlob = std::move(blob);
+  sInstallPending = true;
+  sPlacePending = false;
+  sResumeLoading = true;
+  fileIdx = meta.fileIdx;
+  SetMessage("Resuming: " + header.world + " - " + header.room);
+  return true;
+}
+
+bool RequestResumeLoad() {
+  if (PortDebug::StateManager() == nullptr) {
+    SetMessage("Can't load the resume state: no game running");
+    return false;
+  }
+  if (sInstallPending || sPlacePending) {
+    SetMessage("A load is already in progress");
+    return false;
+  }
+  sResumeLoadRequest = true;
+  return true;
+}
+
+void ResumeClear() {
+  DropSnapshot();
+  RemoveResumeFile();
+  SetMessage("Resume state deleted");
+}
+
+std::string ResumeStatus() {
+  ResumeMeta meta;
+  Header header;
+  std::vector< uint8_t > blob;
+  if (!ReadResume(meta, header, blob))
+    return "no resume state";
+  ResumeMeta current = meta;
+  current.identity = CurrentIdentity();
+  char when[32] = "";
+  const std::time_t at = static_cast< std::time_t >(header.savedAt);
+  if (const std::tm* tm = std::localtime(&at))
+    std::strftime(when, sizeof(when), "%Y-%m-%d %H:%M", tm);
+  return header.world + " - " + header.room + ", file " + std::to_string(meta.fileIdx + 1) + ", " +
+         when + (ResumeMatches(meta, current) ? "" : " (another game's)");
+}
+
+namespace {
+std::mutex sPromptMutex;
+bool sPromptShown = false;
+bool sPromptYes = true;
+int sPromptAnswer = -1;
+ResumeInfo sPromptInfo;
+} // namespace
+
+void SetResumePrompt(const ResumeInfo* info, bool yesSelected) {
+  std::lock_guard< std::mutex > lock(sPromptMutex);
+  sPromptShown = info != nullptr;
+  if (info != nullptr) {
+    sPromptInfo = *info;
+    sPromptYes = yesSelected;
+  } else {
+    sPromptAnswer = -1;
+  }
+}
+
+bool ResumePromptShown(ResumeInfo& out, bool& yesSelected) {
+  std::lock_guard< std::mutex > lock(sPromptMutex);
+  if (!sPromptShown)
+    return false;
+  out = sPromptInfo;
+  yesSelected = sPromptYes;
+  return true;
+}
+
+void AnswerResumePrompt(bool yes) {
+  std::lock_guard< std::mutex > lock(sPromptMutex);
+  if (sPromptShown && sPromptAnswer < 0)
+    sPromptAnswer = yes ? 1 : 0;
+}
+
+int TakeResumePromptAnswer() {
+  std::lock_guard< std::mutex > lock(sPromptMutex);
+  const int answer = sPromptAnswer;
+  sPromptAnswer = -1;
+  return answer;
 }
 
 } // namespace PortSaveState

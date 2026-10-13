@@ -1062,7 +1062,7 @@ std::vector<uint8_t> Mati(uint32_t shader, const std::vector<std::pair<const cha
 }
 
 // A root generator whose material is `Fresh(7)`, with a blend mode and sprite centre.
-std::vector<uint8_t> VmatEffect(bool model = false) {
+std::vector<uint8_t> VmatEffect(bool model = false, const EffectGuid& material = Fresh(7), uint32_t pbdm = 2) {
   std::vector<uint8_t> out(0x3c, 0);
   std::memcpy(out.data(), "RFRM", 4);
   std::memcpy(out.data() + 0x14, "GENP", 4);
@@ -1070,10 +1070,10 @@ std::vector<uint8_t> VmatEffect(bool model = false) {
   PutProperty(out, "MAXP", 1);
   PutConstant(out, 4);
   PutProperty(out, "PBDM", 1);
-  PutConstant(out, 2);
+  PutConstant(out, pbdm);
   PutProperty(out, "MTIN", 0);
   out.push_back(1);
-  PutGuid(out, Fresh(7));
+  PutGuid(out, material);
   if (model) {
     PutProperty(out, "PMDL", 0);
     PutGuid(out, Legacy(0x1234ABCD));
@@ -1268,6 +1268,120 @@ uint32_t VmatWord(const std::vector<uint8_t>& v, size_t at) {
   return at + 4 <= v.size() ? uint32_t(v[at]) << 24 | v[at + 1] << 16 | v[at + 2] << 8 | v[at + 3] : ~0u;
 }
 
+// The wave orb's exact MATI (MTIN 756533fc-e832-48f2-b1ef-ebb41fcea14f, little-endian groups) and its
+// header blend (EBlendMode, the LE u32 at 0x61).
+const EffectGuid kWaveMati = {0xfc, 0x33, 0x65, 0x75, 0x32, 0xe8, 0xf2, 0x48,
+                              0xb1, 0xef, 0xeb, 0xb4, 0x1f, 0xce, 0xa1, 0x4f};
+
+// Converts a VmatEffect (PBDM `pbdm`, 0 by default) whose material is `material` and returns the VMAT blob's blend word, or ~0u
+// when no VMAT came out.
+uint32_t ConvertBlend(std::vector<uint8_t> mati, const EffectGuid& material, bool model, uint32_t pbdm = 0) {
+  const std::vector<uint8_t> data = VmatEffect(model, material, pbdm);
+  EffectNode effect;
+  std::string error;
+  if (!ParseEffect(data.data(), data.size(), effect, error)) {
+    std::fprintf(stderr, "FAIL: wave blend effect does not parse: %s\n", error.c_str());
+    ++sFailures;
+    return ~0u;
+  }
+  EffectConvertIO io;
+  io.materialTexture = [&material](const EffectGuid& id) { return id == material ? 0x5EED0007u : 0u; };
+  io.materialData = [&mati](const EffectGuid&) { return mati; };
+  io.vfxTexture = [](const EffectGuid&) {
+    FlipbookAtlas atlas;
+    atlas.id = 0x5EED0008;
+    return atlas;
+  };
+  io.modelMesh = [](uint32_t) { return std::vector<uint8_t>(); };
+  std::vector<ConvertedPart> parts = ConvertEffect(effect, data.data(), io);
+  std::vector<RetailPartProperty> properties;
+  if (parts.size() != 1 || !SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error)) {
+    return ~0u;
+  }
+  for (const RetailPartProperty& property : properties) {
+    if (property.fourcc == EffectFourCC("VMAT")) {
+      return VmatWord(property.value, 16);
+    }
+  }
+  return ~0u;
+}
+
+// A swoosh on the orb's exact MATI keeps SBDM: the override is for model particles only.
+void TestWaveOrbSwoosh(const std::vector<uint8_t>& mati) {
+  std::vector<uint8_t> out(0x3c, 0);
+  std::memcpy(out.data(), "RFRM", 4);
+  std::memcpy(out.data() + 0x14, "GENP", 4);
+  PutGenerator(out, true);
+  PutProperty(out, "MAXP", 1);
+  PutConstant(out, 3);
+  PutProperty(out, "SSWH", 0);
+  PutGuid(out, Legacy(0x0000AAAA));
+  PutTexr(out, 0x1234ABCD);
+  PutProperty(out, "_END", 4);
+  Put32(out, 1);
+  PutGuid(out, Legacy(0x0000AAAA));
+  PutFourCC(out, "SWSH");
+  PutProperty(out, "LENG", 1);
+  PutConstant(out, 8);
+  PutProperty(out, "SBDM", 1);
+  PutConstant(out, 0);
+  PutProperty(out, "PMDL", 0);
+  PutGuid(out, Legacy(0x1234ABCD));
+  PutProperty(out, "MTIN", 0);
+  out.push_back(1);
+  PutGuid(out, kWaveMati);
+  PutProperty(out, "_END", 4);
+  out.insert(out.end(), {'F', 'O', 'O', 'T'});
+  EffectNode effect;
+  std::string error;
+  Check(ParseEffect(out.data(), out.size(), effect, error), "orb swoosh effect parses");
+  EffectConvertIO io;
+  io.materialTexture = [](const EffectGuid& id) { return id == kWaveMati ? 0x5EED0007u : 0u; };
+  io.materialData = [&mati](const EffectGuid&) { return mati; };
+  io.vfxTexture = [](const EffectGuid&) {
+    FlipbookAtlas atlas;
+    atlas.id = 0x5EED0008;
+    return atlas;
+  };
+  const std::vector<ConvertedPart> parts = ConvertEffect(effect, out.data(), io);
+  uint32_t blend = ~0u;
+  for (const ConvertedPart& part : parts) {
+    std::vector<RetailPartProperty> properties;
+    if (part.type == EffectFourCC("SWHC") && SplitRetailEffect(part.type, part.part.data(), part.part.size(), properties, error)) {
+      for (const RetailPartProperty& property : properties) {
+        if (property.fourcc == EffectFourCC("VMAT")) {
+          blend = VmatWord(property.value, 16);
+        }
+      }
+    }
+  }
+  Check(blend == 0, "a swoosh on the orb's MATI keeps SBDM (alpha), not AdditiveOne");
+}
+
+// Only the wave orb's MATI, on a model particle, with header blend 1 takes Additive over PBDM.
+void TestWaveOrbHeaderBlend() {
+  auto orb = [](uint32_t shader, uint32_t headerBlend) {
+    std::vector<uint8_t> mati = Mati(shader, {{shader == 0x642dd72b ? "BCLR" : "TCH0", Fresh(8)}});
+    mati[0x61] = uint8_t(headerBlend);
+    return mati;
+  };
+  Check(ConvertBlend(orb(0x642dd72b, 1), kWaveMati, true) == 5, "wave orb MATI + PMDL + header blend 1: AdditiveOne (5)");
+  Check(ConvertBlend(orb(0x642dd72b, 1), Fresh(7), true) == 0, "other MATI guid keeps PBDM 0");
+  Check(ConvertBlend(orb(0x642dd72b, 0), kWaveMati, true) == 0, "header blend 0 keeps PBDM");
+  Check(ConvertBlend(orb(0x461071b8, 1), kWaveMati, true) == 0, "another shader keeps PBDM 0");
+  Check(ConvertBlend(orb(0x642dd72b, 2), kWaveMati, true) == 0, "header blend 2 keeps PBDM 0");
+  Check(ConvertBlend(std::vector<uint8_t>(0x50, 0), kWaveMati, true) == ~0u, "a short MATI writes no VMAT, no crash");
+  Check(ConvertBlend(orb(0x642dd72b, 1), kWaveMati, false) == 0, "no PMDL keeps PBDM 0");
+  // The older modes are untouched: PBDM 0..3 convert as themselves, on the orb's MATI too without PMDL
+  // and on its PMDL with another guid.
+  for (uint32_t pbdm = 0; pbdm <= 3; ++pbdm) {
+    Check(ConvertBlend(orb(0x642dd72b, 1), Fresh(7), true, pbdm) == pbdm, "PBDM 0..3 convert unchanged");
+    Check(ConvertBlend(orb(0x642dd72b, 1), kWaveMati, false, pbdm) == pbdm, "PBDM 0..3 without PMDL unchanged");
+  }
+  Check(ConvertBlend(orb(0x642dd72b, 1), kWaveMati, true, 2) == 5, "the override is the orb's, whatever its PBDM");
+  TestWaveOrbSwoosh(orb(0x642dd72b, 1));
+}
+
 // The new recipes: the FrameBuffer shaders draw as a multiply (blend 4), and
 // the ice charge beam reads its colour from BCLR alone.
 void TestVmatNewRecipes() {
@@ -1451,6 +1565,7 @@ int main() {
   TestParameterDefault();
   TestModelRotation();
   TestVmatNewRecipes();
+  TestWaveOrbHeaderBlend();
   TestModelsOnly();
   TestFacingRotation();
   if (sFailures != 0) {

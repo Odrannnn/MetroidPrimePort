@@ -2,6 +2,9 @@
 
 #include <algorithm>
 
+#ifdef TARGET_PC
+#include "aurora/vfx.hpp"
+#endif
 #include "Kyoto/CFactoryFnReturn.hpp"
 #include "Kyoto/CRandom16.hpp"
 #include "Kyoto/CSimplePool.hpp"
@@ -235,7 +238,7 @@ static bool PortReadVfxMat(CPortVfxData& vfx, CInputStream& in, u32 nbytes, CSim
   // knows: it is skipped whole, before anything is built, and the PART draws as retail.
   constexpr u32 kTexWords = 11;
   constexpr u32 kTailWords = 7 + 2 + 1 + 3 * 11 + 3;
-  if (version != 2 || ntex > 4 || blend > 4 || nbytes != (kTexWords * ntex + kTailWords) * 4 + 16) {
+  if (version != 2 || ntex > 4 || blend > aurora::gfx::vfx::MaxBlend || nbytes != (kTexWords * ntex + kTailWords) * 4 + 16) {
     skipRest();
     return true;
   }

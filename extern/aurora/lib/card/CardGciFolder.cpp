@@ -128,18 +128,8 @@ ECardResult CardGciFolder::createFile(const char* filename, size_t size, FileHan
     return ECardResult::INSSPACE;
   }
 
-  std::string baseName = fmt::format("{}-{}-{}", m_maker, m_game, filename);
-  for (char& c : baseName) {
-    if (static_cast<unsigned char>(c) < 32 || std::strchr("<>:\"/\\|?*", c)) {
-      c = '_';
-    }
-  }
-  auto diskName = io::fs_path_from_string(baseName + ".gci");
-  // CARD filenames are case-sensitive even when the filesystem isn't.
   std::error_code ec;
-  for (uint32_t suffix = 1; std::filesystem::exists(m_folderPath / diskName, ec) && !ec; ++suffix) {
-    diskName = io::fs_path_from_string(fmt::format("{}-{}.gci", baseName, suffix));
-  }
+  const auto diskName = unused_disk_name(filename, ec);
   if (ec) {
     return ECardResult::IOERROR;
   }
@@ -216,6 +206,21 @@ ECardResult CardGciFolder::deleteFile(uint32_t fileno) {
   return ECardResult::READY;
 }
 
+std::filesystem::path CardGciFolder::unused_disk_name(const char* filename, std::error_code& ec) const {
+  std::string baseName = fmt::format("{}-{}-{}", m_maker, m_game, filename);
+  for (char& c : baseName) {
+    if (static_cast<unsigned char>(c) < 32 || std::strchr("<>:\"/\\|?*", c)) {
+      c = '_';
+    }
+  }
+  auto diskName = io::fs_path_from_string(baseName + ".gci");
+  // CARD filenames are case-sensitive even when the filesystem isn't.
+  for (uint32_t suffix = 1; std::filesystem::exists(m_folderPath / diskName, ec) && !ec; ++suffix) {
+    diskName = io::fs_path_from_string(fmt::format("{}-{}.gci", baseName, suffix));
+  }
+  return ec ? std::filesystem::path{} : diskName;
+}
+
 ECardResult CardGciFolder::renameFile(const char* oldName, const char* newName) {
   if (m_error != ECardResult::READY) {
     return m_error;
@@ -231,6 +236,19 @@ ECardResult CardGciFolder::renameFile(const char* oldName, const char* newName) 
     return ECardResult::EXIST;
   }
   auto& file = m_files[idx];
+  // Port: the file on disk follows the new name, so a save written under a
+  // temporary name and renamed (PAL Metroid Prime) doesn't keep that name on
+  // disk. If the disk rename fails, the old disk name stays; the header is what
+  // counts.
+  std::error_code ec;
+  const auto diskName = unused_disk_name(newName, ec);
+  if (!ec) {
+    const auto source = io::fs_path_to_string(m_folderPath / file.filename);
+    const auto destination = io::fs_path_to_string(m_folderPath / diskName);
+    if (SDL_RenamePath(source.c_str(), destination.c_str())) {
+      file.filename = diskName.u8string();
+    }
+  }
   std::strncpy(file.file.m_filename, newName, CARD_FILENAME_MAX);
   file.dirty = true;
   return ECardResult::READY;

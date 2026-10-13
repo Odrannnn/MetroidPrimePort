@@ -1,5 +1,7 @@
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/CMain.hpp"
+#include "MetroidPrime/CStateManager.hpp"
+#include "MetroidPrime/Player/CPlayer.hpp"
 
 // Port: Aurora owns the application/window/GPU loop; the game entry is renamed
 // and driven by platform/main.cpp.
@@ -12,7 +14,10 @@
 #include <SDL3/SDL_timer.h>
 
 #include "port_debug.h"
+#include "port_photo.h"
+#include "port_savestate.h"
 #include "port_log.h"
+#include "port_memory_log.h"
 #include "port_disc.h"
 #include "port_mods.h"
 #include "port_textures.h"
@@ -157,6 +162,18 @@ bool COsContext::mProgressiveMode;
 u32 sARAMMemArray[2];
 float sInfiniteLoopTime;
 static uint sTicksAdvanced = 0;
+
+// Port: the player is in (or going into or out of) morph ball during play, with
+// no pause or map screen up.
+static bool MorphBallHoldsMouse() {
+  const CStateManager* mgr = PortDebug::StateManager();
+  if (mgr == nullptr || PortDebug::PauseScreenOpen() || PortDebug::MapScreenOpen() ||
+      mgr->GetGameState() != CStateManager::kGS_Running) {
+    return false;
+  }
+  const CPlayer* player = mgr->GetPlayer();
+  return player != nullptr && player->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed;
+}
 
 // Port: apply the selected aspect ratio to the game's framebuffer and viewport.
 // Aurora derives the internal EFB from the render mode, so this also resizes the
@@ -462,7 +479,8 @@ CGameArchitectureSupport::CGameArchitectureSupport(COsContext& osContext)
   gpMain->ResetGameState();
   CIOWinManager& ioWinManager = x58_ioWinMgr;
   uint32_t bootWorld, bootArea;
-  if (!gpTweakGame->GetSplashScreensDisabled() && !PortDebug::BootWorld(bootWorld, bootArea)) {
+  if (!gpTweakGame->GetSplashScreensDisabled() && !PortDebug::BootWorld(bootWorld, bootArea) &&
+      PortDebug::BootLogos() != PortDebug::kBootLogos_Off) {
     ioWinManager.AddIOWin(rs_new CSplashScreen(CSplashScreen::kSplashScreen_Nintendo), 1000, 10000);
   }
   ioWinManager.AddIOWin(rs_new CMainFlow(), 0, 0);
@@ -680,6 +698,8 @@ void CGameGlobalObjects::AddPaksAndFactories() {
   rstl::single_ptr< IController > controller(IController::Create(osContext));
   gpController = controller.get();
 #endif
+  // Quick resume: SDL only calls watchers for the background events.
+  PortSaveState::ResumeInstallEventWatch();
   while (!factory.GetResLoader().AreAllPaksLoaded()) {
     const AuroraEvent* event = aurora_update();
     for (; event != nullptr && event->type != AURORA_NONE; ++event) {
@@ -946,9 +966,18 @@ int CMain::RsMain(int argc, const char* const* argv) {
 #endif
       // Port: pump Aurora's window/input events (it marks the watchdog's phase).
       {
+        // The pump may deliver a background event to the quick resume watch,
+        // which then takes a fresh snapshot: we are between ticks here.
+        PortSaveState::SetEventPumpSafe(true);
         const AuroraEvent* event = aurora_update();
+        PortSaveState::SetEventPumpSafe(false);
         while (event != nullptr && event->type != AURORA_NONE) {
           if (event->type == AURORA_EXIT) {
+            // Quick resume: written here, between ticks and before shutdown.
+            // (Android's background events never get here: SDL only calls
+            // watchers for them, see PortSaveState::ResumeInstallEventWatch.)
+            PortSaveState::ResumeSave();
+            PortSaveState::ResumeQuitCleanly();
             x160_24_finished = true;
           } else if (event->type == AURORA_SDL_EVENT && event->sdl.type == SDL_EVENT_KEY_DOWN &&
                      !event->sdl.key.repeat && event->sdl.key.scancode == SDL_SCANCODE_F10) {
@@ -997,7 +1026,8 @@ int CMain::RsMain(int argc, const char* const* argv) {
       // SDL/compositor relative capture owns cursor visibility and warp handling.
 #ifdef MP_ENABLE_SMOKE_DRIVER
       if (PortSmokeMouseEnabled()) {
-        PortDebug::SetMouseCaptured(PortDebug::MouseGameplayActive() && !PortDebug::Visible());
+        PortDebug::SetMouseCaptured(PortDebug::MouseGameplayActive() && !PortDebug::Visible() &&
+                                      !PortPhoto::PanelWantsCursor());
       } else
 #endif
       {
@@ -1018,14 +1048,27 @@ int CMain::RsMain(int argc, const char* const* argv) {
         }
         if (sCaptureWindow != nullptr) {
           const bool focused = SDL_GetKeyboardFocus() == sCaptureWindow;
-          const bool wantRelative = PortDebug::MouseAim() && PortDebug::MouseGameplayActive() &&
-                                    !PortDebug::Visible() && focused;
+          PortSaveState::ResumeInfo promptInfo;
+          bool promptYes = true;
+          const bool resumePrompt = PortSaveState::ResumePromptShown(promptInfo, promptYes);
+          // Photo mode's free camera looks with the mouse even without mouse aim.
+          const bool wantRelative =
+              (PortPhoto::Active() ? PortPhoto::MouseLook()
+                                   : PortDebug::MouseAim() && PortDebug::MouseGameplayActive() &&
+                                         !PortPhoto::PanelWantsCursor()) &&
+              !PortDebug::Visible() && !resumePrompt && focused;
 #ifdef __ANDROID__
           // A free (hidden) cursor flung to the screen edge brings up the nav bar
           // or taskbar, so keep the pointer captured unless the overlay is open.
-          const bool wantLock = !PortDebug::Visible() && focused;
+          // Photo mode keeps it free even with the panel hidden: taps arrive as
+          // mouse events, and a captured pointer has no position for its touch bar.
+          const bool wantLock = !PortDebug::Visible() && !PortPhoto::Active() && !resumePrompt && focused;
 #else
-          const bool wantLock = wantRelative;
+          // Morph ball has no mouse aim, but its bombs are on the mouse buttons:
+          // keep the pointer locked so a click can't land outside the window.
+          const bool wantLock = wantRelative ||
+                                (PortDebug::MouseAim() && MorphBallHoldsMouse() && !PortDebug::Visible() &&
+                                 !PortPhoto::PanelWantsCursor() && !resumePrompt && focused);
 #endif
           if (SDL_GetWindowRelativeMouseMode(sCaptureWindow) != wantLock) {
             SDL_SetWindowRelativeMouseMode(sCaptureWindow, wantLock);
@@ -1035,7 +1078,8 @@ int CMain::RsMain(int argc, const char* const* argv) {
           // which is navigated with the mouse (and the controller), and while the
           // clickable update toast is up and the mouse isn't captured.
           const bool wantCursor =
-              (PortDebug::Visible() || (PortDebug::UpdateToastShowing() && !wantLock)) &&
+              (PortDebug::Visible() || PortPhoto::PanelWantsCursor() || resumePrompt ||
+               (PortDebug::UpdateToastShowing() && !wantLock)) &&
               SDL_GetKeyboardFocus() == sCaptureWindow;
           if (wantCursor) {
             SDL_ShowCursor();
@@ -1072,6 +1116,7 @@ int CMain::RsMain(int argc, const char* const* argv) {
       CARAMToken::UpdateAllDMAs();
       aurora::phase::set(aurora::phase::Main, "game tick (UpdateTicks)");
       if (!archSupport->UpdateTicks()) {
+        PortSaveState::ResumeQuitCleanly();
         x160_24_finished = true;
       }
       // Track the step UpdateTicks actually used (fixed or adaptive).
@@ -1218,6 +1263,7 @@ int CMain::RsMain(int argc, const char* const* argv) {
         nextFrameDeadline = SDL_GetTicksNS();
       }
       PortDebug::RecordFrame(workEndNs - loopStartNs, sTicksAdvanced, presented);
+      PortMemoryLog::Tick(SDL_GetTicksNS());
       {
         // The whole iteration, pacing included: what a player sees as a frame.
         const uint64_t frameEndNs = SDL_GetTicksNS();

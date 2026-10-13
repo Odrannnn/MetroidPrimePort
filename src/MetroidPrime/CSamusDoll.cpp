@@ -440,9 +440,29 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
     const CColor visorColor =
         CColor::Lerp(CColor::White().WithAlphaOf(drawAlpha),
                      CColor(alphaBlend, alphaBlend, alphaBlend, drawAlpha), x68_visorPulseFactor);
+#ifdef TARGET_PC
+    // Port: the Remastered visor's materials draw by their shaders, each pass with its colour
+    // as Remastered's (CCubeModel::PortInventoryPass).
+    CCubeModel::PortInventoryPass visorPass = {false,
+                                               {visorColor.GetRed(), visorColor.GetGreen(),
+                                                visorColor.GetBlue(), visorColor.GetAlpha()},
+                                               drawAlpha * addBlend * x68_visorPulseFactor,
+                                               drawAlpha};
+    {
+      const CCubeModel::PortInventoryScope scope(visorPass);
+      visor->Draw(CModelFlags::AlphaBlended(visorColor));
+    }
+    visorPass.additive = true;
+    {
+      const CCubeModel::PortInventoryScope scope(visorPass);
+      visor->Draw(CModelFlags::Additive(drawAlpha * addBlend * x68_visorPulseFactor)
+                      .DepthCompareUpdate(true, false));
+    }
+#else
     visor->Draw(CModelFlags::AlphaBlended(visorColor));
     visor->Draw(CModelFlags::Additive(drawAlpha * addBlend * x68_visorPulseFactor)
                     .DepthCompareUpdate(true, false));
+#endif
     if (x270_25_hasGrappleBeam) {
       CGraphics::SetModelMatrix(grappleXf);
       grapple->Draw(CModelFlags::AlphaBlended(drawAlpha));

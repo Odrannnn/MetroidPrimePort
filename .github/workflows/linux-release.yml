@@ -32,7 +32,8 @@ jobs:
             libXScrnSaver-devel libXtst-devel wayland-devel wayland-protocols-devel \
             libxkbcommon-devel mesa-libEGL-devel mesa-libGL-devel \
             freetype-devel libpng-devel zlib-devel bzip2-devel brotli-devel \
-            libzstd-devel openssl-devel ccache
+            libzstd-devel openssl-devel ccache \
+            systemd-devel libusb1-devel
       - uses: actions/checkout@v4
         with:
           # The version string is `git describe`; it needs the tags.
@@ -83,6 +84,10 @@ jobs:
             exit 1
           fi
           echo "needs at most glibc $MAX_GLIBC, GLIBCXX $MAX_GLIBCXX"
+          # SDL builds its HIDAPI hidraw backend only with libudev.h; without it
+          # no controller gyro is found (issue #82). Both libraries are dlopened.
+          nm "$bin" | grep -q PLATFORM_hid_enumerate ||
+            { echo "SDL was built without the hidraw HIDAPI backend (libudev.h missing)" >&2; exit 1; }
           # Only libraries with stable sonames (MP_BUNDLED_DEPS, issue #27).
           extra="$(readelf -d "$bin" | grep -oP 'NEEDED.*\[\K[^]]+' |
             grep -vxE 'lib(ssl|crypto)\.so\.3|lib(z|zstd)\.so\.1|libstdc\+\+\.so\.6|lib(m|c)\.so\.6|libgcc_s\.so\.1|ld-linux-x86-64\.so\.2' || true)"

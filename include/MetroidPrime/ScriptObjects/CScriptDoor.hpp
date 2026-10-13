@@ -40,6 +40,11 @@ public:
 
   const TUniqueId GetConnectedDockID() const { return mDockId; }
   bool IsOpen() const { return mIsOpen; }
+#ifdef TARGET_PC
+  // Save state restore: puts the door in a state without sending any script
+  // message (the saved state already holds what the original open or close did).
+  void PortRestoreOpen(bool open);
+#endif
   bool IsBallDoor() const { return mBallDoor; }
   void SetDoClose(const bool close) { mDoClose = close; }
 

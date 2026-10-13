@@ -4,6 +4,8 @@
 #include "MetroidPrime/CEntity.hpp"
 
 class CScriptCounter : public CEntity {
+  friend struct PortRoomState;
+
   int x34_initial;
   int x38_current;
   int x3c_max;

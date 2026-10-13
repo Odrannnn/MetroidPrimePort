@@ -289,6 +289,18 @@ void TestLightmap() {
   std::vector<uint8_t> bad = file;
   bad[4] = 9;
   Check(!PortRoomGeo::Parse(bad, out, error), "lightmap: section in a version 9 file rejected");
+
+  // A scale of 0 with an offset is a one-texel lookup (Remastered's props), kept on its own.
+  in[1].lightmap[2] = 0.f;
+  const std::vector<uint8_t> texel = PortRoomGeo::Write(in);
+  Check(texel.size() == plain + 8 + 24 && PortRoomGeo::Parse(texel, out, error) && out.size() == 2 &&
+            out[1].lightmap[0] == 0.25f && out[1].lightmap[1] == 0.5f && out[1].lightmap[2] == 0.f &&
+            PortRoomGeo::HasLightmapLookup(out[1].lightmap) && !PortRoomGeo::HasLightmapLookup(out[0].lightmap),
+        "lightmap: one-texel lookup round trip");
+  const float negative[3] = {0.25f, 0.5f, -1.f};
+  const float nan[3] = {0.25f, std::nanf(""), 0.125f};
+  Check(!PortRoomGeo::HasLightmapLookup(negative) && !PortRoomGeo::HasLightmapLookup(nan),
+        "lightmap: negative or non-finite lookups rejected");
 }
 
 // The glow section, alone and after the script section.

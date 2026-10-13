@@ -45,6 +45,7 @@ struct Rig {
   Runtime runtime;
   RawState raw;
   uint16_t contexts = kCtxGameplay;
+  uint16_t quiet = 0;
   double now = 1000;
 
   void Start() { runtime.SetProfile(&profile); }
@@ -57,7 +58,7 @@ struct Rig {
   }
   const Output& Step(double ms = 16) {
     now += ms;
-    return runtime.Poll(raw, contexts, now);
+    return runtime.Poll(raw, contexts, now, quiet);
   }
 };
 } // namespace
@@ -264,6 +265,30 @@ int main() {
     r.Step();
     r.Set(kA, true);
     CHECK(r.Step().Held(Action::PadB) && !r.runtime.Last().Held(Action::PadA));
+  }
+
+  // A quiet context (the scan text's Menu, issue #103) comes and goes without
+  // consuming the held input: the scan lock stays, and its Menu row joins in.
+  {
+    Rig r;
+    Binding lock = Bind(Action::PadL, {Btn(kA)});
+    lock.contexts = kCtxGameplay | kCtxScan;
+    Binding menu = Bind(Action::MenuL, {Btn(kA)});
+    menu.contexts = kCtxMenu | kCtxMap;
+    r.profile.bindings = {lock, menu};
+    r.contexts = kCtxGameplay | kCtxScan;
+    r.Start();
+    r.Set(kA, true);
+    CHECK(r.Step().Held(Action::PadL));
+    r.contexts |= kCtxMenu;
+    r.quiet = kCtxMenu;
+    CHECK(r.Step().Held(Action::PadL) && r.runtime.Last().Held(Action::MenuL));
+    r.contexts &= ~kCtxMenu;
+    CHECK(r.Step().Held(Action::PadL) && !r.runtime.Last().Held(Action::MenuL));
+    // Not quiet: the switch consumes the held input.
+    r.quiet = 0;
+    r.contexts |= kCtxMenu;
+    CHECK(!r.Step().Held(Action::PadL) && !r.runtime.Last().Held(Action::MenuL));
   }
 
   // Layers: holding RB switches A to its layer binding in the same poll;

@@ -319,15 +319,18 @@ void shutdown() {}
 
 namespace aurora::gfx::shadow {
 bool ensure_task() { return false; }
-bool set_frame(const float worldToView[3][4], const float sunDir[3], float radius, const float color[3],
-               Uniform& out) {
+bool set_frame(const float worldToView[3][4], const cascade::Frustum& frustum, const float sunDir[3], float distance,
+               const float color[3], Uniform& out) {
   return false;
 }
-bool box_casts(const float worldToView[3][4], const float sunDir[3], float radius, const float min[3],
-               const float max[3]) {
+bool fit_frame(const float worldToView[3][4], const cascade::Frustum& frustum, const float sunDir[3], float distance,
+               cascade::Fit out[cascade::Count]) {
   return false;
 }
-void box_center(const float worldToView[3][4], float radius, float center[3]) {}
+bool box_casts(const float worldToView[3][4], const cascade::Frustum& frustum, const float sunDir[3], float distance,
+               const float min[3], const float max[3]) {
+  return false;
+}
 uint32_t last_caster_count() { return 0; }
 void add_caster(const gx::DrawData& draw) {}
 bool record() { return false; }

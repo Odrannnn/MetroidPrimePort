@@ -33,7 +33,7 @@ assert "substring(separator + 1)" in title and "return \"save.gci\";" in title
 card_start = cpp.index("void OpenCardDialog(CardPick pick)")
 card_end = cpp.index("std::string CardSaveTo(", card_start)
 card = cpp[card_start:card_end]
-queue_name = "PortGci::PathString(sCardExportQueue.front().filename())"
+queue_name = "sCardExportQueue.front().name"
 assert queue_name in card
 assert card.index(queue_name) < card.index("SetNextAndroidSaveDialogFilename(location.c_str());")
 assert card.index("SetNextAndroidSaveDialogFilename(location.c_str());") < card.index("SDL_ShowSaveFileDialog(")

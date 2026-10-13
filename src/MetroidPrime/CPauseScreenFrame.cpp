@@ -30,6 +30,7 @@
 #include "GuiSys/CGuiModel.hpp"
 #include "port_debug.h"
 #include "port_map_pickups.h"
+#include "port_photo.h"
 #include "port_skip_cutscenes.h"
 #include <math.h>
 #endif
@@ -205,6 +206,7 @@ enum EPortOption {
   kPO_ElevatorRide,
   kPO_RapidCharge,
   kPO_OriginalExperience,
+  kPO_PhotoMode,
 };
 #define PORT_OPTION(opt) static_cast< EGameOption >(opt)
 
@@ -245,6 +247,7 @@ static const SGameOption skPortDisplayOptions[] = {
     {PORT_OPTION(kPO_Fov), -1, PortDebug::kFovMin, PortDebug::kFovMax, 1.f, kOT_Float},
     {PORT_OPTION(kPO_AntiAliasing), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_SpeedrunTimer), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_PhotoMode), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {kGO_RestoreDefaults, 35, 0.f, 1.f, 1.f, kOT_RestoreDefaults},
 };
 static const SGameOption skPortControllerOptions[] = {
@@ -325,6 +328,8 @@ static const wchar_t* PortOptionTitle(EGameOption option) {
     return L"Elevator Ride";
   case kPO_OriginalExperience:
     return L"Original Experience";
+  case kPO_PhotoMode:
+    return L"Photo Mode";
   default:
     return L"";
   }
@@ -442,6 +447,12 @@ static void SetPortOption(EGameOption option, int value) {
     break;
   case kPO_AntiAliasing:
     PortDebug::SetMsaa(value > 0 ? 4 : 1);
+    break;
+  case kPO_PhotoMode:
+    // The pause screen closes, then photo mode starts when play resumes.
+    if (value > 0) {
+      PortPhoto::RequestEnterAfterPause();
+    }
     break;
   case kPO_HudScale:
     PortDebug::SetHudScale(value);

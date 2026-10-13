@@ -303,14 +303,17 @@ void CCameraFilterPass::DrawWideScreen(const CColor& color, const CTexture* tex,
 namespace {
 // `DrawRandomStatic` samples a random main-memory address on GameCube to produce
 // noise. The port's renderer dereferences the texture source, so hand it a real
-// scratch buffer of noise instead of a fake address.
+// scratch buffer of noise instead of a fake address. Like the original
+// (`((rand() + 0x1f) & ~0x1f) + 0x8000`), each call starts at a different
+// 32-byte aligned offset so the static animates.
 void* RandomStaticTextureData() {
   constexpr int kMaxWidth = 642;
   constexpr int kMaxHeight = 482;
   // IA4 sources are consumed tiled (8x4 texels), so the renderer reads the
   // rounded-up extent rather than width * height.
-  constexpr uint kMaxSize = ((kMaxWidth + 7) & ~7) * ((kMaxHeight + 3) & ~3);
-  static uchar sBuffer[kMaxSize];
+  constexpr uint kMaxOffset = ((RAND_MAX & 0x7fff) + 0x1f) & ~0x1f;
+  constexpr uint kMaxSize = ((kMaxWidth + 7) & ~7) * ((kMaxHeight + 3) & ~3) + kMaxOffset;
+  alignas(32) static uchar sBuffer[kMaxSize];
   static bool sInitialized = false;
   if (!sInitialized) {
     sInitialized = true;
@@ -322,7 +325,11 @@ void* RandomStaticTextureData() {
       memcpy(sBuffer + i, &state, sizeof(state));
     }
   }
-  return sBuffer;
+  // A fresh offset every frame would make aurora cache a new texture per frame
+  // for 600 frames (over 300 MiB within a minute near a drone, issue #107), so
+  // the static cycles through a few fixed offsets instead.
+  constexpr int kSlots = 8;
+  return sBuffer + (rand() % kSlots) * ((kMaxOffset / kSlots) & ~0x1fu);
 }
 } // namespace
 

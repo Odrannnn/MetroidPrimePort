@@ -1921,7 +1921,7 @@ void CSamusHud::PortApplyHudLag(const SPortHudLag& state) {
       x310_cameraPos);
 }
 
-void CSamusHud::PortPresentHudLag(bool present) const {
+void CSamusHud::PortPresentHudLag(bool present, bool mouseLookFree) const {
   CSamusHud& self = const_cast< CSamusHud& >(*this);
   if (!present) {
     if (xPortLagPresented) {
@@ -1944,8 +1944,14 @@ void CSamusHud::PortPresentHudLag(bool present) const {
   }
   SPortHudLag blend = cur;
   if (cur.lag) {
-    blend.rotation = CQuaternion::Slerp(prev.rotation, cur.rotation, t);
-    blend.inverse = CQuaternion::Slerp(prev.inverse, cur.inverse, t);
+    // #97: with mouse look free the world camera keeps this tick's rotation
+    // (CCameraManager::GetCurrentCameraTransform), so the X-ray and thermal
+    // reticle's lag rotation must not be slerped toward the previous tick or
+    // it moves against the world at every sim step.
+    if (!mouseLookFree) {
+      blend.rotation = CQuaternion::Slerp(prev.rotation, cur.rotation, t);
+      blend.inverse = CQuaternion::Slerp(prev.inverse, cur.inverse, t);
+    }
     blend.offset = prev.offset + (cur.offset - prev.offset) * t;
   }
   // A turn of more than ~30 degrees in a tick is a snap (respawn, warp): keep it.

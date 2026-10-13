@@ -24,11 +24,18 @@ public:
   // active: gameplay has control and the option applies (unmorphed, input not
   // disabled). locked: the player was locked on an object or grappling at the end
   // of the previous tick (orbiting a carcass or a point is not a lock).
-  Output Update(bool active, bool held, bool pressed, bool locked) {
+  //
+  // dt: seconds since the last call. A press within kDebounce of the press that
+  // ended the latch is contact bounce (an analog trigger crossing its threshold
+  // again while being released) and is swallowed instead of locking again.
+  static constexpr float kDebounce = 0.2f;
+
+  Output Update(bool active, bool held, bool pressed, bool locked, float dt = 0.f) {
     if (!active) {
       Reset();
       return {held, pressed};
     }
+    mDebounce = mDebounce > dt ? mDebounce - dt : 0.f;
     if (mLatched && mWasLocked && !locked) {
       mLatched = false;
       mSwallow = held; // the finger may still be on the button
@@ -48,9 +55,15 @@ public:
       if (pressed) {
         mLatched = false;
         mSwallow = true;
+        mDebounce = dt > 0.f ? kDebounce : 0.f;
         return {false, false};
       }
       return {true, false};
+    }
+    if (pressed && mDebounce > 0.f) {
+      mSwallow = true;
+      mDebounce = kDebounce;
+      return {false, false};
     }
     // Not latched: the button passes through, and a press waits for its lock.
     mPending = held && (pressed || mPending);
@@ -61,10 +74,12 @@ public:
     mSwallow = false;
     mWasLocked = false;
     mPending = false;
+    mDebounce = 0.f;
   }
   bool Latched() const { return mLatched; }
 
 private:
+  float mDebounce = 0.f; // time left in which a new press counts as bounce
   bool mLatched = false;
   bool mSwallow = false; // a press that ended the latch, hidden until released
   bool mWasLocked = false;

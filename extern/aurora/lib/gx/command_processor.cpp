@@ -1337,24 +1337,28 @@ void handle_aurora(ByteReader& reader) noexcept {
         v = reader.read<f32>();
       }
     }
+    gfx::shadow::cascade::Frustum frustum;
+    for (f32* v : {&frustum.left, &frustum.right, &frustum.top, &frustum.bottom, &frustum.znear, &frustum.zfar}) {
+      *v = reader.read<f32>();
+    }
     f32 sunDir[3];
     for (f32& v : sunDir) {
       v = reader.read<f32>();
     }
-    const f32 radius = reader.read<f32>();
+    const f32 distance = reader.read<f32>();
     f32 color[3];
     for (f32& v : color) {
       v = reader.read<f32>();
     }
     gfx::shadow::Uniform uniform{};
-    const bool active = gfx::shadow::set_frame(worldToView, sunDir, radius, color, uniform);
+    const bool active = gfx::shadow::set_frame(worldToView, frustum, sunDir, distance, color, uniform);
     if (g_gxState.shadowActive != active) {
       g_gxState.shadowActive = active;
       g_gxState.dirty |= DirtyPipeline;
     }
     if (active) {
       static_assert(sizeof(uniform) == sizeof(g_gxState.shadowUniform));
-      std::array<Vec4<float>, 10> values;
+      std::array<Vec4<float>, 36> values;
       std::memcpy(values.data(), &uniform, sizeof(uniform));
       if (g_gxState.shadowUniform != values) {
         g_gxState.shadowUniform = values;
@@ -1461,6 +1465,21 @@ void handle_aurora(ByteReader& reader) noexcept {
     const Vec4<float> value{diffuse, f0, 0.f, fade};
     if (g_gxState.pbrLightScale != value) {
       g_gxState.pbrLightScale = value;
+      g_gxState.dirty |= DirtyUniform;
+    }
+  } else if (subCmd == GX_AURORA_SET_PBR_MODEL_MODULATION) {
+    f32 v[8];
+    for (f32& f : v) {
+      f = reader.read<f32>();
+    }
+    const Vec4<float> diffuse{v[0], v[1], v[2], v[3]};
+    const Vec4<float> incan{v[4], v[5], v[6], v[7]};
+    const Vec4<float> coverage{reader.read<f32>(), 0.f, 0.f, 0.f};
+    if (g_gxState.pbrModelDiffuse != diffuse || g_gxState.pbrModelIncan != incan ||
+        g_gxState.pbrModelCoverage != coverage) {
+      g_gxState.pbrModelDiffuse = diffuse;
+      g_gxState.pbrModelIncan = incan;
+      g_gxState.pbrModelCoverage = coverage;
       g_gxState.dirty |= DirtyUniform;
     }
   } else if (subCmd == GX_AURORA_SET_PBR_MATERIAL) {

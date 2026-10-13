@@ -716,6 +716,9 @@ s32 CARDOpen(const s32 chan, const char* fileName, CARDFileInfo* fileInfo) {
   const auto res = card->openFile(fileName, handle);
   if (res == aurora::card::ECardResult::READY)
     CopyKabuFileHandleToDolphin(chan, handle, fileInfo);
+  else if (static_cast<s32>(res) == CARD_RESULT_NOFILE)
+    // Games probe for files that may not exist (PAL's "MetroidPrime~" temp save).
+    Log.debug("No file to open: {}", fileName);
   else
     Log.error("Failed to open file: {}", fileName);
 

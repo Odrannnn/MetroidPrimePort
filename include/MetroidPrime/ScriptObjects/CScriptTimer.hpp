@@ -4,6 +4,8 @@
 #include "MetroidPrime/CEntity.hpp"
 
 class CScriptTimer : public CEntity {
+  friend struct PortRoomState;
+
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
   uint x34_startFrame;
 #endif

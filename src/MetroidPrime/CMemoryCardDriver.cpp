@@ -1,6 +1,9 @@
 #include "MetroidPrime/CMemoryCardDriver.hpp"
 
 #include "MetroidPrime/CMain.hpp"
+#ifdef TARGET_PC
+#include "MetroidPrime/PortSaveFormat.hpp"
+#endif
 
 #include "Kyoto/Streams/CMemoryInStream.hpp"
 
@@ -9,6 +12,21 @@
 
 static bool lbl_805A9118;
 static const char* const skSaveFileNames[2] = {"MetroidPrime A", "MetroidPrime B"};
+#ifdef TARGET_PC
+// PAL has one file, "MetroidPrime". Saving still goes through a second file so a
+// failed write never destroys the only save: "MetroidPrime~" is written, the old
+// file deleted, and the new one renamed. The port's old PAL files ("MetroidPrime
+// A"/"B", USA container) are deliberately not matched, so they are left alone.
+static const char* const skPalSaveFileNames[2] = {"MetroidPrime", "MetroidPrime~"};
+static const char* SaveFileName(int idx) {
+  return PortSaveFormat::IsPal() ? skPalSaveFileNames[idx] : skSaveFileNames[idx];
+}
+// One block of the card, and how many the save file takes.
+static uint SaveFileBytes() { return PortSaveFormat::IsPal() ? 0x6000 : 0x2000; }
+#else
+static const char* SaveFileName(int idx) { return skSaveFileNames[idx]; }
+static uint SaveFileBytes() { return 0x2000; }
+#endif
 
 // Diagnostic names remain in the retail string pool after their users were removed.
 static const char* const skStateNames[] = {
@@ -83,7 +101,11 @@ CMemoryCardDriver::CMemoryCardDriver(CMemoryCardSys::EMemoryCardPort cardPort, C
 , x1c_cardFreeFiles(0)
 , x20_fileTime(0)
 , x28_cardSerial(0)
+#ifdef TARGET_PC
+, x30_systemData(PortSaveFormat::SystemBytes(), 0)
+#else
 , x30_systemData(0)
+#endif
 , xe4_fileSlots(nullptr)
 , x100_mcFileInfos()
 , x194_fileIdx(-1)
@@ -93,10 +115,10 @@ CMemoryCardDriver::CMemoryCardDriver(CMemoryCardSys::EMemoryCardPort cardPort, C
   lbl_805A9118 = true;
 
   x100_mcFileInfos.push_back(
-      SFileInfo(kFS_Unknown, x0_cardPort, rstl::string_l(skSaveFileNames[0])));
+      SFileInfo(kFS_Unknown, x0_cardPort, rstl::string_l(SaveFileName(0))));
 
   x100_mcFileInfos.push_back(
-      SFileInfo(kFS_Unknown, x0_cardPort, rstl::string_l(skSaveFileNames[1])));
+      SFileInfo(kFS_Unknown, x0_cardPort, rstl::string_l(SaveFileName(1))));
 }
 
 void CMemoryCardDriver::ClearFileInfo() { x198_fileInfo = nullptr; }
@@ -383,8 +405,8 @@ void CMemoryCardDriver::StartFileRenameBtoA() {
     x10_state = kS_FileRenameBtoA;
     int bidx = x194_fileIdx == 0 ? 1 : 0;
     ECardResult result =
-        CMemoryCardSys::Rename(x0_cardPort, rstl::string_l(skSaveFileNames[x194_fileIdx]),
-                               rstl::string_l(skSaveFileNames[bidx]));
+        CMemoryCardSys::Rename(x0_cardPort, rstl::string_l(SaveFileName(x194_fileIdx)),
+                               rstl::string_l(SaveFileName(bidx)));
     if (result != kCR_READY) {
       UpdateFileRenameBtoA(result);
     }
@@ -470,7 +492,7 @@ void CMemoryCardDriver::StartCardCheck() {
 void CMemoryCardDriver::ClearError() { x14_error = kE_OK; }
 
 void CMemoryCardDriver::CheckCardCapacity() {
-  if (x18_cardFreeBytes >= 0x2000 && x1c_cardFreeFiles >= 1) {
+  if (x18_cardFreeBytes >= SaveFileBytes() && x1c_cardFreeFiles >= 1) {
     return;
   }
   x14_error = kE_CardStillFull;
@@ -606,7 +628,7 @@ void CMemoryCardDriver::StartFileRead() {
 void CMemoryCardDriver::StartFileCreate() {
   x14_error = kE_OK;
   x10_state = kS_FileCreate;
-  if (x18_cardFreeBytes < 0x4000 || x1c_cardFreeFiles < 2) {
+  if (x18_cardFreeBytes < SaveFileBytes() * 2 || x1c_cardFreeFiles < 2) {
     x10_state = kS_FileCreateFailed;
     x14_error = kE_CardFull;
     return;
@@ -614,7 +636,7 @@ void CMemoryCardDriver::StartFileCreate() {
 
   x194_fileIdx = 0;
   x198_fileInfo = rs_new CMemoryCardSys::CCardFileInfo(
-      x0_cardPort, rstl::string_l(skSaveFileNames[x194_fileIdx]));
+      x0_cardPort, rstl::string_l(SaveFileName(x194_fileIdx)));
   InitializeFileInfo();
   ECardResult result = x198_fileInfo->CreateFile();
   if (result != kCR_READY)
@@ -633,7 +655,7 @@ void CMemoryCardDriver::StartFileCreateTransactional() {
   x14_error = kE_OK;
   x10_state = kS_FileCreateTransactional;
   ClearFileInfo();
-  if (x18_cardFreeBytes < 8192 || x1c_cardFreeFiles < 1) {
+  if (x18_cardFreeBytes < SaveFileBytes() || x1c_cardFreeFiles < 1) {
     x10_state = kS_FileCreateTransactionalFailed;
     x14_error = kE_CardFull;
     return;
@@ -648,7 +670,7 @@ void CMemoryCardDriver::StartFileCreateTransactional() {
 
   x194_fileIdx = altFileIdx;
   x198_fileInfo = rs_new CMemoryCardSys::CCardFileInfo(
-      x0_cardPort, rstl::string_l(skSaveFileNames[x194_fileIdx]));
+      x0_cardPort, rstl::string_l(SaveFileName(x194_fileIdx)));
   InitializeFileInfo();
   ECardResult result = x198_fileInfo->CreateFile();
   if (result != kCR_READY)
@@ -668,7 +690,7 @@ void CMemoryCardDriver::StartFileDeleteAltTransactional() {
   x10_state = kS_FileAltDeleteTransactional;
   int bidx = x194_fileIdx == 0 ? 1 : 0;
   ECardResult result =
-      CMemoryCardSys::DeleteFile(x0_cardPort, rstl::string_l(skSaveFileNames[bidx]));
+      CMemoryCardSys::DeleteFile(x0_cardPort, rstl::string_l(SaveFileName(bidx)));
   if (result != kCR_READY)
     UpdateFileAltDeleteTransactional(result);
 }
@@ -692,6 +714,12 @@ void CMemoryCardDriver::InitializeFileInfo() {
 
   char nameBuffer[36];
 
+#ifdef TARGET_PC
+  if (PortSaveFormat::IsPal()) {
+    sprintf(nameBuffer, "%02d.%02d.%02d  %02d:%02d", time.mday, time.mon + 1, time.year % 100,
+            time.hour, time.min);
+  } else
+#endif
   sprintf(nameBuffer, "%02d.%02d.%02d  %02d:%02d", time.mon + 1, time.mday, time.year % 100,
           time.hour, time.min);
 
@@ -700,8 +728,13 @@ void CMemoryCardDriver::InitializeFileInfo() {
   fileInfo.LockIconToken(x8_saveIcon0, 2, *gpSimplePool);
 
   rstl::vector< u8 >& saveBuffer = x198_fileInfo->SaveBuffer();
-  saveBuffer.assign(3004);
-  CMemoryStreamOut w(saveBuffer.data(), 3004);
+#ifdef TARGET_PC
+  const int bodyBytes = PortSaveFormat::BodyBytes();
+#else
+  const int bodyBytes = 3004;
+#endif
+  saveBuffer.assign(bodyBytes);
+  CMemoryStreamOut w(saveBuffer.data(), bodyBytes);
 
   SSaveHeader header(0);
   for (int i = 0; i < xe4_fileSlots.capacity(); ++i) {
@@ -709,7 +742,7 @@ void CMemoryCardDriver::InitializeFileInfo() {
   }
   w.Put(header);
 
-  w.Put(x30_systemData.data(), x30_systemData.capacity());
+  w.Put(x30_systemData.data(), x30_systemData.size());
 
   for (rstl::reserved_vector< rstl::auto_ptr< SGameFileSlot >, 3 >::iterator it =
            xe4_fileSlots.begin();
@@ -730,9 +763,13 @@ void CMemoryCardDriver::ReadFinished() {
 
   x20_fileTime = stat.GetTime();
 
+#ifdef TARGET_PC
+  CMemoryInStream r(fileInfo.x34_saveData.data(), PortSaveFormat::BodyBytes());
+#else
   CMemoryInStream r(fileInfo.x34_saveData.data(), 3004);
+#endif
   SSaveHeader header(r);
-  r.Get(x30_systemData.data(), x30_systemData.capacity());
+  r.Get(x30_systemData.data(), x30_systemData.size());
 
   for (int i = 0; i < xe4_fileSlots.capacity(); ++i) {
     rstl::auto_ptr< SGameFileSlot >& slot = xe4_fileSlots[i];
@@ -761,7 +798,7 @@ void CMemoryCardDriver::BuildNewFileSlot(int saveIdx) {
   slot->LoadGameState(saveIdx);
 
   {
-    CMemoryInStream r(x30_systemData.data(), x30_systemData.capacity());
+    CMemoryInStream r(x30_systemData.data(), x30_systemData.size());
     gpGameState->ReadSystemOptions(r);
   }
 
@@ -779,23 +816,23 @@ void CMemoryCardDriver::BuildExistingFileSlot(int saveIdx) {
   else
     slot->InitializeFromGameState();
 
-  CMemoryStreamOut w(x30_systemData.data(), x30_systemData.capacity());
+  CMemoryStreamOut w(x30_systemData.data(), x30_systemData.size());
   gpGameState->WriteSystemOptions(w);
 }
 
 void CMemoryCardDriver::ImportPersistentOptions() {
-  CMemoryInStream r(x30_systemData.data(), x30_systemData.capacity());
+  CMemoryInStream r(x30_systemData.data(), x30_systemData.size());
   CSystemState state(r);
   gpGameState->ImportPersistentOptions(state);
 }
 
 void CMemoryCardDriver::ExportPersistentOptions() {
   u8* data = x30_systemData.data();
-  CMemoryInStream r(data, x30_systemData.capacity());
+  CMemoryInStream r(data, x30_systemData.size());
   CSystemState state(r);
   gpGameState->ExportPersistentOptions(state);
 
-  CMemoryStreamOut w(data, x30_systemData.capacity());
+  CMemoryStreamOut w(data, x30_systemData.size());
   state.PutTo(w);
 }
 
@@ -815,27 +852,38 @@ void SSaveHeader::PutTo(COutputStream& out) const {
   }
 }
 
+#ifdef TARGET_PC
+SGameFileSlot::SGameFileSlot() : x0_saveBuffer(PortSaveFormat::SlotBytes(), u8(0)) {
+  InitializeFromGameState();
+}
+#else
 SGameFileSlot::SGameFileSlot() : x0_saveBuffer('\x00') { InitializeFromGameState(); }
+#endif
 
+#ifdef TARGET_PC
+SGameFileSlot::SGameFileSlot(CMemoryInStream& in)
+: x0_saveBuffer(PortSaveFormat::SlotBytes(), u8(0)) {
+#else
 SGameFileSlot::SGameFileSlot(CMemoryInStream& in) : x0_saveBuffer('\x00') {
-  in.Get(x0_saveBuffer.data(), x0_saveBuffer.capacity());
+#endif
+  in.Get(x0_saveBuffer.data(), x0_saveBuffer.size());
   x944_fileInfo = gpGameState->LoadGameFileState(x0_saveBuffer.data());
 }
 
 void SGameFileSlot::PutTo(COutputStream& w) const {
-  w.Put(x0_saveBuffer.data(), x0_saveBuffer.capacity());
+  w.Put(x0_saveBuffer.data(), x0_saveBuffer.size());
 }
 
 void SGameFileSlot::InitializeFromGameState() {
   {
-    CMemoryStreamOut w(x0_saveBuffer.data(), x0_saveBuffer.capacity());
+    CMemoryStreamOut w(x0_saveBuffer.data(), x0_saveBuffer.size());
     gpGameState->PutTo(w);
   }
   x944_fileInfo = CGameState::LoadGameFileState(x0_saveBuffer.data());
 }
 
 void SGameFileSlot::LoadGameState(int idx) {
-  CMemoryInStream r(x0_saveBuffer.data(), x0_saveBuffer.capacity());
+  CMemoryInStream r(x0_saveBuffer.data(), x0_saveBuffer.size());
   gpMain->StreamNewGameState(r, idx);
 }
 

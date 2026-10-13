@@ -1437,22 +1437,27 @@ static void draw_box_or_model(const CAABox& aabb, const CModel* model, const CTr
 namespace {
 // The thermal blend samples a random main-memory address on GameCube to produce
 // noise. The port's renderer dereferences the texture source, so hand it a real
-// scratch buffer of noise instead of a fake address.
+// scratch buffer of noise instead of a fake address. The seed picks one of a few fixed frames:
+// new noise every frame is a new texture every frame, which the renderer keeps alive for
+// seconds (gigabytes of GPU memory within ten seconds, issue #95).
 void* ThermalNoiseTextureData(uint seed, int width, int height) {
+  const int kFrames = 8;
   const size_t bytes =
       static_cast< size_t >(((width + 7) & ~7) * ((height + 3) & ~3));
-  static std::vector< uchar > sNoise;
-  if (sNoise.size() < bytes) {
-    sNoise.resize(bytes);
+  static std::vector< uchar > sNoise[kFrames];
+  if (sNoise[0].size() != bytes) {
+    for (int f = 0; f < kFrames; ++f) {
+      sNoise[f].resize(bytes);
+      uint state = static_cast< uint >(f) * 0x9E3779B9u + 1u;
+      for (size_t i = 0; i < bytes; ++i) {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        sNoise[f][i] = static_cast< uchar >(state);
+      }
+    }
   }
-  uint state = seed | 1u;
-  for (size_t i = 0; i < bytes; ++i) {
-    state ^= state << 13;
-    state ^= state >> 17;
-    state ^= state << 5;
-    sNoise[i] = static_cast< uchar >(state);
-  }
-  return sNoise.data();
+  return sNoise[seed % kFrames].data();
 }
 } // namespace
 

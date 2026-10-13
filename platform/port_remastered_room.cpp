@@ -3756,11 +3756,11 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     }
   };
   // The instance's slot in the room's baked lightmap, when the lightmap loaded and the
-  // lookup is one (a scale above 0).
+  // lookup is one (PortRoomGeo::HasLightmapLookup: a scale of 0 is one texel).
   const bool lightmapOk = Lightmap(r).ok;
   size_t lookups = 0;
   auto setLookup = [&](PortRoomGeo::Instance& inst, const float* v) {
-    if (std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]) && v[2] > 0.f) {
+    if (PortRoomGeo::HasLightmapLookup(v)) {
       inst.lightmap[0] = v[0];
       inst.lightmap[1] = v[1];
       inst.lightmap[2] = v[2];

@@ -103,6 +103,12 @@ public:
   void DrawTouchBounds() const;
   bool IsModelOpaque(const CStateManager& mgr) const;
   void RenderInternal(const CStateManager& mgr) const;
+#ifdef TARGET_PC
+  // Port: draws only the base model into the sun's shadow map (no particles, blob shadow or
+  // sorted submission). True when the model draw was issued (the pipeline may still reject a blended or cutout draw);
+  // false when there was nothing to draw or the box is outside the map.
+  bool PortRenderShadowCaster(const CStateManager& mgr) const;
+#endif
   void CreateShadowIfNeeded();
 
   const CTransform4f& GetTransform() const { return x34_transform; }
@@ -263,14 +269,17 @@ public:
   // A world point carried along with this actor to where it is drawn (the
   // point itself when no blend applies), for HUD markers placed on it.
   CVector3f PortPresentedPoint(const CVector3f& world) const;
-  // Rigid blend of two transforms at t, with the snap rule above (over 4
-  // units or 45 degrees apart = false). `cur` gets the rigid form of `to`.
+  // Rigid blend of two transforms at t, with the snap rule above (a teleport
+  // or 45 degrees apart = false). `cur` gets the rigid form of `to`.
   // A non-zero `pivot` (world offset to the visual centre, the morph ball's
   // radius) makes that centre lerp and the turn happen about it; then only a
-  // teleport cuts, a big roll keeps the translation (port_presentation_rules.h).
+  // teleport cuts, a big roll keeps the translation. `lastStep2` is the
+  // squared step of the tick before, so fast movers aren't taken for
+  // teleports (port_presentation_rules.h).
   static bool PortBlendRigid(const CTransform4f& from, const CTransform4f& to, float t,
                              CTransform4f& blend, CTransform4f& cur,
-                             const CVector3f& pivot = CVector3f::Zero());
+                             const CVector3f& pivot = CVector3f::Zero(),
+                             float lastStep2 = 0.f);
 #endif
 
 protected:
@@ -332,6 +341,8 @@ private:
 #ifdef TARGET_PC
   CTransform4f xPortPrevTransform;
   uint xPortPrevGeneration;
+  // Squared step of the tick before (0 when that tick had no snapshot).
+  float xPortLastStep2;
   bool xPortOwnPresentation;
 #endif
 };

@@ -68,6 +68,13 @@ int main() {
   CHECK(PortClassifyRigidBlend(0.01f, 0.5f, false) == PortRigidBlendKind::Cut);
   CHECK(PortClassifyRigidBlend(0.01f, 0.5f, true) == PortRigidBlendKind::TranslateOnly);
   CHECK(PortClassifyRigidBlend(0.01f, 0.95f, true) == PortRigidBlendKind::Full);
+  // Issue #99: a body already moving fast keeps blending; a jump far beyond
+  // its last step still cuts.
+  CHECK(PortClassifyRigidBlend(36.f, 1.f, false, 25.f) == PortRigidBlendKind::Full);
+  CHECK(PortClassifyRigidBlend(25.f, 1.f, false, 36.f) == PortRigidBlendKind::Full);
+  CHECK(PortClassifyRigidBlend(400.f, 1.f, false, 25.f) == PortRigidBlendKind::Cut);
+  CHECK(PortClassifyRigidBlend(36.f, 1.f, false, 0.f) == PortRigidBlendKind::Cut);
+  CHECK(!PortIsTeleport(16.f, 0.f));
 
   // Production blend (PortBlendRigidGeneric, the body of CActor::PortBlendRigid).
   const Ops ops;

@@ -55,6 +55,30 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.25.0" date="2026-10-13">
+      <description>
+        <p>Steadier X-ray and thermal reticles while walking, a scan lock that no longer drops when a scan finishes, and better crash logging on Android.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.25.0</url>
+    </release>
+    <release version="0.24.0" date="2026-10-13">
+      <description>
+        <p>A searchable settings window, a separate vertical stick aim speed, mouse fixes in morph ball, smoother scan icons and visor reticles at high frame rates, animated visor static, and a fix for the thermal visor running out of memory.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.24.0</url>
+    </release>
+    <release version="0.23.0" date="2026-10-12">
+      <description>
+        <p>Save import and conversion between Wii Trilogy, USA, PAL and Dolphin saves, the real PAL save format, USA 1.01 and 1.02 discs supported, a 1.00 compatibility option, prompts that follow rebinds, and Remastered sun cascades.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.23.0</url>
+    </release>
+    <release version="0.22.0" date="2026-10-11">
+      <description>
+        <p>Smoother high-FPS presentation, rebindable menu buttons, aim and scan-speed options, and Remastered prop lighting fixes.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.22.0</url>
+    </release>
     <release version="0.21.0" date="2026-10-10">
       <description>
         <p>Improves controller remapping and projected-blend lighting in Remastered imports.</p>

@@ -43,6 +43,11 @@ int main() {
   Check(Get().stickAimRate == 2000.f, "stick_aim_rate below range");
   ApplySetting("stick_aim_rate", "20000");
   Check(Get().stickAimRate == 2000.f, "stick_aim_rate above range");
+  Check(ApplySetting("stick_aim_split", "1") && Get().stickAimSplit, "stick_aim_split");
+  Check(ApplySetting("stick_aim_rate_y", "450") && Get().stickAimRateY == 450.f, "stick_aim_rate_y");
+  ApplySetting("stick_aim_rate_y", "20000");
+  Check(Get().stickAimRateY == 450.f, "stick_aim_rate_y above range");
+  ApplySetting("stick_aim_split", "0");
   ApplySetting("crosshair_size", "80");
   Check(Get().crosshairSize == 80, "crosshair_size");
   ApplySetting("crosshair_size", "5");

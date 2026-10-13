@@ -149,7 +149,7 @@ properties (`setprop debug.mport.env ''`) when you're done.
 
 ## Particles
 
-Console `fx` (also in `docs/NATIVE_PORT.md`) shows the live generators of the particle engine
+Console `fx` (also in `docs/CONSOLE.md`) shows the live generators of the particle engine
 (PART, SWHC, ELSC; each registers itself, always compiled in, no cost while unused):
 
     fx list [filter]       root generators: #id, kind, asset, pos, live/max particles, frame/life,
@@ -259,7 +259,7 @@ run uses its own targets and the game's GX state is reset afterwards. Code: `ext
 ## See also
 
 `tools/mpcon.py` (the plain console client, also usable against a real game),
-`docs/NATIVE_PORT.md` (full console command list, env variables),
+`docs/CONSOLE.md` (full console command list) and `docs/SETTINGS.md` (env variables),
 `build/mpr/re.sh` + `build/mpr/TOOLS.md` (local Remastered reverse-engineering toolkit).
 - `fx` mute hides draws only; muted generators keep emitting and updating (so their children still count in
   `fx stats` particles). Owner objects are not shown, and CRSC (crossfade/swoosh descriptions that are not

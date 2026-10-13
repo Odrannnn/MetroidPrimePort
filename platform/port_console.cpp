@@ -9,6 +9,7 @@
 #include "port_debug.h"
 #include "port_discord.h"
 #include "port_freecam.h"
+#include "port_photo.h"
 #include "port_hd_font.h"
 #include "port_livesplit.h"
 #include "port_rando_gen.h"
@@ -55,6 +56,7 @@
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
+#include "MetroidPrime/ScriptObjects/CScriptDoor.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptPlayerHint.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptSpecialFunction.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptWater.hpp"
@@ -577,11 +579,14 @@ void CmdHelp() {
   Out("mappan <dx> <dy> [hold s]   drag the open map screen by dx,dy dp (view height 400 dp); finger down for hold s (0.25)");
   Out("freecam [on|off|freeze on|off|player on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]");
   Out("                           fly the view away from the player (HUD hidden; freeze holds the game still)");
+  Out("photo [on|off|capture [1|2|4]|fov <n>|roll <n>|samus on|off|panel on|off|super 1|2|4|speed <n>]");
+  Out("                           photo mode: frozen free camera with a roll and fov, saves a PNG");
   Out("aspect <4:3|16:9|window>   switch the rendering aspect, as the Options row does");
   Out("original [on|off]   Original experience (retail settings over the saved ones)");
   Out("keypreset classic|mouse   apply a keyboard preset (Controls > Remap), as its button");
   Out("padpreset gamecube|remastered|modern|southpaw   apply a controller preset to pad 1");
   Out("fov <45..90>               first-person vertical FOV, as the Options row does");
+  Out("gunoffset <r> <f> <u>      arm cannon offset in metres (+-1), as the Video row does");
   Out("window [<w> <h>]           resize the window (leaves fullscreen); prints the size");
   Out("msaa <1|4>, aniso <1..16>  anti-aliasing and anisotropic filtering, applied next frame");
   Out("hudscale <50..100>         HUD scale in percent, as the Options row does");
@@ -823,6 +828,9 @@ void CmdObj(CStateManager& mgr) {
   if (const CPhysicsActor* physics = TCastToConstPtr< CPhysicsActor >(ent)) {
     const CVector3f vel = physics->GetVelocityWR();
     Out("velocity (%.2f, %.2f, %.2f)", vel.GetX(), vel.GetY(), vel.GetZ());
+  }
+  if (const CScriptDoor* door = TCastToConstPtr< CScriptDoor >(ent)) {
+    Out("door %s", door->IsOpen() ? "open" : "closed");
   }
   if (CPatterned* patterned = TCastToPtr< CPatterned >(ent)) {
     const CAiState* state = patterned->GetStateMachineState().GetActorState();
@@ -1085,7 +1093,7 @@ void CmdLook(CStateManager& mgr) {
 // vulnerability, so it dies as from a last shot (bosses run their death scripts).
 void CmdKill(CStateManager& mgr) {
   if (sCmd.args.size() < 2) {
-    return Finish("usage: kill <id>");
+    return Finish("usage: kill <id> [damage]");
   }
   CActor* actor = TCastToPtr< CActor >(FindObject(mgr, sCmd.args[1]));
   if (actor == nullptr) {
@@ -1096,8 +1104,11 @@ void CmdKill(CStateManager& mgr) {
     return Finish("that actor has no health");
   }
   const CVector3f dir = actor->GetTransform().GetForward();
-  mgr.ApplyLocalDamage(actor->GetTranslation(), dir, *actor, health->GetHP() + 1.f,
-                       CWeaponMode::Power());
+  float damage = health->GetHP() + 1.f;
+  if (sCmd.args.size() > 2) {
+    damage = static_cast< float >(std::atof(sCmd.args[2].c_str()));
+  }
+  mgr.ApplyLocalDamage(actor->GetTranslation(), dir, *actor, damage, CWeaponMode::Power());
   Finish();
 }
 
@@ -1775,6 +1786,66 @@ void CmdFreeCam() {
   Finish();
 }
 
+void CmdPhoto(CStateManager& mgr) {
+  static const char* const usage =
+      "usage: photo [on|off|capture [1|2|4]|fov <20..120>|roll <-180..180>|samus on|off|panel on|off|"
+      "super 1|2|4|speed <n>]";
+  if (sCmd.args.size() > 1) {
+    const std::string arg = Lower(sCmd.args[1]);
+    const std::string value = sCmd.args.size() > 2 ? Lower(sCmd.args[2]) : std::string();
+    float number = 0.f;
+    std::string why;
+    if (arg == "on") {
+      if (!PortPhoto::Enter(mgr, why)) {
+        return Finish(("photo mode refused: " + why).c_str());
+      }
+    } else if (arg == "off") {
+      PortPhoto::Exit();
+    } else if (!PortPhoto::Active()) {
+      return Finish("photo mode is off");
+    } else if (arg == "capture") {
+      const int factor = value.empty() ? 0 : std::atoi(value.c_str());
+      if (!value.empty() && factor != 1 && factor != 2 && factor != 4) {
+        return Finish(usage);
+      }
+      if (!PortPhoto::RequestCapture(factor)) {
+        return Finish("a capture is already running");
+      }
+    } else if (arg == "fov" && ParseFloat(value, number)) {
+      PortPhoto::SetFov(number);
+    } else if (arg == "roll" && ParseFloat(value, number)) {
+      PortPhoto::SetRoll(number);
+    } else if (arg == "speed" && ParseFloat(value, number)) {
+      PortPhoto::SetSpeed(number);
+    } else if (arg == "samus" && (value == "on" || value == "off")) {
+      PortPhoto::SetShowSamus(value == "on");
+    } else if (arg == "panel" && (value == "on" || value == "off")) {
+      PortPhoto::SetPanelShown(value == "on");
+    } else if (arg == "super" && (value == "1" || value == "2" || value == "4")) {
+      PortPhoto::SetSupersample(std::atoi(value.c_str()));
+    } else {
+      return Finish(usage);
+    }
+  }
+  const PortPhoto::CaptureResult last = PortPhoto::LastCapture();
+  // The camera state is only live while photo mode is on; off, just the persisted settings.
+  char live[96] = "";
+  if (PortPhoto::Active()) {
+    std::snprintf(live, sizeof(live), "fov %.1f roll %.1f samus %s panel %s ", PortPhoto::Fov(),
+                  PortPhoto::Roll(), PortPhoto::ShowSamus() ? "on" : "off",
+                  PortPhoto::PanelShown() ? "on" : "off");
+  }
+  Out("photo %s %ssuper %d speed %.1f capture %s%s%s", PortPhoto::Active() ? "on" : "off", live,
+      PortPhoto::Supersample(), PortPhoto::Speed(),
+      PortPhoto::Capturing() ? "running" : last.state > 0 ? "saved" : last.state < 0 ? "failed" : "none",
+      last.state > 0 ? " " : "", last.state > 0 ? last.path.c_str() : "");
+  if (last.state > 0) {
+    Out("last capture %ux%u at render scale %.2f%s", last.width, last.height, last.scale,
+        last.clamped ? " (clamped)" : "");
+  }
+  Finish();
+}
+
 bool IsTickCommand(const std::string& name) {
   if (name == "fx" && sCmd.args.size() > 1) {
     static const char* const queries[] = {"list", "tree", "stats", "mute", "solo", "timescale"};
@@ -1786,7 +1857,7 @@ bool IsTickCommand(const std::string& name) {
   }
   static const char* const names[] = {"status", "areas", "objs", "obj", "send", "give",
                                       "take", "items", "heal", "kill", "hurt", "die", "god", "memo", "strg", "language", "tp", "room", "fx", "face", "look", "warp",
-                                      "tracker", "enter", "visor", "beam"};
+                                      "tracker", "enter", "visor", "beam", "photo"};
   for (const char* n : names) {
     if (name == n) {
       return true;
@@ -1800,6 +1871,8 @@ void RunTick(CStateManager& mgr) {
   if (name == "status") {
     CmdStatus(mgr);
     Finish();
+  } else if (name == "photo") {
+    CmdPhoto(mgr);
   } else if (name == "areas") {
     CmdAreas(mgr);
   } else if (name == "enter") {
@@ -1906,6 +1979,9 @@ void RunFrame() {
   } else if (name == "fx") {
     CmdFxQuery();
   } else if (name == "quit") {
+    // As closing the window: the quick resume is written first.
+    PortSaveState::ResumeSave();
+    PortSaveState::ResumeQuitCleanly();
     Finish();
     sQuit = true;
   } else if (name == "phazongun") {
@@ -1963,6 +2039,15 @@ void RunFrame() {
       return Finish("usage: fov <45..90>   first-person vertical FOV (retail 55)");
     }
     PortDebug::SetFirstPersonFov(fov);
+    Finish();
+  } else if (name == "gunoffset") {
+    if (sCmd.args.size() != 4) {
+      return Finish("usage: gunoffset <right> <forward> <up>   arm cannon offset in metres (+-1)");
+    }
+    const float offset[3] = {static_cast< float >(std::atof(sCmd.args[1].c_str())),
+                             static_cast< float >(std::atof(sCmd.args[2].c_str())),
+                             static_cast< float >(std::atof(sCmd.args[3].c_str()))};
+    PortDebug::SetGunOffset(offset);
     Finish();
   } else if (name == "window") {
     int count = 0;
@@ -2102,15 +2187,16 @@ void RunFrame() {
         (Lower(sCmd.args[2]) == "on" || Lower(sCmd.args[2]) == "off")) {
       PortRoomGeo::SetOffscreenCasters(Lower(sCmd.args[2]) == "on");
     }
-    f32 dir[3], color[3], center[3], radius = 0.f;
+    f32 dir[3], color[3], center[3], distance = 0.f;
     u32 casters = 0;
-    GXPortGetShadowInfo(dir, color, &radius, center, &casters);
-    if (radius <= 0.f) {
+    GXPortGetShadowInfo(dir, color, &distance, center, &casters);
+    if (distance <= 0.f) {
       Out("shadow map off (no sun, MP_SHADOWS=0, or a scene without shadows)");
     } else {
       Out("light travels %.3f %.3f %.3f colour %.3f %.3f %.3f", dir[0], dir[1], dir[2], color[0], color[1], color[2]);
-      Out("map radius %.1f centre %.2f %.2f %.2f, %u caster draw(s), %u of them out-of-view room models (casters %s)",
-          radius, center[0], center[1], center[2], casters, PortRoomGeo::OffscreenCasterCount(),
+      Out("4 cascades to %.1f, last centred %.2f %.2f %.2f, %u caster draw(s), %u of them out-of-view room models "
+          "(casters %s)",
+          distance, center[0], center[1], center[2], casters, PortRoomGeo::OffscreenCasterCount(),
           PortRoomGeo::OffscreenCasters() ? "on" : "off");
     }
     OutLines(PortRoomEnv::SunInfo());
@@ -2553,6 +2639,28 @@ void RunFrame() {
       return Finish();
     }
     return Finish("usage: state list|last|save [n]|load [n]|undo|slot <n>");
+  } else if (name == "resume") {
+    const std::string action = sCmd.args.size() > 1 ? sCmd.args[1] : "status";
+    if (action == "status") {
+      Out("%s", PortSaveState::ResumeStatus().c_str());
+      return Finish();
+    } else if (action == "save") {
+      // Whatever the quick_resume setting says; away from a safe point it
+      // writes the last snapshot.
+      const bool saved = PortSaveState::ResumeSave(true);
+      Out("%s", PortSaveState::LastMessage().c_str());
+      return Finish(saved ? nullptr : "not written");
+    } else if (action == "load") {
+      if (!PortSaveState::RequestResumeLoad()) {
+        return Finish(PortSaveState::LastMessage().c_str());
+      }
+      Out("queued; see 'state last'");
+      return Finish();
+    } else if (action == "clear") {
+      PortSaveState::ResumeClear();
+      return Finish();
+    }
+    return Finish("usage: resume [status|save|load|clear]");
   } else if (name == "timer") {
     const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
     if (value != "0" && value != "1") {
@@ -2613,17 +2721,26 @@ void RunFrame() {
       path += (i > 2 ? " " : "") + sCmd.args[i];
     }
     const std::string sub = sCmd.args.size() > 2 ? Lower(sCmd.args[2]) : "";
+    const auto isFormat = [](const std::string& word) {
+      return word == "usa" || word == "pal" || word == "trilogy";
+    };
     std::string text;
     if (action == "list") {
       text = PortDebug::CardList();
     } else if (action == "import" && !path.empty()) {
       text = PortDebug::CardImport(path);
+    } else if (action == "export" && isFormat(sub) && sCmd.args.size() > 3) {
+      text = PortDebug::CardExport(path.substr(sub.size() + 1), sub);
     } else if (action == "export" && !path.empty()) {
       text = PortDebug::CardExport(path);
-    } else if (action == "dolphin" && sCmd.args.size() == 3 && (sub == "import" || sub == "export")) {
-      text = sub == "import" ? PortDebug::CardImportDolphin() : PortDebug::CardExportDolphin();
+    } else if (action == "dolphin" && sub == "import" && sCmd.args.size() == 3) {
+      text = PortDebug::CardImportDolphin();
+    } else if (action == "dolphin" && sub == "export" && sCmd.args.size() <= 4 &&
+               (sCmd.args.size() == 3 || isFormat(Lower(sCmd.args[3])))) {
+      text = PortDebug::CardExportDolphin(sCmd.args.size() == 4 ? Lower(sCmd.args[3]) : "");
     } else {
-      return Finish("usage: gci list | import <path> | export <dir or .raw> | dolphin import|export");
+      return Finish("usage: gci list | import <path> | export [usa|pal] <dir or .raw> | export trilogy "
+                    "<save.bin> | dolphin import | dolphin export [usa|pal|trilogy]");
     }
     size_t start = 0;
     while (start <= text.size()) {

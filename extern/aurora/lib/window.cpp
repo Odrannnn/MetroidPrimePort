@@ -480,21 +480,15 @@ void shutdown() {
   SDL_Quit();
 }
 
-AuroraWindowSize get_window_size() {
-  int width = 0;
-  int height = 0;
-  int native_fb_w = 0;
-  int native_fb_h = 0;
-  AURORA_ASSERT(SDL_GetWindowSize(g_window, &width, &height), "Failed to get window size: {}", SDL_GetError());
-  AURORA_ASSERT(SDL_GetWindowSizeInPixels(g_window, &native_fb_w, &native_fb_h), "Failed to get window size in pixels: {}",
-         SDL_GetError());
-
+namespace {
+// The frame buffer size a render scale gives for a window of native_fb_w x native_fb_h pixels.
+Vec2<int> frame_buffer_size_for_scale(int native_fb_w, int native_fb_h, float frameBufferScale) {
   int fb_w = native_fb_w;
   int fb_h = native_fb_h;
-  if (g_frameBufferScale > 0.f) {
+  if (frameBufferScale > 0.f) {
     const auto [baseW, baseH] = vi::configured_fb_size();
     const auto [scaledW, scaledH] =
-        scale_frame_buffer_to_aspect(static_cast<int>(baseW), static_cast<int>(baseH), g_frameBufferScale,
+        scale_frame_buffer_to_aspect(static_cast<int>(baseW), static_cast<int>(baseH), frameBufferScale,
                                      static_cast<float>(fb_w) / static_cast<float>(fb_h));
     fb_w = scaledW;
     fb_h = scaledH;
@@ -508,6 +502,33 @@ AuroraWindowSize get_window_size() {
       fb_h = fitH;
     }
   }
+  return {fb_w, fb_h};
+}
+} // namespace
+
+bool get_frame_buffer_size_for_scale(float scale, uint32_t* width, uint32_t* height) {
+  int native_fb_w = 0;
+  int native_fb_h = 0;
+  if (g_window == nullptr || !SDL_GetWindowSizeInPixels(g_window, &native_fb_w, &native_fb_h) || native_fb_w <= 0 ||
+      native_fb_h <= 0) {
+    return false;
+  }
+  const auto [fb_w, fb_h] = frame_buffer_size_for_scale(native_fb_w, native_fb_h, scale);
+  *width = static_cast<uint32_t>(fb_w);
+  *height = static_cast<uint32_t>(fb_h);
+  return true;
+}
+
+AuroraWindowSize get_window_size() {
+  int width = 0;
+  int height = 0;
+  int native_fb_w = 0;
+  int native_fb_h = 0;
+  AURORA_ASSERT(SDL_GetWindowSize(g_window, &width, &height), "Failed to get window size: {}", SDL_GetError());
+  AURORA_ASSERT(SDL_GetWindowSizeInPixels(g_window, &native_fb_w, &native_fb_h), "Failed to get window size in pixels: {}",
+         SDL_GetError());
+
+  const auto [fb_w, fb_h] = frame_buffer_size_for_scale(native_fb_w, native_fb_h, g_frameBufferScale);
 
   const float scale = SDL_GetWindowDisplayScale(g_window);
   return {

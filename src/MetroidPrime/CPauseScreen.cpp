@@ -28,6 +28,7 @@
 #include "MetroidPrime/Tweaks/CTweakPlayerRes.hpp"
 #include "rstl/StringExtras.hpp"
 #include "rstl/math.hpp"
+#include "port_photo.h"
 #include <float.h>
 
 CPauseScreen::ESubScreen CPauseScreen::GetPreviousSubscreen(ESubScreen screen) {
@@ -320,7 +321,7 @@ void CPauseScreen::ProcessControllerInput(const CStateManager& mgr, const CFinal
   }
   if (InputEnabled()) {
     bool invalid = IsInvalidSubscreen(x8_curSubscreen);
-    if (input.PStart() || (input.PB() && bExits) ||
+    if (input.PStart() || (input.PB() && bExits) || PortPhoto::EnterPending() ||
         (!x7c_screens[x78_activeIdx].null() &&
          x7c_screens[x78_activeIdx]->ShouldExitPauseScreen())) {
       CSfxManager::SfxStart(0x59a, 0x7f, 0x40, false, CSfxManager::kMedPriority, false,

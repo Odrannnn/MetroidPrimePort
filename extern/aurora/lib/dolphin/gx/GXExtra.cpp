@@ -227,20 +227,27 @@ void GXPortSetShadowCasterOnly(GXBool on) {
 // The last shadow frame, for GXPortShadowBoxCasts and GXPortGetShadowInfo on the game thread.
 static struct {
   f32 worldToView[3][4];
+  aurora::gfx::shadow::cascade::Frustum frustum{};
   f32 sunDir[3];
   f32 color[3];
-  f32 radius = 0.f;
+  f32 distance = 0.f;
 } sShadowFrame;
 
 GXBool GXPortShadowBoxCasts(const f32 min[3], const f32 max[3]) {
-  return aurora::gfx::shadow::box_casts(sShadowFrame.worldToView, sShadowFrame.sunDir, sShadowFrame.radius, min, max);
+  return aurora::gfx::shadow::box_casts(sShadowFrame.worldToView, sShadowFrame.frustum, sShadowFrame.sunDir,
+                                        sShadowFrame.distance, min, max);
 }
 
-void GXPortGetShadowInfo(f32 sunDir[3], f32 color[3], f32* radius, f32 center[3], u32* casters) {
+void GXPortGetShadowInfo(f32 sunDir[3], f32 color[3], f32* distance, f32 center[3], u32* casters) {
   std::memcpy(sunDir, sShadowFrame.sunDir, sizeof(sShadowFrame.sunDir));
   std::memcpy(color, sShadowFrame.color, sizeof(sShadowFrame.color));
-  *radius = sShadowFrame.radius;
-  aurora::gfx::shadow::box_center(sShadowFrame.worldToView, sShadowFrame.radius, center);
+  aurora::gfx::shadow::cascade::Fit fits[aurora::gfx::shadow::cascade::Count];
+  const bool active = aurora::gfx::shadow::fit_frame(sShadowFrame.worldToView, sShadowFrame.frustum,
+                                                     sShadowFrame.sunDir, sShadowFrame.distance, fits);
+  *distance = active ? sShadowFrame.distance : 0.f;
+  for (int i = 0; i < 3; ++i) {
+    center[i] = active ? fits[aurora::gfx::shadow::cascade::Count - 1].center[i] : 0.f;
+  }
   *casters = aurora::gfx::shadow::last_caster_count();
 }
 
@@ -252,21 +259,26 @@ void GXPortSetRoomLights(const f32* records, u32 count) {
   }
 }
 
-void GXPortSetShadowFrame(const f32 worldToView[3][4], const f32 sunDir[3], f32 radius, const f32 color[3]) {
+void GXPortSetShadowFrame(const f32 worldToView[3][4], const f32 frustum[6], const f32 sunDir[3], f32 distance,
+                          const f32 color[3]) {
   std::memcpy(sShadowFrame.worldToView, worldToView, sizeof(sShadowFrame.worldToView));
+  sShadowFrame.frustum = {frustum[0], frustum[1], frustum[2], frustum[3], frustum[4], frustum[5]};
   std::memcpy(sShadowFrame.sunDir, sunDir, sizeof(sShadowFrame.sunDir));
   std::memcpy(sShadowFrame.color, color, sizeof(sShadowFrame.color));
-  sShadowFrame.radius = radius;
+  sShadowFrame.distance = distance;
   GX_WRITE_AURORA(GX_AURORA_PORT_SHADOW_FRAME);
   for (u32 i = 0; i < 3; ++i) {
     for (u32 j = 0; j < 4; ++j) {
       GX_WRITE_F32(worldToView[i][j]);
     }
   }
+  for (u32 i = 0; i < 6; ++i) {
+    GX_WRITE_F32(frustum[i]);
+  }
   for (u32 i = 0; i < 3; ++i) {
     GX_WRITE_F32(sunDir[i]);
   }
-  GX_WRITE_F32(radius);
+  GX_WRITE_F32(distance);
   for (u32 i = 0; i < 3; ++i) {
     GX_WRITE_F32(color[i]);
   }
@@ -665,6 +677,35 @@ void GXSetPBRBakedLightModulation(const f32 rgb[3]) {
   for (f32 v : now.rgb) {
     GX_WRITE_F32(v);
   }
+}
+
+void GXSetPBRModelModulation(const f32 diffuse[4], const f32 incan[4], f32 coverage) {
+  struct Write {
+    f32 diffuse[4];
+    f32 incan[4];
+    f32 coverage;
+  };
+  static LastPBRWrite<Write> sLast;
+  Write now{{1.f, 1.f, 1.f, 1.f}, {0.f, 0.f, 0.f, 1.f}, coverage};
+  for (u32 i = 0; i < 4; ++i) {
+    if (diffuse != nullptr) {
+      now.diffuse[i] = diffuse[i];
+    }
+    if (incan != nullptr) {
+      now.incan[i] = incan[i];
+    }
+  }
+  if (sLast.repeats(now)) {
+    return;
+  }
+  GX_WRITE_AURORA(GX_AURORA_SET_PBR_MODEL_MODULATION);
+  for (f32 v : now.diffuse) {
+    GX_WRITE_F32(v);
+  }
+  for (f32 v : now.incan) {
+    GX_WRITE_F32(v);
+  }
+  GX_WRITE_F32(now.coverage);
 }
 
 void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 top, f32 bindScale, f32 bindOffset) {

@@ -205,7 +205,7 @@ bool sHint = false;
 bool sBrdfSent = false; // the mods' brdf.lut, or the lack of one, is with Aurora
 uint32_t sHintArea = 0;
 float sHintCentre[3];
-float sHintLightmap[3] = {}; // SetLightmapHint; scale 0: none
+float sHintLightmap[3] = {}; // SetLightmapHint; PortRoomGeo::HasLightmapLookup
 int sEnabled = -1;
 int sExposure = -1;
 int sBloom = -1;
@@ -2631,7 +2631,7 @@ void SetLightmapHint(const float lookup[3]) { std::memcpy(sHintLightmap, lookup,
 
 void ClearVolumeHint() {
   sHint = false;
-  sHintLightmap[2] = 0.f;
+  std::fill(std::begin(sHintLightmap), std::end(sHintLightmap), 0.f);
 }
 
 static bool sProbeOverride = false;
@@ -3018,7 +3018,7 @@ bool Compose(const Located& located, Selection& out) {
 // cache, which is by position, since instances that share a middle need not share a lookup.
 bool AddLightmap(Selection& out) {
   out.lightmap = 0;
-  if (!sHint || !(sHintLightmap[2] > 0.f) || !Enabled() || !VolumesEnabled()) {
+  if (!sHint || !PortRoomGeo::HasLightmapLookup(sHintLightmap) || !Enabled() || !VolumesEnabled()) {
     return false;
   }
   const auto found = sAreas.find(sHintArea);
@@ -3038,6 +3038,10 @@ bool AddLightmap(Selection& out) {
     return false;
   }
   static const float scale = port::EnvFloat("MP_ROOM_ENV_LIGHTMAP_SCALE", 1.f);
+  // The shader takes a level of 0 for no lightmap (a scale of 0 is a one-texel lookup).
+  if (!(level * scale > 0.f)) {
+    return false;
+  }
   out.lightmap = area.lightmap;
   out.lightmapRect[0] = sHintLightmap[0];
   out.lightmapRect[1] = sHintLightmap[1];

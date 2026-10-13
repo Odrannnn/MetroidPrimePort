@@ -71,6 +71,13 @@ bool ApplySetting(std::string_view keyView, std::string_view valueView) {
     if (std::isfinite(f) && f >= 50.f && f <= 10000.f) {
       s.stickAimRate = f;
     }
+  } else if (key == "stick_aim_split") {
+    s.stickAimSplit = ParseBool(value);
+  } else if (key == "stick_aim_rate_y") {
+    const float f = ParseFloat(value);
+    if (std::isfinite(f) && f >= 50.f && f <= 10000.f) {
+      s.stickAimRateY = f;
+    }
   } else if (key == "gyro_mode") {
     const long v = std::strtol(value.c_str(), nullptr, 10);
     if (v >= 0 && v <= 2) {
@@ -238,6 +245,8 @@ void WriteAimSettings(std::ostream& out) {
   out << "spring_ball_flick=" << (s.springFlick ? 1 : 0) << '\n';
   out << "spring_ball_flick_rate=" << s.springFlickRate << '\n';
   out << "stick_aim_rate=" << s.stickAimRate << '\n';
+  out << "stick_aim_split=" << (s.stickAimSplit ? 1 : 0) << '\n';
+  out << "stick_aim_rate_y=" << s.stickAimRateY << '\n';
   out << "gyro_mode=" << s.gyroMode << '\n';
   out << "gyro_source=" << s.gyroSource << '\n';
   out << "gyro_rate=" << s.gyroRate << '\n';

@@ -157,7 +157,20 @@ enum class ActionKind : uint8_t {
   X(SaveState, Digital, "save_state", "Save state")                                                \
   X(LoadState, Digital, "load_state", "Load state")                                                \
   X(Screenshot, Digital, "screenshot", "Screenshot")                                               \
-  X(ToggleOriginal, Digital, "toggle_original", "Original experience")
+  X(ToggleOriginal, Digital, "toggle_original", "Original experience")                             \
+  X(PhotoMode, Digital, "photo_mode", "Photo mode")                                                \
+  X(MenuA, Digital, "menu_a", "Menu A")                                                            \
+  X(MenuB, Digital, "menu_b", "Menu B")                                                            \
+  X(MenuX, Digital, "menu_x", "Menu X")                                                            \
+  X(MenuY, Digital, "menu_y", "Menu Y")                                                            \
+  X(MenuL, Digital, "menu_l", "Menu L (click)")                                                    \
+  X(MenuR, Digital, "menu_r", "Menu R (click)")                                                    \
+  X(MenuLAnalog, HalfAxis, "menu_l_analog", "Menu L (analog)")                                     \
+  X(MenuRAnalog, HalfAxis, "menu_r_analog", "Menu R (analog)")                                     \
+  X(MenuUp, Digital, "menu_up", "Menu up")                                                         \
+  X(MenuDown, Digital, "menu_down", "Menu down")                                                   \
+  X(MenuLeft, Digital, "menu_left", "Menu left")                                                   \
+  X(MenuRight, Digital, "menu_right", "Menu right")
 
 enum class Action : uint16_t {
 #define PORT_INPUT_ACTION_ENUM(id, kind, key, label) id,
@@ -230,8 +243,9 @@ public:
   // Drops every latch and timer; inputs held now are consumed until released.
   void Reset();
   // One poll. contexts: the active context bits (layers are added from the
-  // profile's Layer actions). nowMs: a monotonic clock.
-  const Output& Poll(const RawState& raw, uint16_t contexts, double nowMs);
+  // profile's Layer actions). nowMs: a monotonic clock. quiet: context bits whose
+  // switching on or off leaves held inputs alone instead of consuming them.
+  const Output& Poll(const RawState& raw, uint16_t contexts, double nowMs, uint16_t quiet = 0);
   const Output& Last() const { return mOut; }
   // The context bits the last poll used (with layers).
   uint16_t ActiveContexts() const { return mContexts; }

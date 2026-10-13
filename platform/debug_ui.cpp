@@ -6,6 +6,7 @@
 #include "port_collision_view.h"
 #include "port_debug.h"
 #include "port_freecam.h"
+#include "port_photo.h"
 #include "port_hd_font.h"
 #include "port_room_env.h"
 #include "port_room_geo.h"
@@ -107,6 +108,7 @@ extern char** environ;
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -132,6 +134,11 @@ void request_screenshot() noexcept;
 extern "C" void AIPortSetOutputEnabled(int enabled);
 extern "C" int AIPortOutputEnabled(void);
 extern "C" void salSetMuted(int muted);
+
+// ImGui's item hooks, forwarded by extern/aurora/extern/imgui_item_hook.cpp.
+extern void (*gImGuiItemAddHook)(ImGuiContext* ctx, ImGuiID id, const ImRect& rect);
+extern void (*gImGuiItemInfoHook)(ImGuiContext* ctx, ImGuiID id, const char* label,
+                                  ImGuiItemStatusFlags flags);
 
 namespace {
 
@@ -222,9 +229,15 @@ bool sTrackerProgress = false;
 int sApSuitDamage = 1;
 bool sCheats = false;
 bool sSkippableCutscenes = false;
+// The stored choice only. Randomizer and Archipelago games force it on at use
+// (PortSkipCutscenes::Forced), which the getter does not fold in.
+bool sRevision100Compatibility = false;
 std::string sTextLanguage;
 int sElevatorRide = PortDebug::kElevatorRide_Original;
+int sBootLogos = PortDebug::kBootLogos_Skippable;
 bool sSaveStateHotkeys = true;
+bool sQuickResume = true;
+bool sSaveStateRoomState = true;
 float sTwinStickRightY = 0.f;
 std::atomic<bool> sTouchBeamShift{false}; // the touch twin layout's held Beam button
 std::atomic<bool> sTouchTurboFire{false}; // the touch Turbo button, held
@@ -239,6 +252,7 @@ bool sLogFile = true;
 std::mutex sRandoMutex;
 PortRandoGen::Settings sRandoSettings;
 float sFirstPersonFov = PortDebug::kFovRetail;
+float sGunOffset[3] = {};
 int sMsaa = 1;
 int sAnisotropy = 16;
 // Setting `opengles`; sOpenGlesAtStart is what this run was started with.
@@ -279,6 +293,7 @@ WheelIcon sWheelIcons[2][4];
 std::atomic<uint64_t> sWheelStampNs{0};
 // Whether the pause menu (inventory, logbook) is up; the touch overlay shows R there.
 std::atomic<bool> sPauseScreenOpen{false};
+std::atomic<bool> sPausedDialogOpen{false};
 std::atomic<uint64_t> sPauseScreenStampNs{0};
 std::atomic<int> sVisorRequest{-1};
 std::atomic<uint64_t> sVisorRequestUntilNs{0};
@@ -512,6 +527,13 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sRemasteredImagePath = value;
   } else if (key == "remastered_keys") {
     sRemasteredKeysPath = value;
+  } else if (key == "photo_supersample") {
+    PortPhoto::SetSupersample(std::atoi(value.c_str()));
+  } else if (key == "photo_speed") {
+    const float f = static_cast< float >(std::atof(value.c_str()));
+    if (std::isfinite(f)) {
+      PortPhoto::SetSpeed(f);
+    }
   } else if (key == "render_scale") {
     const float f = static_cast< float >(std::atof(value.c_str()));
     if (std::isfinite(f) && f >= 0.f && f <= 4.f) {
@@ -602,13 +624,24 @@ void ApplySetting(const std::string& key, const std::string& value) {
     sTextLanguage = value;
   } else if (key == "skippable_cutscenes") {
     sSkippableCutscenes = ParseBool(value);
+  } else if (key == "revision_100_compatibility") {
+    sRevision100Compatibility = ParseBool(value);
   } else if (key == "elevator_ride") {
     const int mode = std::atoi(value.c_str());
     sElevatorRide = mode >= PortDebug::kElevatorRide_Original && mode <= PortDebug::kElevatorRide_Skip
                         ? mode
                         : PortDebug::kElevatorRide_Original;
+  } else if (key == "boot_logos") {
+    const int mode = std::atoi(value.c_str());
+    sBootLogos = mode >= PortDebug::kBootLogos_Show && mode <= PortDebug::kBootLogos_Off
+                     ? mode
+                     : PortDebug::kBootLogos_Skippable;
   } else if (key == "savestate_hotkeys") {
     sSaveStateHotkeys = ParseBool(value);
+  } else if (key == "quick_resume") {
+    sQuickResume = ParseBool(value);
+  } else if (key == "savestate_room_state") {
+    sSaveStateRoomState = ParseBool(value);
   } else if (key == "unlock_hard_mode") {
     sUnlockHardMode = ParseBool(value);
   } else if (key == "unlock_fusion_suit") {
@@ -636,6 +669,15 @@ void ApplySetting(const std::string& key, const std::string& value) {
     const float f = static_cast< float >(std::atof(value.c_str()));
     if (std::isfinite(f) && f >= PortDebug::kFovMin && f <= PortDebug::kFovMax) {
       sFirstPersonFov = f;
+    }
+  } else if (key == "gun_offset") {
+    float v[3] = {};
+    if (std::sscanf(value.c_str(), "%f,%f,%f", &v[0], &v[1], &v[2]) == 3) {
+      for (int i = 0; i < 3; ++i) {
+        sGunOffset[i] = std::isfinite(v[i]) ? std::clamp(v[i], -PortDebug::kGunOffsetMax,
+                                                         PortDebug::kGunOffsetMax)
+                                            : 0.f;
+      }
     }
   } else if (key == "game_options") {
     sGameOptions = value;
@@ -785,10 +827,15 @@ std::string SettingsText() {
   file << "ap_suit_damage=" << sApSuitDamage << '\n';
   file << "cheats=" << (sCheats ? 1 : 0) << '\n';
   file << "skippable_cutscenes=" << (sSkippableCutscenes ? 1 : 0) << '\n';
+  file << "revision_100_compatibility=" << (sRevision100Compatibility ? 1 : 0) << '\n';
   file << "text_language=" << sTextLanguage << '\n';
   file << "elevator_ride=" << sElevatorRide << '\n';
+  file << "boot_logos=" << sBootLogos << '\n';
   file << "savestate_hotkeys=" << (sSaveStateHotkeys ? 1 : 0) << '\n';
+  file << "quick_resume=" << (sQuickResume ? 1 : 0) << '\n';
+  file << "savestate_room_state=" << (sSaveStateRoomState ? 1 : 0) << '\n';
   file << "fov=" << sFirstPersonFov << '\n';
+  file << "gun_offset=" << sGunOffset[0] << ',' << sGunOffset[1] << ',' << sGunOffset[2] << '\n';
   file << "msaa=" << sMsaa << '\n';
   file << "opengles=" << (sOpenGles ? 1 : 0) << '\n';
   file << "gpu_driver=" << sGpuDriver << '\n';
@@ -812,6 +859,8 @@ std::string SettingsText() {
   file << "ui_theme=" << (sUiTheme == 1 ? "prime" : sUiTheme == 2 ? "remastered" : sUiTheme == 3 ? "plain" : "auto")
        << '\n';
   file << "ui_sounds=" << (sUiSounds ? 1 : 0) << '\n';
+  file << "photo_supersample=" << PortPhoto::Supersample() << '\n';
+  file << "photo_speed=" << PortPhoto::Speed() << '\n';
   file << "render_scale=" << sRenderScale << '\n';
   file << "dynamic_res=" << (sDynamicRes ? 1 : 0) << '\n';
   file << "dynamic_res_target=" << sDynamicResTarget << '\n';
@@ -974,7 +1023,79 @@ bool IsPhysicalInput(const SDL_Event& event) {
   }
 }
 
+// Photo mode on a touchscreen: the touch controls hide (nativeDebugOverlayVisible), a finger
+// put down on the left half is an invisible stick centred where it landed, and one on the right
+// half drags the view. Fingers that land on the photo windows are left to ImGui. Events arrive on
+// Android's UI thread, so the state is shared under a lock and the game thread takes it each frame.
+constexpr float kPhotoStickRadius = 0.12f; // of the screen height, for a full stick
+constexpr float kPhotoLookDegrees = 100.f; // per screen height dragged
+struct PhotoTouch {
+  bool stickDown = false, lookDown = false; // Android finger ids start at 0
+  SDL_FingerID stick = 0;
+  SDL_FingerID look = 0;
+  float stickX = 0.f, stickY = 0.f; // where the stick finger landed
+  float moveX = 0.f, moveY = 0.f;
+  float lookX = 0.f, lookY = 0.f; // the look finger's last place
+  float yaw = 0.f, pitch = 0.f;   // not taken yet
+  bool enabled = false;
+  float aspect = 1.f; // window width over height
+  std::vector<ImVec4> windows; // x0, y0, x1, y1 as fractions of the window
+};
+std::mutex sPhotoTouchMutex;
+PhotoTouch sPhotoTouch;
+
+void PhotoTouchEvent(const SDL_Event& event) {
+  if (event.type != SDL_EVENT_FINGER_DOWN && event.type != SDL_EVENT_FINGER_MOTION &&
+      event.type != SDL_EVENT_FINGER_UP && event.type != SDL_EVENT_FINGER_CANCELED) {
+    return;
+  }
+  const SDL_TouchFingerEvent& f = event.tfinger;
+  std::lock_guard lock(sPhotoTouchMutex);
+  PhotoTouch& t = sPhotoTouch;
+  if (event.type == SDL_EVENT_FINGER_DOWN) {
+    if (!t.enabled) {
+      return;
+    }
+    for (const ImVec4& r : t.windows) {
+      if (f.x >= r.x && f.x <= r.z && f.y >= r.y && f.y <= r.w) {
+        return;
+      }
+    }
+    if (f.x < 0.5f && !t.stickDown) {
+      t.stickDown = true;
+      t.stick = f.fingerID;
+      t.stickX = f.x;
+      t.stickY = f.y;
+      t.moveX = t.moveY = 0.f;
+    } else if (f.x >= 0.5f && !t.lookDown) {
+      t.lookDown = true;
+      t.look = f.fingerID;
+      t.lookX = f.x;
+      t.lookY = f.y;
+    }
+  } else if (event.type == SDL_EVENT_FINGER_MOTION) {
+    if (t.stickDown && f.fingerID == t.stick) {
+      t.moveX = std::clamp((f.x - t.stickX) * t.aspect / kPhotoStickRadius, -1.f, 1.f);
+      t.moveY = std::clamp((t.stickY - f.y) / kPhotoStickRadius, -1.f, 1.f);
+    } else if (t.lookDown && f.fingerID == t.look) {
+      t.yaw -= (f.x - t.lookX) * t.aspect * kPhotoLookDegrees;
+      t.pitch -= (f.y - t.lookY) * kPhotoLookDegrees;
+      t.lookX = f.x;
+      t.lookY = f.y;
+    }
+  } else {
+    if (t.stickDown && f.fingerID == t.stick) {
+      t.stickDown = false;
+      t.moveX = t.moveY = 0.f;
+    }
+    if (t.lookDown && f.fingerID == t.look) {
+      t.lookDown = false;
+    }
+  }
+}
+
 bool SDLCALL debug_event_watch(void*, SDL_Event* event) {
+  PhotoTouchEvent(*event);
   // The port menu, save state and screenshot keys are bindings
   // (PortInputDevices::PollPortActions).
   if (event->type == SDL_EVENT_KEY_DOWN && !event->key.repeat &&
@@ -1176,7 +1297,11 @@ float TickFrames() { return sTickPeriod * 60.f; }
 
 // What the frame code uses: the settings, or retail's under Original experience.
 static bool EffectiveFrameLimit() { return sFrameLimitEnabled || sOriginalExperience; }
-static float EffectiveRenderScale() { return sOriginalExperience ? 1.f : sRenderScale; }
+// Photo mode's supersampled capture holds the EFB at this scale for a few frames; never saved.
+static float sCaptureScale = 0.f;
+static float EffectiveRenderScale() {
+  return sCaptureScale > 0.f ? sCaptureScale : sOriginalExperience ? 1.f : sRenderScale;
+}
 static int EffectiveMsaa() { return sOriginalExperience ? 1 : sMsaa; }
 static int EffectiveAnisotropy() { return sOriginalExperience ? 1 : sAnisotropy; }
 
@@ -1222,6 +1347,9 @@ static void ResetDynamicRes() {
 // GPU, so it steps rarely: down after two slow seconds, up after a steady stretch that
 // doubles each time a step up turns out too slow.
 static void UpdateDynamicRes(double fps, unsigned frames) {
+  if (sCaptureScale > 0.f) {
+    return;
+  }
   const float top = EffectiveRenderScale();
   const float bottom = std::min(sDynamicResMin, top);
   if (!sDynamicRes || sOriginalExperience || top <= bottom || sTurbo) {
@@ -1385,6 +1513,36 @@ void SetRenderScale(float scale) {
   VISetFrameBufferScale(EffectiveRenderScale());
 }
 
+SDL_Window* MainWindow();
+
+float BaseRenderScale() {
+  EnsureInitialized();
+  if (sOriginalExperience) {
+    return 1.f;
+  }
+  if (sRenderScale > 0.f) {
+    return sRenderScale;
+  }
+  // Auto draws at the window's pixel size; as a multiple of the 480-line base.
+  int width = 0, height = 0;
+  SDL_Window* window = MainWindow();
+  if (window != nullptr && SDL_GetWindowSizeInPixels(window, &width, &height) && height > 0) {
+    return static_cast< float >(height) / 480.f;
+  }
+  return 1.f;
+}
+
+void SetCaptureRenderScale(float scale) {
+  EnsureInitialized();
+  const float next = scale > 0.f ? scale : 0.f;
+  if (sCaptureScale == next) {
+    return;
+  }
+  sCaptureScale = next;
+  sDynScale = 0.f;
+  VISetFrameBufferScale(EffectiveRenderScale());
+}
+
 bool DynamicRes() {
   EnsureInitialized();
   return sDynamicRes && !sOriginalExperience;
@@ -1490,7 +1648,7 @@ bool CrosshairColor(float rgb[3]) {
 
 bool HideHelmet() {
   EnsureInitialized();
-  return sHideHelmet && !sOriginalExperience;
+  return (sHideHelmet || PortPhoto::Active()) && !sOriginalExperience;
 }
 
 void SetHideHelmet(bool enabled) {
@@ -1501,7 +1659,7 @@ void SetHideHelmet(bool enabled) {
 
 bool HideVisorEffects() {
   EnsureInitialized();
-  return sHideVisorEffects && !sOriginalExperience;
+  return (sHideVisorEffects || PortPhoto::Active()) && !sOriginalExperience;
 }
 
 void SetHideVisorEffects(bool enabled) {
@@ -1565,6 +1723,17 @@ void SetSkippableCutscenes(bool enabled) {
   MarkDirty();
 }
 
+bool Revision100Compatibility() {
+  EnsureInitialized();
+  return sRevision100Compatibility;
+}
+
+void SetRevision100Compatibility(bool enabled) {
+  EnsureInitialized();
+  sRevision100Compatibility = enabled;
+  MarkDirty();
+}
+
 const char* TextLanguage() {
   EnsureInitialized();
   for (size_t i = 0; i < PortRemastered::kTextLanguageCount; ++i) {
@@ -1593,6 +1762,17 @@ void SetElevatorRide(EElevatorRide mode) {
   MarkDirty();
 }
 
+EBootLogos BootLogos() {
+  EnsureInitialized();
+  return sOriginalExperience ? kBootLogos_Show : static_cast< EBootLogos >(sBootLogos);
+}
+
+void SetBootLogos(EBootLogos mode) {
+  EnsureInitialized();
+  sBootLogos = mode >= kBootLogos_Show && mode <= kBootLogos_Off ? mode : kBootLogos_Skippable;
+  MarkDirty();
+}
+
 float FirstPersonFov() {
   EnsureInitialized();
   return sOriginalExperience ? kFovRetail : sFirstPersonFov;
@@ -1604,6 +1784,23 @@ void SetFirstPersonFov(float degrees) {
     sFirstPersonFov = std::clamp(degrees, kFovMin, kFovMax);
     MarkDirty();
   }
+}
+
+void GunOffset(float out[3]) {
+  EnsureInitialized();
+  for (int i = 0; i < 3; ++i) {
+    out[i] = sOriginalExperience ? 0.f : sGunOffset[i];
+  }
+}
+
+void SetGunOffset(const float offset[3]) {
+  EnsureInitialized();
+  for (int i = 0; i < 3; ++i) {
+    if (std::isfinite(offset[i])) {
+      sGunOffset[i] = std::clamp(offset[i], -kGunOffsetMax, kGunOffsetMax);
+    }
+  }
+  MarkDirty();
 }
 
 int Msaa() {
@@ -2093,7 +2290,7 @@ void AddStickAim(float x, float y, float dt) {
   }
   // x right / y up; the aim state expects SDL-style right/down positive.
   sStickAimVelX = x * sInput.stickAimRate;
-  sStickAimVelY = -y * sInput.stickAimRate;
+  sStickAimVelY = -y * (sInput.stickAimSplit ? sInput.stickAimRateY : sInput.stickAimRate);
   sMouseFrameX += sStickAimVelX * dt;
   sMouseFrameY += sStickAimVelY * dt;
 }
@@ -2360,8 +2557,12 @@ unsigned MouseWeaponButtons(unsigned held) {
                                MouseCaptured() && !Visible(), held);
 }
 unsigned MouseMenuButtons(unsigned held, bool focused) {
+  // The resume prompt's buttons take the click; the game must not also read it as A.
+  PortSaveState::ResumeInfo promptInfo;
+  bool promptYes = true;
+  const bool resumePrompt = PortSaveState::ResumePromptShown(promptInfo, promptYes);
   return sMouseMenuGate.Poll(MouseAim() && MouseButtons() && !MouseGameplayActive() &&
-                                 !Visible() && focused,
+                                 !Visible() && !resumePrompt && focused,
                              held);
 }
 void NoteMouseButton(bool synthetic, unsigned mask, bool down) {
@@ -2393,7 +2594,8 @@ void SetMouseSensitivity(float radiansPerPixel) {
 }
 
 void AddMouseDelta(float dx, float dy) {
-  if (!sMouseCaptured || !MouseAim() || Visible() || !std::isfinite(dx) || !std::isfinite(dy)) {
+  if (!sMouseCaptured || !(MouseAim() || PortPhoto::Active()) || Visible() || !std::isfinite(dx) ||
+      !std::isfinite(dy)) {
     return;
   }
   sMousePendingX += dx;
@@ -2485,14 +2687,20 @@ uint32_t WheelState() {
 }
 
 // Game thread, once per frame from CInGameGuiManager::Update.
-void SetPauseScreenOpen(bool open) {
+void SetPauseScreenOpen(bool open, bool dialog) {
   sPauseScreenOpen.store(open);
+  sPausedDialogOpen.store(dialog);
   sPauseScreenStampNs.store(SDL_GetTicksNS());
 }
 
 // Not refreshed for a while (left the game) counts as closed.
 bool PauseScreenOpen() {
   return sPauseScreenOpen.load() && SDL_GetTicksNS() - sPauseScreenStampNs.load() < 300'000'000;
+}
+
+bool PausedMenuOpen() {
+  return (sPauseScreenOpen.load() || sPausedDialogOpen.load()) &&
+         SDL_GetTicksNS() - sPauseScreenStampNs.load() < 300'000'000;
 }
 
 void RequestVisor(int visor) {
@@ -3006,6 +3214,8 @@ void SetStateManager(CStateManager* mgr) {
   }
   sStateManager = mgr;
 }
+bool QuickResume() { return sQuickResume; }
+bool SaveStateRoomState() { return sSaveStateRoomState; }
 CStateManager* StateManager() { return sStateManager; }
 bool ViewRay(float origin[3], float forward[3]) {
   if (sStateManager == nullptr || sStateManager->GetCameraManager() == nullptr) {
@@ -4088,13 +4298,41 @@ void DrawPerformanceTab() {
 // Memory card transfer (port_gci.h). The work runs on the main thread; the
 // file dialogs answer on another one, so their picks wait in sCardPicks.
 namespace {
-enum CardPick { kCardPick_Import, kCardPick_ExportFolder, kCardPick_ExportFile };
+// kCardPick_Trilogy: the Trilogy save.bin to write the save into.
+enum CardPick { kCardPick_Import, kCardPick_ExportFolder, kCardPick_ExportFile, kCardPick_Trilogy };
 std::mutex sCardPickMutex;
 std::vector<std::pair<CardPick, std::string>> sCardPicks;
 std::atomic<bool> sCardDialogOpen{false};
 std::string sCardStatus;
 // Android has no folder dialog: each file gets its own save dialog, in turn.
-std::vector<std::filesystem::path> sCardExportQueue;
+struct CardExportFile {
+  std::string name; // the suggested file name
+  std::vector<uint8_t> bytes;
+  std::string note; // what a conversion could not carry over
+};
+std::vector<CardExportFile> sCardExportQueue;
+// The overlay's "Export as" choice: an index into kCardExportWords.
+int sCardExportChoice = 0;
+constexpr const char* kCardExportWords[] = {"", "usa", "pal", "trilogy"};
+constexpr const char* kCardExportUsage = " (usa, pal or trilogy).";
+
+// "" means the card's files as they are; Unknown for a word that is no format.
+// "trilogy" is the Wii Trilogy's save.bin (WiiSave).
+PortGci::ExportFormat CardExportFormat(const std::string& word) {
+  if (word.empty()) {
+    return PortGci::NativeExport();
+  }
+  if (word == "usa") {
+    return PortGci::ExportFormat::UsaGci;
+  }
+  if (word == "pal") {
+    return PortGci::ExportFormat::PalGci;
+  }
+  if (word == "trilogy") {
+    return PortGci::ExportFormat::WiiSave;
+  }
+  return PortGci::ExportFormat::Unknown;
+}
 
 // The last path segment, for messages; content:// URIs keep theirs escaped.
 std::string CardDisplayName(const std::string& path) {
@@ -4179,17 +4417,24 @@ std::string CardImport(const std::string& path) {
       PortGci::ImportBytes(contents, CardDisplayName(path), folder, folder.parent_path()));
 }
 
-std::string CardExport(const std::string& dest) {
+std::string CardExport(const std::string& dest, const std::string& format) {
   std::filesystem::path folder;
   const std::string refusal = CardExportSource(folder);
   if (!refusal.empty()) {
     return refusal;
   }
-  const std::filesystem::path target = PortGci::PathFromString(dest);
-  if (target.extension() == ".raw") {
-    return PortGci::ExportRaw(folder, target).Summary("Exported");
+  const PortGci::ExportFormat to = CardExportFormat(format);
+  if (to == PortGci::ExportFormat::Unknown) {
+    return "Unknown export format " + format + kCardExportUsage;
   }
-  return PortGci::ExportFolder(folder, target).Summary("Exported");
+  const std::filesystem::path target = PortGci::PathFromString(dest);
+  if (to == PortGci::ExportFormat::WiiSave) {
+    return PortGci::ExportTrilogy(folder, target).Summary("Exported");
+  }
+  if (target.extension() == ".raw") {
+    return PortGci::ExportRaw(folder, target, to).Summary("Exported");
+  }
+  return PortGci::ExportFolder(folder, target, to).Summary("Exported");
 }
 
 std::string CardImportDolphin() {
@@ -4230,27 +4475,39 @@ std::string CardImportDolphin() {
   return "Dolphin's memory card holds no Metroid Prime saves.";
 }
 
-std::string CardExportDolphin() {
+std::string CardExportDolphin(const std::string& format) {
   std::filesystem::path folder;
   const std::string refusal = CardExportSource(folder);
   if (!refusal.empty()) {
     return refusal;
   }
-  const PortGci::DolphinCard dolphin = PortGci::FindDolphinCard();
+  const PortGci::ExportFormat to = CardExportFormat(format);
+  if (to == PortGci::ExportFormat::Unknown) {
+    return "Unknown export format " + format + kCardExportUsage;
+  }
+  if (to == PortGci::ExportFormat::WiiSave) {
+    const std::filesystem::path bin = PortGci::FindDolphinTrilogy();
+    if (bin.empty()) {
+      return "No Trilogy save in Dolphin (Wii/title/00010000/52334d45 or 52334d50/data/save.bin in its user "
+             "folder); start Metroid Prime Trilogy in Dolphin once to create it.";
+    }
+    return "To " + PortGci::PathString(bin) + ": " + PortGci::ExportTrilogy(folder, bin).Summary("Exported");
+  }
+  const char* region = PortGci::CardRegionOf(to);
+  const PortGci::DolphinCard dolphin = PortGci::FindDolphinCard(region);
   if (!dolphin.Found()) {
-    return std::string("No Dolphin memory card found (GC/") + PortGci::CardRegion() + "/Card A or GC/MemoryCardA." +
-           PortGci::CardRegion() + ".raw in "
-           "Dolphin's user folder); start a GameCube game in Dolphin once to create it.";
+    return std::string("No Dolphin memory card found (GC/") + region + "/Card A or GC/MemoryCardA." + region +
+           ".raw in Dolphin's user folder); start a GameCube game of that region in Dolphin once to create it.";
   }
   std::string text;
   if (!dolphin.gciFolder.empty()) {
     text = "To " + PortGci::PathString(dolphin.gciFolder) + ": " +
-           PortGci::ExportFolder(folder, dolphin.gciFolder).Summary("Exported");
+           PortGci::ExportFolder(folder, dolphin.gciFolder, to).Summary("Exported");
   }
   if (!dolphin.rawImage.empty()) {
     text += std::string(text.empty() ? "" : "\n") + "To " +
             PortGci::PathString(dolphin.rawImage) + ": " +
-            PortGci::ExportRaw(folder, dolphin.rawImage).Summary("Exported");
+            PortGci::ExportRaw(folder, dolphin.rawImage, to).Summary("Exported");
   }
   return text;
 }
@@ -4324,7 +4581,7 @@ void OpenCardDialog(CardPick pick) {
     SDL_ShowOpenFileDialog(done, userdata, window, nullptr, 0, nullptr, false);
 #else
     static const SDL_DialogFileFilter filters[] = {
-        {"GameCube saves (.gci, card images)", "gci;raw;mcp;sav"},
+        {"Saves (.gci, card images, Wii data.bin/save.bin)", "gci;raw;mcp;sav;bin"},
         {"All files", "*"},
     };
     SDL_ShowOpenFileDialog(done, userdata, window, filters, 2, nullptr, false);
@@ -4334,11 +4591,23 @@ void OpenCardDialog(CardPick pick) {
   case kCardPick_ExportFolder:
     SDL_ShowOpenFolderDialog(done, userdata, window, nullptr, false);
     break;
+  case kCardPick_Trilogy: {
+#if defined(__ANDROID__)
+    SDL_ShowOpenFileDialog(done, userdata, window, nullptr, 0, nullptr, false);
+#else
+    static const SDL_DialogFileFilter filters[] = {
+        {"Trilogy save (save.bin)", "bin"},
+        {"All files", "*"},
+    };
+    SDL_ShowOpenFileDialog(done, userdata, window, filters, 2, nullptr, false);
+#endif
+    break;
+  }
   case kCardPick_ExportFile: {
     static std::string location;
     location = sCardExportQueue.empty()
                    ? std::string()
-                   : PortGci::PathString(sCardExportQueue.front().filename());
+                   : sCardExportQueue.front().name;
 #if defined(__ANDROID__)
     // SDL's Android save picker ignores its initial-location argument. Hand the
     // current queue member's basename to its Java dialog instead.
@@ -4351,16 +4620,76 @@ void OpenCardDialog(CardPick pick) {
   }
 }
 
-std::string CardSaveTo(const std::filesystem::path& source, const std::string& target) {
-  std::ifstream in(source, std::ios::binary);
-  const std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  SDL_IOStream* out = in ? SDL_IOFromFile(target.c_str(), "wb") : nullptr;
-  bool ok = out != nullptr && SDL_WriteIO(out, bytes.data(), bytes.size()) == bytes.size();
+#if defined(__ANDROID__)
+// Fills sCardExportQueue with the card's files, read as they are or converted
+// to `format` (one file then). Returns an error, or "" with the queue filled.
+std::string CardQueueExport(const std::filesystem::path& folder, const std::string& format) {
+  sCardExportQueue.clear();
+  const PortGci::ExportFormat to = CardExportFormat(format);
+  if (to == PortGci::ExportFormat::Unknown || to == PortGci::ExportFormat::WiiSave) {
+    return "Unknown export format " + format + " (usa or pal).";
+  }
+  if (to == PortGci::NativeExport()) {
+    for (const std::filesystem::path& file : PortGci::GameFiles(folder)) {
+      std::ifstream in(file, std::ios::binary);
+      std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      if (!in && !in.eof()) {
+        sCardExportQueue.clear();
+        return "Could not read " + PortGci::PathString(file.filename()) + ".";
+      }
+      sCardExportQueue.push_back({PortGci::PathString(file.filename()), std::move(bytes), {}});
+    }
+    return {};
+  }
+  CardExportFile entry;
+  std::string error;
+  PortGci::Header header;
+  if (!PortGci::ExportBytes(folder, to, entry.bytes, entry.note, error) ||
+      !PortGci::ParseHeader(entry.bytes.data(), entry.bytes.size(), header, error)) {
+    return "Could not convert the save: " + error;
+  }
+  entry.name = PortGci::DiskName(header);
+  sCardExportQueue.push_back(std::move(entry));
+  return {};
+}
+
+// Queues the Trilogy save.bin at `basePath` (a content:// URI from the picker)
+// with the card's newest save written into it.
+std::string CardQueueTrilogy(const std::string& basePath) {
+  sCardExportQueue.clear();
+  std::filesystem::path folder;
+  const std::string refusal = CardExportSource(folder);
+  if (!refusal.empty()) {
+    return refusal;
+  }
+  size_t size = 0;
+  void* data = SDL_LoadFile(basePath.c_str(), &size);
+  if (data == nullptr) {
+    return "Could not read " + CardDisplayName(basePath) + ": " + SDL_GetError();
+  }
+  const uint8_t* bytes = static_cast< const uint8_t* >(data);
+  const std::vector<uint8_t> base(bytes, bytes + size);
+  SDL_free(data);
+  CardExportFile entry;
+  std::string error;
+  if (!PortGci::ExportBytes(folder, PortGci::ExportFormat::WiiSave, entry.bytes, entry.note, error, base)) {
+    return "Could not convert the save: " + error;
+  }
+  entry.name = "save.bin";
+  sCardExportQueue.push_back(std::move(entry));
+  return {};
+}
+#endif
+
+std::string CardSaveTo(const CardExportFile& source, const std::string& target) {
+  SDL_IOStream* out = SDL_IOFromFile(target.c_str(), "wb");
+  bool ok = out != nullptr && SDL_WriteIO(out, source.bytes.data(), source.bytes.size()) == source.bytes.size();
   if (out != nullptr) {
     ok = SDL_CloseIO(out) && ok;
   }
-  return ok ? "Saved " + PortGci::PathString(source.filename()) + " as " + CardDisplayName(target) + "."
-            : "Could not save " + PortGci::PathString(source.filename()) + ": " + SDL_GetError();
+  return ok ? "Saved " + source.name + " as " + CardDisplayName(target) +
+                  (source.note.empty() ? "" : ", " + source.note) + "."
+            : "Could not save " + source.name + ": " + SDL_GetError();
 }
 
 // Runs every frame, overlay open or not, so a dialog's answer is acted on.
@@ -4383,7 +4712,17 @@ void ProcessCardPicks() {
       sCardStatus = CardImport(path);
       break;
     case kCardPick_ExportFolder:
-      sCardStatus = CardExport(path);
+      sCardStatus = CardExport(path, kCardExportWords[sCardExportChoice]);
+      break;
+    case kCardPick_Trilogy:
+#if defined(__ANDROID__)
+      sCardStatus = CardQueueTrilogy(path);
+      if (!sCardExportQueue.empty()) {
+        OpenCardDialog(kCardPick_ExportFile);
+      }
+#else
+      sCardStatus = CardExport(path, "trilogy");
+#endif
       break;
     case kCardPick_ExportFile:
       if (!sCardExportQueue.empty()) {
@@ -4414,8 +4753,9 @@ void DrawMemoryCard() {
   if (ImGui::Button("Import file...")) {
     OpenCardDialog(kCardPick_Import);
   }
-  ItemHelp("Dolphin .gci saves or a whole card image (.raw). An import replaces the card's saves; "
-           "the old ones move to _replaced in the card folder.");
+  ItemHelp("Dolphin .gci saves, a whole card image (.raw) or a Wii Trilogy data.bin/save.bin. Saves of the "
+           "other release (USA/PAL) or the Trilogy are converted to this disc's format. An import replaces "
+           "the card's saves; the old ones move to _replaced in the card folder.");
 #if !defined(__ANDROID__)
   ImGui::SameLine();
   if (ImGui::Button("Import from Dolphin")) {
@@ -4427,23 +4767,51 @@ void DrawMemoryCard() {
 #endif
   ImGui::EndDisabled();
   ImGui::BeginDisabled(busy || saves == 0);
+  const std::string asIs = std::string("As on the card (") +
+                           PortSaveConvert::FormatName(PortGci::NativeExport()) + ")";
+  const char* choices[] = {asIs.c_str(), "USA GameCube (GM8E)", "PAL GameCube (GM8P)",
+                           "Wii Trilogy (save.bin)"};
+  ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.0f);
+  ImGui::Combo("Export as", &sCardExportChoice, choices, IM_ARRAYSIZE(choices));
+  ItemHelp("The release the exported save is for. A save of another release is converted from the newest "
+           "save on the card; it replaces that release's saves at the destination. The Trilogy's save is "
+           "written into an existing save.bin (Dolphin's, or one exported from a Wii and decrypted): the "
+           "newest save replaces the Metroid Prime game the Trilogy shows (start one there and save once "
+           "first); Echoes and Corruption are kept. A Wii's data.bin is signed by the console, so it "
+           "cannot be made here.");
+  const char* format = kCardExportWords[sCardExportChoice];
+  const bool trilogy = CardExportFormat(format) == PortGci::ExportFormat::WiiSave;
 #if defined(__ANDROID__)
-  if (ImGui::Button("Export...")) {
-    sCardExportQueue = PortGci::GameFiles(folder);
-    OpenCardDialog(kCardPick_ExportFile);
+  if (trilogy) {
+    if (ImGui::Button("Export into save.bin...")) {
+      OpenCardDialog(kCardPick_Trilogy);
+    }
+    ItemHelp("Pick the Trilogy save.bin to start from, then where to save the new one.");
+  } else {
+    if (ImGui::Button("Export...")) {
+      sCardStatus = CardQueueExport(folder, format);
+      if (!sCardExportQueue.empty()) {
+        OpenCardDialog(kCardPick_ExportFile);
+      }
+    }
+    ItemHelp((std::string("Saves each file in turn; keep Dolphin's names (01-") +
+              PortGci::GameCodeOf(CardExportFormat(format)) + "-MetroidPrime A.gci) for its GCI folder.")
+                 .c_str());
   }
-  ItemHelp((std::string("Saves each file in turn; keep Dolphin's names (01-") + PortGci::GameCode() +
-            "-MetroidPrime A.gci) for its GCI folder.")
-               .c_str());
 #else
-  if (ImGui::Button("Export to folder...")) {
-    OpenCardDialog(kCardPick_ExportFolder);
+  if (ImGui::Button(trilogy ? "Export into save.bin..." : "Export to folder...")) {
+    OpenCardDialog(trilogy ? kCardPick_Trilogy : kCardPick_ExportFolder);
   }
   ImGui::SameLine();
   if (ImGui::Button("Export to Dolphin")) {
-    sCardStatus = CardExportDolphin();
+    sCardStatus = CardExportDolphin(format);
   }
-  ItemHelp("Close Dolphin first. A raw card is backed up to .raw.bak before it is written.");
+  ItemHelp(trilogy ? "Close Dolphin first. Goes to Dolphin's Trilogy save (Wii/title/00010000/52334d45/data/"
+                     "save.bin); the old one is kept as save.bin.bak."
+                   : (std::string("Close Dolphin first. Goes to Dolphin's ") +
+                      PortGci::CardRegionOf(CardExportFormat(format)) +
+                      " card; a raw card is backed up to .raw.bak before it is written.")
+                         .c_str());
 #endif
   ImGui::EndDisabled();
 #if !defined(__ANDROID__)
@@ -4840,6 +5208,280 @@ void PlaceTopToast(const ImGuiViewport* viewport) {
 // Call between Begin and End of a toast placed with PlaceTopToast.
 void TopToastPlaced(const ImGuiViewport* viewport) {
   sTopToastNextY = ImGui::GetWindowPos().y - viewport->Pos.y + ImGui::GetWindowSize().y + 8.f;
+}
+
+// Once per frame on the game thread: hands the touches to the free camera, and records where the
+// photo windows are (`windows`) and whether fingers may fly the camera now.
+void PhotoTouchFrame(bool enabled, std::vector<ImVec4> windows) {
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  float moveX = 0.f, moveY = 0.f, yaw = 0.f, pitch = 0.f;
+  {
+    std::lock_guard lock(sPhotoTouchMutex);
+    PhotoTouch& t = sPhotoTouch;
+    t.enabled = enabled;
+    t.windows = std::move(windows);
+    if (viewport->Size.y > 0.f) {
+      t.aspect = viewport->Size.x / viewport->Size.y;
+    }
+    if (!enabled) {
+      t.stickDown = t.lookDown = false;
+      t.moveX = t.moveY = 0.f;
+    }
+    moveX = t.moveX;
+    moveY = t.moveY;
+    yaw = t.yaw;
+    pitch = t.pitch;
+    t.yaw = t.pitch = 0.f;
+  }
+  if (PortPhoto::Active()) {
+    PortFreeCam::SetTouchMove(moveX, moveY);
+    if (enabled) {
+      PortFreeCam::AddTouchTurn(yaw, pitch);
+    }
+  }
+}
+
+// The window just drawn, as fractions of the main viewport.
+ImVec4 PhotoWindowRect(const ImGuiViewport* viewport) {
+  const ImVec2 pos = ImGui::GetWindowPos();
+  const ImVec2 size = ImGui::GetWindowSize();
+  if (viewport->Size.x <= 0.f || viewport->Size.y <= 0.f) {
+    return ImVec4();
+  }
+  return ImVec4((pos.x - viewport->Pos.x) / viewport->Size.x, (pos.y - viewport->Pos.y) / viewport->Size.y,
+                (pos.x + size.x - viewport->Pos.x) / viewport->Size.x,
+                (pos.y + size.y - viewport->Pos.y) / viewport->Size.y);
+}
+
+// The photo mode panel (top right, compact) and its messages (a toast under the others).
+void DrawPhotoUI() {
+  std::vector<ImVec4> touchWindows;
+  const bool touchEnabled = PortPhoto::Active() && !PortPhoto::Capturing() && !OverlayVisible();
+  struct TouchFrameAtExit {
+    const bool& enabled;
+    std::vector<ImVec4>& windows;
+    ~TouchFrameAtExit() { PhotoTouchFrame(enabled, std::move(windows)); }
+  } touchFrame{touchEnabled, touchWindows};
+  PortPhoto::Frame();
+  static std::string sMessage;
+  static double sMessageAt = 0.0;
+  const double now = ImGui::GetTime();
+  if (std::string text = PortPhoto::TakeMessage(); !text.empty()) {
+    sMessage = std::move(text);
+    sMessageAt = now;
+  }
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  if (!sMessage.empty() && now - sMessageAt < 4.0 && !PortPhoto::Capturing()) {
+    PlaceTopToast(viewport);
+    ImGui::SetNextWindowSize(ImVec2(std::min(viewport->Size.x - 32.f, 560.f), 0.f));
+    ImGui::SetNextWindowBgAlpha(0.8f);
+    if (ImGui::Begin("##photo-toast", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav |
+                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoInputs)) {
+      ImGui::TextWrapped("%s", sMessage.c_str());
+      TopToastPlaced(viewport);
+    }
+    ImGui::End();
+  }
+  if (!PortPhoto::Active() || PortPhoto::Capturing()) {
+    return;
+  }
+  // Keyboard and mouse: H panel, P or a left click while looking captures, Esc exits, the wheel
+  // zooms. A captured mouse is the camera's, so the click can't be meant for a widget.
+  static bool sWasLeftDown = false;
+  const bool leftDown = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK) != 0;
+  const bool leftClicked = leftDown && !sWasLeftDown;
+  sWasLeftDown = leftDown;
+  if (!TouchActive() && !OverlayVisible() && !ImGui::GetIO().WantTextInput) {
+    if (ImGui::IsKeyPressed(ImGuiKey_H, false)) {
+      PortPhoto::SetPanelShown(!PortPhoto::PanelShown());
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_P, false) || (leftClicked && MouseCaptured())) {
+      PortPhoto::RequestCapture();
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+      PortPhoto::RequestExit();
+    }
+    const float wheel = ImGui::GetIO().MouseWheel;
+    if (wheel != 0.f && (MouseCaptured() || !ImGui::GetIO().WantCaptureMouse)) {
+      PortPhoto::SetFov(PortPhoto::Fov() - wheel * 5.f);
+    }
+  }
+  if (!PortPhoto::PanelShown()) {
+    // The touch controls are gone in photo mode, so a touchscreen gets a small bar for it.
+    if (TouchActive()) {
+      const float margin = 12.f * sUiAppliedScale;
+      ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x - margin, viewport->Pos.y + margin),
+                              ImGuiCond_Always, ImVec2(1.f, 0.f));
+      ImGui::SetNextWindowBgAlpha(0.6f);
+      if (ImGui::Begin("##photo-bar", nullptr,
+                       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav |
+                           ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::Button("Panel")) {
+          PortPhoto::SetPanelShown(true);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Capture")) {
+          PortPhoto::RequestCapture();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Exit")) {
+          PortPhoto::RequestExit();
+        }
+        touchWindows.push_back(PhotoWindowRect(viewport));
+      }
+      ImGui::End();
+    }
+    return;
+  }
+  // Sized in scaled units so it fits a phone (density ~3). The touch controls hide in photo mode.
+  const float margin = 12.f * sUiAppliedScale;
+  const float width = std::min(viewport->Size.x - 2.f * margin, 320.f * sUiAppliedScale);
+  ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x - margin, viewport->Pos.y + margin),
+                          ImGuiCond_Always, ImVec2(1.f, 0.f));
+  // Height 0 fits the content each frame; the width stays fixed so wide content wraps, not overflows.
+  ImGui::SetNextWindowSize(ImVec2(width, 0.f));
+  ImGui::SetNextWindowBgAlpha(0.85f);
+  // The pad's d-pad and A also fly, roll and capture, so the panel only navigates while it has the
+  // pad (Y); the nav cursor starts on the first widget when it takes it.
+  const bool padFocus = PortPhoto::PanelFocused();
+  static bool sWasPadFocus = false;
+  if (padFocus && !sWasPadFocus) {
+    ImGui::SetNextWindowFocus();
+    ImGui::SetNavCursorVisible(true);
+  }
+  sWasPadFocus = padFocus;
+  if (ImGui::Begin("Photo mode##photo", nullptr,
+                   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+                       ImGuiWindowFlags_NoSavedSettings | (padFocus ? 0 : ImGuiWindowFlags_NoNav))) {
+    float fov = PortPhoto::Fov();
+    if (ImGui::SliderFloat("FOV", &fov, 20.f, 120.f, "%.0f")) {
+      PortPhoto::SetFov(fov);
+    }
+    float roll = PortPhoto::Roll();
+    if (ImGui::SliderFloat("Roll", &roll, -180.f, 180.f, "%.0f")) {
+      PortPhoto::SetRoll(roll);
+    }
+    bool samus = PortPhoto::ShowSamus();
+    if (ImGui::Checkbox("Show Samus", &samus)) {
+      PortPhoto::SetShowSamus(samus);
+    }
+    float speed = PortPhoto::Speed();
+    if (ImGui::SliderFloat("Speed", &speed, 1.f, 100.f, "%.0f m/s", ImGuiSliderFlags_Logarithmic)) {
+      PortPhoto::SetSpeed(speed);
+      MarkDirty();
+    }
+    int factor = PortPhoto::Supersample();
+    ImGui::TextUnformatted("Size");
+    for (const int f : {1, 2, 4}) {
+      ImGui::SameLine();
+      char label[8];
+      std::snprintf(label, sizeof(label), "%dx##ss", f);
+      if (ImGui::RadioButton(label, factor == f)) {
+        PortPhoto::SetSupersample(f);
+        MarkDirty();
+      }
+    }
+    if (ImGui::Button("Capture")) {
+      PortPhoto::RequestCapture();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Hide panel")) {
+      PortPhoto::SetPanelShown(false);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Exit")) {
+      PortPhoto::RequestExit();
+    }
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    if (TouchActive()) {
+      ImGui::TextWrapped("Touch: left half moves, right half looks around");
+    } else if (padFocus) {
+      ImGui::TextWrapped("Pad: d-pad move, A change, Y or B back to the camera");
+    } else {
+      ImGui::TextWrapped("Pad: A capture, B exit, Y panel, d-pad roll, X+d-pad FOV");
+      ImGui::TextWrapped("Mouse: hold right button to look, click captures, wheel FOV; P capture, H panel, "
+                         "Esc exit");
+    }
+    ImGui::PopStyleColor();
+    touchWindows.push_back(PhotoWindowRect(viewport));
+  }
+  ImGui::End();
+}
+
+// Quick resume's question (CFrontEndUI keeps the decision; the pad and keyboard answer on the game
+// side). A window in the middle of the screen that draws with the F1 overlay hidden and takes touch
+// and mouse; ImGui navigation stays off so the pad is not read twice.
+void DrawResumePrompt() {
+  PortSaveState::ResumeInfo info;
+  bool yesSelected = true;
+  if (!PortSaveState::ResumePromptShown(info, yesSelected) || OverlayVisible()) {
+    return;
+  }
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  const float scale = sUiAppliedScale;
+  ImGui::GetBackgroundDrawList(const_cast<ImGuiViewport*>(viewport))
+      ->AddRectFilled(viewport->Pos, ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y),
+                      IM_COL32(0, 0, 0, 150));
+  const float width = std::min(viewport->Size.x - 24.f * scale, 440.f * scale);
+  ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f),
+                          ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSize(ImVec2(width, 0.f));
+  ImGui::SetNextWindowBgAlpha(0.92f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * scale, 16.f * scale));
+  if (ImGui::Begin("##resume-prompt", nullptr,
+                   ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav |
+                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
+    const char* title = "Resume where you left off?";
+    if (info.crashedAgain) {
+      title = "The game closed unexpectedly again after resuming here.\nResume anyway?";
+    } else if (info.afterCrash) {
+      title = "The game closed unexpectedly.\nResume where you left off?";
+    }
+    ImGui::SetWindowFontScale(1.3f);
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextUnformatted(title);
+    ImGui::PopTextWrapPos();
+    ImGui::SetWindowFontScale(1.f);
+    ImGui::Spacing();
+    std::string where = info.world;
+    if (!where.empty() && !info.room.empty()) {
+      where += " - ";
+    }
+    where += info.room;
+    ImGui::TextWrapped("%s", where.c_str());
+    char when[32] = "";
+    const std::time_t at = static_cast<std::time_t>(info.savedAt);
+    if (const std::tm* tm = std::localtime(&at)) {
+      std::strftime(when, sizeof(when), "%Y-%m-%d %H:%M", tm);
+    }
+    ImGui::TextDisabled("%s", when);
+    ImGui::Spacing();
+    ImGui::Spacing();
+    const float gap = ImGui::GetStyle().ItemSpacing.x;
+    const ImVec2 button((ImGui::GetContentRegionAvail().x - gap) * 0.5f, 56.f * scale);
+    for (int i = 0; i < 2; ++i) {
+      const bool yes = i == 0;
+      const bool highlighted = yes == yesSelected;
+      if (i > 0) {
+        ImGui::SameLine();
+      }
+      if (highlighted) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+      }
+      ImGui::SetWindowFontScale(1.2f);
+      if (ImGui::Button(yes ? "Yes" : "No", button)) {
+        PortSaveState::AnswerResumePrompt(yes);
+      }
+      ImGui::SetWindowFontScale(1.f);
+      if (highlighted) {
+        ImGui::PopStyleColor();
+      }
+    }
+  }
+  ImGui::End();
+  ImGui::PopStyleVar();
 }
 
 void DrawUpdateToast() {
@@ -5427,6 +6069,13 @@ void DrawCutscenesSection() {
            "far faster; Fast ends it about 2 s in, once the next area is loaded; Skip shows black "
            "until the area is loaded. The cinematic played in the elevator room before the ride is "
            "not affected.");
+  int bootLogos = sBootLogos;
+  if (ImGui::Combo("Boot logos", &bootLogos, "Show\0Skip with A or Start\0Off\0")) {
+    SetBootLogos(static_cast< EBootLogos >(bootLogos));
+  }
+  ItemHelp("The Nintendo, Retro and Dolby logos at launch. Skip with A or Start ends the current "
+           "logo with a short fade; Off goes straight to the opening (which A or Start skips to "
+           "the title). Applies at the next launch.");
   if (ImGui::SliderInt("Scan speed", &sScanSpeed, kScanSpeedMin, kScanSpeedMax, "%d%%",
                        ImGuiSliderFlags_AlwaysClamp)) {
     MarkDirty();
@@ -5435,6 +6084,21 @@ void DrawCutscenesSection() {
            "half the time. What a scan records is unchanged.");
   EndOriginalLocked(locked);
 
+  // Not under the Original experience lock: the stored choice applies there too.
+  ImGui::SeparatorText("Revision compatibility");
+  const bool revisionForced = PortSkipCutscenes::Forced();
+  bool revisionCompat = sRevision100Compatibility || revisionForced;
+  ImGui::BeginDisabled(revisionForced);
+  if (ImGui::Checkbox("1.00 sequence-break compatibility", &revisionCompat)) {
+    SetRevision100Compatibility(revisionCompat);
+  }
+  ImGui::EndDisabled();
+  ItemHelp("Restores supported revision-specific sequence-break behavior on newer/PAL discs. "
+           "Requires reloading the game. Automatically enabled for randomizer and Archipelago games.");
+  if (revisionForced) {
+    SameLineAfterHelp();
+    ImGui::TextDisabled("(automatic in randomizer and Archipelago games)");
+  }
 }
 
 void DrawUnlocksSection() {
@@ -5778,6 +6442,23 @@ void DrawVideoDisplay() {
     ImGui::TextDisabled("About %.0f deg horizontal at this aspect.", hfov);
     ImGui::SetItemTooltip("First-person vertical FOV (retail 55). The arm cannon stays at the retail\n"
                           "FOV; morph ball and cutscene cameras are unchanged.");
+  }
+  {
+    // Issue #72: PrimeHack-style arm cannon placement.
+    float offset[3] = {sGunOffset[0], sGunOffset[1], sGunOffset[2]};
+    bool changed = ImGui::SliderFloat("Arm cannon right", &offset[0], -kGunOffsetMax, kGunOffsetMax, "%.2f m");
+    changed |= ImGui::SliderFloat("Arm cannon forward", &offset[1], -kGunOffsetMax, kGunOffsetMax, "%.2f m");
+    changed |= ImGui::SliderFloat("Arm cannon up", &offset[2], -kGunOffsetMax, kGunOffsetMax, "%.2f m");
+    if (changed) {
+      SetGunOffset(offset);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Retail##gunoffset")) {
+      const float zero[3] = {};
+      SetGunOffset(zero);
+    }
+    ImGui::SetItemTooltip("Back to the retail place.");
+    ImGui::TextDisabled("Moves the arm cannon; shots leave from where it is.");
   }
   EndOriginalLocked(locked);
 
@@ -6275,8 +6956,28 @@ void DrawControlsController() {
                            ImGuiSliderFlags_Logarithmic)) {
       SetStickAimRate(stickRate);
     }
-    ItemHelp("How fast the right stick turns the camera at full tilt. 900 px/s (the default) is "
-             "about 180 degrees a second at the default mouse sensitivity.");
+    ItemHelp(sInput.stickAimSplit
+                 ? "How fast the right stick turns the camera left and right at full tilt. 900 px/s "
+                   "(the default) is about 180 degrees a second at the default mouse sensitivity."
+                 : "How fast the right stick turns the camera at full tilt. 900 px/s (the default) is "
+                   "about 180 degrees a second at the default mouse sensitivity.");
+    bool split = sInput.stickAimSplit;
+    if (ImGui::Checkbox("Separate vertical speed", &split)) {
+      sInput.stickAimSplit = split;
+      MarkDirty();
+    }
+    ItemHelp("Gives looking up and down its own speed; Stick aim speed then sets only left and "
+             "right.");
+    if (sInput.stickAimSplit) {
+      float stickRateY = sInput.stickAimRateY;
+      if (ImGui::SliderFloat("Vertical stick aim speed", &stickRateY, 100.f, 8100.f, "%.0f px/s",
+                             ImGuiSliderFlags_Logarithmic) &&
+          std::isfinite(stickRateY) && stickRateY >= 50.f && stickRateY <= 10000.f) {
+        sInput.stickAimRateY = stickRateY;
+        MarkDirty();
+      }
+      ItemHelp("How fast the right stick turns the camera up and down at full tilt.");
+    }
     // The game's own option, saved with its settings; free look uses it too.
     ImGui::BeginDisabled(gpGameState == nullptr);
     bool invertY = gpGameState != nullptr && gpGameState->GameOptions().GetInvertYAxis();
@@ -6733,6 +7434,15 @@ void DrawGameSection() {
       (shotKeys.empty() ? std::string("Screenshot") : "Screenshot (" + shotKeys + ")") + "###screenshot";
   if (ImGui::Button(shotLabel.c_str())) {
     aurora::request_screenshot();
+  }
+  ImGui::SameLine();
+  const std::string photoKeys = PortInputRemap::BindingsText(PortInput::Action::PhotoMode, " / ");
+  const std::string photoLabel =
+      (photoKeys.empty() ? std::string("Photo mode") : "Photo mode (" + photoKeys + ")") + "###photomode";
+  if (ImGui::Button(photoLabel.c_str())) {
+    PortPhoto::RequestEnter();
+    // The overlay would cover the picture; photo mode starts at the next game tick.
+    sVisible = false;
   }
   ImGui::SameLine();
   if (ImGui::Button("Exit game")) {
@@ -7678,6 +8388,8 @@ void DrawDebugTab() {
   if (ImGui::CollapsingHeader("Sounds playing")) {
     DrawVoices();
   }
+
+  DrawRemasteredDebug();
 }
 
 void DrawTrackerCount(const char* label, const PortTracker::Count& count) {
@@ -7774,8 +8486,6 @@ void DrawTrackerLogic() {
       }
     }
   }
-
-  DrawRemasteredDebug();
 }
 
 void DrawTrackerTab() {
@@ -7898,6 +8608,26 @@ void DrawSaveStatesTab() {
     sSaveStateHotkeys = hotkeys;
     MarkDirty();
   }
+  bool roomState = sSaveStateRoomState;
+  if (ImGui::Checkbox("Keep enemies and room objects###savestate-room-state", &roomState)) {
+    sSaveStateRoomState = roomState;
+    MarkDirty();
+  }
+  ItemHelp("Save states (and quick resume) also store the enemies, doors, platforms, timers and "
+           "other objects of the loaded rooms: a killed enemy stays dead and the rest resume with "
+           "their health, place and behaviour. Off, or for states saved without it, the room "
+           "starts over as after a memory card load. Boss fights resume with generic data only "
+           "(see docs/SETTINGS.md).");
+  bool quickResume = sQuickResume;
+  if (ImGui::Checkbox("Quick resume###quick-resume", &quickResume)) {
+    sQuickResume = quickResume;
+    MarkDirty();
+  }
+  ItemHelp("When the app goes to the background (Android) or you quit (desktop) during play, a "
+           "resume state is written. The next launch asks \"Resume where you left off?\" at the "
+           "title screen. Yes loads the same save file and puts Samus back, like a save state "
+           "(enemies and the room come back too unless \"Keep enemies and room objects\" is off). No deletes it. Nothing "
+           "is written in cutscenes, elevator rides, while Samus is dead or on the title screen.");
   const bool running = sStateManager != nullptr;
   if (!running) {
     ImGui::TextDisabled("Saving and loading need a running game.");
@@ -8537,6 +9267,39 @@ const StartTarget& GetStartTarget() {
   return target;
 }
 
+struct SettingsIndexRow;
+
+// A settings search result being opened (see JumpTo).
+struct SearchJump {
+  const SettingsIndexRow* row = nullptr;
+  int page = -1;      // kDebugPages index still to select
+  bool sub = false;   // the row's sub-tab is still to select
+  int occurrence = 0; // which of the items with this label on the page
+  int seen = 0;       // items with the label drawn so far this frame
+  bool found = false;
+  double start = 0.0;            // when the jump began, then when the widget was found
+  ImGuiID added = 0;             // the widget, when the item-add hook matched it
+  ImGuiWindow* window = nullptr; // where the widget was drawn this frame, to flash it
+  ImRect rect;
+  bool inPage = false; // inside a page's body, not the page list, tabs or results
+};
+SearchJump sJump;
+
+int TakeJumpPage() {
+  const int page = sJump.page;
+  sJump.page = -1;
+  return page;
+}
+
+bool TakeJumpSub(const char* page, const char* name);
+
+// A page's settings, where a jump looks for its widget.
+void DrawPageBody(const DebugPage& page) {
+  sJump.inPage = true;
+  page.draw();
+  sJump.inPage = false;
+}
+
 // A page's inner tab, opened first when MP_DEBUG_TAB names it. The caller ends
 // the item with EndTabItem when this returns true.
 bool SubTab(const char* page, const char* name) {
@@ -8544,11 +9307,291 @@ bool SubTab(const char* page, const char* name) {
   const StartTarget& target = GetStartTarget();
   const bool start = pending && SDL_strcasecmp(target.page.c_str(), page) == 0 &&
                      SDL_strcasecmp(target.sub.c_str(), name) == 0;
-  const bool shown = ImGui::BeginTabItem(name, nullptr, start ? ImGuiTabItemFlags_SetSelected : 0);
+  const bool jump = TakeJumpSub(page, name);
+  const bool inPage = std::exchange(sJump.inPage, false); // the tab is not a setting
+  const bool shown =
+      ImGui::BeginTabItem(name, nullptr, start || jump ? ImGuiTabItemFlags_SetSelected : 0);
+  sJump.inPage = inPage;
   if (start) {
     pending = false;
   }
   return shown;
+}
+
+// The settings search: a query lists the matching rows of the settings index,
+// and picking one opens its page, sub-tab and collapsing header, scrolls to the
+// widget and flashes it. The widget is found by its label through ImGui's item
+// hook, which reports items only while a jump is under way.
+struct SettingsIndexRow {
+  const char* page;
+  const char* sub;
+  const char* section;
+  const char* label;
+  const char* keywords;
+};
+
+constexpr SettingsIndexRow kSettingsIndex[] = {
+#include "port_settings_index.inc"
+};
+
+constexpr double kJumpTimeout = 2.0; // gives up on a widget that is never drawn
+constexpr double kFlashTime = 1.5;
+
+char sSearch[128] = "";
+
+std::string Lowercase(std::string text) {
+  for (char& c : text) {
+    c = static_cast< char >(std::tolower(static_cast< unsigned char >(c)));
+  }
+  return text;
+}
+
+// The label without its "##id" part is the text, which may go on with a key
+// hint ("Screenshot (F12)").
+bool LabelIs(const char* label, const char* text) {
+  const char* end = ImGui::FindRenderedTextEnd(label);
+  const size_t length = std::strlen(text);
+  const size_t shown = static_cast< size_t >(end - label);
+  return shown >= length && std::memcmp(label, text, length) == 0 &&
+         (shown == length || (shown > length + 1 && label[length] == ' ' && label[length + 1] == '('));
+}
+
+// The row's widget, drawn this frame: the occurrence it wants is scrolled to
+// and focused once, then flashed until the flash fades.
+void SearchItemFound(ImGuiContext& g, ImGuiID id, const ImRect& rect) {
+  SearchJump& jump = sJump;
+  if (jump.seen++ != jump.occurrence) {
+    return;
+  }
+  ImGuiWindow* window = g.CurrentWindow;
+  if (!jump.found) {
+    jump.found = true;
+    jump.start = g.Time;
+    ImGui::ScrollToRectEx(window, rect, ImGuiScrollFlags_AlwaysCenterY);
+    ImGui::SetFocusID(id, window); // so a pad carries on from it
+  }
+  jump.window = window; // flashed by EndSearchJump, over the widget
+  jump.rect = rect;
+}
+
+// Combos report no label, so an item whose id is the row's label is its widget
+// too. The label hook then skips it.
+void SearchItemAddHook(ImGuiContext* ctx, ImGuiID id, const ImRect& rect) {
+  SearchJump& jump = sJump;
+  ImGuiWindow* window = ctx->CurrentWindow;
+  // Begin reports a window while its id stack is still empty.
+  if (jump.row == nullptr || !jump.inPage || id == 0 || window == nullptr || window->IDStack.Size == 0 ||
+      id != window->GetID(jump.row->label)) {
+    return;
+  }
+  jump.added = id;
+  SearchItemFound(*ctx, id, rect);
+}
+
+void SearchItemHook(ImGuiContext* ctx, ImGuiID id, const char* label, ImGuiItemStatusFlags flags) {
+  SearchJump& jump = sJump;
+  if (jump.row == nullptr || !jump.inPage || label == nullptr || id == 0 || id == jump.added) {
+    return;
+  }
+  ImGuiContext& g = *ctx;
+  const SettingsIndexRow& row = *jump.row;
+  if ((flags & ImGuiItemStatusFlags_Openable) != 0 && *row.section != '\0' && LabelIs(label, row.section)) {
+    // The header the widget sits under, opened on the next frame if closed.
+    if ((flags & ImGuiItemStatusFlags_Opened) == 0) {
+      g.CurrentWindow->DC.StateStorage->SetInt(id, 1);
+    }
+  } else if (LabelIs(label, row.label)) {
+    SearchItemFound(g, id, g.LastItemData.Rect);
+  }
+}
+
+void JumpTo(const SettingsIndexRow& row) {
+  sJump = SearchJump{};
+  for (int i = 0; i < static_cast< int >(ARRAY_SIZE(kDebugPages)); ++i) {
+    if (std::strcmp(kDebugPages[i].name, row.page) == 0) {
+      sJump.page = i;
+    }
+  }
+  sJump.row = &row;
+  sJump.sub = *row.sub != '\0';
+  // Rows with the same label on one page are in draw order.
+  for (const SettingsIndexRow& other : kSettingsIndex) {
+    if (&other == &row) {
+      break;
+    }
+    if (std::strcmp(other.page, row.page) == 0 && std::strcmp(other.sub, row.sub) == 0 &&
+        std::strcmp(other.label, row.label) == 0) {
+      ++sJump.occurrence;
+    }
+  }
+  sJump.start = ImGui::GetTime();
+  sSearch[0] = '\0';
+}
+
+bool TakeJumpSub(const char* page, const char* name) {
+  if (!sJump.sub || std::strcmp(sJump.row->page, page) != 0 ||
+      std::strcmp(sJump.row->sub, name) != 0) {
+    return false;
+  }
+  sJump.sub = false;
+  return true;
+}
+
+// Around the overlay window only: while a jump looks for its widget, items are
+// reported even when scrolled out of view.
+// MP_DEBUG_SEARCH_AUDIT=1 opens every index row in turn with the overlay up and
+// logs whether its widget was found, to check the index against the pages.
+void AuditSearchIndex(const SearchJump& jump, double now) {
+  static int next = port::EnvFlag("MP_DEBUG_SEARCH_AUDIT") ? 0 : -1;
+  static int missed = 0;
+  if (next < 0 || (jump.row != nullptr && !jump.found && now - jump.start <= kJumpTimeout)) {
+    return;
+  }
+  if (jump.row != nullptr) {
+    missed += jump.found ? 0 : 1;
+    std::fprintf(stderr, "metroid_prime_port: search audit: %s: %s > %s > %s > %s\n",
+                 jump.found ? "found" : "MISSED", jump.row->page, jump.row->sub, jump.row->section,
+                 jump.row->label);
+  }
+  if (next == static_cast< int >(ARRAY_SIZE(kSettingsIndex))) {
+    std::fprintf(stderr, "metroid_prime_port: search audit: done, %d of %d missed\n", missed, next);
+    next = -1;
+    sJump = SearchJump{};
+    return;
+  }
+  JumpTo(kSettingsIndex[next++]);
+}
+
+void BeginSearchJump() {
+  ImGuiContext& g = *ImGui::GetCurrentContext();
+  SearchJump& jump = sJump;
+  AuditSearchIndex(jump, g.Time);
+  if (jump.row != nullptr &&
+      g.Time - jump.start > (jump.found ? kFlashTime : kJumpTimeout)) {
+    jump = SearchJump{};
+  }
+  const bool active = jump.row != nullptr;
+  jump.seen = 0;
+  jump.window = nullptr;
+  gImGuiItemAddHook = active ? SearchItemAddHook : nullptr;
+  gImGuiItemInfoHook = active ? SearchItemHook : nullptr;
+  g.TestEngineHookItems = active;
+  g.ItemUnclipByLog = active && !jump.found;
+}
+
+void EndSearchJump() {
+  ImGuiContext& g = *ImGui::GetCurrentContext();
+  const SearchJump& jump = sJump;
+  const float fade = 1.f - static_cast< float >((g.Time - jump.start) / kFlashTime);
+  if (jump.found && jump.window != nullptr && fade > 0.f) {
+    const ImRect& rect = jump.rect;
+    const float padX = g.Style.FramePadding.x * 0.5f;
+    const float padY = g.Style.FramePadding.y * 0.5f;
+    ImDrawList* draw = jump.window->DrawList;
+    draw->PushClipRect(jump.window->InnerClipRect.Min, jump.window->InnerClipRect.Max);
+    draw->AddRectFilled(ImVec2(rect.Min.x - padX, rect.Min.y - padY), ImVec2(rect.Max.x + padX, rect.Max.y + padY),
+                        ImGui::GetColorU32(ImGuiCol_NavCursor, 0.45f * fade), g.Style.FrameRounding);
+    draw->PopClipRect();
+  }
+  gImGuiItemAddHook = nullptr;
+  gImGuiItemInfoHook = nullptr;
+  g.TestEngineHookItems = false;
+  g.ItemUnclipByLog = false;
+}
+
+void DrawSearchField() {
+  // MP_DEBUG_SEARCH=<query> opens with it typed, for captures of the overlay.
+  static bool sPrefill = true;
+  if (sPrefill) {
+    sPrefill = false;
+    if (const char* query = port::EnvString("MP_DEBUG_SEARCH")) {
+      SDL_strlcpy(sSearch, query, sizeof(sSearch));
+    }
+  }
+  if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F)) {
+    ImGui::SetKeyboardFocusHere();
+  }
+#if defined(__ANDROID__)
+  const char* const kHint = "Search settings";
+#else
+  const char* const kHint = "Search settings (Ctrl+F)";
+#endif
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  ImGui::InputTextWithHint("##settings-search", kHint, sSearch, sizeof(sSearch),
+                           ImGuiInputTextFlags_EscapeClearsAll);
+}
+
+bool Searching() { return sSearch[0] != '\0'; }
+
+// Every word of the query must be in the row's label, place or keywords. Rows
+// whose label starts with the query come first, then those that contain it,
+// then those whose label has every word.
+void DrawSearchResults() {
+  static std::string sQuery;
+  static std::vector< const SettingsIndexRow* > sHits;
+  const std::string query = Lowercase(Trim(sSearch));
+  if (query != sQuery) {
+    sQuery = query;
+    sHits.clear();
+    std::vector< std::string > words;
+    std::istringstream stream(query);
+    for (std::string word; stream >> word;) {
+      words.push_back(word);
+    }
+    std::vector< std::pair< int, const SettingsIndexRow* > > scored;
+    for (const SettingsIndexRow& row : kSettingsIndex) {
+      const std::string label = Lowercase(row.label);
+      const std::string all = label + ' ' + Lowercase(row.section) + ' ' + Lowercase(row.sub) + ' ' +
+                              Lowercase(row.page) + ' ' + Lowercase(row.keywords);
+      bool match = true;
+      bool inLabel = true;
+      for (const std::string& word : words) {
+        match = match && all.find(word) != std::string::npos;
+        inLabel = inLabel && label.find(word) != std::string::npos;
+      }
+      if (!match) {
+        continue;
+      }
+      const int score = label.rfind(query, 0) == 0                ? 0
+                        : label.find(query) != std::string::npos ? 1
+                        : inLabel                                ? 2
+                                                                 : 3;
+      scored.emplace_back(score, &row);
+    }
+    std::stable_sort(scored.begin(), scored.end(),
+                     [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (const auto& hit : scored) {
+      sHits.push_back(hit.second);
+    }
+  }
+
+  if (sHits.empty()) {
+    ImGui::TextDisabled("No settings match \"%s\".", sSearch);
+    return;
+  }
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float rowHeight = ImGui::GetTextLineHeight() * 2.f + style.ItemSpacing.y;
+  for (size_t i = 0; i < sHits.size(); ++i) {
+    const SettingsIndexRow& row = *sHits[i];
+    std::string place = row.page;
+    for (const char* part : {row.sub, row.section}) {
+      if (*part != '\0') {
+        place += std::string(" > ") + part;
+      }
+    }
+    ImGui::PushID(static_cast< int >(i));
+    if (ImGui::Selectable("##hit", false, ImGuiSelectableFlags_None, ImVec2(0.f, rowHeight))) {
+      JumpTo(row);
+    }
+    const ImVec2 min = ImGui::GetItemRectMin();
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->PushClipRect(min, ImGui::GetItemRectMax(), true); // long labels stop at the row
+    draw->AddText(min, ImGui::GetColorU32(ImGuiCol_Text), row.label);
+    draw->AddText(ImVec2(min.x, min.y + ImGui::GetTextLineHeight()),
+                  ImGui::GetColorU32(ImGuiCol_TextDisabled), place.c_str());
+    draw->PopClipRect();
+    ImGui::PopID();
+  }
 }
 
 // The innermost window under the finger that can actually scroll vertically,
@@ -8735,8 +9778,12 @@ bool DrawPageWindow() {
       open = false;
     }
     ImGui::Separator();
+    DrawSearchField();
 
     static int sPage = 0;
+    if (const int jumpPage = TakeJumpPage(); jumpPage >= 0) {
+      sPage = jumpPage;
+    }
     // MP_DEBUG_TAB=<name> opens on that page, for captures of the overlay.
     static bool sStartPending = true;
     if (sStartPending) {
@@ -8755,18 +9802,24 @@ bool DrawPageWindow() {
     const float rowHeight = ImGui::GetFrameHeight() * 1.2f;
     if (ImGui::BeginChild("##pages", ImVec2(listWidth, 0.f), ImGuiChildFlags_Borders)) {
       for (int i = 0; i < static_cast< int >(ARRAY_SIZE(kDebugPages)); ++i) {
-        if (ImGui::Selectable(kDebugPages[i].name, sPage == i, ImGuiSelectableFlags_None,
-                              ImVec2(0.f, rowHeight))) {
+        if (ImGui::Selectable(kDebugPages[i].name, sPage == i && !Searching(),
+                              ImGuiSelectableFlags_None, ImVec2(0.f, rowHeight))) {
           sPage = i;
+          sSearch[0] = '\0';
         }
       }
     }
     ImGui::EndChild();
     ImGui::SameLine();
     // Keyed by page, so each page keeps its own scroll position.
-    ImGui::PushID(sPage);
+    const bool searching = Searching();
+    ImGui::PushID(searching ? -1 : sPage);
     if (ImGui::BeginChild("##page", ImVec2(0.f, 0.f), ImGuiChildFlags_Borders)) {
-      kDebugPages[sPage].draw();
+      if (searching) {
+        DrawSearchResults();
+      } else {
+        DrawPageBody(kDebugPages[sPage]);
+      }
     }
     ImGui::EndChild();
     ImGui::PopID();
@@ -8794,16 +9847,25 @@ bool DrawDesktopWindow() {
       ImGui::EndMenuBar();
     }
 
-    if (ImGui::BeginTabBar("##debug_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+    DrawSearchField();
+    if (Searching()) {
+      if (ImGui::BeginChild("##search-results")) {
+        DrawSearchResults();
+      }
+      ImGui::EndChild();
+    } else if (ImGui::BeginTabBar("##debug_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
       // MP_DEBUG_TAB=<name> opens on that tab, for captures of the overlay.
       static bool sStartPending = true;
-      for (const DebugPage& page : kDebugPages) {
+      const int jumpPage = TakeJumpPage();
+      for (int i = 0; i < static_cast< int >(ARRAY_SIZE(kDebugPages)); ++i) {
+        const DebugPage& page = kDebugPages[i];
         const bool start =
             sStartPending && SDL_strcasecmp(GetStartTarget().page.c_str(), page.name) == 0;
-        if (ImGui::BeginTabItem(page.name, nullptr, start ? ImGuiTabItemFlags_SetSelected : 0)) {
+        if (ImGui::BeginTabItem(page.name, nullptr,
+                                start || i == jumpPage ? ImGuiTabItemFlags_SetSelected : 0)) {
           if (start)
             sStartPending = false;
-          page.draw();
+          DrawPageBody(page);
           ImGui::EndTabItem();
         }
       }
@@ -8854,6 +9916,8 @@ void DrawUI() {
   DrawDiscReadFailedAlert();
   DrawShaderCompilationToast();
   DrawUpdateToast();
+  DrawPhotoUI();
+  DrawResumePrompt();
   if (sTouchLayoutSavePending.exchange(false, std::memory_order_acq_rel)) {
     MarkDirty();
     SaveSettings();
@@ -8877,7 +9941,9 @@ void DrawUI() {
   }
 
   UpdateTouchScroll();
+  BeginSearchJump();
   const bool open = PageLayout() ? DrawPageWindow() : DrawDesktopWindow();
+  EndSearchJump();
   ClearTouchHover();
   DrawGalleryWindow();
 
@@ -9137,7 +10203,13 @@ Java_org_metroidprime_port_TouchControlsView_nativeTapUpdateToast(JNIEnv*, jclas
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_metroidprime_port_TouchControlsView_nativeDebugOverlayVisible(JNIEnv*, jclass) {
-  return PortDebug::OverlayVisible() ? JNI_TRUE : JNI_FALSE;
+  // Photo mode is touched like the F1 overlay: the controls hide and leave the touches to SDL, where
+  // its panel takes the ones on it and the rest fly the camera (PhotoTouchEvent).
+  PortSaveState::ResumeInfo promptInfo;
+  bool promptYes = true;
+  return PortDebug::OverlayVisible() || PortPhoto::Active() || PortSaveState::ResumePromptShown(promptInfo, promptYes)
+             ? JNI_TRUE
+             : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL

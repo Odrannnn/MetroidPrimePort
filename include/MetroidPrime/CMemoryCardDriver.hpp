@@ -25,7 +25,12 @@ struct SSaveHeader {
 };
 
 struct SGameFileSlot {
+#ifdef TARGET_PC
+  // PAL slots are 0xA7F bytes; size() is the logical length (940 on USA).
+  rstl::reserved_vector< u8, 0xA7F > x0_saveBuffer;
+#else
   rstl::reserved_vector< u8, 940 > x0_saveBuffer;
+#endif
   CGameState::GameFileStateInfo x944_fileInfo;
 
   SGameFileSlot();
@@ -35,7 +40,9 @@ struct SGameFileSlot {
   void LoadGameState(int idx);
   void PutTo(COutputStream& w) const;
 };
+#ifndef TARGET_PC
 CHECK_SIZEOF(SGameFileSlot, 0x3d8)
+#endif
 
 enum EState {
   kS_Initial = 0,

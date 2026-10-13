@@ -344,13 +344,14 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
                                     wgpu::ShaderModule shader, const char* label) noexcept {
   ZoneScoped;
   if (config.shadowPass != 0) {
-    // The sun's shadow map: depth only, both faces, with a slope bias against acne.
+    // The sun's shadow map: depth only, culled as the draw is, with Remastered's shadow pass bias
+    // (2 units, slope 4, no clamp).
     const wgpu::DepthStencilState depthStencil{
         .format = gfx::shadow::MapFormat,
         .depthWriteEnabled = true,
         .depthCompare = wgpu::CompareFunction::Less,
         .depthBias = 2,
-        .depthBiasSlopeScale = 2.0f,
+        .depthBiasSlopeScale = 4.0f,
     };
     const wgpu::RenderPipelineDescriptor descriptor{
         .label = label,
@@ -362,7 +363,7 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
                 .bufferCount = static_cast<uint32_t>(vtxBuffers.size()),
                 .buffers = vtxBuffers.data(),
             },
-        .primitive = to_primitive_state(GX_CULL_NONE),
+        .primitive = to_primitive_state(config.cullMode),
         .depthStencil = &depthStencil,
     };
     return g_device.CreateRenderPipeline(&descriptor);
@@ -773,7 +774,7 @@ void initialize() noexcept {
         .texture =
             {
                 .sampleType = wgpu::TextureSampleType::Depth,
-                .viewDimension = wgpu::TextureViewDimension::e2D,
+                .viewDimension = wgpu::TextureViewDimension::e2DArray,
             },
     };
     textureEntries[kShadowSamplerBinding] = {

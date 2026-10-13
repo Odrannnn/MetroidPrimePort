@@ -851,7 +851,21 @@ bool CPlayerVisor::DrawScanObjectIndicators(const CStateManager& mgr) const {
       CVector3f scanPosition = actor->GetScanObjectIndicatorPosition(mgr);
 #ifdef TARGET_PC
       // Drawn through the presented camera, so follow the presented actor, not its last tick.
-      scanPosition = actor->PortPresentedPoint(scanPosition);
+      // The icon is pulled from the orbit point toward the last tick's camera, for large
+      // actors to just past the near plane; redo that pull toward the presented camera, or
+      // the tick-to-present camera offset swings it across the screen (#98).
+      {
+        const CVector3f orbitPos = actor->GetOrbitPosition(mgr);
+        const float pull = (orbitPos - scanPosition).Magnitude();
+        const CVector3f presentedOrbit = actor->PortPresentedPoint(orbitPos);
+        const CVector3f toCamera =
+            cameraPosition - mgr.GetCameraManager()->GetGlobalCameraTranslation(mgr) - presentedOrbit;
+        const float mag = toCamera.Magnitude();
+        scanPosition = presentedOrbit;
+        if (mag > 0.0001f)
+          scanPosition += toCamera *
+                          (rstl::min_val(pull, mag - camera.GetNearClipDistance() - 0.1f) / mag);
+      }
       const bool portRem = PortScanIconsRemastered(x124_scanIconNoncritical.GetObject());
       float portSmooth = 1.f;
       if (portRem) {

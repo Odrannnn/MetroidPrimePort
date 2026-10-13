@@ -31,6 +31,8 @@ private:
   GciFile* get_file(uint32_t idx);
   const GciFile* get_file(uint32_t idx) const;
   int32_t find_file(const char* filename) const;
+  // A free "<maker>-<game>-<name>.gci" in the folder (empty with ec set on error).
+  std::filesystem::path unused_disk_name(const char* filename, std::error_code& ec) const;
   GciFile* get_open_file(const FileHandle& fh);
   const GciFile* get_open_file(const FileHandle& fh) const;
 

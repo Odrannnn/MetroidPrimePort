@@ -97,6 +97,7 @@ public:
                          CQuaternion rotDelta);
 
 private:
+  friend struct PortRoomState;
   typedef rstl::reserved_vector< ushort, 1024 > TMovedList;
 
   void DragSlave(CStateManager& mgr, TMovedList& moved, CActor* actor, const CVector3f& delta);

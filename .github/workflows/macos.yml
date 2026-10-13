@@ -142,6 +142,9 @@ jobs:
           (cd build-mac/_deps && find . -type f \( -name 'LICENSE*' -o -name 'COPYING*' -o -name 'NOTICE*' \) -not -path '*/build/*' |
             while read -r f; do mkdir -p "../../dist/licenses/$(dirname "$f")"; cp "$f" "../../dist/licenses/$f"; done)
           cp docs/NATIVE_PORT.md dist/README.md
+          cp docs/SETTINGS.md dist/SETTINGS.md
+          cp docs/MODS.md dist/MODS.md
+          cp docs/CONSOLE.md dist/CONSOLE.md
 
       # Fail if a library that should be static is linked dynamically again:
       # only the system's own libraries and frameworks may be referenced.

@@ -410,7 +410,7 @@ bool Parse(const std::vector<uint8_t>& data, std::vector<Instance>& out, std::st
           float v = 0.f;
           instance.lightmap[j] = ReadF32(data.data() + at + 4 * j, v) ? v : 0.f;
         }
-        if (!(instance.lightmap[2] > 0.f)) {
+        if (!HasLightmapLookup(instance.lightmap)) {
           instance.lightmap[0] = instance.lightmap[1] = instance.lightmap[2] = 0.f;
         }
         at += 12;
@@ -531,7 +531,7 @@ std::vector<uint8_t> Write(const std::vector<Instance>& instances, const Script*
       AppendLE32(out, h.instance);
     }
   }
-  const bool lit = std::any_of(instances.begin(), instances.end(), [](const Instance& i) { return i.lightmap[2] > 0.f; });
+  const bool lit = std::any_of(instances.begin(), instances.end(), [](const Instance& i) { return HasLightmapLookup(i.lightmap); });
   if (lit) {
     AppendLE32(out, kLmapMagic);
     AppendLE32(out, uint32_t(instances.size()));

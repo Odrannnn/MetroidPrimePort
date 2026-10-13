@@ -59,7 +59,8 @@ self-contained — and it is why `MP_USER_PATH` cannot be used to move saves.
 - **Windows**: `windows.yml` copies the port's grant and notice, Aurora's and
   MusyX's licences, and every `LICENSE*`/`COPYING*`/`NOTICE*` from the fetched
   packages into `dist/licenses/`, preserving the dependency path, and puts
-  `docs/NATIVE_PORT.md` in as the `README`. It also packages `textures/` (the
+  `docs/NATIVE_PORT.md` in as the `README`, with `docs/SETTINGS.md`, `docs/MODS.md`
+  and `docs/CONSOLE.md` alongside it. It also packages `textures/` (the
   HD and button-prompt sets), so the artefact zips as-is with no copy from a
   Linux build. SDL3 (built from source), zlib, libpng, nod and OpenSSL are
   linked statically into the exe, so their licences (including `openssl.txt`
@@ -129,10 +130,30 @@ in `assets/`, and no `.iso`, `.pak` or `.strg` is in the package. An earlier
 revision of this section recorded the signer as `d8814c79…` and six notices; both
 were wrong.
 
-The port targets `versionName "0.21.0"` and `versionCode 24`. A version bump
+The port targets `versionName "0.25.0"` and `versionCode 28`. A version bump
 also adds a `<release>` entry (newest first) to
 `packaging/io.github.odrannnn.metroidprimeport.metainfo.xml`, which is the
 version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
+
+## Release checklist
+
+1. Bump `versionName`/`versionCode` in `android/app/build.gradle` and the line
+   above, add the metainfo `<release version="X" date=…>` entry, commit, and
+   `git push user port`.
+2. Build every artefact from that commit:
+   - Linux from CI, never the desktop (see "Runtime dependencies"):
+     `gh workflow run linux-release.yml --ref port -R Odrannnn/MetroidPrimePort`,
+     `gh run download <id> -n metroid_prime_port-linux`. Rename the tarball to
+     `metroid-prime-port-X-linux-x86_64.tar.gz` (its top directory stays
+     unversioned); the AppImage keeps the name `MetroidPrime-x86_64.AppImage`.
+   - Windows: run `windows.yml`, `gh run download <id> -n metroid_prime_port-windows`,
+     drop CI's `user/` folder (log, `dawn_cache.db`, `pipeline_cache.db`), and zip
+     the rest as `metroid-prime-port-X-windows-x86_64.zip`.
+   - Android: the signed APK, staged as `metroid-prime-port-X-android-arm64.apk`.
+3. Check each artefact's version string, then `git tag -a vX` and `git push user vX`.
+4. `gh release create vX --notes-file …` with every asset passed explicitly, and
+   confirm with `gh release view vX --json assets`. Base the notes on the
+   previous release's.
 
 ## Per-platform packaging
 

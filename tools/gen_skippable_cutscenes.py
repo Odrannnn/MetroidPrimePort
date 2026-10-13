@@ -34,7 +34,18 @@ The patched PAL files outgrow a disc (about 30 MB past GC_DISC_LENGTH, 1_459_978
 packing fills exactly): build randomprime with `GC_DISC_LENGTH` in
 structs/src/gc_disc.rs raised to 1_600_000_000. The output is only read back
 here, so the oversized ISO doesn't matter. Passing only the USA arguments
-drops the PAL tables.
+leaves the PAL tables empty (one row no room matches).
+
+USA 1.02 (rev2): no randomprime ISO exists for it, so its one differing room is
+derived from the USA stream instead (rev2_table): Chapel of the Elders moved
+the connection `remconn 0x000E0173 5/13 0x000E00B2`, so that op alone is
+dropped and every other op (including `addconn 0x000E0180 9/13 0x000E00B2`) is
+kept. The tables kSkipRoomsRev2/kSkipOpsRev2 are always emitted last; pass
+`--rev2-disc <1.02 disc>` to also replay the whole USA table plus the rev2
+override on that disc (no op may miss). To refresh only the rev2 section of an
+existing file without any ISO:
+
+    tools/gen_skippable_cutscenes.py --rev2-only platform/port_skip_cutscenes_data.inc
 
 The script replays the ops on randomprime's original SCLYs (must match the
 skippable ones byte for byte) and on the retail disc (every op must find its
@@ -48,12 +59,12 @@ import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from extract_textures import disc_files, pak_resources  # noqa: E402
 
 OP_CLONE, OP_EDIT, OP_REMCONN, OP_ADDCONN, OP_PUSH, OP_DELETE, OP_MOVE = 1, 2, 3, 4, 5, 6, 7
 
 
 def load_sclys(iso_path):
+    from extract_textures import disc_files, pak_resources  # needs numpy; the tests don't
     out = {}
     with open(iso_path, 'rb') as iso:
         for name, off, size in list(disc_files(iso)):
@@ -489,9 +500,102 @@ def pal_table(usa_table, pal_disc, pal_orig, pal_skip, cut):
     return table, lines
 
 
+CHAPEL = 0x40C548E9
+# The op rev2 can't apply: remconn sender, state, message, target.
+CHAPEL_REV2_DROP = (0x000E0173, 5, 13, 0x000E00B2)
+REV2_MARK = '// USA 1.02 (rev2): '
+
+
+def split_ops(ops):
+    """The op stream as a list of (kind, raw bytes), one per op."""
+    out, p = [], 0
+    while p < len(ops):
+        op = ops[p]
+        if op == OP_CLONE:
+            n = 10
+        elif op == OP_EDIT:
+            nlen = struct.unpack_from('>H', ops, p + 5)[0]
+            count = struct.unpack_from('>H', ops, p + 7 + nlen)[0]
+            n = 9 + nlen
+            for _ in range(count):
+                n += 4 + struct.unpack_from('>H', ops, p + n + 2)[0]
+        elif op in (OP_REMCONN, OP_ADDCONN):
+            n = 17
+        elif op == OP_PUSH:
+            nc = struct.unpack_from('>H', ops, p + 7)[0]
+            n = 9 + 12 * nc
+            n += 4 + struct.unpack_from('>I', ops, p + n)[0]
+        elif op == OP_MOVE:
+            n = 6
+        elif op == OP_DELETE:
+            n = 5
+        else:
+            raise SystemExit('bad op %d at %d' % (op, p))
+        out.append((op, ops[p:p + n]))
+        p += n
+    assert p == len(ops), 'op stream overruns'
+    return out
+
+
+def rev2_table(usa_table):
+    """[(mrea, ops)] for USA 1.02: Chapel's USA stream minus the one remconn
+    that rev2 moved (the minimal variant: every other op, addconn
+    0x000E0180 -> 0x000E00B2 included, is kept)."""
+    ops = dict(usa_table).get(CHAPEL)
+    if ops is None:
+        raise SystemExit('no Chapel of the Elders stream in the USA table')
+    drop = struct.pack('>BIIII', OP_REMCONN, *CHAPEL_REV2_DROP)
+    parts = split_ops(ops)
+    kept = [raw for _, raw in parts if raw != drop]
+    if len(kept) != len(parts) - 1:
+        raise SystemExit('Chapel stream holds %d of the rev2 remconn, want 1'
+                         % (len(parts) - len(kept)))
+    out = b''.join(kept)
+    assert len(out) == len(ops) - len(drop)
+    return [(CHAPEL, out)]
+
+
+def check_rev2(table, rev2, rev2_disc):
+    """Every stream (the rev2 one in place of the USA one) must apply on the
+    1.02 disc without a miss."""
+    over = dict(rev2)
+    for r, ops in table:
+        _, misses = apply_ops(rev2_disc[r], over.get(r, ops))
+        if misses:
+            raise SystemExit('rev2 %08X: ops miss %s' % (r, misses))
+    # and the USA stream alone must still miss exactly where the override helps
+    _, misses = apply_ops(rev2_disc[CHAPEL], dict(table)[CHAPEL])
+    if not misses:
+        print('note: the USA Chapel stream applies on this disc; override not needed')
+
+
+def parse_inc_table(text, rooms_name, ops_name):
+    m = re.search(rooms_name + r'\[\] = \{(.*?)\};', text, re.S)
+    if m is None:  # files from before the PAL tables were always written
+        return []
+    rooms = [(int(a, 16), int(b), int(c))
+             for a, b, c in re.findall(r'\{0x([0-9A-F]{8}), (\d+), (\d+)\}', m.group(1))]
+    m = re.search(ops_name + r'\[\] = \{(.*?)\};', text, re.S)
+    blob = bytes(int(x, 16) for x in re.findall(r'0x([0-9A-Fa-f]{2})', m.group(1)))
+    return [(r, blob[o:o + n]) for r, o, n in rooms if r != NO_ROOM]
+
+
+def write_rev2(f, rev2):
+    f.write('\n' + REV2_MARK + 'randomprime has no ISO for it. Chapel of the Elders\n'
+            '// moved the remconn 000E0173 -> 000E00B2; the USA stream minus that op.\n')
+    write_tables(f, 'kSkipRoomsRev2', 'kSkipOpsRev2', rev2)
+
+
+NO_ROOM = 0xFFFFFFFF
+
+
 def write_tables(f, rooms_name, ops_name, table):
     blob = bytearray()
     f.write('static const SkipRoom %s[] = {\n' % rooms_name)
+    if not table:
+        # zero-length arrays aren't portable: a row no room id matches
+        f.write('    {0x%08X, 0, 0},\n' % NO_ROOM)
+        blob.append(0)
     for r, ops in table:
         f.write('    {0x%08X, %d, %d},\n' % (r, len(blob), len(ops)))
         blob += ops
@@ -503,6 +607,21 @@ def write_tables(f, rooms_name, ops_name, table):
 
 
 def main():
+    if sys.argv[1:2] == ['--rev2-only']:
+        path = sys.argv[2]
+        text = open(path).read()
+        head = text[:text.index('\n' + REV2_MARK)] + '\n' if REV2_MARK in text else text
+        rev2 = rev2_table(parse_inc_table(head, 'kSkipRooms', 'kSkipOps'))
+        with open(path, 'w') as f:
+            f.write(head.rstrip('\n') + '\n')
+            write_rev2(f, rev2)
+        print('rev2: %d room, %d bytes' % (len(rev2), sum(len(o) for _, o in rev2)))
+        return
+    rev2_disc = None
+    if '--rev2-disc' in sys.argv:
+        i = sys.argv.index('--rev2-disc')
+        rev2_disc = sys.argv[i + 1]
+        del sys.argv[i:i + 2]
     disc, orig_iso, skip_iso, jsonc, out = sys.argv[1:6]
     pal = sys.argv[6:9]  # optional: PAL disc, its original and skippable ISOs
     d, o, s = load_sclys(disc), load_sclys(orig_iso), load_sclys(skip_iso)
@@ -526,6 +645,11 @@ def main():
         for line in pal_lines:
             print('  ' + line)
 
+    rev2 = rev2_table(table)
+    if rev2_disc:
+        check_rev2(table, rev2, load_sclys(rev2_disc))
+        print('rev2: all %d streams apply on %s' % (len(table), rev2_disc))
+
     with open(out, 'w') as f:
         f.write('// Generated by tools/gen_skippable_cutscenes.py from randomprime\'s\n'
                 '// skippable_cutscenes.jsonc (MIT, see NOTICE). Do not edit.\n')
@@ -535,9 +659,9 @@ def main():
         for i in range(0, len(landing), 24):
             f.write('    ' + ','.join('0x%02X' % b for b in landing[i:i + 24]) + ',\n')
         f.write('};\n')
-        if pal_rooms:
-            f.write('\n// GM8P01: the rooms whose USA stream above misses or differs there.\n')
-            write_tables(f, 'kSkipRoomsPal', 'kSkipOpsPal', pal_rooms)
+        f.write('\n// GM8P01: the rooms whose USA stream above misses or differs there.\n')
+        write_tables(f, 'kSkipRoomsPal', 'kSkipOpsPal', pal_rooms)
+        write_rev2(f, rev2)
     print('%d rooms, %d bytes of ops, %d landing' % (len(table), n, len(landing)))
 
 

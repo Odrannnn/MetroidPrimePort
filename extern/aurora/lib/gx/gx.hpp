@@ -95,7 +95,7 @@ struct DrawImmediateData {
   u32 vtxStart = 0;
   u32 currentPnMtx = 0;
   u32 fogRangeBase = 0;
-  u32 serial = 0; // the draw's serial, read by shaders built with ShaderConfig::drawId
+  u32 serial = 0; // the draw's serial, read by shaders built with ShaderConfig::drawId; in the shadow pass, the cascade
   std::array<u32, MaxIndexAttr> arrayStart{};
 };
 static_assert(std::has_unique_object_representations_v<DrawImmediateData>);
@@ -428,7 +428,7 @@ struct GXState {
   u32 pbrVolume = 0; // GX_AURORA_SET_PBR_VOLUME
   std::array<Vec4<float>, 6> pbrVolumeRows{}; // see GXSetPBRVolume
   u32 pbrLightmap = 0; // GX_AURORA_SET_PBR_LIGHTMAP
-  Vec4<float> pbrLightmapRect{};                  // offU, offV, scale (0: off), level
+  Vec4<float> pbrLightmapRect{};                  // offU, offV, scale (0: one texel), level (0: off)
   std::array<Vec4<float>, 3> pbrLightmapAxes{};   // xyz: a row taking a view-space normal to the lightmap's axes
   Vec4<float> pbrRoomLights{}; // GX_AURORA_PORT_ROOM_LIGHTS: x the first record (u32 bits, in words), y the count
   u8 pbrLightmapAttr = GX_VA_NULL; // GX_AURORA_SET_PBR_LIGHTMAP_ATTR
@@ -439,6 +439,10 @@ struct GXState {
   // the top strength.
   std::array<Vec4<float>, 3> pbrBacklightLights{};
   Vec4<float> pbrLightScale{1.f, 1.f, 0.f, 0.f}; // GX_AURORA_SET_PBR_LIGHT_SCALE: diffuse, f0, -, fade
+  // GX_AURORA_SET_PBR_MODEL_MODULATION: the diffuse and incandescence vectors, and the coverage (x)
+  Vec4<float> pbrModelDiffuse{1.f, 1.f, 1.f, 1.f};
+  Vec4<float> pbrModelIncan{0.f, 0.f, 0.f, 1.f};
+  Vec4<float> pbrModelCoverage{1.f, 0.f, 0.f, 0.f};
   std::array<Vec4<float>, 8> pbrShield{}; // GX_AURORA_SET_PBR_SHIELD: CCH0..6, then AUVI xyz + DIFC.w
   // GX_AURORA_SET_PBR_LIGHT_HDR, per light: colour (rgb, falloff + 1; w 0 = off), then
   // (view position, r0), then (r1, -, -, -).
@@ -455,7 +459,7 @@ struct GXState {
   bool shadowCaster = false;
   bool shadowCasterOnly = false; // they cast but aren't drawn (GXPortSetShadowCasterOnly)
   bool shadowActive = false;
-  std::array<Vec4<float>, 10> shadowUniform{};
+  std::array<Vec4<float>, 36> shadowUniform{};
 
   // GX2 polygon offset state
   f32 frontOffset = 0.0f;

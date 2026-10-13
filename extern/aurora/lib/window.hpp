@@ -35,6 +35,8 @@ bool create_renderer();
 void destroy_window();
 void show_window();
 AuroraWindowSize get_window_size();
+// The frame buffer size a render scale would give, without applying it.
+bool get_frame_buffer_size_for_scale(float scale, uint32_t* width, uint32_t* height);
 const AuroraEvent* poll_events();
 SDL_Window* get_sdl_window();
 SDL_Renderer* get_sdl_renderer();

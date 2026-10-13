@@ -44,6 +44,10 @@ struct Settings {
   bool springFlick = false;
   float springFlickRate = 6.f;
   float stickAimRate = 900.f;
+  // With stickAimSplit on, stickAimRateY drives vertical stick aim and
+  // stickAimRate only the horizontal; off, stickAimRate drives both.
+  bool stickAimSplit = false;
+  float stickAimRateY = 900.f;
   // Gyro aiming: off / hold / always, auto / controller / phone, and how fast a
   // rotation turns into aim travel.
   int gyroMode = 0;

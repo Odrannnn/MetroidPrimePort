@@ -14,8 +14,10 @@ sdk: org.freedesktop.Sdk
 command: metroid_prime_port
 
 finish-args:
-  # Vulkan goes through the DRM device.
-  - --device=dri
+  # Vulkan goes through the DRM device; controllers need /dev/input and, for
+  # SDL's HIDAPI drivers (gyro, rumble, issue #82), /dev/hidraw*. Only
+  # --device=all covers hidraw.
+  - --device=all
   - --share=ipc
   - --socket=wayland
   - --socket=fallback-x11

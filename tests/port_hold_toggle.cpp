@@ -24,6 +24,23 @@ constexpr float kDt = 1.f / 60.f;
 } // namespace
 
 int main() {
+  // Toggle: a press right after the one that ended the latch is trigger bounce
+  // and stays hidden; a press after the debounce window locks again.
+  {
+    PortHoldToggle::Toggle t;
+    CHECK(Is(t.Update(true, true, true, false, kDt), true, true));
+    CHECK(Is(t.Update(true, true, false, true, kDt), true, false));
+    CHECK(Is(t.Update(true, false, false, true, kDt), true, false));
+    CHECK(Is(t.Update(true, true, true, true, kDt), false, false));  // exit press
+    CHECK(Is(t.Update(true, false, false, false, kDt), false, false)); // bounce: release
+    CHECK(Is(t.Update(true, true, true, false, kDt), false, false));   // bounce: re-press
+    CHECK(Is(t.Update(true, true, false, false, kDt), false, false));
+    CHECK(Is(t.Update(true, false, false, false, kDt), false, false));
+    for (int i = 0; i < 20; ++i) {
+      CHECK(Is(t.Update(true, false, false, false, kDt), false, false));
+    }
+    CHECK(Is(t.Update(true, true, true, false, kDt), true, true)); // a real press
+  }
   // Toggle: a press that locks on latches, release keeps it, the next press lets
   // go and is hidden until the button is released.
   {

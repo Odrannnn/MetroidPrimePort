@@ -20,6 +20,10 @@ namespace PortDebug {
 // CStateManager::Update). Null before gameplay starts.
 void SetStateManager(CStateManager* mgr);
 CStateManager* StateManager();
+// The "quick_resume" setting: write a resume state on quit or background.
+bool QuickResume();
+// The "savestate_room_state" setting: save states keep enemies and room objects.
+bool SaveStateRoomState();
 // Where the world is drawn from and which way it looks (the free camera's while it is
 // on); false outside a world.
 bool ViewRay(float origin[3], float forward[3]);
@@ -152,6 +156,10 @@ void SetFullscreen(bool enabled);
 // 0 = auto (native, driven by the display scale), otherwise a fixed multiplier.
 float RenderScale();
 void SetRenderScale(float scale);
+// Photo mode captures: the configured scale (1 when auto), and a temporary override
+// (0 = none) that also holds dynamic resolution still.
+float BaseRenderScale();
+void SetCaptureRenderScale(float scale);
 // Dynamic resolution: draws the EFB between DynamicResMin and RenderScale to
 // hold DynamicResTarget fps (0 = the frame cap). False when off.
 bool DynamicRes();
@@ -249,6 +257,10 @@ void SetApSuitDamage(int mode);
 // (PortSkipCutscenes::Active).
 bool SkippableCutscenes();
 void SetSkippableCutscenes(bool enabled);
+// The stored 1.00 sequence-break compatibility choice (raw, not the effective
+// policy). Randomizer and Archipelago games force it on at use.
+bool Revision100Compatibility();
+void SetRevision100Compatibility(bool enabled);
 // The language of the game's text: "" for the disc's English, else one of the
 // codes in PortRemastered::kTextLanguages, which a Remastered import adds to the
 // string tables. A table without it shows English. Read at every
@@ -261,6 +273,12 @@ void SetTextLanguage(const char* code);
 enum EElevatorRide { kElevatorRide_Original, kElevatorRide_Fast, kElevatorRide_Skip };
 EElevatorRide ElevatorRide();
 void SetElevatorRide(EElevatorRide mode);
+// The Nintendo, Retro and Dolby logos at launch (CSplashScreen). Skippable ends
+// the current one with a short fade on A or Start; Off goes straight to the
+// front end. Original experience shows them in full.
+enum EBootLogos { kBootLogos_Show, kBootLogos_Skippable, kBootLogos_Off };
+EBootLogos BootLogos();
+void SetBootLogos(EBootLogos mode);
 // First-person vertical field of view in degrees (retail 55). The arm cannon is
 // drawn at the retail FOV whatever this is, like a view-model FOV.
 const float kFovRetail = 55.f;
@@ -268,6 +286,12 @@ const float kFovMin = 45.f;
 const float kFovMax = 90.f;
 float FirstPersonFov();
 void SetFirstPersonFov(float degrees);
+// Arm cannon offset from its retail place, in metres along the camera's right,
+// forward and up axes (issue #72, like PrimeHack's). It moves the real gun, so
+// shots leave from the new muzzle. Zero in the original experience.
+const float kGunOffsetMax = 1.f;
+void GunOffset(float out[3]);
+void SetGunOffset(const float offset[3]);
 // Multisample anti-aliasing (1 = off, or 4) and the max texture anisotropy
 // (1-16, retail-style mipmapped textures ask for the max). Applied next frame.
 int Msaa();
@@ -391,12 +415,15 @@ bool StartRemasteredImport(const std::string& image, const std::string& keys);
 // the console. Each returns a message for the user. Imports are refused in
 // game; `path` may be a .gci, a raw card image, a folder of .gci files or an
 // Android content:// URI, and an export to a path ending in .raw writes a card
-// image instead of .gci files.
+// image instead of .gci files. `format` picks what an export writes: "" (the
+// card's files as they are), "usa" or "pal" (the save converted to that
+// GameCube release; Dolphin's card of that region) or "trilogy" (the newest
+// save written into the Wii Trilogy's save.bin at `dest`, or Dolphin's).
 std::string CardList();
 std::string CardImport(const std::string& path);
-std::string CardExport(const std::string& dest);
+std::string CardExport(const std::string& dest, const std::string& format = "");
 std::string CardImportDolphin();
-std::string CardExportDolphin();
+std::string CardExportDolphin(const std::string& format = "");
 // Cheat: the player takes no damage (F1 > Debug > Cheats, MP_GODMODE, console `god`).
 bool Invulnerable();
 void SetInvulnerable(bool enabled);
@@ -535,9 +562,12 @@ bool TouchVisorTapScan();
 void SetTouchVisorTapScan(bool on);
 void SetWheelState(uint32_t mask);
 uint32_t WheelState();
-// CInGameGuiManager publishes each frame whether the pause menu is up (stale = closed).
-void SetPauseScreenOpen(bool open);
+// CInGameGuiManager publishes each frame whether the pause menu is up (stale = closed),
+// and whether a paused dialog (save station, upgrade message) is.
+void SetPauseScreenOpen(bool open, bool dialog);
 bool PauseScreenOpen();
+// The pause menu or a paused dialog: input reads the Menu rows there (issue #93).
+bool PausedMenuOpen();
 void RequestVisor(int visor);
 void RequestBeam(int beam);
 // The HUD's beam/visor menu icons for the touch wheels (Android), decoded to RGBA8 when the HUD

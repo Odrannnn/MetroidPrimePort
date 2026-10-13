@@ -51,7 +51,10 @@ int main() {
   Check(PortDisc::Identify("GM8J01", 0, 0) == Version::Unknown);
   Check(PortDisc::Identify("GM8E01", 1, 0) == Version::Unknown);
   Check(PortDisc::Current() == Version::Unknown);
-  Check(PortDisc::IsAccepted(Version::Usa100) && !PortDisc::IsAccepted(Version::Unknown));
+  Check(PortDisc::IsAccepted(Version::Usa100) && PortDisc::IsAccepted(Version::Usa101) &&
+        PortDisc::IsAccepted(Version::Usa102) && PortDisc::IsAccepted(Version::Pal));
+  Check(!PortDisc::IsAccepted(Version::Unknown));
+  Check(PortDisc::Identify("GM8E01", 0, 1) == Version::Usa101);
   dolSize = 4;
   Check(Rejected(0x81230000, 4));
 }

@@ -1,6 +1,7 @@
 #include "Kyoto/Input/CDolphinController.hpp"
 #include "port_console.h"
 #include "port_debug.h"
+#include "port_freecam.h"
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
@@ -127,8 +128,10 @@ void CDolphinController::ReadDevices() {
 
   // Twin-stick: feed the right stick into the first-person aim and consume it,
   // so it does not also drive the game's own free-look. The map screen keeps
-  // the C-stick: it pans the map there.
-  if (PortDebug::TwinStick() && !PortDebug::MapScreenOpen() && x4_status[0].err == PAD_ERR_NONE) {
+  // the C-stick: it pans the map there. So does the free camera (photo mode):
+  // it turns with it.
+  if (PortDebug::TwinStick() && !PortDebug::MapScreenOpen() && !PortFreeCam::Active() &&
+      x4_status[0].err == PAD_ERR_NONE) {
     // Under mouse aim the mouse aims, so a keyboard key on the C-stick picks a
     // beam, as without twin-stick (the mouse-and-keyboard preset's 1-4), and is
     // left to the game. Without it the keys aim (the classic preset's IJKL).

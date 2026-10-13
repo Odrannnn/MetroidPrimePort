@@ -33,7 +33,28 @@ enum Feature : uint32_t {
 // Multiply is port-only: the FrameBuffer_* shaders draw the scene behind them x rgb, warped by an
 // indirect map. The pass can't sample its own target, so the warp is dropped and the target is
 // multiplied by mix(1, rgb, a) instead (exact where the warp scale is 0).
-enum class Blend : uint32_t { Alpha = 0, Premultiplied = 1, Additive = 2, Opaque = 3, Multiply = 4 };
+// AdditiveOne is the wave orb's model blend: RGB One/One, alpha Zero/One, drawn with depth write off.
+// The values are serialised in VMAT blobs (0..4 older, 5 new) and form part of the pipeline key.
+enum class Blend : uint32_t { Alpha = 0, Premultiplied = 1, Additive = 2, Opaque = 3, Multiply = 4, AdditiveOne = 5 };
+
+// The highest Blend value a VMAT blob may carry.
+inline constexpr uint32_t MaxBlend = uint32_t(Blend::AdditiveOne);
+
+// A model draw of this blend never writes depth and always depth-tests (LEqual), whatever its generator asked for.
+inline constexpr bool forces_depth_write_off(Blend blend) { return blend == Blend::AdditiveOne; }
+
+// The depth state of a model draw: the generator's own (test = zTest, write = !AAPH && ZBUF) for every blend
+// but AdditiveOne, which tests always and never writes.
+struct DepthSelection {
+  bool compare;
+  bool write;
+  constexpr bool operator==(const DepthSelection& o) const { return compare == o.compare && write == o.write; }
+};
+inline constexpr DepthSelection select_model_depth(Blend blend, bool zTest, bool aaph, bool zbuf) {
+  if (forces_depth_write_off(blend))
+    return {true, false};
+  return {zTest, !aaph && zbuf};
+}
 
 struct Vertex {
   float pos[3];      // PNMTX0 space

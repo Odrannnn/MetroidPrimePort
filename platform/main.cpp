@@ -28,6 +28,7 @@
 #include "port_build_info.h"
 #include "port_log.h"
 #include "port_log_file.h"
+#include "port_memory_log.h"
 #include "port_mods.h"
 #include "port_pal_languages.h"
 #include "port_room_geo.h"
@@ -363,13 +364,10 @@ std::string FindUnreadableDiscFile() {
 }
 
 constexpr const char* kSupportedDisc =
-    "Metroid Prime for the GameCube is supported: USA 1.00\n(GM8E01, revision 0), and PAL (GM8P01, experimental).";
-// Shown instead while other releases are opted into (MP_DISC_ANY_VERSION).
-constexpr const char* kSupportedDiscAny =
     "Metroid Prime for the GameCube is supported: USA 1.00, 1.01\nand 1.02 (GM8E01), and PAL (GM8P01, experimental).";
 
 const char* SupportedDiscText() {
-    return PortDisc::IsAccepted(PortDisc::Version::Usa101) ? kSupportedDiscAny : kSupportedDisc;
+    return kSupportedDisc;
 }
 
 // What the user picked instead, in words: the usual mistakes are another
@@ -996,6 +994,7 @@ int main(int argc, char** argv) {
         }
     }
 #endif
+    PortMemoryLog::LogStartup();
     const std::span<const uint8_t> embeddedSeed = PortEmbedded::Find("initial_pipeline_cache.db");
 #if !defined(__ANDROID__)
     // The window icon, for a bare binary that no desktop entry describes.

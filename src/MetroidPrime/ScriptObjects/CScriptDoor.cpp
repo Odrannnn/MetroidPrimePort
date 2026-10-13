@@ -296,6 +296,17 @@ void CScriptDoor::OpenDoor(TUniqueId uid, CStateManager& mgr) {
   }
 }
 
+#ifdef TARGET_PC
+void CScriptDoor::PortRestoreOpen(bool open) {
+  mIsOpen = open;
+  mWasOpen = open;
+  mConditionsMet = false;
+  mClosing = false;
+  mDoClose = false;
+  SetDoorAnimation(open ? kDAT_Open : kDAT_Close);
+}
+#endif
+
 void CScriptDoor::SetDoorAnimation(EDoorAnimType state) {
   mDoorState = state;
   if (HasAnimation()) {

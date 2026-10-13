@@ -28,6 +28,7 @@
 
 #include "port_debug.h"
 #include "port_freecam.h"
+#include "port_photo.h"
 #include "MetroidPrime/CScriptLayerManager.hpp"
 #include "port_room_env.h"
 #include <dolphin/gx/GXExtra.h>
@@ -136,6 +137,9 @@ CIOWin::EMessageReturn CMFGame::OnMessage(const CArchitectureMessage& message,
     }
     // Fall through.
     case kGFS_InGame:
+#ifdef TARGET_PC
+      PortPhoto::Tick(*mStateManager, mFlowState == kGFS_InGame);
+#endif
       mStateManager->SetRandomAvailable(true);
       switch (mStateManager->GetDeferredStateTransition()) {
       case kSMT_InGame:
@@ -204,9 +208,12 @@ CIOWin::EMessageReturn CMFGame::OnMessage(const CArchitectureMessage& message,
             mStateManager->GetCameraManager()->GetCurrentCamera(*mStateManager);
         const CCinematicCamera* const cineCam = TCastToConstPtr< CCinematicCamera >(camera);
 #ifdef TARGET_PC
+        // Photo mode takes Start (leave) and Z (rise) for itself.
+        const bool photoMode = PortPhoto::Active();
         // A skips a skippable cinematic too (it does nothing else while one plays).
-        const bool skipPress = input.PStart() || (cineCam && input.PA());
+        const bool skipPress = !photoMode && (input.PStart() || (cineCam && input.PA()));
 #else
+        const bool photoMode = false;
         const bool skipPress = input.PStart();
 #endif
         if (skipPress) {
@@ -219,7 +226,7 @@ CIOWin::EMessageReturn CMFGame::OnMessage(const CArchitectureMessage& message,
           } else if (!cineCam) {
             mStateManager->DeferStateTransition(kSMT_PauseGame);
           }
-        } else if (input.PZ() && !cineCam && mStateManager->CanShowMapScreen()) {
+        } else if (!photoMode && input.PZ() && !cineCam && mStateManager->CanShowMapScreen()) {
           mStateManager->DeferStateTransition(kSMT_MapScreen);
         }
       }
@@ -227,7 +234,10 @@ CIOWin::EMessageReturn CMFGame::OnMessage(const CArchitectureMessage& message,
       mStateManager->ProcessInput(input);
       mStateManager->SetRandomAvailable(false);
     }
-    mGuiManager->ProcessControllerInput(*mStateManager, input, queue);
+#ifdef TARGET_PC
+    if (!PortPhoto::Active())
+#endif
+      mGuiManager->ProcessControllerInput(*mStateManager, input, queue);
     break;
   }
   case kAM_FrameEnd:

@@ -30,7 +30,7 @@ rendered frame. The alternative, running the simulation itself faster (`sim_rate
 - **Mouse aim.** Under free mouse look the view keeps this tick's orientation
   (only translation is blended), so the reticle never trails the shot
   direction. The arm cannon, arm and muzzle effects render against the matching
-  simulation camera (`NATIVE_PORT.md`, "In uncapped presentation").
+  simulation camera (`docs/SETTINGS.md`, "In uncapped presentation").
 - **Per-frame look (phase 1).** See section 4.
 - **Actor transforms (phase 2).** See section 1.
 - **Skinned poses (phase 3).** See section 2.
@@ -67,8 +67,12 @@ Implemented as a view shift rather than by swapping the transform in every
   morphing player. Nested scopes keep the outer view. The player's
   `AddToRenderer` is not wrapped (it also queues the gun); its body and ball
   draw through the callback, which is.
-- Snaps like the camera: more than 4 units or more than 45° in a tick, and
-  any actor whose transform didn't change.
+- Snaps like the camera: a teleport or more than 45° in a tick, and
+  any actor whose transform didn't change. A teleport is a step over 4 units
+  that is also over three times the previous tick's step
+  (`PortIsTeleport`, `xPortLastStep2`): with the bare 4-unit limit, Meta
+  Ridley's fly-in and its chase camera flipped between blended and snapped
+  as their speed crossed it, and the view jittered (issue #99).
 - Morph ball: the ball is drawn at `GetBallToWorld()` = player origin +
   (0,0,radius) in world Z. `CActor::PortPresentedView` selects that pivot
   for the fully morphed player, covering both renderer callbacks and recursive
@@ -279,7 +283,7 @@ so they work unchanged.
 Tools: `MP_PRESENT_T` / console `present <t|cycle|tick|off>` forces the
 presentation factor even under `MP_TURBO` or the frame limiter; `hold 1` stops
 ticks and `step <n>` runs exactly n, so one tick pair can be drawn at any t
-(`NATIVE_PORT.md`). Comparison: hold, `present tick` (shot N), `step 1`, then
+(`docs/SETTINGS.md`). Comparison: hold, `present tick` (shot N), `step 1`, then
 shots at t = 0, t = 1, tick (N+1) and 0.5. A correct blend gives t = 0 = N and
 t = 1 = N+1.
 

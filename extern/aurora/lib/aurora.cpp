@@ -37,6 +37,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <mutex>
+#include <string>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -56,6 +58,12 @@ constexpr Module Log{"aurora"};
 
 #ifdef AURORA_ENABLE_GX
 std::atomic_bool g_screenshotRequested;
+// A PNG request names its file and is answered through g_pngState (0 pending, 1 saved, -1 failed).
+std::mutex g_pngMutex;
+std::string g_pngPath;
+std::atomic_int g_pngState{0};
+std::atomic_uint32_t g_pngWidth{0};
+std::atomic_uint32_t g_pngHeight{0};
 
 // GPU
 using webgpu::g_device;
@@ -63,6 +71,13 @@ using webgpu::g_queue;
 using webgpu::g_surface;
 
 void record_screenshot(wgpu::CommandEncoder& encoder, std::vector<gfx::AfterSubmitCallback>& callbacks) {
+  std::string pngPath;
+  {
+    std::lock_guard lock{g_pngMutex};
+    pngPath = std::move(g_pngPath);
+    g_pngPath.clear();
+  }
+  const bool png = !pngPath.empty();
   const auto& source = webgpu::present_source();
   const bool bgra = source.format == wgpu::TextureFormat::BGRA8Unorm ||
                     source.format == wgpu::TextureFormat::BGRA8UnormSrgb;
@@ -70,6 +85,9 @@ void record_screenshot(wgpu::CommandEncoder& encoder, std::vector<gfx::AfterSubm
                     source.format == wgpu::TextureFormat::RGBA8UnormSrgb;
   if (!bgra && !rgba) {
     Log.warn("Screenshot unsupported for texture format {}", magic_enum::enum_name(source.format));
+    if (png) {
+      g_pngState.store(-1, std::memory_order_release);
+    }
     return;
   }
 
@@ -94,14 +112,17 @@ void record_screenshot(wgpu::CommandEncoder& encoder, std::vector<gfx::AfterSubm
   };
   encoder.CopyTextureToBuffer(&src, &dst, &source.size);
 
-  callbacks.emplace_back([readback, width, height, bytesPerRow, byteSize, bgra]() {
+  callbacks.emplace_back([readback, width, height, bytesPerRow, byteSize, bgra, png, pngPath]() {
     readback.MapAsync(
         wgpu::MapMode::Read, 0, byteSize, wgpu::CallbackMode::AllowSpontaneous,
-        [readback, width, height, bytesPerRow, byteSize, bgra](wgpu::MapAsyncStatus status,
-                                                               wgpu::StringView message) {
+        [readback, width, height, bytesPerRow, byteSize, bgra, png, pngPath](wgpu::MapAsyncStatus status,
+                                                                          wgpu::StringView message) {
           if (status != wgpu::MapAsyncStatus::Success) {
             if (status != wgpu::MapAsyncStatus::CallbackCancelled && status != wgpu::MapAsyncStatus::Aborted) {
               Log.warn("Screenshot readback failed {}: {}", magic_enum::enum_name(status), message);
+            }
+            if (png) {
+              g_pngState.store(-1, std::memory_order_release);
             }
             return;
           }
@@ -113,6 +134,22 @@ void record_screenshot(wgpu::CommandEncoder& encoder, std::vector<gfx::AfterSubm
               static_cast<int>(bytesPerRow));
           if (surface == nullptr) {
             Log.warn("Unable to create screenshot surface: {}", SDL_GetError());
+            if (png) {
+              g_pngState.store(-1, std::memory_order_release);
+            }
+          } else if (png) {
+            std::error_code ec;
+            std::filesystem::create_directories(std::filesystem::path(pngPath).parent_path(), ec);
+            if (!SDL_SavePNG(surface, pngPath.c_str())) {
+              Log.warn("Unable to save screenshot {}: {}", pngPath, SDL_GetError());
+              g_pngState.store(-1, std::memory_order_release);
+            } else {
+              Log.info("Screenshot saved to {}", pngPath);
+              g_pngWidth.store(width, std::memory_order_relaxed);
+              g_pngHeight.store(height, std::memory_order_relaxed);
+              g_pngState.store(1, std::memory_order_release);
+            }
+            SDL_DestroySurface(surface);
           } else {
             std::error_code ec;
             std::filesystem::create_directories("screenshots", ec);
@@ -597,6 +634,41 @@ void request_screenshot() noexcept {
 #ifdef AURORA_ENABLE_GX
   g_screenshotRequested.store(true, std::memory_order_release);
 #endif
+}
+void request_screenshot_png(const char* path) noexcept {
+#ifdef AURORA_ENABLE_GX
+  {
+    std::lock_guard lock{g_pngMutex};
+    g_pngPath = path != nullptr ? path : "";
+  }
+  g_pngState.store(0, std::memory_order_release);
+  g_screenshotRequested.store(true, std::memory_order_release);
+#endif
+}
+
+int screenshot_png_state(uint32_t* width, uint32_t* height) noexcept {
+#ifdef AURORA_ENABLE_GX
+  const int state = g_pngState.load(std::memory_order_acquire);
+  if (state > 0) {
+    if (width != nullptr) *width = g_pngWidth.load(std::memory_order_relaxed);
+    if (height != nullptr) *height = g_pngHeight.load(std::memory_order_relaxed);
+  }
+  return state;
+#else
+  return -1;
+#endif
+}
+
+bool frame_buffer_size_for_scale(float scale, uint32_t* width, uint32_t* height) noexcept {
+  return window::get_frame_buffer_size_for_scale(scale, width, height);
+}
+
+uint32_t max_texture_dimension() noexcept {
+  wgpu::Limits limits{};
+  if (!webgpu::g_device || !webgpu::g_device.GetLimits(&limits)) {
+    return 0;
+  }
+  return limits.maxTextureDimension2D;
 }
 } // namespace aurora
 

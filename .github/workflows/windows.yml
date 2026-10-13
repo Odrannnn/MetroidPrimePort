@@ -112,6 +112,9 @@ jobs:
           Copy-Item extern/musyx/LICENSE dist/licenses/musyx.txt
           Copy-Item extern/astcenc/LICENSE.txt dist/licenses/astcenc.txt
           Copy-Item docs/NATIVE_PORT.md dist/README.md
+          Copy-Item docs/SETTINGS.md dist/SETTINGS.md
+          Copy-Item docs/MODS.md dist/MODS.md
+          Copy-Item docs/CONSOLE.md dist/CONSOLE.md
           # ffmpeg is its own program under the LGPL: its licence, and where
           # its source and build line are, go with it.
           Copy-Item ffmpeg-min/out/ffmpeg.exe dist/

@@ -301,6 +301,11 @@ constexpr uint32_t kColorTex = 1, kOpacityTex = 2, kErosion = 4, kRamp = 8, kInd
                    kOpacityFade = 2048, kColorRgbOnly = 4096;
 // aurora::gfx::vfx::Blend::Multiply, the port's stand-in for the FrameBuffer_* shaders.
 constexpr uint32_t kBlendMultiply = 4;
+constexpr uint32_t kBlendAdditiveOne = 5;  // aurora::gfx::vfx::Blend::AdditiveOne (RGB One/One)
+
+// MTIN 756533fc-e832-48f2-b1ef-ebb41fcea14f, the wave orb's material, as the table's little-endian GUID.
+constexpr EffectGuid kWaveOrbMati = {0xfc, 0x33, 0x65, 0x75, 0x32, 0xe8, 0xf2, 0x48,
+                                     0xb1, 0xef, 0xeb, 0xb4, 0x1f, 0xce, 0xa1, 0x4f};
 
 enum class Role { Color, Opacity, Ramp, Ramp2, Threshold, Indirect, Palette };
 
@@ -657,8 +662,11 @@ struct MatiTexture {
   int32_t wrapY = -1;
 };
 
+constexpr uint32_t kNoHeaderBlend = 0xffffffffu;
+
 struct Mati {
   uint32_t shader = 0;  // the four bytes at 0x48, big-endian
+  uint32_t headerBlend = kNoHeaderBlend;  // the header's EBlendMode, the LE u32 at 0x61
   std::map<std::string, MatiTexture> textures;
   std::map<std::string, std::array<float, 4>> vectors;
 };
@@ -673,6 +681,7 @@ bool ParseMati(const std::vector<uint8_t>& d, Mati& out) {
     return false;
   }
   out.shader = uint32_t(d[0x48]) << 24 | uint32_t(d[0x49]) << 16 | uint32_t(d[0x4a]) << 8 | d[0x4b];
+  out.headerBlend = ReadLE32(d.data() + 0x61);
   const uint32_t count = ReadLE32(d.data() + 0x69);
   size_t at = 0x6d;
   for (uint32_t i = 0; i < count && at + 5 <= d.size(); ++i) {
@@ -1741,6 +1750,15 @@ public:
       } else {
         m_approximated.push_back("VMAT: PBDM taken as alpha blend");
       }
+    }
+    // The wave beam's orb is the one known particle model whose MATI header blend
+    // (EBlendMode 1, Remastered's One/One) wins over PBDM, which is 0 there: the
+    // model draw passes -1 and resolves it to the MATI resource's mode
+    // (CParticleSceneNode::RenderModelEntries, GetMaterialInstanceBlendMode).
+    // Pinned to that exact MATI; no other MATI or shader is generalised from it.
+    if (!swoosh && find(F("PMDL")) != nullptr && guid->guid == kWaveOrbMati && mati.shader == 0x642dd72b &&
+        mati.headerBlend == 1) {
+      blend = kBlendAdditiveOne;
     }
     if (recipe->frameBuffer) {
       if (cch0[0] != 0.0f || cch0[1] != 0.0f) {

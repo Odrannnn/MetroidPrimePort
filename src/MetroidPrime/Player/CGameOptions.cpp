@@ -14,6 +14,7 @@
 #include "dolphin/os.h"
 
 #ifdef TARGET_PC
+#include "MetroidPrime/PortSaveFormat.hpp"
 #include "port_apclient.h"
 #include "port_randomizer.h"
 #endif
@@ -67,7 +68,12 @@ CGameOptions::CGameOptions()
 , x68_25_invertY(skDefaultInvertY)
 , x68_26_rumble(skDefaultRumble)
 , x68_27_swapBeamsControls(skDefaultSwapBeamsControls)
+#ifdef TARGET_PC
+, x68_28_hintSystem(skDefaultHintSystem)
+, x68_29_palFlag(false) {
+#else
 , x68_28_hintSystem(skDefaultHintSystem) {
+#endif
   InitSoundMode();
 }
 
@@ -86,7 +92,12 @@ CGameOptions::CGameOptions(CInputStream& in)
 , x68_25_invertY(skDefaultInvertY)
 , x68_26_rumble(skDefaultRumble)
 , x68_27_swapBeamsControls(skDefaultSwapBeamsControls)
+#ifdef TARGET_PC
+, x68_28_hintSystem(skDefaultHintSystem)
+, x68_29_palFlag(false) {
+#else
 , x68_28_hintSystem(skDefaultHintSystem) {
+#endif
 
   for (int i = 0; i < x0_.size(); ++i) {
     x0_[i] = in.ReadBits(8);
@@ -106,6 +117,10 @@ CGameOptions::CGameOptions(CInputStream& in)
   x68_25_invertY = in.ReadPackedBool();
   x68_26_rumble = in.ReadPackedBool();
   x68_27_swapBeamsControls = in.ReadPackedBool();
+#ifdef TARGET_PC
+  if (PortSaveFormat::IsPal())
+    x68_29_palFlag = in.ReadPackedBool();
+#endif
 
   InitSoundMode();
 }
@@ -130,6 +145,10 @@ void CGameOptions::PutTo(COutputStream& out) {
   out.WriteBits(x68_25_invertY != false, 1);
   out.WriteBits(x68_26_rumble != false, 1);
   out.WriteBits(x68_27_swapBeamsControls != false, 1);
+#ifdef TARGET_PC
+  if (PortSaveFormat::IsPal())
+    out.WriteBits(x68_29_palFlag != false, 1);
+#endif
 }
 
 void CGameOptions::ResetToDefaults() {

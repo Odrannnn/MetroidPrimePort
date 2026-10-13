@@ -12,6 +12,7 @@
 
 #include "Kyoto/MemoryCopy.hpp"
 #include "Kyoto/Basics/CBasics.hpp"
+#include "MetroidPrime/PortSaveFormat.hpp"
 #include "port_gci.h"
 #include "port_log.h"
 #include "port_paths.h"
@@ -30,6 +31,30 @@ namespace {
 // card, or that one).
 std::string sDefaultCardBase;
 std::string sCardBase;
+
+// Port: move a pre-native PAL save ("MetroidPrime A/B") into the PAL disc's own
+// format once the card folder is known.
+void MigrateLegacyPalSave() {
+  const PortGci::Report migrated = PortGci::MigrateMountedLegacyPal();
+  if (migrated.copied > 0 || !migrated.errors.empty()) {
+    PortLog::Write("memory card: %s\n", migrated.Summary("Migrated").c_str());
+  }
+}
+} // namespace
+
+namespace {
+// PAL: a sector's CRC covers everything after its own 4-byte CRC field.
+bool PalSectorValid(const uchar* sector) {
+  uint stored;
+  memcpy(&stored, sector, sizeof(stored));
+  return CBasics::SwapBytes(stored) ==
+         CCRC32::Calculate(sector + 4, PortSaveFormat::kPalSectorSize - 4);
+}
+uint PalSectorSeq(const uchar* sector) {
+  uint seq;
+  memcpy(&seq, sector + 4, sizeof(seq));
+  return CBasics::SwapBytes(seq);
+}
 } // namespace
 
 ECardResult SMemoryCardFileInfo::FileRead() {
@@ -37,6 +62,38 @@ ECardResult SMemoryCardFileInfo::FileRead() {
   saveData = rstl::vector< uchar >();
   const uint size = x24_saveFileData.size();
   const void* data = x24_saveFileData.data();
+  if (PortSaveFormat::IsPal()) {
+    // Sector 0 is the header; sectors 1 and 2 are two copies of the save. Pick one
+    // like the PAL game: a single valid copy wins; if both are valid and have the
+    // same sequence number copy 0 wins, otherwise copy 1.
+    ECardResult result = kCR_READY;
+    if (size != static_cast< uint >(PortSaveFormat::kPalFileSize)) {
+      result = kCR_BROKEN;
+    } else {
+      const uchar* base = static_cast< const uchar* >(data) + PortSaveFormat::kPalSectorSize;
+      const uchar* copy0 = base;
+      const uchar* copy1 = base + PortSaveFormat::kPalSectorSize;
+      const bool ok0 = PalSectorValid(copy0);
+      const bool ok1 = PalSectorValid(copy1);
+      const uchar* chosen = nullptr;
+      if (ok0 && ok1) {
+        chosen = PalSectorSeq(copy0) == PalSectorSeq(copy1) ? copy0 : copy1;
+      } else if (ok0) {
+        chosen = copy0;
+      } else if (ok1) {
+        chosen = copy1;
+      }
+      if (chosen == nullptr) {
+        result = kCR_CRC_MISMATCH;
+      } else {
+        const uint payload = PortSaveFormat::kPalSectorSize - PortSaveFormat::kPalPayloadOffset;
+        saveData.assign(payload);
+        (memcpy)(saveData.data(), chosen + PortSaveFormat::kPalPayloadOffset, payload);
+      }
+    }
+    x24_saveFileData = rstl::vector< uchar, rstl::aligned_allocator >();
+    return result;
+  }
   if (size < 4) {
     return kCR_BROKEN;
   }
@@ -152,6 +209,36 @@ void CMemoryCardSys::CCardFileInfo::WriteIconData(COutputStream& out) {
 
 void CMemoryCardSys::CCardFileInfo::BuildCardBuffer() {
   const uint bannerSize = CalculateBannerDataSize();
+  if (PortSaveFormat::IsPal()) {
+    // Sector 0: [crc][comment][banner][icons]. Sectors 1 and 2: [crc][seq][payload],
+    // two identical copies (seq 0) of the save body.
+    const uint sector = PortSaveFormat::kPalSectorSize;
+    const uint payloadMax = sector - PortSaveFormat::kPalPayloadOffset;
+    const uint bodySize = xf4_saveBuffer.size() < payloadMax ? xf4_saveBuffer.size() : payloadMax;
+    x104_cardBuffer.assign(PortSaveFormat::kPalFileSize);
+    uchar* data = x104_cardBuffer.data();
+    memset(data, 0, PortSaveFormat::kPalFileSize);
+    {
+      CMemoryStreamOut out(data, sector);
+      out.WriteInt32(0);
+      char comment[64];
+      strncpy(comment, x28_comment.data(), sizeof(comment));
+      out.Put(comment, sizeof(comment));
+      WriteBannerData(out);
+      WriteIconData(out);
+    }
+    for (int i = 1; i <= 2; ++i) {
+      (memcpy)(data + i * sector + PortSaveFormat::kPalPayloadOffset, xf4_saveBuffer.data(),
+               bodySize);
+    }
+    for (int i = 0; i < 3; ++i) {
+      uchar* sec = data + i * sector;
+      const uint crc = CBasics::SwapBytes(CCRC32::Calculate(sec + 4, sector - 4));
+      memcpy(sec, &crc, sizeof(crc));
+    }
+    xf4_saveBuffer = rstl::vector< uchar >();
+    return;
+  }
   const uint totalSize = (bannerSize + xf4_saveBuffer.size() + 8191) & ~8191;
   x104_cardBuffer.assign(totalSize);
   void* data = x104_cardBuffer.data();
@@ -172,6 +259,9 @@ void CMemoryCardSys::CCardFileInfo::BuildCardBuffer() {
 }
 
 uint CMemoryCardSys::CCardFileInfo::CalculateTotalDataSize() {
+  if (PortSaveFormat::IsPal()) {
+    return PortSaveFormat::kPalFileSize;
+  }
   const uint saveSize = xf4_saveBuffer.size();
   uint totalSize = CalculateBannerDataSize();
   totalSize += saveSize;
@@ -282,6 +372,7 @@ void CMemoryCardSys::Initialize() {
     // PAL, whose card aurora keeps under EUR).
     CARDInit(PortGci::GameCode(), "01");
     mIsInitialized = true;
+    MigrateLegacyPalSave();
   }
 }
 
@@ -300,6 +391,8 @@ bool CMemoryCardSys::PortSwitchCard(const char* directory) {
   sCardBase = target;
   PortLog::Write("memory card: switched to %s%s\n", target.c_str(),
                  mounted ? "" : " (no card could be mounted there)");
+  if (mounted)
+    MigrateLegacyPalSave();
   return true;
 }
 

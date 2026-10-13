@@ -9,11 +9,18 @@
 #include "Kyoto/TToken.hpp"
 #include "MetroidPrime/CMemoryCard.hpp"
 #include "MetroidPrime/CMain.hpp"
+#include "MetroidPrime/PortSaveFormat.hpp"
 #include "MetroidPrime/CWorldSaveGameInfo.hpp"
 #include "MetroidPrime/Tweaks/CTweakGame.hpp"
 #include "rstl/algorithm.hpp"
 #include "rstl/math.hpp"
 #include "dolphin/os.h"
+
+#ifdef TARGET_PC
+#include "port_debug.h"
+
+#include <cstring>
+#endif
 
 union SGameTime {
   double value;
@@ -44,6 +51,23 @@ static int CapCinematicBits(int count) {
   }
   return count > maxBits ? maxBits : count;
 }
+
+// PAL's system options keep the selected language (0x803c3788: ENGL GERM FREN
+// SPAN ITAL DUTC JAPN), which the PAL game applies at boot. Write the port's
+// text language so the save opens in it on a GameCube or Dolphin. The PAL disc
+// has no Dutch text (its GetLanguage maps Dutch to English), so Dutch is 0.
+static int PalSaveLanguage() {
+  const char* code = PortDebug::TextLanguage();
+  if (strcmp(code, "EUGE") == 0)
+    return 1;
+  if (strcmp(code, "EUFR") == 0 || strcmp(code, "USFR") == 0)
+    return 2;
+  if (strcmp(code, "EUSP") == 0 || strcmp(code, "USSP") == 0)
+    return 3;
+  if (strcmp(code, "EUIT") == 0)
+    return 4;
+  return 0;
+}
 #endif
 
 CSystemState::CSystemState() : x0_nesState(static_cast< uchar >(0))
@@ -58,7 +82,13 @@ CSystemState::CSystemState() : x0_nesState(static_cast< uchar >(0))
 , xd0_26_hardModeBeat(false)
 , xd0_27_fusionBeat(false)
 , xd0_28_fusionSuitActive(false)
-, xd0_29_allItemsCollected(false) {}
+#ifdef TARGET_PC
+, xd0_29_allItemsCollected(false)
+, xd1_palField(0) {
+#else
+, xd0_29_allItemsCollected(false) {
+#endif
+}
 
 CSystemState::CSystemState(CInputStream& in) : x0_nesState(static_cast< uchar >(0))
 , x68_(static_cast< uchar >(0))
@@ -72,8 +102,20 @@ CSystemState::CSystemState(CInputStream& in) : x0_nesState(static_cast< uchar >(
 , xd0_26_hardModeBeat(false)
 , xd0_27_fusionBeat(false)
 , xd0_28_fusionSuitActive(false)
+#ifdef TARGET_PC
+, xd0_29_allItemsCollected(false)
+, xd1_palField(0) {
+#else
 , xd0_29_allItemsCollected(false) {
-  for (int i = 0; i < 98; ++i)
+#endif
+#ifdef TARGET_PC
+  // PAL keeps an 18-byte NES state where USA has 98.
+  const bool pal = PortSaveFormat::IsPal();
+  const int nesBytes = pal ? 18 : 98;
+#else
+  const int nesBytes = 98;
+#endif
+  for (int i = 0; i < nesBytes; ++i)
     x0_nesState[i] = in.ReadBits(8);
   for (int i = 0; i < 64; ++i)
     x68_[i] = in.ReadBits(8);
@@ -87,6 +129,10 @@ CSystemState::CSystemState(CInputStream& in) : x0_nesState(static_cast< uchar >(
   xd0_27_fusionBeat = in.ReadBits(1) != 0;
   xd0_29_allItemsCollected = in.ReadBits(1) != 0;
   xbc_autoMapperKeyState = in.ReadBits(2);
+#ifdef TARGET_PC
+  if (pal)
+    xd1_palField = in.ReadBits(GetBitCount(7));
+#endif
 
   const rstl::vector< CMemoryCard::MemoryWorld >& worlds = gpMemoryCard->GetMemoryWorlds();
   int cinematicCount = 0;
@@ -97,7 +143,7 @@ CSystemState::CSystemState(CInputStream& in) : x0_nesState(static_cast< uchar >(
   }
   rstl::vector< bool > cinematicStates(cinematicCount, false);
 #ifdef TARGET_PC
-  const int storedCount = CapCinematicBits(cinematicCount);
+  const int storedCount = pal ? cinematicCount : CapCinematicBits(cinematicCount);
 #else
   const int storedCount = cinematicCount;
 #endif
@@ -119,7 +165,13 @@ CSystemState::CSystemState(CInputStream& in) : x0_nesState(static_cast< uchar >(
 }
 
 void CSystemState::PutTo(COutputStream& out) {
-  for (int i = 0; i < 98; ++i)
+#ifdef TARGET_PC
+  const bool pal = PortSaveFormat::IsPal();
+  const int nesBytes = pal ? 18 : 98;
+#else
+  const int nesBytes = 98;
+#endif
+  for (int i = 0; i < nesBytes; ++i)
     out.WriteBits(x0_nesState[i], 8);
   for (int i = 0; i < 64; ++i)
     out.WriteBits(x68_[i], 8);
@@ -133,6 +185,10 @@ void CSystemState::PutTo(COutputStream& out) {
   out.WriteBits(xd0_27_fusionBeat ? 1 : 0, 1);
   out.WriteBits(xd0_29_allItemsCollected ? 1 : 0, 1);
   out.WriteBits(xbc_autoMapperKeyState, 2);
+#ifdef TARGET_PC
+  if (pal)
+    out.WriteBits(PalSaveLanguage(), GetBitCount(7));
+#endif
   const rstl::vector< CMemoryCard::MemoryWorld >& worlds = gpMemoryCard->GetMemoryWorlds();
   int cinematicCount = 0;
   for (AUTO(it, worlds.begin()); it != worlds.end(); ++it) {
@@ -152,7 +208,8 @@ void CSystemState::PutTo(COutputStream& out) {
           rstl::pair< CAssetId, TEditorId >(worldId, world.GetCinematics()[i])));
   }
 #ifdef TARGET_PC
-  cinematicCount = CapCinematicBits(cinematicCount);
+  if (!pal)
+    cinematicCount = CapCinematicBits(cinematicCount);
 #endif
   for (int i = 0; i < cinematicCount; ++i)
     out.WriteBits(cinematicStates[i] ? 1 : 0, 1);
@@ -459,8 +516,13 @@ void CGameState::ExportPersistentOptions(CSystemState& options) {
 }
 
 void CGameState::WriteBackupBuf() {
-  x218_backupBuf.assign(940);
-  CMemoryStreamOut out(x218_backupBuf.data(), 940);
+#ifdef TARGET_PC
+  const int slotBytes = PortSaveFormat::SlotBytes();
+#else
+  const int slotBytes = 940;
+#endif
+  x218_backupBuf.assign(slotBytes);
+  CMemoryStreamOut out(x218_backupBuf.data(), slotBytes);
   PutTo(out);
 }
 

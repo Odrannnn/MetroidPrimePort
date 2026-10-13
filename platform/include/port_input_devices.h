@@ -86,9 +86,15 @@ void BuildBaseProfile(PortInput::Profile& out);
 // The profile the saved controls describe, with the user's bindings on top
 // (exposed for tests and the remap UI).
 void BuildProfile(PortInput::Profile& out);
-// While a menu or the map is open and "Standard buttons in menus" applies to port
-// 0's pad: the mapping its A/B/X/Y/L/R/D-pad follow there (for the prompts).
-bool MenuButtonMapping(PADDefaultMapping& out);
+// For the button prompts: the single input of the last polled profile (user
+// bindings, and the "Menus and map" rows in menus and the map while "Separate
+// menu buttons" applies) that presses a PAD button or pushes a PAD axis from
+// `family`, preferring one that applies in the current context. False when none.
+bool PromptButtonInput(unsigned padButton, PortInput::Family family, PortInput::Input& out);
+bool PromptAxisInput(PADAxis axis, PortInput::Family family, PortInput::Input& out);
+// A pad input as the native button the prompts name (an SDL_GamepadButton or
+// PAD_NATIVE_BUTTON_TRIGGER_*), or PAD_NATIVE_BUTTON_INVALID.
+u32 PromptNativeButton(const PortInput::Input& in);
 // The PAD status an engine output describes, as Aurora's own mapping would.
 PADStatus Synthesize(const PortInput::Output& out);
 

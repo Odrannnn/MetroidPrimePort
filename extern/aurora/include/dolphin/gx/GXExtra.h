@@ -230,6 +230,14 @@ void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3],
 // alpha fades the draws: their alpha is multiplied by it, or is it where alphaReplaces is set
 // (an opaque material drawn blended, whose own alpha means nothing). 1 and GX_FALSE are neutral.
 void GXSetPBRLightScale(f32 diffuse, f32 f0, f32 alpha, GXBool alphaReplaces);
+// Aurora extension: the model colours of the following PBR draws, as full vectors: the diffuse
+// modulation (r, g, b, a), the incandescence (r, g, b, a) and the coverage, a scalar kept apart
+// from the diffuse alpha. Stays in effect until changed. They reach the PBR uniforms
+// (pbr_model_diffuse, pbr_model_incan, pbr_model_coverage); only the pause visor's kinds 36 and
+// 37 read them.
+// Null `diffuse` is (1, 1, 1, 1), null `incan` is (0, 0, 0, 1), each independently; 1 is the
+// neutral coverage.
+void GXSetPBRModelModulation(const f32 diffuse[4], const f32 incan[4], f32 coverage);
 
 // Aurora extension: Remastered's bloom over what the EFB holds now (see lib/gfx/bloom.cpp).
 // The EFB is taken as drawn through the tone curve `tone` (as GXSetPBRTone); light above
@@ -300,9 +308,10 @@ void GXPortColorGradeLut(u32 id, const u8* rgba);
 // The average radiance (linear rgb) of the latest frame measured by GXPortPostProcess, and a
 // count that goes up with each new one. False before the first.
 GXBool GXPortFrameRadiance(f32 out[3], u32* serial);
-// The sun's shadow. Each frame, GXPortSetShadowFrame gives the view (world -> view rows), the sun's
-// direction (world, the way its light travels), the radius around the camera its map covers (<= 0:
-// none) and an extra light's colour (0 for none: the sun then only shadows the room's directional
+// The sun's shadow. Each frame, GXPortSetShadowFrame gives the view (world -> view rows), the camera's
+// frustum (left, right, top, bottom on the near plane, near, far), the sun's direction (world, the
+// way its light travels), how far from the camera its cascades reach (<= 0: none) and an extra
+// light's colour (0 for none: the sun then only shadows the room's directional
 // light along that direction). Lit PBR draws made with GXPortSetShadowCaster on cast into the map
 // and receive the previous frame's; GXPortRenderShadowMap draws the map after the frame's casters.
 // GXPortSetShadowCasterOnly makes the following draws (with the caster on) cast but not draw, for
@@ -310,11 +319,12 @@ GXBool GXPortFrameRadiance(f32 out[3], u32* serial);
 // the last GXPortSetShadowFrame (the FIFO's, so a frame behind the game thread).
 void GXPortSetShadowCaster(GXBool on);
 void GXPortSetShadowCasterOnly(GXBool on);
-void GXPortSetShadowFrame(const f32 worldToView[3][4], const f32 sunDir[3], f32 radius, const f32 color[3]);
+void GXPortSetShadowFrame(const f32 worldToView[3][4], const f32 frustum[6], const f32 sunDir[3], f32 distance,
+                          const f32 color[3]);
 GXBool GXPortShadowBoxCasts(const f32 min[3], const f32 max[3]);
-// For the console: the last frame's sun direction, colour, radius (0: no map) and the map's centre
-// in world space, and how many draws the last map drawn had.
-void GXPortGetShadowInfo(f32 sunDir[3], f32 color[3], f32* radius, f32 center[3], u32* casters);
+// For the console: the last frame's sun direction, colour, shadow distance (0: no map) and the
+// centre of its last cascade in world space, and how many draws the last map drawn had.
+void GXPortGetShadowInfo(f32 sunDir[3], f32 color[3], f32* distance, f32 center[3], u32* casters);
 GXBool GXPortRenderShadowMap(void);
 // The room's Remastered point and spot lights for the rest of the frame, added on every PBR draw
 // (lit, lightmapped or not) as the sun is. Each record is 16 f32: view-space position, A; colour

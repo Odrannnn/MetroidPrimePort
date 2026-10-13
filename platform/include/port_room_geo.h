@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -83,9 +84,16 @@ class CVector3f;
 // area's .roomenv holds the lightmap itself):
 //   'LMAP', u32 count (the instances'), per instance: f32 offU, offV, scale
 // A model's atlas UV is (offU + u * scale, offV + v * scale) for its UV0 (u, v), as Remastered
-// takes it from the instance's vec4(offU, offV, scale, 0). Scale 0: the instance has none.
+// takes it from the instance's vec4(offU, offV, scale, 0). Scale 0 with an offset is one texel
+// for the whole model (Remastered's props: 17,969 of its MCON instances); all three 0: none.
 // The section is left out when no instance has a lookup.
 namespace PortRoomGeo {
+
+// Whether (offU, offV, scale) is a lookup into the room's lightmap (see above).
+inline bool HasLightmapLookup(const float lookup[3]) {
+  return std::isfinite(lookup[0]) && std::isfinite(lookup[1]) && std::isfinite(lookup[2]) && lookup[2] >= 0.f &&
+         (lookup[0] != 0.f || lookup[1] != 0.f || lookup[2] != 0.f);
+}
 
 enum : uint8_t { kEveryLayer = 0xff };
 enum : uint32_t { kNoGroup = 0xffffffff };
@@ -126,7 +134,7 @@ struct Instance {
   bool animOnShow = false;
   bool sky = false; // the room's sky (version 6), drawn in place of the world's
   float skyRadiance[3] = {}; // version 7; 0: not known
-  float lightmap[3] = {};    // version 10: offU, offV, scale into the room's lightmap; scale 0: none
+  float lightmap[3] = {};    // version 10: offU, offV, scale into the room's lightmap; all 0: none
 };
 
 // Remastered's script objects between what happens in game and a group of instances.

@@ -69,18 +69,26 @@ public:
   // past `outer` it slides by the whole spread. False unless that spread is active.
   // `curved` is the smooth variant for the helmet's arcs: a wider band with an eased stretch.
   bool GetAspectSlices(float& inner, float& outer, bool curved = false) const;
-  // How far that warp moves the image at screen tangent `tangent`, for a warp centred on screen
-  // tangent `center` (GetSliceCenter).
-  float GetAspectSliceOffset(float tangent, bool curved = false, float center = 0.f) const;
+  // How far that warp moves the image at authored (unlagged) screen tangent `tangent`.
+  float GetAspectSliceOffset(float tangent, bool curved = false) const;
   // HUD lag moves the frame's content on screen. `idleToView` maps the frame's view space without
-  // lag onto the one drawn (identity at rest), so the warp's slices follow the content instead of
-  // staying put while it moves through them.
-  void SetSpreadLag(const CTransform4f& idleToView) { mSpreadLag = idleToView; }
+  // lag onto the one drawn (identity at rest). The warp is applied in the unlagged space and then
+  // carried through the lag, so the content keeps its shape while it lags: warping lagged screen
+  // tangents instead made the lag's perspective (it is mostly a turn) slide content through the
+  // stretch band, which a wide band (thermal, X-ray) amplified into visible swimming.
+  void SetSpreadLag(const CTransform4f& idleToView) {
+    mSpreadLag = idleToView;
+    mSpreadLagInv = idleToView.GetInverse();
+  }
   // Places a HUD camera at `xf` (CSamusHud::BuildFinalCameraTransform) whose unlagged pose is
   // unrotated at `idlePos`, and sets the spread lag to match.
   void SetHudO2WTransform(const CTransform4f& xf, const CVector3f& idlePos);
-  // Where the lagged content's screen centre is, as a screen tangent at view depth `depth`.
-  float GetSliceCenter(float depth) const;
+  // The drawn screen tangent of unlagged screen tangent `tangent` at view depth `depth` (on the
+  // horizon), i.e. where the lag puts it.
+  float GetLaggedTangent(float tangent, float depth) const;
+  // How far the warp moves the image at view-space point `eye`, as a drawn screen tangent: the
+  // point is taken back through the lag, warped there, and lagged again.
+  float GetLaggedSliceOffset(const CVector3f& eye, bool curved = false) const;
   // Where the curved warp's band ends, as a fraction of the authored half width.
   static constexpr float kCurveOuter = 0.85f;
   // A frame whose centre piece is wider than the combat HUD's energy bar (the thermal and X-ray
@@ -129,6 +137,7 @@ public:
   float mSliceInner = 0.f;
   float mSliceOuter = 0.f;
   CTransform4f mSpreadLag = CTransform4f::Identity();
+  CTransform4f mSpreadLagInv = CTransform4f::Identity();
   // Camera-to-world transform used by the last Draw.
   mutable CTransform4f mSpreadView = CTransform4f::Identity();
   bool mHudScaled = false;

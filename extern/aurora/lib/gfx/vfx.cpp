@@ -380,6 +380,7 @@ fn fs_main(in: VOut) -> @location(0) vec4f {
     alpha = clamp(a * hdr, 0.0, 1.0);
     col = tone(rgb * (a / alpha));
   }
+  // BLEND 5 (AdditiveOne) takes no alpha compensation above and no fog below, as Additive; its tone is unchanged.
   // Remastered sets a no-fog bit for every particle blend but alpha and opaque
   // (SetupFogFromBlendMode), so additive and premultiplied draws are not fogged at all.
   if (BLEND == 0u || BLEND == 3u) {
@@ -447,8 +448,12 @@ uint32_t block_size(wgpu::TextureFormat format) {
   }
 }
 
+} // namespace
+
 // The PBDM factors (RESOLVED-state.md Q1): alpha (SrcAlpha, 1-SrcAlpha | One, 1-SrcAlpha), premultiplied
 // (One, 1-SrcAlpha | Zero, One), additive (SrcAlpha, One | Zero, One), opaque (One, Zero for both).
+// AdditiveOne (port-only, the wave orb's model blend) is (One, One | Zero, One). Not in the anonymous namespace:
+// the unit tests call it.
 wgpu::BlendState blend_state(Blend blend) {
   wgpu::BlendComponent c{.operation = wgpu::BlendOperation::Add};
   wgpu::BlendComponent a{.operation = wgpu::BlendOperation::Add};
@@ -471,6 +476,12 @@ wgpu::BlendState blend_state(Blend blend) {
     a.srcFactor = wgpu::BlendFactor::Zero;
     a.dstFactor = wgpu::BlendFactor::One;
     break;
+  case Blend::AdditiveOne:
+    c.srcFactor = wgpu::BlendFactor::One;
+    c.dstFactor = wgpu::BlendFactor::One;
+    a.srcFactor = wgpu::BlendFactor::Zero;
+    a.dstFactor = wgpu::BlendFactor::One;
+    break;
   case Blend::Opaque:
     c.srcFactor = a.srcFactor = wgpu::BlendFactor::One;
     c.dstFactor = a.dstFactor = wgpu::BlendFactor::Zero;
@@ -484,6 +495,8 @@ wgpu::BlendState blend_state(Blend blend) {
   }
   return {.color = c, .alpha = a};
 }
+
+namespace {
 
 // Pool threads of the pipeline cache create pipelines too.
 std::mutex g_staticMutex;

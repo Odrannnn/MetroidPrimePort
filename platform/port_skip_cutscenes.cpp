@@ -1,10 +1,12 @@
 #include "port_skip_cutscenes.h"
+#include "port_skip_streams.h"
 
 #include "port_apclient.h"
 #include "port_debug.h"
 #include "port_disc.h"
 #include "port_log.h"
 #include "port_randomizer.h"
+#include "port_revision_scripts.h"
 
 #include <algorithm>
 
@@ -16,8 +18,6 @@ struct SkipRoom {
   uint32_t offset;
   uint32_t size;
 };
-
-#include "port_skip_cutscenes_data.inc"
 
 using PickupRoom = SkipRoom;
 struct PickupModelEntry {
@@ -128,20 +128,6 @@ std::vector< uint8_t > TempleOps() {
   return std::move(w.ops);
 }
 
-const uint32_t kGeothermalCore = 0xC0498676;
-
-// PAL's Geothermal Core puts a Power Bomb rock and a door blocker in front of
-// Plasma Processing, which USA 1.00 (and so the randomizer logic, built from
-// USA) reaches without Power Bombs. Drop the rock's whole set (generator,
-// debris, effect, rumble, memory relay, scan point, blocker), so a PAL disc
-// plays this room as the USA one; the missile drops added next to it stay.
-std::vector< uint8_t > GeothermalCorePalOps() {
-  OpWriter w;
-  for (uint32_t id = 0x001403AA; id <= 0x001403B5; ++id)
-    w.remove(id);
-  return std::move(w.ops);
-}
-
 bool PatchScripts(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out);
 
 } // namespace
@@ -154,15 +140,21 @@ bool PatchArea(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< u
   out.clear();
   if (Active())
     PatchScripts(mreaId, scly, size, out);
-  if (mreaId == kGeothermalCore && PortDisc::Current() == PortDisc::Version::Pal) {
-    const std::vector< uint8_t > ops = GeothermalCorePalOps();
+  // Revision compatibility (USA 1.00 behaviour on later discs), after the
+  // patches above. Randomized games always want it; otherwise it's the
+  // setting. A miss keeps what the patches above made.
+  if (PortDebug::Revision100Compatibility() || Forced()) {
+    const PortDisc::Version version = PortDisc::Current();
     const bool patched = !out.empty();
     std::vector< uint8_t > fixed;
-    if (ApplyOps(patched ? out.data() : scly, patched ? out.size() : size, ops.data(), ops.size(),
-                 fixed) == 0)
+    int misses = 0;
+    const PortRevisionScripts::Result result = PortRevisionScripts::Apply(
+        version, mreaId, patched ? out.data() : scly, patched ? out.size() : size, fixed, &misses);
+    if (result == PortRevisionScripts::Result::Patched)
       out.swap(fixed);
-    else
-      PortLog::Write("PAL: Geothermal Core Power Bomb rock doesn't match, left as is\n");
+    else if (result == PortRevisionScripts::Result::Missed)
+      PortLog::Write("revision scripts: %s (room %08X) doesn't match (%d), left as is\n",
+                     PortRevisionScripts::Describe(version, mreaId), mreaId, misses);
   }
   return !out.empty();
 }
@@ -170,22 +162,11 @@ bool PatchArea(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< u
 namespace {
 
 bool PatchScripts(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out) {
-  // PAL lays some rooms out differently: its own streams, where the USA one
-  // doesn't do the same there.
-  const SkipRoom* room = nullptr;
-  const uint8_t* skipOps = kSkipOps;
-  if (PortDisc::Current() == PortDisc::Version::Pal) {
-    room = FindRoom(kSkipRoomsPal, kSkipRoomsPal + sizeof(kSkipRoomsPal) / sizeof(kSkipRoomsPal[0]),
-                    mreaId);
-    skipOps = kSkipOpsPal;
-  }
-  if (room == nullptr) {
-    room = FindRoom(kSkipRooms, kSkipRooms + sizeof(kSkipRooms) / sizeof(kSkipRooms[0]), mreaId);
-    skipOps = kSkipOps;
-  }
+  SkipStream stream;
+  const bool hasSkip = SkipStreamFor(PortDisc::Current(), mreaId, stream);
   bool skipped = false;
-  if (room != nullptr) {
-    const int misses = ApplyOps(scly, size, skipOps + room->offset, room->size, out);
+  if (hasSkip) {
+    const int misses = ApplyOps(scly, size, stream.ops, stream.size, out);
     if (misses != 0) {
       // A mod replaced the room, or the disc isn't one the streams were made
       // from: the patch could leave the script half-edited, so keep the room
@@ -210,7 +191,8 @@ bool PatchScripts(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector
     // Archipelago games start with Samus already out of the ship, as
     // randomprime's patch_landing_site_cutscene_triggers does.
     std::vector< uint8_t > landed;
-    if (ApplyOps(out.data(), out.size(), kLandingOps, sizeof(kLandingOps), landed) == 0)
+    const SkipStream landing = LandingStream();
+    if (ApplyOps(out.data(), out.size(), landing.ops, landing.size, landed) == 0)
       out.swap(landed);
     else
       PortLog::Write("skippable cutscenes: Landing Site intro skip doesn't match, left as is\n");

@@ -53,6 +53,8 @@ TUniqueId sCameraSnapshotId = kInvalidUniqueId;
 uint sCameraSnapshotGeneration = 0;
 CTransform4f sPreviousCameraTransform = CTransform4f::Identity();
 CTransform4f sCurrentCameraTransform = CTransform4f::Identity();
+// Squared translation of the current camera over the last tick.
+float sCameraLastStep2 = 0.f;
 float sPresentationInterpolation = -1.f;
 
 CTransform4f InterpolateCameraTransform(const CTransform4f& previous,
@@ -365,11 +367,17 @@ void CCameraManager::Update(float dt, CStateManager& mgr) {
       GetCurrentCamera(mgr).GetTransform() * CTransform4f::Translate(x30_shakeOffset);
   const CQuaternion previousRotation = CQuaternion::FromMatrix(previousTransform);
   const CQuaternion currentRotation = CQuaternion::FromMatrix(currentTransform);
+  const float step2 =
+      (currentTransform.GetTranslation() - previousTransform.GetTranslation()).MagSquared();
+  const bool sameCamera = sCameraSnapshotOwner == this && previousId == currentId;
+  // A fast chase camera (Meta Ridley's fly-in, issue #99) moves over 4 units a
+  // tick; only a jump well past the last tick's step is a cut.
   const bool discontinuity =
-      (currentTransform.GetTranslation() - previousTransform.GetTranslation()).MagSquared() > 16.f ||
+      PortIsTeleport(step2, sameCamera ? sCameraLastStep2 : 0.f) ||
       (!mgr.GetPlayer()->MouseLookIsFree(mgr) &&
        fabsf(CQuaternion::Dot(previousRotation, currentRotation)) < 0.9238795f);
-  if (sCameraSnapshotOwner != this || previousId != currentId || discontinuity) {
+  sCameraLastStep2 = sameCamera ? step2 : 0.f;
+  if (!sameCamera || discontinuity) {
     sPreviousCameraTransform = currentTransform;
   } else {
     sPreviousCameraTransform = previousTransform;

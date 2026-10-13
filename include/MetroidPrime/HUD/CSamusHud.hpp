@@ -61,7 +61,7 @@ public:
 #ifdef TARGET_PC
   // Smooth frames: true poses the HUD lag/bob at the presented time, false
   // puts the last tick's back.
-  void PortPresentHudLag(bool present) const;
+  void PortPresentHudLag(bool present, bool mouseLookFree = false) const;
 #endif
   void ProcessControllerInput(const CFinalInput& input);
   void UpdateStateTransition(float dt, const CStateManager& mgr);

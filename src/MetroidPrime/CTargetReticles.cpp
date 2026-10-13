@@ -1343,6 +1343,14 @@ float CCompoundTargetReticle::CalculateClampedScale(CVector3f pos, float scale, 
                                                     float clampMax, const CStateManager& mgr) {
   const CGameCamera& cam = mgr.GetCameraManager()->GetCurrentCamera(mgr);
   CTransform4f camXf = mgr.GetCameraManager()->GetCurrentCameraTransform(mgr);
+#ifdef TARGET_PC
+  // Draws pass points placed for the presented camera (PortPresentGroup), but
+  // the scale is measured against the tick's camera. Between ticks the two are
+  // up to a step apart, so walking forward or back pulsed the clamped size of
+  // the X-ray ring and thermal reticle at every sim step (issue #97). Measure
+  // the point where it sits relative to the drawn camera.
+  pos = mgr.GetCameraManager()->GetSimulationCameraTransform(mgr) * camXf.GetInverse() * pos;
+#endif
   CVector3f viewSpace = cam.GetTransform().TransposeMultiply(pos);
   float projX1 = cam.GetPerspectiveMatrix().MultiplyOneOverW(viewSpace).GetX();
   float pixelScale =

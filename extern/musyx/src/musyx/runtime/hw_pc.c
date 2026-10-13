@@ -359,7 +359,9 @@ static void updateCurrentAddr(DSPvoice* vp, u32 srcPosHi) {
 #if MUSY_VERSION >= MUSY_VERSION_CHECK(2, 0, 2)
   case 6:
 #endif
-    vp->currentAddr = (u32)((uintptr_t)smp->addr / 2 + srcPosHi);
+    /* Truncate before halving, as hwGetPos does ((u32)addr / 2); halving the
+       64-bit pointer differs when bit 32 is set (high heaps, e.g. Android). */
+    vp->currentAddr = (u32)(uintptr_t)smp->addr / 2 + srcPosHi;
     break;
   case 3:
     vp->currentAddr = (u32)((uintptr_t)smp->addr + srcPosHi);
