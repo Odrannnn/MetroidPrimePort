@@ -505,6 +505,26 @@ void DrawVideoCompatibility() {
     }
   }
   {
+    bool software = sSoftwareRendering;
+    if (ImGui::Checkbox("Software rendering (next start only, very slow)", &software)) {
+      sSoftwareRendering = software;
+      MarkDirty();
+    }
+    ImGui::SetItemTooltip("Draws the next start on the CPU (WARP on Windows) instead of the GPU, at a few frames a\n"
+                          "second. If a problem is gone there, it is the GPU driver's; if it is still there, it is\n"
+                          "the port's. Run the GPU self-test while on it. The start after that uses the GPU again.");
+    if (aurora_software_adapter()) {
+      ImGui::SameLine();
+      ImGui::TextColored(ThemeWarnColor(), "On this run");
+    } else if (sSoftwareRenderingThisRun) {
+      ImGui::SameLine();
+      ImGui::TextColored(ThemeWarnColor(), "No software renderer started; using the GPU");
+    } else if (sSoftwareRendering) {
+      ImGui::SameLine();
+      ImGui::TextColored(ThemeWarnColor(), "Restart to apply");
+    }
+  }
+  {
     const int ticked = std::popcount(sDriverWorkarounds);
     char header[64];
     std::snprintf(header, sizeof(header), ticked > 0 ? "Driver workarounds (%d on)###driver-workarounds"

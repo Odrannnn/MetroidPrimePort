@@ -842,6 +842,23 @@ void BeginDriverWorkarounds(const std::string& userFolder, std::string& enable, 
   }
 }
 
+bool BeginSoftwareRendering() {
+  EnsureInitialized();
+  if (std::getenv("MP_SOFTWARE_RENDERING") != nullptr) {
+    sSoftwareRenderingThisRun = port::EnvFlag("MP_SOFTWARE_RENDERING");
+  } else {
+    sSoftwareRenderingThisRun = sSoftwareRendering;
+    if (sSoftwareRendering) {
+      sSoftwareRendering = false;
+      MarkDirty();
+    }
+  }
+  if (sSoftwareRenderingThisRun) {
+    PortLog::Write("port: software rendering asked for this run (very slow); the next start uses the GPU again\n");
+  }
+  return sSoftwareRenderingThisRun;
+}
+
 void DriverWorkaroundsStarted() {
   if (!sDriverWorkaroundsMarker.empty()) {
     std::error_code ec;

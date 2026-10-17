@@ -93,6 +93,11 @@ typedef struct {
   bool pauseOnFocusLost;
   bool allowTextureDumps;
   bool allowCpuAdapter;
+  /*
+   * Start on the backend's software adapter (WARP on Windows, a CPU Vulkan driver elsewhere), to
+   * tell a GPU driver bug from the application's own. When no backend has one, the GPU is used.
+   */
+  bool forceSoftwareAdapter;
   int32_t windowPosX;
   int32_t windowPosY;
   uint32_t windowWidth;
@@ -222,6 +227,8 @@ AuroraBackend aurora_get_backend();
 const char* aurora_get_gpu_driver();
 // True when AuroraConfig::vulkanLibraryDir's Vulkan library failed and the system's was tried instead.
 bool aurora_vulkan_library_failed();
+// True when the device runs on a software (CPU) adapter, such as WARP.
+bool aurora_software_adapter();
 const AuroraBackend* aurora_get_available_backends(size_t* count);
 float aurora_get_timescale();
 

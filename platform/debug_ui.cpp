@@ -327,6 +327,11 @@ unsigned sDriverWorkaroundsAtStart = 0;
 // What BeginDriverWorkarounds did at start, for the F1 section: error checks on this run,
 // MP_DRIVER_WORKAROUNDS overriding the boxes, or the boxes cleared after a start that failed.
 bool sDriverChecksThisRun = false;
+// Setting `software_rendering`: start once on the software renderer (WARP on Windows) to tell a
+// GPU driver bug from the port's own (issue #143). Unticked as a start applies it, like the error
+// checks; MP_SOFTWARE_RENDERING=1/0 decides one run instead. ThisRun is what this start asked for.
+bool sSoftwareRendering = false;
+bool sSoftwareRenderingThisRun = false;
 const char* sDriverWorkaroundsEnv = nullptr;
 bool sDriverWorkaroundsCleared = false;
 

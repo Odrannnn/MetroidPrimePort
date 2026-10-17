@@ -42,6 +42,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <vector>
 
 #include "system_info.hpp"
 #include "tracy/Tracy.hpp"
@@ -262,7 +263,35 @@ AuroraInfo initialize(int argc, char* argv[], const AuroraConfig& config) noexce
   /* Attempt to create a window using the calling application's desired backend */
   AuroraBackend selectedBackend = config.desiredBackend;
   bool windowCreated = false;
-  if (selectedBackend != BACKEND_AUTO && window::create_window(selectedBackend)) {
+  if (g_config.forceSoftwareAdapter) {
+    // Every backend's software adapter in the usual order (the desired one first); none at all
+    // falls through to the GPU below rather than to no picture.
+    std::vector<AuroraBackend> order;
+    if (selectedBackend != BACKEND_AUTO) {
+      order.push_back(selectedBackend);
+    }
+    for (const auto backendType : PreferredBackendOrder) {
+      if (backendType != BACKEND_NULL && backendType != selectedBackend) {
+        order.push_back(backendType);
+      }
+    }
+    for (const auto backendType : order) {
+      if (!window::create_window(backendType)) {
+        continue;
+      }
+      if (webgpu::initialize(backendType, true)) {
+        selectedBackend = backendType;
+        windowCreated = true;
+        break;
+      }
+      window::destroy_window();
+    }
+    if (!windowCreated) {
+      Log.warn("No software adapter could be started; using the GPU");
+      g_config.forceSoftwareAdapter = false;
+    }
+  }
+  if (!windowCreated && selectedBackend != BACKEND_AUTO && window::create_window(selectedBackend)) {
     if (webgpu::initialize(selectedBackend, config.allowCpuAdapter)) {
       windowCreated = true;
     } else {
@@ -712,6 +741,7 @@ const char* aurora_get_gpu_driver() {
   return driver.c_str();
 }
 bool aurora_vulkan_library_failed() { return aurora::webgpu::g_vulkanLibraryFailed; }
+bool aurora_software_adapter() { return aurora::webgpu::g_adapterInfo.adapterType == wgpu::AdapterType::CPU; }
 const AuroraBackend* aurora_get_available_backends(size_t* count) {
   if (count != nullptr) {
     *count = aurora::PreferredBackendOrder.size();

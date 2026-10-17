@@ -1062,6 +1062,8 @@ int main(int argc, char** argv) {
         .pauseOnFocusLost = false,
         .allowTextureDumps = dumpTextures,
         .allowCpuAdapter = false,
+        // Set below from Video > Compatibility > Software rendering.
+        .forceSoftwareAdapter = false,
         // Let SDL place the window. The default 0,0 is the client area's corner on
         // Windows, which puts the title bar above the top of the screen.
         .windowPosX = -1,
@@ -1196,6 +1198,7 @@ int main(int argc, char** argv) {
     static std::string dawnEnableToggles;
     static std::string dawnDisableToggles;
     PortDebug::BeginDriverWorkarounds(userFolder, dawnEnableToggles, dawnDisableToggles);
+    config.forceSoftwareAdapter = PortDebug::BeginSoftwareRendering();
     config.dawnEnableToggles = dawnEnableToggles.c_str();
     config.dawnDisableToggles = dawnDisableToggles.c_str();
     aurora_initialize(argc, argv, &config);
@@ -1216,6 +1219,9 @@ int main(int argc, char** argv) {
             PortDebug::SetGpuDriver("");
         }
         PortGpuDriver::SetLoadError("Vulkan failed to start with it; switched back to the system driver");
+    }
+    if (config.forceSoftwareAdapter && !aurora_software_adapter()) {
+        PortLog::Write("port: no software renderer could start; running on the GPU\n");
     }
     // The driver started: only a crash before this point reverts it.
     {

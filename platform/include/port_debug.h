@@ -407,6 +407,10 @@ void ApplyStorageClamp();
 void BeginDriverWorkarounds(const std::string& userFolder, std::string& enable, std::string& disable);
 // The game got through its first second of frames: the workarounds didn't break the start.
 void DriverWorkaroundsStarted();
+// Setting `software_rendering` (or MP_SOFTWARE_RENDERING): whether this start asks Aurora for the
+// software adapter (AuroraConfig::forceSoftwareAdapter). The setting lasts one start: it is
+// unticked here. Call once, before aurora_initialize.
+bool BeginSoftwareRendering();
 // Extras normally earned by finishing the game (or, for the Fusion Suit, by a
 // GBA link to Metroid Fusion). They only change what the title screen offers;
 // nothing is written into the save's persistent flags.

@@ -265,6 +265,8 @@ const SettingKey kSettingKeys[] = {
        sStorageClampAtStart = sStorageClamp;
      },
      [](std::ostream& out) { out << sStorageClamp; }, false, "-1", "1"},
+    {"software_rendering", [](const std::string& value) { sSoftwareRendering = ParseBool(value); },
+     [](std::ostream& out) { WriteBool(out, sSoftwareRendering); }, false, "1", "0"},
     {"driver_workarounds",
      [](const std::string& value) {
        sDriverWorkarounds = ParseDriverWorkarounds(value);

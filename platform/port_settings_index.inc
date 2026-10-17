@@ -156,6 +156,7 @@
 {"Video", "Compatibility", "Compatibility", "Install driver (.zip)...", "gpu driver zip install vulkan"},
 #endif
 {"Video", "Compatibility", "Compatibility", "Adreno shader fix", "adreno shader fix qualcomm android gpu"},
+{"Video", "Compatibility", "Compatibility", "Software rendering (next start only, very slow)", "software renderer warp cpu llvmpipe lavapipe driver bug test"},
 {"Video", "Compatibility", "Compatibility > Driver workarounds", "Keep depth buffers (Direct3D 11)", "driver workaround intel flicker depth discard d3d11"},
 {"Video", "Compatibility", "Compatibility > Driver workarounds", "Upload draw constants through the GPU (Direct3D 11)", "driver workaround intel flicker constants buffers d3d11"},
 {"Video", "Compatibility", "Compatibility > Driver workarounds", "Alternative GPU sync (Direct3D 11)", "driver workaround intel flicker fence sync d3d11"},

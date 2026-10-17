@@ -438,6 +438,16 @@
   setting is On or Off (and the variable is unset), the port sets
   `MP_STORAGE_CLAMP` itself before starting Aurora; the log's `port: env:` line
   then ends in `(from storage_clamp)`, so it isn't mistaken for a user's variable.
+- Software rendering (Video > Compatibility, persisted as `software_rendering`, default
+  off, issue #143): the next start asks Dawn for the backend's software adapter
+  (`forceFallbackAdapter`: WARP on Windows, a CPU Vulkan driver such as lavapipe
+  elsewhere) instead of the GPU, at a few frames a second. It tells a GPU driver bug
+  (gone on the software renderer) from the port's own (still there). It lasts one
+  start: the box is unticked as the start applies it, the log says `software rendering
+  asked for this run`, and the adapter block shows `Software adapter: forced`. With
+  no software adapter on any backend the start uses the GPU and logs `no software
+  renderer could start`. `MP_SOFTWARE_RENDERING=1` (or `0`) decides one run instead
+  and leaves the setting alone.
 - Driver workarounds (Video > Compatibility, a collapsed group, persisted as
   `driver_workarounds`: a comma-separated list of the ticked ones' names, empty by
   default, issue #143): opt-in Dawn toggles for a GPU that draws wrong, applied when

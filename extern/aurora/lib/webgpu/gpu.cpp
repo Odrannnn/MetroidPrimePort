@@ -1036,12 +1036,16 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
     const wgpu::RequestAdapterOptions options{
         .featureLevel = wgpu::FeatureLevel::Compatibility,
         .powerPreference = lowPower ? wgpu::PowerPreference::LowPower : wgpu::PowerPreference::HighPerformance,
+        .forceFallbackAdapter = g_config.forceSoftwareAdapter,
         .backendType = backend,
         .compatibleSurface = g_surface,
     };
-    Log.info("Requesting adapter\n  Feature level: {}\n  Power preference: {}\n  Backend: {}\n  Compatible surface: {}",
-             magic_enum::enum_name(options.featureLevel), magic_enum::enum_name(options.powerPreference),
-             magic_enum::enum_name(options.backendType), static_cast<bool>(options.compatibleSurface));
+    Log.info(
+        "Requesting adapter\n  Feature level: {}\n  Power preference: {}\n  Backend: {}\n  Compatible surface: {}"
+        "{}",
+        magic_enum::enum_name(options.featureLevel), magic_enum::enum_name(options.powerPreference),
+        magic_enum::enum_name(options.backendType), static_cast<bool>(options.compatibleSurface),
+        options.forceFallbackAdapter ? "\n  Software adapter: forced" : "");
     bool requestAdapterCallbackCompleted = false;
     wgpu::RequestAdapterStatus requestAdapterStatus = wgpu::RequestAdapterStatus::CallbackCancelled;
     std::string requestAdapterMessage;
