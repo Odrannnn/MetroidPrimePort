@@ -518,7 +518,18 @@ void DrawVideoCompatibility() {
     if (open) {
       ImGui::PushTextWrapPos(0.f);
       ImGui::TextDisabled("For a GPU that draws wrong, such as flickering or missing geometry. Tick one, "
-                          "restart, then run the GPU self-test below; leave them off otherwise.");
+                          "restart, then run the GPU self-test below; leave them off otherwise. If a start "
+                          "with them fails, the next start turns them off.");
+      if (sDriverWorkaroundsCleared) {
+        ImGui::TextColored(ThemeWarnColor(), "Turned off: the last start with them did not reach the game.");
+      }
+      if (sDriverWorkaroundsEnv != nullptr) {
+        ImGui::TextDisabled("MP_DRIVER_WORKAROUNDS=%s replaces these boxes this run.", sDriverWorkaroundsEnv);
+      }
+      if (sDriverChecksThisRun) {
+        ImGui::TextColored(ThemeWarnColor(), "Driver error checks are on this run (slower); the next start "
+                                             "turns them off.");
+      }
       ImGui::PopTextWrapPos();
       for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
         bool on = (sDriverWorkarounds & (1u << i)) != 0;

@@ -240,7 +240,12 @@ Every case goes draw -> EFB copy -> readback, so two more checks leave stages ou
 with a copy and copies it again (no draw). The readback buffer starts filled with `A5` bytes, so a block no copy
 reached says "nothing was copied back" instead of reading as black. When the failures point at one stage, a
 `diagnosis:` line names it: readback broken (the other results mean nothing), EFB copies broken, or draws not
-reaching the framebuffer.
+reaching the framebuffer. When everything passes, the diagnosis says so and what that leaves: the cases draw
+offscreen and never present, so a fault the player still sees is in presenting the frame (swapchain, present
+mode) or in drawing the cases don't cover. Tell the reporter that rather than "your GPU is fine".
+
+The count includes `readback` and `efb-clear-copy`, so it reads `x/12`; reports from before these checks
+(issue #143) read `x/10` with the same ten draw cases.
 A silent warm-up pass runs first so the async pipeline compiles finish, then the logged pass (a few frames later).
 Each case's own pipeline is waited for (a blocking lookup), so a draw is never skipped because its pipeline is
 still compiling: a FAIL means the draw happened and the device rendered it wrong. The wait can delay the call

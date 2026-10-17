@@ -1195,7 +1195,7 @@ int main(int argc, char** argv) {
     PortDebug::ApplyStorageClamp();
     static std::string dawnEnableToggles;
     static std::string dawnDisableToggles;
-    PortDebug::DriverWorkaroundToggles(dawnEnableToggles, dawnDisableToggles);
+    PortDebug::BeginDriverWorkarounds(userFolder, dawnEnableToggles, dawnDisableToggles);
     config.dawnEnableToggles = dawnEnableToggles.c_str();
     config.dawnDisableToggles = dawnDisableToggles.c_str();
     aurora_initialize(argc, argv, &config);

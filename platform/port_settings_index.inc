@@ -159,7 +159,7 @@
 {"Video", "Compatibility", "Compatibility > Driver workarounds", "Keep depth buffers (Direct3D 11)", "driver workaround intel flicker depth discard d3d11"},
 {"Video", "Compatibility", "Compatibility > Driver workarounds", "Upload draw constants through the GPU (Direct3D 11)", "driver workaround intel flicker constants buffers d3d11"},
 {"Video", "Compatibility", "Compatibility > Driver workarounds", "Alternative GPU sync (Direct3D 11)", "driver workaround intel flicker fence sync d3d11"},
-{"Video", "Compatibility", "Compatibility > Driver workarounds", "Driver error checks (slower)", "driver workaround validation errors debug dawn"},
+{"Video", "Compatibility", "Compatibility > Driver workarounds", "Driver error checks (next start only, slower)", "driver workaround validation errors debug dawn"},
 {"Video", "Compatibility", "Compatibility", "GPU self-test", "gpu test check diagnose"},
 {"Remastered", "", "Remastered models", "Use the Remastered models", "remastered mod enable disable toggle on off retail"},
 #if defined(__ANDROID__)

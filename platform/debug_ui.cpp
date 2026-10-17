@@ -312,15 +312,39 @@ constexpr DriverWorkaround kDriverWorkarounds[] = {
      "Waits for the GPU with a different kind of fence before reusing upload buffers.\n"
      "Try it if the picture flickers from frame to frame.",
      "d3d11_use_unmonitored_fence", nullptr},
-    {"validation", "Driver error checks (slower)",
-     "Turns the graphics library's own checks back on, so a command the driver rejects\n"
-     "is named in the log. Costs performance: for a bug report, not for playing.",
+    {"validation", "Driver error checks (next start only, slower)",
+     "Turns the graphics library's own checks back on for one start, so a command the driver\n"
+     "rejects is named in the log. Costs performance, so it turns itself off after that start.",
      nullptr, "skip_validation,disable_robustness"},
 };
 constexpr size_t kDriverWorkaroundCount = std::size(kDriverWorkarounds);
+// `validation` is for one start only: BeginDriverWorkarounds applies it and unticks it.
+constexpr unsigned kDriverChecksBit = 1u << 3;
+static_assert(std::string_view{kDriverWorkarounds[3].key} == "validation");
 // Setting `driver_workarounds`: bit i is kDriverWorkarounds[i]; AtStart is what this run's device got.
 unsigned sDriverWorkarounds = 0;
 unsigned sDriverWorkaroundsAtStart = 0;
+// What BeginDriverWorkarounds did at start, for the F1 section: error checks on this run,
+// MP_DRIVER_WORKAROUNDS overriding the boxes, or the boxes cleared after a start that failed.
+bool sDriverChecksThisRun = false;
+const char* sDriverWorkaroundsEnv = nullptr;
+bool sDriverWorkaroundsCleared = false;
+
+// `driver_workarounds` / MP_DRIVER_WORKAROUNDS: comma-separated names to kDriverWorkarounds bits.
+unsigned ParseDriverWorkarounds(std::string_view rest) {
+  unsigned bits = 0;
+  while (!rest.empty()) {
+    const size_t comma = rest.find(',');
+    const std::string_view name = rest.substr(0, comma);
+    for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
+      if (name == kDriverWorkarounds[i].key) {
+        bits |= 1u << i;
+      }
+    }
+    rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
+  }
+  return bits;
+}
 bool sUnlockFusionSuit = false;
 bool sUnlockGalleries = false;
 bool sSpeedrunTimer = false;

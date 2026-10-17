@@ -446,9 +446,21 @@
   `d3d11_disable_cpu_buffers`; `unmonitored_fence` ("Alternative GPU sync") turns on
   `d3d11_use_unmonitored_fence`; `validation` ("Driver error checks") turns off
   `skip_validation` and `disable_robustness`, so Dawn names a rejected command in the
-  log (slower). The first three only matter on Direct3D 11. The log's `Dawn toggles`
+  log (slower). The first three are passed only to a Direct3D 11 device; on another
+  API the log lists them as `(ignored: not Direct3D 11)`. The log's `Dawn toggles`
   block lists what the device got, each one also as a `driver workaround on|off:` line;
   `MP_DAWN_ENABLE` / `MP_DAWN_DISABLE` apply after them.
+  - Driver error checks last one start: the box is unticked as the start applies it,
+    the log says `driver error checks are on for this run`, and the section shows it.
+  - A way out when one breaks the start: while any are on, the user folder holds
+    `driver_workarounds_starting` until the game's 60th frame. If a start leaves it
+    behind (a crash or hang before then), the next start unticks them all, logs
+    `did not reach the game; turning them off` and says so in the section.
+  - `MP_DRIVER_WORKAROUNDS=0` starts one run without them, whatever is ticked;
+    `MP_DRIVER_WORKAROUNDS=keep_depth,validation` (names as above) uses those
+    instead. The setting is left as it was, and so is the crash marker: a run on the
+    override neither trips it nor clears it. After a start clears them, the marker
+    stays until a start reaches frame 60, so repeated crashes keep them off.
 - HUD scale (Video > Display and pause Options > Display, persisted as `hud_scale`,
   50-100 percent, default 100): shrinks the combat HUD, radar, beam and visor
   menus and the minimap toward the screen centre, each frame as a whole so the

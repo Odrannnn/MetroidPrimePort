@@ -529,6 +529,10 @@ u32 readback_pattern(u32 x, u32 y) { return kReadbackQuadrant[(y >= Size / 2 ? 2
 
 constexpr const char* ReadbackBroken =
     "reading textures back fails on this device, so the case results say nothing about drawing";
+// The cases draw offscreen and never present, so a clean pass rules out less than it seems to.
+constexpr const char* AllPassed =
+    "every check passed: offscreen drawing, EFB copies and readback work, so a fault still on screen is "
+    "in presenting the frame (swapchain) or in something these cases don't draw";
 
 // The stage the failures point at, from the two checks that leave stages out; empty when nothing stands out.
 const char* diagnosis() {
@@ -540,6 +544,9 @@ const char* diagnosis() {
   }
   if (!g.results[ClearCopyCase].pass) {
     return "EFB copies fail even with no draw in them (readback works)";
+  }
+  if (std::all_of(g.results.begin(), g.results.end(), [](const CaseResult& r) { return r.pass; })) {
+    return AllPassed;
   }
   const bool anyDrawPassed = std::any_of(g.results.begin(), g.results.end(), [](const CaseResult& r) {
     return r.pass && r.name != Cases[ClearCopyCase].name;
@@ -568,7 +575,9 @@ void finish_locked(const char* note) {
     log_result(r);
   }
   const char* const cause = diagnosis();
-  if (cause[0] != '\0') {
+  if (cause == AllPassed) {
+    Log.info("gpu selftest: diagnosis: {}", cause);
+  } else if (cause[0] != '\0') {
     Log.warn("gpu selftest: diagnosis: {}", cause);
   }
   const auto total =

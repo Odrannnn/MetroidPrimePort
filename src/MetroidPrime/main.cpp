@@ -1294,6 +1294,9 @@ int CMain::RsMain(int argc, const char* const* argv) {
           milestoneSpanStartNs = frameEndNs;
           milestoneSpanStartFrame = s_frameLog;
           milestoneWorstNs = 0;
+          if (s_frameLog == 60) {
+            PortDebug::DriverWorkaroundsStarted();
+          }
         }
       }
       // Port: a stalled loop shows up as input that does nothing and then lands

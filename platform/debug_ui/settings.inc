@@ -267,18 +267,7 @@ const SettingKey kSettingKeys[] = {
      [](std::ostream& out) { out << sStorageClamp; }, false, "-1", "1"},
     {"driver_workarounds",
      [](const std::string& value) {
-       sDriverWorkarounds = 0;
-       std::string_view rest = value;
-       while (!rest.empty()) {
-         const size_t comma = rest.find(',');
-         const std::string_view name = rest.substr(0, comma);
-         for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
-           if (name == kDriverWorkarounds[i].key) {
-             sDriverWorkarounds |= 1u << i;
-           }
-         }
-         rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
-       }
+       sDriverWorkarounds = ParseDriverWorkarounds(value);
        sDriverWorkaroundsAtStart = sDriverWorkarounds;
      },
      [](std::ostream& out) {

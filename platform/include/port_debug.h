@@ -400,8 +400,13 @@ void SetGpuDriver(const std::string& id);
 // generator unless it's already in the environment. Call before aurora_initialize.
 void ApplyStorageClamp();
 // Setting `driver_workarounds`: the Dawn toggles the ticked Video > Compatibility > Driver
-// workarounds turn on and off, comma-separated, for AuroraConfig. Call before aurora_initialize.
-void DriverWorkaroundToggles(std::string& enable, std::string& disable);
+// workarounds turn on and off, comma-separated, for AuroraConfig. Call once, before
+// aurora_initialize. MP_DRIVER_WORKAROUNDS (names, or 0 for none) replaces the boxes for one
+// run; a start that never called DriverWorkaroundsStarted turns them off at the next one; and
+// `validation` (driver error checks) is unticked as it is applied, so it lasts one start.
+void BeginDriverWorkarounds(const std::string& userFolder, std::string& enable, std::string& disable);
+// The game got through its first second of frames: the workarounds didn't break the start.
+void DriverWorkaroundsStarted();
 // Extras normally earned by finishing the game (or, for the Fusion Suit, by a
 // GBA link to Metroid Fusion). They only change what the title screen offers;
 // nothing is written into the save's persistent flags.

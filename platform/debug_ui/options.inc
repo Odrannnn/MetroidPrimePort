@@ -782,10 +782,44 @@ void ApplyStorageClamp() {
 #endif
   sStorageClampEnvFromSetting = true;
 }
-void DriverWorkaroundToggles(std::string& enable, std::string& disable) {
+// A file in the user folder while a start with driver workarounds is under way: still there at the
+// next start means that one never reached its first second of frames, the same kind of marker
+// main.cpp keeps for OpenGL ES and custom GPU drivers.
+std::filesystem::path sDriverWorkaroundsMarker;
+
+void BeginDriverWorkarounds(const std::string& userFolder, std::string& enable, std::string& disable) {
   EnsureInitialized();
   enable.clear();
   disable.clear();
+  sDriverWorkaroundsMarker =
+      std::filesystem::path(userFolder.empty() ? "." : userFolder) / "driver_workarounds_starting";
+  std::error_code ec;
+  unsigned bits = sDriverWorkarounds;
+  bool keepMarker = false;
+  sDriverWorkaroundsEnv = std::getenv("MP_DRIVER_WORKAROUNDS");
+  if (sDriverWorkaroundsEnv != nullptr) {
+    // "0" (or anything that names none) starts without them, over the ticked boxes.
+    bits = ParseDriverWorkarounds(sDriverWorkaroundsEnv);
+    PortLog::Write("port: MP_DRIVER_WORKAROUNDS=%s replaces the ticked driver workarounds this run\n",
+                   sDriverWorkaroundsEnv);
+  } else if (bits != 0 && std::filesystem::exists(sDriverWorkaroundsMarker, ec)) {
+    PortLog::Write("port: the last start with driver workarounds did not reach the game; turning them off\n");
+    bits = 0;
+    sDriverWorkarounds = 0;
+    sDriverWorkaroundsCleared = true;
+    MarkDirty();
+    // Until a start reaches the game and saves the cleared setting, a crash before that (for any
+    // reason) must not bring the boxes back: the marker stays until DriverWorkaroundsStarted.
+    keepMarker = true;
+  }
+  if (sDriverWorkaroundsEnv == nullptr && (bits & kDriverChecksBit) != 0) {
+    // One start only: untick it now, so the next start is back to full speed whatever happens.
+    sDriverWorkarounds &= ~kDriverChecksBit;
+    MarkDirty();
+    PortLog::Write("port: driver error checks are on for this run (slower); the next start turns them off\n");
+  }
+  sDriverChecksThisRun = (bits & kDriverChecksBit) != 0;
+  sDriverWorkaroundsAtStart = sDriverWorkarounds;
   const auto append = [](std::string& list, const char* toggles) {
     if (toggles != nullptr) {
       list += list.empty() ? "" : ",";
@@ -793,10 +827,25 @@ void DriverWorkaroundToggles(std::string& enable, std::string& disable) {
     }
   };
   for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
-    if (sDriverWorkarounds & (1u << i)) {
+    if (bits & (1u << i)) {
       append(enable, kDriverWorkarounds[i].enable);
       append(disable, kDriverWorkarounds[i].disable);
     }
+  }
+  // A run on MP_DRIVER_WORKAROUNDS says nothing about the ticked boxes: it leaves the marker alone.
+  if (sDriverWorkaroundsEnv != nullptr) {
+    sDriverWorkaroundsMarker.clear();
+  } else if (bits != 0) {
+    std::ofstream(sDriverWorkaroundsMarker) << "1\n";
+  } else if (!keepMarker) {
+    std::filesystem::remove(sDriverWorkaroundsMarker, ec);
+  }
+}
+
+void DriverWorkaroundsStarted() {
+  if (!sDriverWorkaroundsMarker.empty()) {
+    std::error_code ec;
+    std::filesystem::remove(sDriverWorkaroundsMarker, ec);
   }
 }
 
