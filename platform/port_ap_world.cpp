@@ -549,6 +549,8 @@ const uint32_t kChozoWorld = 0x83F6FF6F;
 const uint32_t kHiveTotem = 0xC8309DF6;
 const uint32_t kSunchamberLobby = 0x18AB6106;      // 08_courtyard
 const uint32_t kRuinedFountain = 0x165A4DE9;       // 05_bathhall
+const uint32_t kPistonTunnel = 0x2B3F1CEE;         // 1a_morphballtunnel
+const uint32_t kMinesSaveStationB = 0xB089331E;    // 00_mines_savestation_b
 const uint32_t kProcessingCenterAccess = 0xED6DE73B;
 const uint32_t kEliteQuartersAccess = 0x71343C3F;
 const uint32_t kMetroidQuarantineA = 0xFB051F5A;
@@ -753,12 +755,23 @@ std::vector< uint8_t > RoomOps(const Layout& layout, uint32_t mrea,
       remove(0x001B065F);
   }
 
-  if (mrea == kRuinedFountain) {
-    // randomprime's spawn point fix: the room's default spawn point is in the
-    // spider track alcove, which only the Spider Ball leaves, and a start here
-    // would be stuck. It goes to the room's floor (patch_spawn_point_position
-    // moves the first default one).
-    const float kFloor[3] = {210.512f, -82.424f, 19.2174f};
+  // randomprime's spawn point fixes (patch_spawn_point_position): a room's
+  // first default spawn point moves, or with `makeDefault` its first one,
+  // which becomes the default. Ruined Fountain's is in the spider track
+  // alcove, which only the Spider Ball leaves.
+  struct SpawnFix {
+    uint32_t mrea;
+    float position[3];
+    bool makeDefault;
+  };
+  static const SpawnFix kSpawnFixes[] = {
+      {kPistonTunnel, {124.53f, -79.78f, 22.84f}, false},
+      {kRuinedFountain, {210.512f, -82.424f, 19.2174f}, false},
+      {kMinesSaveStationB, {216.7245f, 4.4046f, -139.8873f}, true},
+  };
+  for (const SpawnFix& fix : kSpawnFixes) {
+    if (fix.mrea != mrea)
+      continue;
     for (const PortSkipCutscenes::ScriptObject& o : objects) {
       if (o.type != kSpawnPoint || (o.id & 0xFFFF) >= 0x8000 || o.props.size() < 4)
         continue;
@@ -770,19 +783,25 @@ std::vector< uint8_t > RoomOps(const Layout& layout, uint32_t mrea,
           static_cast< size_t >(std::find(o.props.begin() + 4, o.props.end(), 0) - o.props.begin()) + 1;
       if (count < 6)
         continue;
-      const size_t defaultSpawn = start + 24 + (count - 6) * 4;
-      if (defaultSpawn >= o.props.size() || o.props[defaultSpawn] == 0)
+      const size_t defaultOffset = 24 + (count - 6) * 4;
+      if (start + defaultOffset >= o.props.size() ||
+          (o.props[start + defaultOffset] == 0 && !fix.makeDefault))
         continue;
       ops.push_back(2);
       u32(o.id);
       u16(0);
-      u16(1);
+      u16(fix.makeDefault ? 2 : 1);
       u16(0); // the position
       u16(12);
-      for (const float f : kFloor) {
+      for (const float f : fix.position) {
         uint32_t bits;
         std::memcpy(&bits, &f, sizeof(bits));
         u32(bits);
+      }
+      if (fix.makeDefault) {
+        u16(static_cast< uint32_t >(defaultOffset));
+        u16(1);
+        ops.push_back(1);
       }
       break;
     }

@@ -1483,6 +1483,16 @@ int main() {
             "Ruined Fountain's default spawn point moves out of the spider track alcove");
       Check(PortApWorld::RoomOps(plain, 0x165A4DE9, {spawn(0x00050010, false)}).empty(),
             "a Ruined Fountain without a default spawn point is left alone");
+      const std::vector< uint8_t > piston =
+          PortApWorld::RoomOps(plain, 0x2B3F1CEE, {spawn(0x00070010, true)});
+      Check(piston.size() == 25 && piston[0] == 2 && piston[4] == 0x10 && piston[8] == 1 && piston[12] == 12,
+            "Piston Tunnel's default spawn point moves");
+      const std::vector< uint8_t > mines =
+          PortApWorld::RoomOps(plain, 0xB089331E, {spawn(0x00260010, false), spawn(0x00260011, true)});
+      const uint8_t madeDefault[] = {0, 24 + 29 * 4, 0, 1, 1};
+      Check(mines.size() == 30 && mines[4] == 0x10 && mines[8] == 2 &&
+                std::equal(madeDefault, madeDefault + 5, mines.end() - 5),
+            "Mines Save Station B's first spawn point moves and becomes the default");
 
       // The softlock fixes.
       std::vector< PortSkipCutscenes::ScriptObject > tower = {object(0x04, 0x001D015B, 63),
