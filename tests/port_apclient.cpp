@@ -1467,6 +1467,22 @@ int main() {
       taken.push_back(object(0x15, 0x00020004, 1));
       Check(PortApWorld::RoomOps(plain, 0xD5CDB809, taken).empty(),
             "a Main Plaza that isn't the disc's is left alone");
+      // A spawn point: 35 properties, the default flag after the 29 item counts.
+      const auto spawn = [&object](uint32_t id, bool firstSpawn) {
+        PortSkipCutscenes::ScriptObject o = object(0x0F, id, 24 + 29 * 4 + 3);
+        o.props[3] = 35;
+        o.props[6 + 24 + 29 * 4] = firstSpawn ? 1 : 0;
+        return o;
+      };
+      const std::vector< uint8_t > fountain = PortApWorld::RoomOps(
+          plain, 0x165A4DE9, {spawn(0x00050010, false), spawn(0x00050011, true), spawn(0x00050012, true)});
+      const uint8_t floor[] = {2,    0x00, 0x05, 0x00, 0x11, 0,    0,    0,    1,    0,    0,
+                               0,    12,   0x43, 0x52, 0x83, 0x12, 0xC2, 0xA4, 0xD9, 0x17, 0x41,
+                               0x99, 0xBD, 0x3C};
+      Check(fountain == std::vector< uint8_t >(floor, floor + sizeof(floor)),
+            "Ruined Fountain's default spawn point moves out of the spider track alcove");
+      Check(PortApWorld::RoomOps(plain, 0x165A4DE9, {spawn(0x00050010, false)}).empty(),
+            "a Ruined Fountain without a default spawn point is left alone");
 
       // The softlock fixes.
       std::vector< PortSkipCutscenes::ScriptObject > tower = {object(0x04, 0x001D015B, 63),

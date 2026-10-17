@@ -548,6 +548,7 @@ namespace {
 const uint32_t kChozoWorld = 0x83F6FF6F;
 const uint32_t kHiveTotem = 0xC8309DF6;
 const uint32_t kSunchamberLobby = 0x18AB6106;      // 08_courtyard
+const uint32_t kRuinedFountain = 0x165A4DE9;       // 05_bathhall
 const uint32_t kProcessingCenterAccess = 0xED6DE73B;
 const uint32_t kEliteQuartersAccess = 0x71343C3F;
 const uint32_t kMetroidQuarantineA = 0xFB051F5A;
@@ -683,8 +684,8 @@ std::vector< uint8_t > RoomOps(const Layout& layout, uint32_t mrea,
     ops.push_back(6);
     u32(id);
   };
-  enum { kActor = 0x00, kTrigger = 0x04, kTimer = 0x05, kPlatform = 0x08, kRelay = 0x15,
-         kDamageableTrigger = 0x1A };
+  enum { kActor = 0x00, kTrigger = 0x04, kTimer = 0x05, kPlatform = 0x08, kSpawnPoint = 0x0F,
+         kRelay = 0x15, kDamageableTrigger = 0x1A };
   enum { kEntered = 3, kZero = 9 };
   enum { kSetToZero = 13 };
   // An actor's visor parameters: whether a lock-on passes through it.
@@ -750,6 +751,41 @@ std::vector< uint8_t > RoomOps(const Layout& layout, uint32_t mrea,
     // The block behind Central Dynamo's door.
     if (mrea == kCentralDynamo && has(0x001B065F, kActor, kActorSize))
       remove(0x001B065F);
+  }
+
+  if (mrea == kRuinedFountain) {
+    // randomprime's spawn point fix: the room's default spawn point is in the
+    // spider track alcove, which only the Spider Ball leaves, and a start here
+    // would be stuck. It goes to the room's floor (patch_spawn_point_position
+    // moves the first default one).
+    const float kFloor[3] = {210.512f, -82.424f, 19.2174f};
+    for (const PortSkipCutscenes::ScriptObject& o : objects) {
+      if (o.type != kSpawnPoint || (o.id & 0xFFFF) >= 0x8000 || o.props.size() < 4)
+        continue;
+      // The count, the name, the position and rotation, the item counts, then
+      // whether it is the default spawn point.
+      const uint32_t count = uint32_t(o.props[0]) << 24 | uint32_t(o.props[1]) << 16 |
+                             uint32_t(o.props[2]) << 8 | o.props[3];
+      const size_t start =
+          static_cast< size_t >(std::find(o.props.begin() + 4, o.props.end(), 0) - o.props.begin()) + 1;
+      if (count < 6)
+        continue;
+      const size_t defaultSpawn = start + 24 + (count - 6) * 4;
+      if (defaultSpawn >= o.props.size() || o.props[defaultSpawn] == 0)
+        continue;
+      ops.push_back(2);
+      u32(o.id);
+      u16(0);
+      u16(1);
+      u16(0); // the position
+      u16(12);
+      for (const float f : kFloor) {
+        uint32_t bits;
+        std::memcpy(&bits, &f, sizeof(bits));
+        u32(bits);
+      }
+      break;
+    }
   }
   LogicOps(mrea, objects, ops);
   return ops;
