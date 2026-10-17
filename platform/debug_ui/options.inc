@@ -780,6 +780,7 @@ void ApplyStorageClamp() {
 #else
   setenv("MP_STORAGE_CLAMP", sStorageClamp > 0 ? "1" : "0", 1);
 #endif
+  sStorageClampEnvFromSetting = true;
 }
 
 

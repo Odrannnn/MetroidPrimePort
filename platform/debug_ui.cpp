@@ -285,6 +285,8 @@ bool sUnlockHardMode = false;
 // Setting `storage_clamp`: -1 auto (aurora decides), 0 off, 1 on; read once when shaders are first made.
 int sStorageClamp = -1;
 int sStorageClampAtStart = -1;
+// Set when ApplyStorageClamp wrote MP_STORAGE_CLAMP from the setting, so the log can tell it from a user's.
+bool sStorageClampEnvFromSetting = false;
 bool sUnlockFusionSuit = false;
 bool sUnlockGalleries = false;
 bool sSpeedrunTimer = false;

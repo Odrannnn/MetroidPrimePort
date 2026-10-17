@@ -658,7 +658,9 @@ void LogSettings() {
 #endif
   for (; env != nullptr && *env != nullptr; ++env) {
     if (std::strncmp(*env, "MP_", 3) == 0) {
-      PortLog::Write("port: env: %s\n", *env);
+      // ApplyStorageClamp sets MP_STORAGE_CLAMP itself from `storage_clamp`: say so, or it reads as user-set.
+      const bool fromSetting = sStorageClampEnvFromSetting && std::strncmp(*env, "MP_STORAGE_CLAMP=", 17) == 0;
+      PortLog::Write("port: env: %s%s\n", *env, fromSetting ? " (from storage_clamp)" : "");
     }
   }
   if (sOriginalExperience) {

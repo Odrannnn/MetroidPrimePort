@@ -434,7 +434,10 @@
   bounds-check branch some Adreno Vulkan drivers miscompile (the world draws
   black, issue #7). Auto turns it on for Vulkan on an Adreno 7xx. Read once when
   shaders are first made, so a change needs a restart. `MP_STORAGE_CLAMP=1`
-  forces it on and any other non-empty value off, over the setting.
+  forces it on and any other non-empty value off, over the setting. When the
+  setting is On or Off (and the variable is unset), the port sets
+  `MP_STORAGE_CLAMP` itself before starting Aurora; the log's `port: env:` line
+  then ends in `(from storage_clamp)`, so it isn't mistaken for a user's variable.
 - HUD scale (Video > Display and pause Options > Display, persisted as `hud_scale`,
   50-100 percent, default 100): shrinks the combat HUD, radar, beam and visor
   menus and the minimap toward the screen centre, each frame as a whole so the
