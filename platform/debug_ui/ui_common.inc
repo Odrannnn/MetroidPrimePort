@@ -382,6 +382,14 @@ static std::atomic<bool> sGpuSelfTestRequested{false};
 
 void RequestGpuSelfTest() { sGpuSelfTestRequested.store(true, std::memory_order_release); }
 
+// The test leaves its own GX state behind: drop the game's cached copy of it, and put back the copy
+// clear colour its efb-clear-copy case sets (the game sets it rarely, so it isn't re-sent every frame).
+void RestoreGxAfterGpuSelfTest() {
+  CGX::ResetGXStatesFull();
+  CGraphics::SetViewMatrix();
+  CGraphics::PortResendCopyClear();
+}
+
 void RunGpuSelfTestIfRequested() {
   // Pipelines compile asynchronously and a draw is skipped until its pipeline is ready, so a request first
   // runs a silent warm-up pass that waits for the test's own pipelines (selftest.cpp), then the logged pass.
@@ -409,15 +417,12 @@ void RunGpuSelfTestIfRequested() {
     if (aurora_gpu_selftest_run(true)) {
       stage = Stage::WarmingUp;
       waited = 0;
-      CGX::ResetGXStatesFull();
-      CGraphics::SetViewMatrix();
+      RestoreGxAfterGpuSelfTest();
     }
     return;
   }
   if (runReal && aurora_gpu_selftest_run(false)) {
-    // The test left its own GX state behind: drop the game's cached copy of it.
-    CGX::ResetGXStatesFull();
-    CGraphics::SetViewMatrix();
+    RestoreGxAfterGpuSelfTest();
   }
 }
 

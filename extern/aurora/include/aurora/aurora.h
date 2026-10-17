@@ -155,6 +155,13 @@ typedef struct {
   const char* vulkanLibraryDir;
 
   /*
+   * Dawn device toggles to turn on and off, comma-separated (null or empty for none): driver
+   * workarounds chosen by the application. MP_DAWN_ENABLE / MP_DAWN_DISABLE apply after these.
+   */
+  const char* dawnEnableToggles;
+  const char* dawnDisableToggles;
+
+  /*
    * When set and only the Null backend started (no GPU and no software adapter), this message is
    * shown in an error box and the process exits with status 1, instead of running with no picture.
    */

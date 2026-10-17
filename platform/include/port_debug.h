@@ -399,6 +399,9 @@ void SetGpuDriver(const std::string& id);
 // Setting `storage_clamp` (Auto/Off/On): sets MP_STORAGE_CLAMP for aurora's shader
 // generator unless it's already in the environment. Call before aurora_initialize.
 void ApplyStorageClamp();
+// Setting `driver_workarounds`: the Dawn toggles the ticked Video > Compatibility > Driver
+// workarounds turn on and off, comma-separated, for AuroraConfig. Call before aurora_initialize.
+void DriverWorkaroundToggles(std::string& enable, std::string& disable);
 // Extras normally earned by finishing the game (or, for the Fusion Suit, by a
 // GBA link to Metroid Fusion). They only change what the title screen offers;
 // nothing is written into the save's persistent flags.

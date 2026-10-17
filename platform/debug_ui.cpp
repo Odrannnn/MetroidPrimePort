@@ -118,6 +118,7 @@ extern char** environ;
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -133,6 +134,7 @@ extern char** environ;
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -287,6 +289,38 @@ int sStorageClamp = -1;
 int sStorageClampAtStart = -1;
 // Set when ApplyStorageClamp wrote MP_STORAGE_CLAMP from the setting, so the log can tell it from a user's.
 bool sStorageClampEnvFromSetting = false;
+// Opt-in Dawn toggles for GPU drivers that draw wrong (issue #143): one checkbox each under
+// Video > Compatibility > Driver workarounds, saved as `driver_workarounds`, applied when the GPU
+// device is made (so after a restart). MP_DAWN_ENABLE / MP_DAWN_DISABLE still apply after them.
+struct DriverWorkaround {
+  const char* key; // its name in `driver_workarounds`
+  const char* label;
+  const char* tooltip;
+  const char* enable;  // Dawn toggles it turns on, comma-separated, or nullptr
+  const char* disable; // and the ones it turns off
+};
+constexpr DriverWorkaround kDriverWorkarounds[] = {
+    {"keep_depth", "Keep depth buffers (Direct3D 11)",
+     "Stops telling the driver it may throw away depth buffers the game is done with.\n"
+     "Try it if geometry flickers on an older Intel GPU.",
+     nullptr, "d3d11_use_discard_view"},
+    {"gpu_constants", "Upload draw constants through the GPU (Direct3D 11)",
+     "Sends each draw's constants with GPU buffer copies instead of the CPU-side path.\n"
+     "Try it if models flicker, stretch or jump around.",
+     "d3d11_disable_cpu_buffers", nullptr},
+    {"unmonitored_fence", "Alternative GPU sync (Direct3D 11)",
+     "Waits for the GPU with a different kind of fence before reusing upload buffers.\n"
+     "Try it if the picture flickers from frame to frame.",
+     "d3d11_use_unmonitored_fence", nullptr},
+    {"validation", "Driver error checks (slower)",
+     "Turns the graphics library's own checks back on, so a command the driver rejects\n"
+     "is named in the log. Costs performance: for a bug report, not for playing.",
+     nullptr, "skip_validation,disable_robustness"},
+};
+constexpr size_t kDriverWorkaroundCount = std::size(kDriverWorkarounds);
+// Setting `driver_workarounds`: bit i is kDriverWorkarounds[i]; AtStart is what this run's device got.
+unsigned sDriverWorkarounds = 0;
+unsigned sDriverWorkaroundsAtStart = 0;
 bool sUnlockFusionSuit = false;
 bool sUnlockGalleries = false;
 bool sSpeedrunTimer = false;

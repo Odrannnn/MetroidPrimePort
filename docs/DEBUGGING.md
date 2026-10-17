@@ -143,7 +143,9 @@ vars can be set without a rebuild:
 Paths for `shader dump` / `shader override` / `drawlog dump` go under
 `/sdcard/Android/data/org.metroidprime.port/files`. `pick` doesn't work (it looks for a local
 screenshot): use `drawlog` plus `adb exec-out screencap -p`. `MP_OPENGLES=0/1` forces the backend
-for one run. `MP_DAWN_ENABLE` / `MP_DAWN_DISABLE` take comma-separated Dawn toggle names. `MP_PIPELINE_THREADS=<n>` sets
+for one run. `MP_DAWN_ENABLE` / `MP_DAWN_DISABLE` take comma-separated Dawn toggle names; they apply after the
+F1 > Video > Compatibility > Driver workarounds checkboxes, and either can turn off one of Aurora's defaults
+(`skip_validation`). `MP_PIPELINE_THREADS=<n>` sets
 how many threads compile pipelines (default half the cores, at most 8; GL always 1). Clear the
 properties (`setprop debug.mport.env ''`) when you're done.
 
@@ -227,11 +229,18 @@ properties, `pdiff a b` only those that differ (e.g. the disc's against the conv
 
 ## GPU self-test
 
-For "the world is black on this GPU" reports (issues #7, #8): renders 10 known patterns into 32x32 offscreen
+For "the world is black on this GPU" reports (issues #7, #8): renders known patterns into 32x32 offscreen
 targets through the same GX -> generated WGSL -> pipeline -> bind-group path the game uses, reads them back and
-compares them (RGB, +-2 per channel). Cases: direct, 8-bit and 16-bit indexed vertices, konst/register TEV
-colour, a 3-stage TEV combine, RGBA8 / IA8 / I8 / CMPR textures, alpha blend and alpha-compare, depth in both
-draw orders, EFB copy sampled back.
+compares them (RGB, +-2 per channel; alpha is shown, not compared). Cases: direct, 8-bit and 16-bit indexed
+vertices, konst/register TEV colour, a 3-stage TEV combine, RGBA8 / IA8 / I8 / CMPR textures, alpha blend and
+alpha-compare, depth in both draw orders, EFB copy sampled back.
+
+Every case goes draw -> EFB copy -> readback, so two more checks leave stages out (issue #143):
+`readback` copies a texture written from the CPU straight back (no GX), and `efb-clear-copy` clears the EFB
+with a copy and copies it again (no draw). The readback buffer starts filled with `A5` bytes, so a block no copy
+reached says "nothing was copied back" instead of reading as black. When the failures point at one stage, a
+`diagnosis:` line names it: readback broken (the other results mean nothing), EFB copies broken, or draws not
+reaching the framebuffer.
 A silent warm-up pass runs first so the async pipeline compiles finish, then the logged pass (a few frames later).
 Each case's own pipeline is waited for (a blocking lookup), so a draw is never skipped because its pipeline is
 still compiling: a FAIL means the draw happened and the device rendered it wrong. The wait can delay the call
@@ -242,8 +251,9 @@ by one compile of a fresh case's pipeline (~300 ms) however busy the compile que
 
     gpu selftest: backend Vulkan, adapter "...", clamped storage loads active|off
     gpu selftest: tev-3-stage: PASS (0.2 ms)
-    gpu selftest: indexed16-pos: FAIL (pixel 4,4 got 000000FF want 00FF00FF, 144/1024 pixels wrong) (0.3 ms)
-    gpu selftest: 9/10 passed (35 ms)
+    gpu selftest: readback: PASS (0.0 ms)
+    gpu selftest: indexed16-pos: FAIL (pixel 4,4 got 000000 alpha FF want 00FF00, 144/1024 pixels wrong) (0.3 ms)
+    gpu selftest: 11/12 passed (35 ms)
 
 A FAIL names the feature. Results land a frame or two after the request. Game rendering is unaffected: the
 run uses its own targets and the game's GX state is reset afterwards. Code: `extern/aurora/lib/gfx/selftest.cpp`.

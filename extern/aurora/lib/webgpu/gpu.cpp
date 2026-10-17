@@ -1285,21 +1285,31 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
         // Upstream aurora bded88e9: https://github.com/TwilitRealm/dusklight/issues/2563
         "use_spirv_reconvergence_mode",
     };
-    // Extra toggles for driver debugging: MP_DAWN_ENABLE / MP_DAWN_DISABLE, comma-separated.
-    static std::deque<std::string> envToggles;
-    envToggles.clear();
-    for (const auto& [name, list] : {std::pair{"MP_DAWN_ENABLE", &enableToggles},
-                                     std::pair{"MP_DAWN_DISABLE", &disableToggles}}) {
-      const char* value = std::getenv(name);
+    // Extra toggles, comma-separated: the application's driver workarounds (AuroraConfig), then
+    // MP_DAWN_ENABLE / MP_DAWN_DISABLE for driver debugging. A later source wins: a toggle is taken
+    // out of the other list, so turning off one of the defaults above (skip_validation) works.
+    static std::deque<std::string> extraToggles;
+    extraToggles.clear();
+    const auto addToggles = [&](const char* source, const char* value, bool enable) {
+      auto& list = enable ? enableToggles : disableToggles;
+      auto& other = enable ? disableToggles : enableToggles;
       for (std::string_view rest = value != nullptr ? value : ""; !rest.empty();) {
         const size_t comma = rest.find(',');
         if (comma != 0) {
-          list->push_back(envToggles.emplace_back(rest.substr(0, comma)).c_str());
-          Log.info("{}: {}", name, envToggles.back());
+          const std::string_view name = rest.substr(0, comma);
+          std::erase_if(other, [name](const char* t) { return name == t; });
+          if (std::none_of(list.begin(), list.end(), [name](const char* t) { return name == t; })) {
+            list.push_back(extraToggles.emplace_back(name).c_str());
+          }
+          Log.info("{}: {}", source, name);
         }
         rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
       }
-    }
+    };
+    addToggles("driver workaround on", g_config.dawnEnableToggles, true);
+    addToggles("driver workaround off", g_config.dawnDisableToggles, false);
+    addToggles("MP_DAWN_ENABLE", std::getenv("MP_DAWN_ENABLE"), true);
+    addToggles("MP_DAWN_DISABLE", std::getenv("MP_DAWN_DISABLE"), false);
     // GL is only the fallback for drivers that draw wrong on Vulkan, so it runs without
     // Dawn's blob cache: cached program binaries crashed Mesa in glProgramBinary.
     wgpu::DawnTogglesDescriptor togglesDescriptor(wgpu::DawnTogglesDescriptor::Init{

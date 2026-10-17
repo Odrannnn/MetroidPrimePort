@@ -438,6 +438,17 @@
   setting is On or Off (and the variable is unset), the port sets
   `MP_STORAGE_CLAMP` itself before starting Aurora; the log's `port: env:` line
   then ends in `(from storage_clamp)`, so it isn't mistaken for a user's variable.
+- Driver workarounds (Video > Compatibility, a collapsed group, persisted as
+  `driver_workarounds`: a comma-separated list of the ticked ones' names, empty by
+  default, issue #143): opt-in Dawn toggles for a GPU that draws wrong, applied when
+  the GPU device is made, so a change shows "Restart to apply". `keep_depth` ("Keep
+  depth buffers") turns off `d3d11_use_discard_view`; `gpu_constants` turns on
+  `d3d11_disable_cpu_buffers`; `unmonitored_fence` ("Alternative GPU sync") turns on
+  `d3d11_use_unmonitored_fence`; `validation` ("Driver error checks") turns off
+  `skip_validation` and `disable_robustness`, so Dawn names a rejected command in the
+  log (slower). The first three only matter on Direct3D 11. The log's `Dawn toggles`
+  block lists what the device got, each one also as a `driver workaround on|off:` line;
+  `MP_DAWN_ENABLE` / `MP_DAWN_DISABLE` apply after them.
 - HUD scale (Video > Display and pause Options > Display, persisted as `hud_scale`,
   50-100 percent, default 100): shrinks the combat HUD, radar, beam and visor
   menus and the minimap toward the screen centre, each frame as a whole so the

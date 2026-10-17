@@ -782,6 +782,23 @@ void ApplyStorageClamp() {
 #endif
   sStorageClampEnvFromSetting = true;
 }
+void DriverWorkaroundToggles(std::string& enable, std::string& disable) {
+  EnsureInitialized();
+  enable.clear();
+  disable.clear();
+  const auto append = [](std::string& list, const char* toggles) {
+    if (toggles != nullptr) {
+      list += list.empty() ? "" : ",";
+      list += toggles;
+    }
+  };
+  for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
+    if (sDriverWorkarounds & (1u << i)) {
+      append(enable, kDriverWorkarounds[i].enable);
+      append(disable, kDriverWorkarounds[i].disable);
+    }
+  }
+}
 
 
 void SetAnisotropy(int level) {

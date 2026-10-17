@@ -1095,6 +1095,9 @@ int main(int argc, char** argv) {
         .pipelineCacheNoSeed = !port::EnvFlag("MP_PIPELINE_SEED", true),
         // Set below when a custom Vulkan driver (port_gpu_driver.h) is loaded.
         .vulkanLibraryDir = nullptr,
+        // Set below from the Driver workarounds settings.
+        .dawnEnableToggles = nullptr,
+        .dawnDisableToggles = nullptr,
         // Aurora's Null backend draws nothing: the game would play its sound behind
         // a black window (issue #33). Scripted runs, which can't answer a box, keep it.
         .noGraphicsMessage = port::EnvFlag("MP_NO_DISC_DIALOG")
@@ -1190,6 +1193,11 @@ int main(int argc, char** argv) {
         }
     }
     PortDebug::ApplyStorageClamp();
+    static std::string dawnEnableToggles;
+    static std::string dawnDisableToggles;
+    PortDebug::DriverWorkaroundToggles(dawnEnableToggles, dawnDisableToggles);
+    config.dawnEnableToggles = dawnEnableToggles.c_str();
+    config.dawnDisableToggles = dawnDisableToggles.c_str();
     aurora_initialize(argc, argv, &config);
     // The settings file, JSON and the logs read and write numbers with the C
     // library, in the "C" format. A toolkit loaded with the window (a GTK

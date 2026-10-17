@@ -347,6 +347,8 @@ public:
   static const GXRenderModeObj& GetRenderMode() { return mRenderModeObj; }
   // Port: resize the internal framebuffer and viewport (dynamic aspect ratio).
   static void PortResizeFrameBuffer(u16 fbWidth);
+  // Port: re-send the copy clear colour and depth, after something else (the GPU self-test) set its own.
+  static void PortResendCopyClear();
   static float GetDepthNear() { return mDepthNear; }
   static float GetDepthFar() { return mDepthFar; }
 

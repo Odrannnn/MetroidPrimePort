@@ -265,6 +265,32 @@ const SettingKey kSettingKeys[] = {
        sStorageClampAtStart = sStorageClamp;
      },
      [](std::ostream& out) { out << sStorageClamp; }, false, "-1", "1"},
+    {"driver_workarounds",
+     [](const std::string& value) {
+       sDriverWorkarounds = 0;
+       std::string_view rest = value;
+       while (!rest.empty()) {
+         const size_t comma = rest.find(',');
+         const std::string_view name = rest.substr(0, comma);
+         for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
+           if (name == kDriverWorkarounds[i].key) {
+             sDriverWorkarounds |= 1u << i;
+           }
+         }
+         rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
+       }
+       sDriverWorkaroundsAtStart = sDriverWorkarounds;
+     },
+     [](std::ostream& out) {
+       const char* sep = "";
+       for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
+         if (sDriverWorkarounds & (1u << i)) {
+           out << sep << kDriverWorkarounds[i].key;
+           sep = ",";
+         }
+       }
+     },
+     true, "keep_depth", "unmonitored_fence,validation"},
     {"speedrun_timer", [](const std::string& value) { sSpeedrunTimer = ParseBool(value); },
      [](std::ostream& out) { WriteBool(out, sSpeedrunTimer); }, false, "1", "0"},
     {"livesplit", [](const std::string& value) { sLiveSplit = ParseBool(value); },

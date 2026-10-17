@@ -5,6 +5,10 @@
 // Every case's pipeline is waited for (blocking lookups, see BlockingPipelines): without that, a case
 // whose pipeline happens to still be compiling reads back as "drew nothing" and the test reports a
 // device bug that is really the test's own race (issue #124).
+// Every case goes draw -> EFB copy -> readback, and a broken stage anywhere reads the same, so two
+// checks isolate the later stages: `readback` copies a CPU-written texture straight back (no GX at all)
+// and `efb-clear-copy` clears the EFB and copies it (no draw). The readback buffer starts out filled
+// with a marker, so a copy that never landed shows as the marker rather than as black (issue #143).
 #include <aurora/aurora.h>
 #include <aurora/gfx.hpp>
 
@@ -24,6 +28,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <magic_enum.hpp>
@@ -76,6 +81,8 @@ struct State {
   Clock::time_point started;
   std::vector<CaseResult> results;
   std::vector<Image> expected;
+  CaseResult readbackResult; // the `readback` check: its block follows the cases' in the readback buffer
+  bool evaluated = false;    // the readback came back and was compared, so a diagnosis means something
   std::vector<TextureHandle> handles;
   wgpu::Buffer readback;
   std::string summary;
@@ -474,6 +481,20 @@ void expect_efb_copy(Image& e) {
   fill(e, 16, 16, 32, 32, rgb(0, 0, 255));
 }
 
+// 11. EFB cleared by a copy, then copied: the copy and readback path with no draw in it.
+// Changes the copy clear colour; the caller restores the game's.
+constexpr Rgba kClearCopyColor{40, 160, 220, 255};
+char g_clearKey;
+void draw_clear_copy() {
+  GXSetCopyClear(GXColor{kClearCopyColor.r, kClearCopyColor.g, kClearCopyColor.b, kClearCopyColor.a}, 0xFFFFFF);
+  GXSetTexCopySrc(0, 0, Size, Size);
+  GXSetTexCopyDst(Size, Size, GX_TF_RGBA8, GX_FALSE);
+  GXCopyTex(&g_clearKey, GX_TRUE);
+}
+void expect_clear_copy(Image& e) {
+  fill(e, 0, 0, Size, Size, rgb(kClearCopyColor.r, kClearCopyColor.g, kClearCopyColor.b));
+}
+
 constexpr Case Cases[] = {
     {"direct-vertices", draw_direct, expect_direct},
     {"indexed8-pos-color", draw_indexed8, expect_indexed8},
@@ -485,7 +506,10 @@ constexpr Case Cases[] = {
     {"blend-alpha-compare", draw_blend_alpha, expect_blend_alpha},
     {"depth-both-orders", draw_depth, expect_depth},
     {"efb-copy-sampled", draw_efb_copy, expect_efb_copy},
+    {"efb-clear-copy", draw_clear_copy, expect_clear_copy},
 };
+constexpr size_t ClearCopyCase = 10;
+static_assert(std::string_view{Cases[ClearCopyCase].name} == "efb-clear-copy");
 constexpr size_t CaseCount = std::size(Cases);
 static char g_keys[CaseCount];
 
@@ -496,6 +520,33 @@ std::string hex(u32 rgb24) {
 }
 
 // ---- readback and comparison -------------------------------------------------------------------------
+// Every byte of the readback buffer before any copy lands in it: a pixel still holding it was never written.
+constexpr u8 FillMarker = 0xA5;
+
+// The `readback` check's texture: four quadrants, written from the CPU and copied straight back.
+constexpr u32 kReadbackQuadrant[4] = {rgb(255, 0, 0), rgb(0, 255, 0), rgb(0, 0, 255), rgb(255, 255, 255)};
+u32 readback_pattern(u32 x, u32 y) { return kReadbackQuadrant[(y >= Size / 2 ? 2 : 0) + (x >= Size / 2 ? 1 : 0)]; }
+
+constexpr const char* ReadbackBroken =
+    "reading textures back fails on this device, so the case results say nothing about drawing";
+
+// The stage the failures point at, from the two checks that leave stages out; empty when nothing stands out.
+const char* diagnosis() {
+  if (!g.evaluated) {
+    return "";
+  }
+  if (!g.readbackResult.pass) {
+    return ReadbackBroken;
+  }
+  if (!g.results[ClearCopyCase].pass) {
+    return "EFB copies fail even with no draw in them (readback works)";
+  }
+  const bool anyDrawPassed = std::any_of(g.results.begin(), g.results.end(), [](const CaseResult& r) {
+    return r.pass && r.name != Cases[ClearCopyCase].name;
+  });
+  return anyDrawPassed ? "" : "draws do not reach the framebuffer (readback and EFB copies work)";
+}
+
 void finish_locked(const char* note) {
   if (g.warmup) {
     g.readback = {};
@@ -504,18 +555,27 @@ void finish_locked(const char* note) {
     return;
   }
   size_t passed = 0;
-  for (const auto& r : g.results) {
+  const auto log_result = [&passed](const CaseResult& r) {
     passed += r.pass ? 1 : 0;
     if (r.pass) {
       Log.info("gpu selftest: {}: PASS ({:.1f} ms)", r.name, r.recordMs);
     } else {
       Log.warn("gpu selftest: {}: FAIL ({}) ({:.1f} ms)", r.name, r.detail, r.recordMs);
     }
+  };
+  log_result(g.readbackResult);
+  for (const auto& r : g.results) {
+    log_result(r);
+  }
+  const char* const cause = diagnosis();
+  if (cause[0] != '\0') {
+    Log.warn("gpu selftest: diagnosis: {}", cause);
   }
   const auto total =
       std::chrono::duration<double, std::milli>(Clock::now() - g.started).count();
   char buf[160];
-  std::snprintf(buf, sizeof(buf), "%zu/%zu passed%s (%.0f ms)", passed, g.results.size(), note, total);
+  std::snprintf(buf, sizeof(buf), "%zu/%zu passed%s%s (%.0f ms)", passed, g.results.size() + 1, note,
+                cause == ReadbackBroken ? ", readback broken" : "", total);
   g.summary = buf;
   Log.info("gpu selftest: {}", g.summary);
   g.readback = {};
@@ -523,7 +583,58 @@ void finish_locked(const char* note) {
   g.phase = Phase::Idle;
 }
 
+// Compares one 32x32 block of the readback with the expected image. Alpha is not compared, but it is shown.
+void compare_block(const u8* block, bool bgra, const Image& want, CaseResult& r) {
+  size_t wrong = 0;
+  size_t unwritten = 0;
+  int firstX = -1, firstY = -1;
+  u32 firstGot = 0, firstAlpha = 0;
+  for (u32 y = 0; y < Size; ++y) {
+    for (u32 x = 0; x < Size; ++x) {
+      const u8* p = block + y * RowBytes + x * 4;
+      const u32 rr = bgra ? p[2] : p[0];
+      const u32 gg = p[1];
+      const u32 bb = bgra ? p[0] : p[2];
+      const u32 w = want.px[y * Size + x];
+      const bool ok = std::abs(static_cast<int>(rr) - static_cast<int>(w >> 16 & 0xFF)) <= Tolerance &&
+                      std::abs(static_cast<int>(gg) - static_cast<int>(w >> 8 & 0xFF)) <= Tolerance &&
+                      std::abs(static_cast<int>(bb) - static_cast<int>(w & 0xFF)) <= Tolerance;
+      if (!ok) {
+        if (wrong == 0) {
+          firstX = static_cast<int>(x);
+          firstY = static_cast<int>(y);
+          firstGot = rgb(rr, gg, bb);
+          firstAlpha = p[3];
+        }
+        ++wrong;
+        unwritten += p[0] == FillMarker && p[1] == FillMarker && p[2] == FillMarker && p[3] == FillMarker;
+      }
+    }
+  }
+  r.pass = wrong == 0;
+  if (r.pass) {
+    return;
+  }
+  if (unwritten == Size * Size) {
+    r.detail = "nothing was copied back: every pixel still holds the readback buffer's fill";
+    return;
+  }
+  r.detail = fmt::format("pixel {},{} got {} alpha {:02X} want {}, {}/{} pixels wrong", firstX, firstY, hex(firstGot),
+                         firstAlpha, hex(want.px[firstY * Size + firstX]), wrong, Size * Size);
+  if (unwritten != 0) {
+    r.detail += fmt::format(", {} never written", unwritten);
+  }
+}
+
 void evaluate(const u8* data) {
+  g.evaluated = true;
+  Image readbackWant;
+  for (u32 y = 0; y < Size; ++y) {
+    for (u32 x = 0; x < Size; ++x) {
+      readbackWant.px[y * Size + x] = readback_pattern(x, y);
+    }
+  }
+  compare_block(data + g.results.size() * BlockBytes, false, readbackWant, g.readbackResult);
   for (size_t i = 0; i < g.results.size(); ++i) {
     auto& r = g.results[i];
     if (!g.handles[i]) {
@@ -539,36 +650,7 @@ void evaluate(const u8* data) {
       r.detail = fmt::format("unsupported copy format {}", magic_enum::enum_name(format));
       continue;
     }
-    const auto& want = g.expected[i];
-    const u8* block = data + i * BlockBytes;
-    size_t wrong = 0;
-    int firstX = -1, firstY = -1;
-    u32 firstGot = 0;
-    for (u32 y = 0; y < Size; ++y) {
-      for (u32 x = 0; x < Size; ++x) {
-        const u8* p = block + y * RowBytes + x * 4;
-        const u32 rr = bgra ? p[2] : p[0];
-        const u32 gg = p[1];
-        const u32 bb = bgra ? p[0] : p[2];
-        const u32 w = want.px[y * Size + x];
-        const bool ok = std::abs(static_cast<int>(rr) - static_cast<int>(w >> 16 & 0xFF)) <= Tolerance &&
-                        std::abs(static_cast<int>(gg) - static_cast<int>(w >> 8 & 0xFF)) <= Tolerance &&
-                        std::abs(static_cast<int>(bb) - static_cast<int>(w & 0xFF)) <= Tolerance;
-        if (!ok) {
-          if (wrong == 0) {
-            firstX = static_cast<int>(x);
-            firstY = static_cast<int>(y);
-            firstGot = rgb(rr, gg, bb);
-          }
-          ++wrong;
-        }
-      }
-    }
-    r.pass = wrong == 0;
-    if (!r.pass) {
-      r.detail = fmt::format("pixel {},{} got {}FF want {}FF, {}/{} pixels wrong", firstX, firstY, hex(firstGot),
-                             hex(want.px[firstY * Size + firstX]), wrong, Size * Size);
-    }
+    compare_block(data + i * BlockBytes, bgra, g.expected[i], r);
   }
 }
 
@@ -577,12 +659,62 @@ void encode(const EncoderTaskContext&, const wgpu::CommandEncoder& cmd, const vo
   if (g.phase != Phase::Pending || g.handles.empty()) {
     return;
   }
+  // One block per case, then the `readback` check's.
   const wgpu::BufferDescriptor desc{
       .label = "GPU self-test readback",
       .usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst,
-      .size = static_cast<uint64_t>(BlockBytes) * g.handles.size(),
+      .size = static_cast<uint64_t>(BlockBytes) * (g.handles.size() + 1),
+      .mappedAtCreation = true,
   };
   g.readback = webgpu::g_device.CreateBuffer(&desc);
+  if (void* fill = g.readback.GetMappedRange(0, desc.size); fill != nullptr) {
+    std::memset(fill, FillMarker, desc.size);
+  }
+  g.readback.Unmap();
+
+  // The `readback` check: a texture written from a CPU buffer, copied back with no GX in between.
+  const wgpu::BufferDescriptor patternDesc{
+      .label = "GPU self-test readback pattern",
+      .usage = wgpu::BufferUsage::CopySrc,
+      .size = BlockBytes,
+      .mappedAtCreation = true,
+  };
+  const wgpu::Buffer pattern = webgpu::g_device.CreateBuffer(&patternDesc);
+  if (auto* px = static_cast<u8*>(pattern.GetMappedRange(0, BlockBytes)); px != nullptr) {
+    for (u32 y = 0; y < Size; ++y) {
+      for (u32 x = 0; x < Size; ++x) {
+        const u32 c = readback_pattern(x, y);
+        u8* p = px + y * RowBytes + x * 4;
+        p[0] = c >> 16 & 0xFF;
+        p[1] = c >> 8 & 0xFF;
+        p[2] = c & 0xFF;
+        p[3] = 0xFF;
+      }
+    }
+  }
+  pattern.Unmap();
+  const wgpu::TextureDescriptor textureDesc{
+      .label = "GPU self-test readback texture",
+      .usage = wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst,
+      .size = {Size, Size, 1},
+      .format = wgpu::TextureFormat::RGBA8Unorm,
+  };
+  const wgpu::Texture texture = webgpu::g_device.CreateTexture(&textureDesc);
+  const wgpu::Extent3D extent{Size, Size, 1};
+  {
+    const wgpu::TexelCopyBufferInfo from{.layout = {.bytesPerRow = RowBytes, .rowsPerImage = Size}, .buffer = pattern};
+    const wgpu::TexelCopyTextureInfo to{.texture = texture};
+    cmd.CopyBufferToTexture(&from, &to, &extent);
+    const wgpu::TexelCopyTextureInfo back{.texture = texture};
+    const wgpu::TexelCopyBufferInfo target{
+        .layout = {.offset = static_cast<uint64_t>(BlockBytes) * g.handles.size(),
+                   .bytesPerRow = RowBytes,
+                   .rowsPerImage = Size},
+        .buffer = g.readback,
+    };
+    cmd.CopyTextureToBuffer(&back, &target, &extent);
+  }
+
   for (size_t i = 0; i < g.handles.size(); ++i) {
     const auto& h = g.handles[i];
     if (!h || h->size.width < Size || h->size.height < Size) {
@@ -593,7 +725,6 @@ void encode(const EncoderTaskContext&, const wgpu::CommandEncoder& cmd, const vo
         .layout = {.offset = static_cast<uint64_t>(BlockBytes) * i, .bytesPerRow = RowBytes, .rowsPerImage = Size},
         .buffer = g.readback,
     };
-    const wgpu::Extent3D extent{Size, Size, 1};
     cmd.CopyTextureToBuffer(&source, &target, &extent);
   }
 }
@@ -618,6 +749,8 @@ void after_submit(const EncoderTaskCompletionContext&, const void*, size_t, void
                     if (status != wgpu::MapAsyncStatus::Success) {
                       Log.warn("gpu selftest: readback mapping failed {}: {}", magic_enum::enum_name(status),
                                std::string_view{message});
+                      g.readbackResult.pass = false;
+                      g.readbackResult.detail = "readback failed";
                       for (auto& r : g.results) {
                         r.pass = false;
                         r.detail = "readback failed";
@@ -729,6 +862,8 @@ bool aurora_gpu_selftest_run(bool warmup) {
   {
     std::lock_guard lock{g.mutex};
     g.results = std::move(results);
+    g.readbackResult = {.name = "readback"};
+    g.evaluated = false;
     g.expected = std::move(expected);
     g.handles = std::move(handles);
     g.started = started;
@@ -736,6 +871,7 @@ bool aurora_gpu_selftest_run(bool warmup) {
   }
   if (!gfx::push_encoder_task(g.task, "", 1)) {
     std::lock_guard lock{g.mutex};
+    g.readbackResult.detail = "no active render pass";
     for (auto& r : g.results) {
       r.pass = false;
       r.detail = "no active render pass";

@@ -505,6 +505,33 @@ void DrawVideoCompatibility() {
     }
   }
   {
+    const int ticked = std::popcount(sDriverWorkarounds);
+    char header[64];
+    std::snprintf(header, sizeof(header), ticked > 0 ? "Driver workarounds (%d on)###driver-workarounds"
+                                                     : "Driver workarounds###driver-workarounds",
+                  ticked);
+    const bool open = ImGui::TreeNode(header);
+    if (sDriverWorkarounds != sDriverWorkaroundsAtStart) {
+      ImGui::SameLine();
+      ImGui::TextColored(ThemeWarnColor(), "Restart to apply");
+    }
+    if (open) {
+      ImGui::PushTextWrapPos(0.f);
+      ImGui::TextDisabled("For a GPU that draws wrong, such as flickering or missing geometry. Tick one, "
+                          "restart, then run the GPU self-test below; leave them off otherwise.");
+      ImGui::PopTextWrapPos();
+      for (size_t i = 0; i < kDriverWorkaroundCount; ++i) {
+        bool on = (sDriverWorkarounds & (1u << i)) != 0;
+        if (ImGui::Checkbox(kDriverWorkarounds[i].label, &on)) {
+          sDriverWorkarounds = on ? sDriverWorkarounds | (1u << i) : sDriverWorkarounds & ~(1u << i);
+          MarkDirty();
+        }
+        ImGui::SetItemTooltip("%s", kDriverWorkarounds[i].tooltip);
+      }
+      ImGui::TreePop();
+    }
+  }
+  {
     const bool pending = aurora_gpu_selftest_pending();
     ImGui::BeginDisabled(pending);
     if (ImGui::Button("GPU self-test")) {
@@ -513,7 +540,8 @@ void DrawVideoCompatibility() {
     ImGui::EndDisabled();
     ImGui::SetItemTooltip("Renders known patterns offscreen through the game's own GX path, reads them back\n"
                           "and logs one PASS or FAIL line per feature (indexed vertices, TEV, textures, blend,\n"
-                          "depth, EFB copy). For GPU driver bugs such as a black world; attach the log to a report.");
+                          "depth, EFB copy), plus checks of the readback and EFB copy alone that say which\n"
+                          "stage fails. For GPU driver bugs such as a black world; attach the log to a report.");
     char summary[160];
     if (pending) {
       ImGui::SameLine();
