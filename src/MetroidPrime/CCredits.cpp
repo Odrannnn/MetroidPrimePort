@@ -497,11 +497,27 @@ void CPlayMovie::SetMovieIndex(int index) {
   }
 }
 
+#ifdef TARGET_PC
+// The PAL disc has no resource named FONT_JapaneseCredits (USA's paks do), so
+// GetObj by that name dereferenced a null tag at the end of the game (#181).
+// PAL draws the credits in the ordinary credits font, which every disc names.
+static const char* CreditsFontName() {
+  const char* japanese = gpTweakGui->GetJapaneseCreditsFont().data();
+  if (gpSimplePool->GetFactory().GetResourceIdByName(japanese) != nullptr)
+    return japanese;
+  return gpTweakGui->GetCreditsFont().data();
+}
+#endif
+
 CCredits::CCredits()
 : CIOWin(rstl::string_l("Credits"))
 , x14_state(0)
 , x18_creditsTable(gpSimplePool->GetObj(gpTweakGui->GetCreditsTable().data()))
+#ifdef TARGET_PC
+, x20_creditsFont(gpSimplePool->GetObj(CreditsFontName()))
+#else
 , x20_creditsFont(gpSimplePool->GetObj(gpTweakGui->GetJapaneseCreditsFont().data()))
+#endif
 , x48_scrollPosition(0.f)
 , x4c_totalScrollDistance(0.f)
 , x50_scrollSpeed(32.f)
