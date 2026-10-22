@@ -67,11 +67,13 @@ const char* const kAlias[][2] = {
 // "exit" under their buttons), where Remastered has a text pane its own code
 // fills. The model stands in the middle of that pane's box. The pairs go by
 // the button each word is under: Remastered's "nexttext" is under the pane
-// the disc calls textpane_back, and the other way round.
+// the disc calls textpane_back, and the other way round. The message screen's
+// A button is a model on the disc and a glyph in a text pane in Remastered.
 const char* const kStandIn[][2] = {
     {"model_next1", "textpane_backtext"},
     {"model_back1", "textpane_nexttext"},
     {"model_return1", "textpane_exittext"},
+    {"model_abutton", "textpane_button"},
 };
 
 // The map screen. Remastered words its prompts as one line and keeps the

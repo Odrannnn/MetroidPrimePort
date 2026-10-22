@@ -125,7 +125,7 @@ inline constexpr int kEffects = 95;    // port_remastered_effect_import and the 
 inline constexpr int kRooms = 25;      // port_remastered_room: roomenv/, .roomgeo, .roomliquid, .roomfx, water maps
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
-inline constexpr int kHud = 7;         // port_remastered_hud, port_remastered_map
+inline constexpr int kHud = 8;         // port_remastered_hud, port_remastered_map
 inline constexpr int kMovies = 0;      // port_remastered_movie
 inline constexpr int kGallery = 0;     // the gallery pictures (port_gallery)
 }  // namespace ImportStage
