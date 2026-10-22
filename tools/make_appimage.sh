@@ -16,11 +16,17 @@ OUT=${2:-"$ROOT/build/appimage"}
 BIN="$BUILD/metroid_prime_port"
 TEXTURES="$ROOT/textures"
 ICON="$ROOT/packaging/metroid_prime_port.png"
-TOOL="$OUT/appimagetool-x86_64.AppImage"
+# The package is for the build host's architecture; appimagetool runs natively.
+ARCH=${ARCH:-$(uname -m)}
 # A fixed release, checked by hash: the tool runs on the release runner.
 TOOL_VERSION=1.9.1
-TOOL_SHA256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
-TOOL_URL="https://github.com/AppImage/appimagetool/releases/download/$TOOL_VERSION/appimagetool-x86_64.AppImage"
+case "$ARCH" in
+    x86_64) TOOL_SHA256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 ;;
+    aarch64) TOOL_SHA256=f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158 ;;
+    *) echo "no pinned appimagetool for $ARCH" >&2; exit 1 ;;
+esac
+TOOL="$OUT/appimagetool-$ARCH.AppImage"
+TOOL_URL="https://github.com/AppImage/appimagetool/releases/download/$TOOL_VERSION/appimagetool-$ARCH.AppImage"
 
 if [[ ! -x "$BIN" ]]; then
     echo "no executable at $BIN - build first" >&2
@@ -101,5 +107,5 @@ if ! "$TOOL" --version >/dev/null 2>&1; then
     RUN=(--appimage-extract-and-run)
 fi
 
-ARCH=x86_64 "$TOOL" "${RUN[@]}" "$APPDIR" "$OUT/MetroidPrime-x86_64.AppImage"
-echo "wrote $OUT/MetroidPrime-x86_64.AppImage"
+ARCH=$ARCH "$TOOL" "${RUN[@]}" "$APPDIR" "$OUT/MetroidPrime-$ARCH.AppImage"
+echo "wrote $OUT/MetroidPrime-$ARCH.AppImage"

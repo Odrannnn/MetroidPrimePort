@@ -17,7 +17,19 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            ld: ld-linux-x86-64
+          # Native arm64 runner (free for public repositories); Dawn and nod
+          # have linux-aarch64 prebuilts, so nothing is cross-compiled.
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            ld: ld-linux-aarch64
+    runs-on: ${{ matrix.runner }}
     container: almalinux:9
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -49,14 +61,14 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
-          key: ccache-linux-${{ github.sha }}
-          restore-keys: ccache-linux-
+          key: ccache-linux-${{ matrix.arch }}-${{ github.sha }}
+          restore-keys: ccache-linux-${{ matrix.arch }}-
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             build/port-gcc/_deps/*-src
             build/port-gcc/_deps/*-subbuild
-          key: deps-linux-${{ hashFiles('CMakeLists.txt', 'extern/aurora/**/CMakeLists.txt', 'extern/aurora/**/*.cmake') }}
+          key: deps-linux-${{ matrix.arch }}-${{ hashFiles('CMakeLists.txt', 'extern/aurora/**/CMakeLists.txt', 'extern/aurora/**/*.cmake') }}
       - name: Configure
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -96,7 +108,7 @@ jobs:
             { echo "SDL was built without the hidraw HIDAPI backend (libudev.h missing)" >&2; exit 1; }
           # Only libraries with stable sonames (MP_BUNDLED_DEPS, issue #27).
           extra="$(readelf -d "$bin" | grep -oP 'NEEDED.*\[\K[^]]+' |
-            grep -vxE 'lib(ssl|crypto)\.so\.3|lib(z|zstd)\.so\.1|libstdc\+\+\.so\.6|lib(m|c)\.so\.6|libgcc_s\.so\.1|ld-linux-x86-64\.so\.2' || true)"
+            grep -vxE 'lib(ssl|crypto)\.so\.3|lib(z|zstd)\.so\.1|libstdc\+\+\.so\.6|lib(m|c)\.so\.6|libgcc_s\.so\.1|${{ matrix.ld }}\.so\.[12]' || true)"
           if [ -n "$extra" ]; then
             echo "unexpected shared libraries:" $extra >&2
             exit 1
@@ -105,16 +117,17 @@ jobs:
         run: |
           export APPIMAGE_EXTRACT_AND_RUN=1
           bash tools/make_appimage.sh build/port-gcc build/appimage
-          d=build/release/metroid-prime-port-linux-x86_64
+          d=build/release/metroid-prime-port-linux-${{ matrix.arch }}
           mkdir -p "$d/share/licenses/metroid-prime-port"
           cp build/port-gcc/metroid_prime_port "$d/"
           bash tools/collect_licenses.sh build/port-gcc "$d/share/licenses/metroid-prime-port"
-          tar -C build/release -czf build/release/metroid-prime-port-linux-x86_64.tar.gz \
-            metroid-prime-port-linux-x86_64
-          mv build/appimage/MetroidPrime-x86_64.AppImage build/release/
+          tar -C build/release -czf build/release/metroid-prime-port-linux-${{ matrix.arch }}.tar.gz \
+            metroid-prime-port-linux-${{ matrix.arch }}
+          mv build/appimage/MetroidPrime-${{ matrix.arch }}.AppImage build/release/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: metroid_prime_port-linux
+          # The x86_64 name is kept so existing release scripts still find it.
+          name: metroid_prime_port-linux${{ matrix.arch != 'x86_64' && format('-{0}', matrix.arch) || '' }}
           path: |
-            build/release/MetroidPrime-x86_64.AppImage
-            build/release/metroid-prime-port-linux-x86_64.tar.gz
+            build/release/MetroidPrime-${{ matrix.arch }}.AppImage
+            build/release/metroid-prime-port-linux-${{ matrix.arch }}.tar.gz

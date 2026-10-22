@@ -152,6 +152,9 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
      `gh run download <id> -n metroid_prime_port-linux`. Rename the tarball to
      `metroid-prime-port-X-linux-x86_64.tar.gz` (its top directory stays
      unversioned); the AppImage keeps the name `MetroidPrime-x86_64.AppImage`.
+     The same run's `metroid_prime_port-linux-aarch64` artifact gives
+     `metroid-prime-port-X-linux-aarch64.tar.gz` and `MetroidPrime-aarch64.AppImage`
+     the same way.
    - Windows: run `windows.yml`, `gh run download <id> -n metroid_prime_port-windows`,
      drop CI's `user/` folder (log, `dawn_cache.db`, `pipeline_cache.db`), and zip
      the rest as `metroid-prime-port-X-windows-x86_64.zip`. The same run's
@@ -163,8 +166,9 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
      `MetroidPrimePort.flatpak`.
    - Android: the signed APK, staged as `metroid-prime-port-X-android-arm64.apk`.
 
-   Every release ships all seven assets (AppImage, tarball, Flatpak, Windows
-   x86_64 and arm64, macOS, APK); start all the builds together.
+   Every release ships all nine assets (AppImage and tarball, each x86_64 and
+   aarch64, Flatpak, Windows x86_64 and arm64, macOS, APK); start all the builds
+   together.
 3. Check each artefact's version string, then `git tag -a vX` and `git push user vX`.
 4. `gh release create vX --notes-file …` with every asset passed explicitly, and
    confirm with `gh release view vX --json assets`. Base the notes on the
@@ -175,7 +179,7 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
 | Platform | Builds from | Produces | State |
 |---|---|---|---|
 | Linux | `cmake -S . -B build/port-gcc` | executable | works; tests green. `cmake --install` also produces a complete tree, verified by running it |
-| Linux | `.github/workflows/linux-release.yml` | AppImage + tarball | manual trigger; builds on AlmaLinux 9 and runs `tools/make_appimage.sh`. Use these for releases, not a desktop build |
+| Linux | `.github/workflows/linux-release.yml` | AppImage + tarball, x86_64 and aarch64 | manual trigger; builds on AlmaLinux 9 and runs `tools/make_appimage.sh`. Use these for releases, not a desktop build. aarch64 builds natively on `ubuntu-24.04-arm`, never run on real arm64 Linux hardware |
 | Linux | `tools/make_flatpak.sh` | Flatpak | manifest installs a working tree and collects notices; builds (`tools/make_flatpak.sh` writes `build/flatpak/MetroidPrimePort.flatpak`). The app id is `io.github.odrannnn.metroidprimeport`, with AppStream metainfo shipped |
 | Windows | `.github/workflows/windows.yml` | zipped `dist/`, x64 and arm64 | weekly (Mondays) and manual trigger; green when run, artifact uploaded, packaged startup checked. arm64 builds natively on `windows-11-arm` with vcpkg's OpenSSL, never run on a real Windows on Arm machine |
 | macOS | `.github/workflows/macos.yml` | ad-hoc signed `.app` (arm64) + `licenses/` | experimental; weekly and manual trigger; builds, tests and packaged startup checked in CI, never run on a real Mac |
