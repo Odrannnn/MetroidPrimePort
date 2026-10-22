@@ -141,8 +141,15 @@ void CWorldShadow::BuildLightShadowTexture(const CStateManager& mgr, TAreaId aid
 
         x88_blurReset = false;
 
+#ifdef TARGET_PC
+        // SetViewport above drew at the bottom of the EFB, which is the render mode's height
+        // here (480), not the GameCube's 448: copying from 448 left the white quad on screen.
+        GXSetTexCopySrc(0, CGraphics::GetRenderMode().efbHeight - x0_texture->GetHeight() * 2,
+                        x0_texture->GetWidth() * 2, x0_texture->GetHeight() * 2);
+#else
         GXSetTexCopySrc(0, 448 - x0_texture->GetHeight() * 2, x0_texture->GetWidth() * 2,
                         x0_texture->GetHeight() * 2);
+#endif
         GXSetTexCopyDst(x0_texture->GetWidth(), x0_texture->GetHeight(),
                         x0_texture->GetTexelFormat() == kTF_RGB565 ? GX_TF_RGB565 : GX_TF_RGBA8,
                         true);
