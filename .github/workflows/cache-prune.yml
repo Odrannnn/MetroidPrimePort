@@ -1,0 +1,50 @@
+name: cache-prune
+
+# The ccache action saves every run under a new key (a timestamp suffix), and
+# the release builds key theirs by commit, so superseded entries pile up: a day
+# of pushes filled the repository's 10 GB, and GitHub's LRU eviction then
+# dropped the Windows, macOS and release caches, whose builds went back to
+# compiling everything (0-10% ccache hits, 16-25 minutes). After each build
+# workflow, keep only the newest entry of every key family per branch.
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [native-linux, linux-release, windows, macos, android]
+    types: [completed]
+
+concurrency:
+  group: cache-prune
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Delete superseded cache entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # A family is the key without its variable suffix: an ISO timestamp
+          # (ccache action), a 40-hex commit or a 64-hex content hash. Keys
+          # with neither suffix are left alone.
+          declare -A seen
+          gh cache list --limit 1000 --sort created_at --order desc \
+              --json id,key,ref,sizeInBytes \
+              --jq '.[] | [.id, .ref, .key, .sizeInBytes] | @tsv' |
+            while IFS=$'\t' read -r id ref key size; do
+              family=$(sed -E 's/-([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z|[0-9a-f]{40}|[0-9a-f]{64})$//' <<<"$key")
+              [ "$family" != "$key" ] || continue
+              if [ -n "${seen["$ref $family"]+x}" ]; then
+                echo "delete $key ($((size / 1000000)) MB, $ref)"
+                gh cache delete "$id" || true
+              else
+                seen["$ref $family"]=1
+              fi
+            done
+          gh api "repos/$GH_REPO/actions/cache/usage" --jq '"\(.active_caches_count) entries, \(.active_caches_size_in_bytes / 1e9 * 100 | floor / 100) GB"'
+        shell: bash -e {0}
