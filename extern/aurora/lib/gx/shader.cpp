@@ -634,15 +634,13 @@ std::string vtx_attr(const ShaderConfig& config, GXAttr attr) {
       // Default normal
       return "vec3f(1.0, 0.0, 0.0)"s;
     }
-    if (attr == GX_VA_CLR1) {
-      // A channel reading colour 1 the vertices don't carry gets opaque white, as Dolphin's
-      // missing colour value does: the game sets only GX_COLOR1's control for its modulation
-      // channel (CGX::FlushState), so GX_ALPHA1 keeps GXInit's GX_SRC_VTX source, and a zero
-      // there made every modulated particle (boost ball glow, coloured inner glows) invisible.
+    if (attr == GX_VA_CLR0 || attr == GX_VA_CLR1) {
+      // A channel reading a colour the vertices don't carry gets opaque white, as Dolphin's
+      // missing colour value does (0xFFFFFFFF). The game sets only GX_COLOR1's control for its
+      // modulation channel (CGX::FlushState), so GX_ALPHA1 keeps GXInit's GX_SRC_VTX source, and
+      // a zero there made every modulated particle (boost ball glow, coloured inner glows)
+      // invisible.
       return "vec4f(1.0, 1.0, 1.0, 1.0)"s;
-    }
-    if (attr == GX_VA_CLR0) {
-      return "vec4f(0.0, 0.0, 0.0, 0.0)"s;
     }
     if (attr >= GX_VA_TEX0 && attr <= GX_VA_TEX7) {
       // A texgen reading a UV set the vertices don't carry (seen with a mod model): draw
