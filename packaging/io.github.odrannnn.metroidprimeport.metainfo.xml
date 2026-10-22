@@ -57,7 +57,7 @@
   <releases>
     <release version="0.32.0" date="2026-10-22">
       <description>
-        <p>Suit colour customisation with a random colours button, the Fusion Suit from the F1 menu, a touch layout editor that adds your own buttons, deletes stock ones and sets per-control opacity, fixes for the crash in the Meta Ridley fight and in the credits on discs without the Japanese font, Aurora graphics fixes (missing vertex colours read as opaque white, EFB alpha, partial copy clears, texture coordinate generation and minification), Ridley, Thardus, Flaahgra and Metroid Prime restored mid-fight by savestates, a check of the whole disc image against its Redump release, safer save, movie and disc reads, and Linux aarch64 builds.</p>
+        <p>Suit colour customisation with a random colours button, the Fusion Suit from the F1 menu, a touch layout editor that adds your own buttons, deletes stock ones and sets per-control opacity, fixes for the crash in the Meta Ridley fight and in the credits on discs without the Japanese font, no more white square in the corner in morph ball, Aurora graphics fixes (missing vertex colours read as opaque white, EFB alpha, partial copy clears, texture coordinate generation and minification), Ridley, Thardus, Flaahgra and Metroid Prime restored mid-fight by savestates, a check of the whole disc image against its Redump release, safer save, movie and disc reads, and Linux aarch64 builds.</p>
       </description>
       <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.32.0</url>
     </release>
