@@ -34,7 +34,7 @@ jobs:
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       # Each run saves its own entry of up to this size in the repository's
-      # shared 10 GB of cache; native-linux keeps its hits within 500 MB.
+      # shared 10 GB of cache; cache-prune deletes the superseded ones.
       CCACHE_MAXSIZE: 1G
       MAX_GLIBC: "2.34"
       MAX_GLIBCXX: "3.4.29"

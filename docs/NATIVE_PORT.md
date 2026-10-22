@@ -17,9 +17,17 @@ MSVC developer environment/Windows SDK. Older compiler versions are unverified.
 
 Aurora and MusyX are vendored snapshots; a normal clone is sufficient. Aurora
 fetches pinned transitive dependencies on the first configure. On Linux install
-SDL build prerequisites (X11/Wayland, ALSA/PulseAudio, EGL/OpenGL, FreeType, PNG);
-see `.github/workflows/native-linux.yml` for the Ubuntu package list and
-`extern/aurora/docs/building.md` for dependency-provider options.
+SDL build prerequisites (X11/Wayland, ALSA/PulseAudio, EGL/OpenGL, FreeType, PNG).
+On Ubuntu 24.04:
+
+```sh
+sudo apt-get install ninja-build g++-14 libasound2-dev libpulse-dev libx11-dev \
+  libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev \
+  libxtst-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl-dev \
+  libfreetype-dev libpng-dev
+```
+
+See `extern/aurora/docs/building.md` for dependency-provider options.
 
 ```sh
 cmake -S . -B build/native -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \

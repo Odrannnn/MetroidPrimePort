@@ -10,7 +10,7 @@ name: cache-prune
 on:
   workflow_dispatch:
   workflow_run:
-    workflows: [native-linux, linux-release, windows, macos, android]
+    workflows: [linux-release, windows, macos, android]
     types: [completed]
 
 concurrency:
