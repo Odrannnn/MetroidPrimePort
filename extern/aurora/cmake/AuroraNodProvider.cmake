@@ -13,12 +13,13 @@ include("${CMAKE_CURRENT_LIST_DIR}/AuroraTargetPlatform.cmake")
 # ── Auto: resolve provider based on platform availability ──
 set(_aurora_nod_provider "${AURORA_NOD_PROVIDER}")
 if (_aurora_nod_provider STREQUAL "auto")
-  # Prebuilt nod packages available for: windows-x86_64, linux-x86_64, macos-arm64
+  # Prebuilt nod packages available for: windows-x86_64, linux-x86_64,
+  # linux-aarch64, macos-arm64
   aurora_get_target_arch(_target_arch)
   set(_has_package FALSE)
   if (CMAKE_SYSTEM_NAME STREQUAL "Windows" AND _target_arch STREQUAL "AMD64")
     set(_has_package TRUE)
-  elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND _target_arch STREQUAL "x86_64")
+  elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND _target_arch MATCHES "^(x86_64|aarch64)$")
     set(_has_package TRUE)
   elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND _target_arch STREQUAL "arm64")
     set(_has_package TRUE)
