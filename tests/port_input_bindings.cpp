@@ -103,7 +103,10 @@ void TestInputText() {
   REQUIRE(InputToText(In(Device::Touch, 3)) == "touch:a");
   REQUIRE(InputToText(In(Device::Touch, 28)) == "touch:tturbo");
   REQUIRE(InputToText(In(Device::Touch, 32)) == "touch:beam_shift");
-  REQUIRE(InputToText(In(Device::Touch, 40)) == "touch:40");
+  REQUIRE(InputToText(In(Device::Touch, 35)) == "touch:35");
+  REQUIRE(InputToText(In(Device::Touch, 40)) == "touch:bbomb");
+  REQUIRE(InputToText(In(Device::Touch, 44)) == "touch:bunmorph");
+  REQUIRE(InputToText(In(Device::Touch, 45)) == "touch:45");
   REQUIRE(InputToText(In(Device::Touch, 63)) == "touch:63");
   REQUIRE(InputFromText("touch:missile", in) && in == In(Device::Touch, 20));
   REQUIRE(InputFromText("touch:map_tap", in) && in == In(Device::Touch, 34));
@@ -384,7 +387,7 @@ void TestTouchButtons() {
   // Bad slots, field counts and actions are skipped, the rest still load.
   for (const char* bad : {"k64:0,0,1,100,0,pad_a", "k-1:0,0,1,100,0,pad_a", "k:0,0,1,100,0,pad_a",
                           "k01:0,0,1,100,0,pad_a", "kx:0,0,1,100,0,pad_a", "k100:0,0,1,100,0,pad_a",
-                          "k1:0,0,1,100,pad_a", "k1:0,0,1,100,0,pad_a,1", "k1:0,0,1,100,0,", "k1:0,0,1,100,0,warp",
+                          "k1:0,0,1,100,pad_a", "k1:0,0,1,100,0,pad_a,1,0", "k1:0,0,1,100,0,", "k1:0,0,1,100,0,warp",
                           "k1:0,0,1,100,0,none", "k1:0,0,1,100,0,stick_up", "k1:0,0,1,100,0,look_x",
                           "k1:0,0,1,100,0,layer_1", "k1:0,0,1,100,0,menu_a", "k1", "K1:0,0,1,100,0,pad_a"}) {
     const std::string text = std::string(bad) + ";k2:0,0,1,100,0,pad_y";
@@ -395,6 +398,11 @@ void TestTouchButtons() {
   // A repeated slot keeps its last valid entry.
   const std::vector<TouchButton> twice = ParseTouchButtons("k4:0,0,1,100,0,pad_a;k4:0,0,1,100,0,pad_b;k4:0,0,1,100,0,warp");
   REQUIRE(twice.size() == 1 && twice[0].action == Action::PadB);
+  // A 7th field is the overlay's page; the action stays the 6th.
+  const std::vector<TouchButton> paged = ParseTouchButtons("k5:0,0,1,100,0,ball_bomb,1;k6:0,0,1,100,0, pad_x ,2");
+  REQUIRE(paged.size() == 2);
+  REQUIRE((paged[0] == TouchButton{5, Action::BallBomb}));
+  REQUIRE((paged[1] == TouchButton{6, Action::PadX}));
   // All 64 at once.
   std::string full;
   for (int slot = 0; slot < kTouchButtonSlots; ++slot)
@@ -468,7 +476,7 @@ void TestBallButtons() {
   REQUIRE(BallRowForGame(Action::PadR)->row == Action::BallSpider);
   REQUIRE(FindBallRow(Action::PadA) == nullptr && BallRowForGame(Action::PadZ) == nullptr);
   REQUIRE(ActionFromKey("ball_power_bomb") == Action::BallPowerBomb);
-  REQUIRE(!TouchButtonAction(Action::BallBomb));
+  REQUIRE(TouchButtonAction(Action::BallBomb));
 
   const Input lb = In(Device::PadButton, 9), rb = In(Device::PadButton, 10);
   const uint32_t kLB = 1u << 9, kRB = 1u << 10;
@@ -561,9 +569,17 @@ void TestBallButtons() {
   rl.bindings[0].blocked = 0;
   ApplyBallButtons(rl);
   REQUIRE(rl.bindings[0].blocked == 0);
-  // The overlay's ball buttons are rows on their touch codes.
-  for (const TouchBallControl& c : kTouchBallControls)
-    REQUIRE(FindBallRow(c.row) != nullptr && c.control >= 0 && c.control < 29);
+  // The overlay's ball page is one button per row, on touch codes 40..44.
+  REQUIRE(std::size(kTouchBallControls) == std::size(kBallRows));
+  for (size_t i = 0; i < std::size(kTouchBallControls); ++i) {
+    const TouchBallControl& c = kTouchBallControls[i];
+    REQUIRE(FindBallRow(c.row) != nullptr && c.control == 40 + int(i));
+  }
+  // An added button's row is scoped to the ball like any other.
+  Profile tb;
+  BindTouchButtons(tb, "k2:0,0,1,100,0,ball_boost,1");
+  ApplyBallButtons(tb);
+  REQUIRE(tb.bindings.size() == 1 && tb.bindings[0].contexts == kCtxMorphBall);
 
   // everywhereOnly (the Menu rows) leaves bindings scoped under Advanced alone.
   Profile e;

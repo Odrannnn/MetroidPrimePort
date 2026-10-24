@@ -30,6 +30,10 @@ constexpr int kTouchControlCount = 29;
 constexpr int kTouchBeamShift = 32;
 constexpr int kTouchTurbo = 33;
 constexpr int kTouchMapTap = 34; // one poll of Z after a minimap tap
+// The Morph Ball page's own buttons (Bomb, Boost, Power Bomb, Spider, Unmorph:
+// TouchControlsView's C_BALL + i), drawn only in the ball.
+constexpr int kTouchBallBase = 40;
+constexpr int kTouchBallCount = 5;
 // The buttons the player adds in the layout editor (slot 0..63, its `k<slot>`
 // entry in the touch layout; PortInput::BindTouchButtons).
 constexpr int kTouchCustomBase = 64;

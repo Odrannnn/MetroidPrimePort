@@ -1251,8 +1251,8 @@ constexpr SPreset kKeyPresets[] = {
      "left ctrl or C morph ball, F or middle click missile,\n"
      "right click or Q lock on, left alt free look, Tab or M map,\n"
      "1-4 beams, 5-8 visors (arrows too), left shift beam shift.\n"
-     "Turns on mouse aim and Twin Stick Aim, so a controller's right\n"
-     "stick aims too."},
+     "In morph ball Q is Spider Ball. Turns on mouse aim and Twin Stick\n"
+     "Aim, so a controller's right stick aims too."},
 };
 constexpr SPreset kPadPresets[] = {
     {"GameCube", "gamecube",
@@ -1262,12 +1262,12 @@ constexpr SPreset kPadPresets[] = {
      "fire, LT lock on, A or LB jump, X morph ball, RB missile, Menu map,\n"
      "View pause, right stick click free look. D-pad: up Combat, right Scan,\n"
      "left X-Ray, down Thermal visor; hold Y for up Power, right Wave, left\n"
-     "Plasma, down Ice beam; in morph ball Y springs (with Spring Ball on).\n"
-     "Turns on Twin Stick Aim and the Scan/X-Ray swap."},
+     "Plasma, down Ice beam; in morph ball Y springs (with Spring Ball on)\n"
+     "and LT is Spider Ball. Turns on Twin Stick Aim and the Scan/X-Ray swap."},
     {"Modern", "modern",
      "RT fire, LT lock on, A jump, B morph ball, RB missile, Y map,\n"
-     "right stick click free look. Turns on Twin Stick Aim; hold LB\n"
-     "and press the D-pad to change beams."},
+     "right stick click free look; in morph ball LT is Spider Ball.\n"
+     "Turns on Twin Stick Aim; hold LB and press the D-pad to change beams."},
     {"Southpaw", "southpaw", "The GameCube layout with the two sticks swapped.\nTurns off Twin Stick Aim."},
 };
 
@@ -1325,6 +1325,21 @@ void DrawReset(const SViews& views) {
   ImGui::EndPopup();
 }
 
+// A preset's Morph Ball rows, after ClearOwn unbinds them all (so each does its
+// game button). The dual-stick layouts move R to the right stick click, so Spider
+// Ball goes on lock-on instead, as in Remastered (LT, or Q on the keyboard).
+void ApplyBallPreset(PortInput::Family family, std::string_view id) {
+  const char* spider = nullptr;
+  if (family == PortInput::Family::Pad && (id == "remastered" || id == "modern")) spider = "axis:lefttrigger+";
+  if (family == PortInput::Family::Keyboard && id == "mouse") spider = "key:20"; // SDL_SCANCODE_Q
+  Binding b;
+  if (spider == nullptr || !PortInput::InputFromText(spider, b.inputs[0])) return;
+  b.action = PortInput::Action::BallSpider;
+  b.count = 1;
+  PortInput::AddUserBinding(Ensure("", "Default"), b);
+  Commit();
+}
+
 // One row of preset buttons. A click replaces the family's own Default-profile
 // bindings with the preset; a kind or model's own bindings stay on top.
 void PresetRow(const SView& v, const SPreset* presets, int count) {
@@ -1349,6 +1364,7 @@ void PresetRow(const SView& v, const SPreset* presets, int count) {
       } else {
         PortControls::ApplyKeyPresetNamed(id);
       }
+      ApplyBallPreset(v.family, id);
       ImGui::CloseCurrentPopup();
     }
     ImGui::EndDisabled();

@@ -32,14 +32,15 @@ constexpr std::string_view kPadAxisNames[] = {"leftx", "lefty", "rightx", "right
                                               "righttrigger"};
 constexpr std::string_view kGyroNames[] = {"pitch", "yaw", "roll"};
 // Touch codes: the overlay's control ids (TouchControlsView.CONTROL_IDS, the names
-// its saved layout uses), then the overlay's own signals at 32..34, then the
-// buttons added in its layout editor at 64..127 (their layout ids, k0..k63).
+// its saved layout uses), then the overlay's own signals at 32..34, its Morph Ball
+// page's buttons at 40..44, then the buttons added in its layout editor at 64..127
+// (their layout ids, k0..k63).
 constexpr std::string_view kTouchNames[] = {
     "lstick", "cstick", "dpad",    "a",     "b",    "x",   "y",          "l",          "r",
     "z",      "visor",  "beam",    "start", "menu", "map", "eye",        "rstick",     "jump",
     "fire",   "morph",  "missile", "lt",    "lb",   "rt",  "rb",         "tz",         "tr",
     "turbo",  "tturbo", "",        "",      "",     "beam_shift", "turbo_held", "map_tap",
-    "", "", "", "", "", "", "", "", "", "",
+    "", "", "", "", "", "bbomb", "bboost", "bpbomb", "bspider", "bunmorph",
     "", "", "", "", "", "", "", "", "", "",
     "", "", "", "", "", "", "", "", "", "k0",
     "k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9", "k10",
@@ -1009,7 +1010,7 @@ bool TouchButtonAction(Action a) {
     return false;
   if (a >= Action::Layer1 && a <= Action::Layer4)
     return false;
-  return !(a >= Action::MenuA && a <= Action::MenuRight) && FindBallRow(a) == nullptr;
+  return !(a >= Action::MenuA && a <= Action::MenuRight);
 }
 
 std::vector<TouchButton> ParseTouchButtons(std::string_view layout) {
@@ -1034,19 +1035,20 @@ std::vector<TouchButton> ParseTouchButtons(std::string_view layout) {
     if (!digits || slot >= kTouchButtonSlots || (id.size() == 3 && id[1] == '0'))
       continue;
     std::string_view fields = entry.substr(colon + 1);
-    std::string_view last;
+    std::string_view key;
     int count = 0;
     while (true) {
       const size_t comma = fields.find(',');
-      last = fields.substr(0, comma);
-      ++count;
+      if (++count == 6)
+        key = fields.substr(0, comma);
       if (comma == std::string_view::npos)
         break;
       fields = fields.substr(comma + 1);
     }
-    if (count != 6)
+    // The 7th, the page the button shows on, is the overlay's alone.
+    if (count != 6 && count != 7)
       continue;
-    const Action a = ActionFromKey(Trim(last));
+    const Action a = ActionFromKey(Trim(key));
     if (TouchButtonAction(a))
       slots[slot] = a;
   }

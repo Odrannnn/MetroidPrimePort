@@ -393,13 +393,18 @@
   and the prompts in the ball follow it. A combo on a row replaces the same combo; its
   buttons alone keep what they do, as with any combo. A row given layers in controls.toml
   works in the ball while one is held and adds to the game button rather than replacing
-  it; without the layer, its input does what it did. On touch the overlay's ball buttons
-  are the rows themselves, bound by default: A or Fire/RT bombs, B or Jump/LB boosts, X or
-  Morph unmorphs, Y or RB lays a Power Bomb and R is the Spider Ball. In the ball those
-  controls send no GameCube button of their own, a touch remap of a row moves it to
-  another control (one left with no row does nothing in the ball) and their labels follow
-  it. The Turbo button and the layout editor's added buttons (which can't take the rows)
-  keep pressing their buttons in the ball.
+  it; without the layer, its input does what it did. A preset from Reset… also sets the
+  rows where the game button would clash: Remastered and Modern pads put Spider Ball on
+  LT (their R is the right stick click), Mouse & keyboard on Q; the rest follow gameplay.
+  On touch the overlay has a Morph Ball page, shown instead of the gameplay one while
+  morphed (not in the map, pause menu or a message box). It has its own buttons, Bomb,
+  Boost, P.Bomb, Spider and Unmorph, which are the rows themselves (bound by default;
+  a touch remap of a row moves it, and the label follows); the stick, START, MENU, the
+  map and the eye are on both pages, and a drag on free screen still aims (the Spring
+  swipe). The face buttons, pills, D-pad or wheels, right stick and Turbo are only on
+  the gameplay page. The layout editor's "Ball page" button edits the other page, where
+  the ball buttons move, resize, hide and delete like any; an added button belongs to
+  the page it was added on, and its "On …" button moves it to Gameplay, Ball or Both.
   "Point and click menus" (on by default; `pointer_menus=`, `MP_POINTER_MENUS`) lets
   the mouse and touch work the game's own menus (front end, pause screen, save stations,
   upgrade messages) and the map. A hover selects (a tap on touch), a click confirms (a

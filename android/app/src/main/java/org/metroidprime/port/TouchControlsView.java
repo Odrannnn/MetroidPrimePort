@@ -128,9 +128,6 @@ final class TouchControlsView extends View {
     };
     // What each GameCube face button does, drawn small under its letter.
     private static final String[] GAMECUBE_FUNCTIONS = {"Fire", "Jump", "Morph", "Missile"};
-    // The same buttons while morphed (#106): A lays a bomb, B boosts, X still morphs (out),
-    // Y lays a power bomb.
-    private static final String[] GAMECUBE_MORPH_FUNCTIONS = {"Bomb", "Boost", "Morph", "P.Bomb"};
     // In the pause menu (Y turns the inventory's suit view), on the map screen
     // (A switches area and world map, Y shows the legend) and in save station or
     // message boxes; blank where the button does nothing there.
@@ -174,14 +171,31 @@ final class TouchControlsView extends View {
         ControlButton.round("Beam", BEAM_SHIFT, 0f, -TWIN_DIAMOND, 0.055f, GC_GREY),
     };
     // Turbo, above Beam.
-    // TWIN_FACE's functions while morphed; Beam still shifts the D-pad.
-    private static final String[] TWIN_MORPH_FUNCTIONS = {"Boost", "Bomb", "Morph", "Beam"};
     // The menus' TWIN_FACE functions, as GAMECUBE_PAUSE_FUNCTIONS and the rest.
     private static final String[] TWIN_PAUSE_FUNCTIONS = {"Back", "Select", "", ""};
     private static final String[] TWIN_MAP_FUNCTIONS = {"Exit", "World", "", ""};
     private static final String[] TWIN_DIALOG_FUNCTIONS = {"", "OK", "", ""};
     private static final ControlButton TWIN_TURBO =
         ControlButton.round("Turbo", TURBO_FIRE, 0f, -0.21f, 0.045f, GC_GREEN);
+
+    // The Morph Ball page's buttons, C_BALL + index, where the face buttons that
+    // do the same in the ball sit: Bomb on A (Fire in twin), Boost on B (Jump),
+    // Unmorph on X (Morph), P.Bomb on Y and Spider on R (twin: above P.Bomb). No
+    // button id: they only report their touch code.
+    private static final ControlButton[] BALL_FACE = {
+        ControlButton.round("Bomb", -1, 0f, 0f, 0.085f, GC_GREEN),
+        ControlButton.round("Boost", -1, -0.123f, 0.103f, 0.050f, GC_RED),
+        ControlButton.round("P.Bomb", -1, -0.085f, -0.133f, 0.055f, GC_GREY),
+        ControlButton.round("Spider", -1, 0.05f, -0.27f, 0.050f, GC_GREY),
+        ControlButton.round("Unmorph", -1, 0.156f, -0.026f, 0.055f, GC_GREY),
+    };
+    private static final ControlButton[] TWIN_BALL_FACE = {
+        ControlButton.round("Bomb", -1, TWIN_DIAMOND, 0f, 0.055f, GC_GREEN),
+        ControlButton.round("Boost", -1, 0f, TWIN_DIAMOND, 0.055f, GC_RED),
+        ControlButton.round("P.Bomb", -1, 0f, -TWIN_DIAMOND, 0.055f, GC_GREY),
+        ControlButton.round("Spider", -1, 0f, -0.21f, 0.055f, GC_GREY),
+        ControlButton.round("Unmorph", -1, -TWIN_DIAMOND, 0f, 0.055f, GC_GREY),
+    };
 
     private static final PillButton[] GAMECUBE_PILLS = {
         new PillButton("L Lock", AXIS_TRIGGER_L, -1, 0.020f, 0.030f, 0.150f, 0.190f, GC_GREY),
@@ -298,7 +312,24 @@ final class TouchControlsView extends View {
     // The Turbo button, once for the default/classic layouts and once for twin.
     private static final int C_TURBO = 27;
     private static final int C_TTURBO = 28;
-    private static final int CONTROLS = 29;
+    // The Morph Ball page's buttons (BALL_FACE's order), shown only in the ball,
+    // where the gameplay page's own buttons hide (onPage). Each does a Morph Ball
+    // row (port_input_bindings.h's kTouchBallControls), on touch code
+    // TOUCH_BALL_BASE + its index, and presses no GameCube button of its own.
+    private static final int C_BALL = 29;
+    private static final int C_BBOMB = 29;
+    private static final int C_BBOOST = 30;
+    private static final int C_BPBOMB = 31;
+    private static final int C_BSPIDER = 32;
+    private static final int C_BUNMORPH = 33;
+    private static final int BALL_BUTTONS = 5;
+    private static final int TOUCH_BALL_BASE = 40;
+    // An added button's page (customPage), saved as its entry's 7th field.
+    private static final int PAGE_PLAY = 0;
+    private static final int PAGE_BALL = 1;
+    private static final int PAGE_BOTH = 2;
+    private static final String[] PAGE_NAMES = {"Gameplay", "Ball", "Both"};
+    private static final int CONTROLS = 34;
     // The buttons the player adds in the editor (issue #92), after the stock
     // controls: control C_CUSTOM + slot, saved as k<slot> with its action's key
     // (customAction), and reported as touch code TOUCH_CUSTOM_BASE + slot
@@ -313,12 +344,12 @@ final class TouchControlsView extends View {
     private static final String[] CONTROL_IDS = controlIds(
         "lstick", "cstick", "dpad", "a", "b", "x", "y", "l", "r", "z", "visor", "beam", "start",
         "menu", "map", "eye", "rstick", "jump", "fire", "morph", "missile", "lt", "lb", "rt", "rb",
-        "tz", "tr", "turbo", "tturbo");
+        "tz", "tr", "turbo", "tturbo", "bbomb", "bboost", "bpbomb", "bspider", "bunmorph");
     private static final String[] CONTROL_NAMES = {
         "Left stick", "C-stick", "D-pad", "A", "B", "X", "Y", "L", "R", "Z", "Visor", "Beam",
         "Start", "Menu", "Map", "Hide", "Right stick", "Jump", "Fire", "Morph", "Missile",
         "LT Lock", "LB Jump", "RT Fire", "RB Missile", "Map (Z)", "R",
-        "Turbo", "Turbo",
+        "Turbo", "Turbo", "Bomb", "Boost", "P.Bomb", "Spider", "Unmorph",
     };
     private static final float MIN_SCALE = 0.5f;
     private static final float MAX_SCALE = 2.5f;
@@ -328,9 +359,10 @@ final class TouchControlsView extends View {
     // The editor's toolbar tools, indexed by EDIT_*; which ones show depends on
     // the selection (editTools).
     private static final String[] EDIT_LABELS =
-        {"−", "+", "Opacity", "Hide", "Reset", "Reset all", "Done", "Add", "Action", "Delete"};
+        {"−", "+", "Opacity", "Hide", "Reset", "Reset all", "Done", "Add", "Action", "Delete",
+         "Ball page", "Page"};
     private static final float[] EDIT_WIDTHS_DP =
-        {44f, 44f, 112f, 60f, 64f, 88f, 64f, 64f, 72f, 72f};
+        {44f, 44f, 112f, 60f, 64f, 88f, 64f, 64f, 72f, 72f, 100f, 100f};
     private static final float EDIT_BAR_HEIGHT_DP = 44f;
     private static final float EDIT_BAR_GAP_DP = 6f;
     private static final float EDIT_GRAB_DP = 8f; // slack round a control's bounds
@@ -344,12 +376,16 @@ final class TouchControlsView extends View {
     private static final int EDIT_ADD = 7;
     private static final int EDIT_ACTION = 8;
     private static final int EDIT_DELETE = 9;
+    // Which page the editor shows (Gameplay or Morph Ball); an added button's page.
+    private static final int EDIT_PAGE = 10;
+    private static final int EDIT_CUSTOM_PAGE = 11;
     // Nothing selected, a stock control, an added button.
-    private static final int[] EDIT_TOOLS_NONE = {EDIT_ADD, EDIT_RESET_ALL, EDIT_DONE};
+    private static final int[] EDIT_TOOLS_NONE = {EDIT_ADD, EDIT_PAGE, EDIT_RESET_ALL, EDIT_DONE};
     private static final int[] EDIT_TOOLS_STOCK =
         {EDIT_MINUS, EDIT_PLUS, EDIT_OPACITY, EDIT_HIDE, EDIT_RESET, EDIT_DELETE, EDIT_DONE};
     private static final int[] EDIT_TOOLS_CUSTOM =
-        {EDIT_MINUS, EDIT_PLUS, EDIT_OPACITY, EDIT_HIDE, EDIT_ACTION, EDIT_DELETE, EDIT_DONE};
+        {EDIT_MINUS, EDIT_PLUS, EDIT_OPACITY, EDIT_HIDE, EDIT_ACTION, EDIT_CUSTOM_PAGE,
+         EDIT_DELETE, EDIT_DONE};
     // A control's own opacity cycles through these (percent). MENU stops at
     // MENU_MIN_ALPHA: it is the only way into F1 on a touch-only device.
     private static final int[] ALPHA_STEPS = {100, 75, 50, 25, 0};
@@ -375,6 +411,11 @@ final class TouchControlsView extends View {
     private final boolean[] ovRemoved = new boolean[CONTROLS];
     // Each added button's action key, or null for a free slot.
     private final String[] customAction = new String[CUSTOM_SLOTS];
+    // Each added button's page: PAGE_PLAY, PAGE_BALL or PAGE_BOTH.
+    private final int[] customPage = new int[CUSTOM_SLOTS];
+    // The Morph Ball page is up: in play while morphed, in the editor by its toolbar.
+    private boolean ballPage;
+    private ControlButton[] ballFace = BALL_FACE;
     // Why the last editor tool did nothing (Add with every slot used), shown in
     // the hint line until the next touch.
     private String editNotice;
@@ -629,6 +670,10 @@ final class TouchControlsView extends View {
             if (labels && !hidden && !autoHidden && labelContext() != labelContextNow) {
                 invalidate();
             }
+            // Morphing or unmorphing flips the page (drawControls releases what it hides).
+            if (!editing && !hidden && controlsOnNow && inBall() != ballPage) {
+                invalidate();
+            }
             final boolean overlayVisible = nativeDebugOverlayVisible();
             if (overlayVisible != lastOverlayVisible) {
                 lastOverlayVisible = overlayVisible;
@@ -772,6 +817,13 @@ final class TouchControlsView extends View {
         twin = !classic && nativeTouchTwinStick();
         face = twin ? TWIN_FACE : GAMECUBE_FACE;
         pills = twin ? TWIN_PILLS : GAMECUBE_PILLS;
+        ballFace = twin ? TWIN_BALL_FACE : BALL_FACE;
+        // The editor keeps the page its toolbar picked; play follows the game.
+        final boolean page = editing ? ballPage : inBall();
+        if (page != ballPage) {
+            ballPage = page;
+            releaseOffPage();
+        }
         turbo = nativeTouchTurbo();
         turboButton = turbo ? (twin ? TWIN_TURBO : GAMECUBE_TURBO) : null;
         if (!turbo) {
@@ -788,7 +840,7 @@ final class TouchControlsView extends View {
             // A layout made on another screen, or before a rotation or resize,
             // must not leave a control off screen where it can't be grabbed.
             for (int i = 0; i < ALL_CONTROLS; ++i) {
-                if (editShown(i) && (ovDx[i] != 0f || ovDy[i] != 0f || ovScale[i] != 1f)) {
+                if (!removed(i) && layoutHas(i) && (ovDx[i] != 0f || ovDy[i] != 0f || ovScale[i] != 1f)) {
                     clampToScreen(i, width, height);
                 }
             }
@@ -836,6 +888,9 @@ final class TouchControlsView extends View {
         for (ControlButton button : face) {
             drawControlButton(canvas, button, width, height);
         }
+        for (ControlButton button : ballFace) {
+            drawControlButton(canvas, button, width, height);
+        }
         if (turboButton != null) {
             drawControlButton(canvas, turboButton, width, height);
         }
@@ -876,7 +931,8 @@ final class TouchControlsView extends View {
     // (which still shows and selects it) nor in the controls-off view, where
     // START and MENU ignore the layout.
     private boolean ctrlHidden(int control) {
-        return controlsOnNow && !editing && (ovHidden[control] || removed(control));
+        return controlsOnNow &&
+               (!onPage(control) || (!editing && (ovHidden[control] || removed(control))));
     }
 
     private boolean removed(int control) {
@@ -887,6 +943,9 @@ final class TouchControlsView extends View {
     private int controlAlpha(int control) {
         if (removed(control)) {
             return -1; // the controls-off view draws START and MENU without this
+        }
+        if (controlsOnNow && !onPage(control)) {
+            return -1;
         }
         if (editing) {
             return ovHidden[control] ? EDIT_MIN_ALPHA : Math.max(EDIT_MIN_ALPHA, ovAlpha[control]);
@@ -1205,6 +1264,32 @@ final class TouchControlsView extends View {
         return true;
     }
 
+    // Lets go of what a page switch hid (a face button held into the ball, a ball
+    // button held out of it), keeping the shared ones, so the stick stays held.
+    private void releaseOffPage() {
+        final java.util.Iterator<Map.Entry<Integer, TouchTarget>> it = targets.entrySet().iterator();
+        while (it.hasNext()) {
+            final Map.Entry<Integer, TouchTarget> entry = it.next();
+            final TouchTarget target = entry.getValue();
+            final boolean off;
+            if (target.type == BUTTON) {
+                off = target.touchControl >= 0 && !onPage(target.touchControl);
+            } else if (target.type == RIGHT_STICK) {
+                off = !onPage(twin ? C_RSTICK : C_CSTICK);
+            } else {
+                off = target.type == WHEEL;
+            }
+            if (!off) {
+                continue;
+            }
+            releaseTarget(target);
+            it.remove();
+            if (entry.getKey() == rightPointer) {
+                rightPointer = -1;
+            }
+        }
+    }
+
     void releaseAll() {
         for (TouchTarget target : targets.values()) {
             releaseTarget(target);
@@ -1342,6 +1427,16 @@ final class TouchControlsView extends View {
         for (ControlButton button : face) {
             if (!ctrlHidden(controlOf(button)) && hitButton(button, x, y, width, height)) {
                 final TouchTarget target = TouchTarget.begin(BUTTON, button.button, x, y);
+                target.control = button;
+                targets.put(pointerId, target);
+                pressTarget(target, controlOf(button), true);
+                return;
+            }
+        }
+        for (ControlButton button : ballFace) {
+            if (!ctrlHidden(controlOf(button)) && hitButton(button, x, y, width, height)) {
+                // Its action is always a binding, like an added button's.
+                final TouchTarget target = TouchTarget.begin(BUTTON, CUSTOM_BUTTON, x, y);
                 target.control = button;
                 targets.put(pointerId, target);
                 pressTarget(target, controlOf(button), true);
@@ -1794,7 +1889,8 @@ final class TouchControlsView extends View {
 
     // The native touch code of an editor control: the stock ones are their C_* id.
     private static int touchCode(int control) {
-        return control >= C_CUSTOM ? TOUCH_CUSTOM_BASE + control - C_CUSTOM : control;
+        return control >= C_CUSTOM ? TOUCH_CUSTOM_BASE + control - C_CUSTOM
+             : control >= C_BALL ? TOUCH_BALL_BASE + control - C_BALL : control;
     }
 
     // Presses a pill, face or added button: reports the control, and sends its own
@@ -1805,7 +1901,8 @@ final class TouchControlsView extends View {
         if (control >= 0 && control < touchHeld.length && touchHeld[control]++ == 0) {
             nativeTouchControl(touchCode(control), true);
         }
-        target.bound = control >= C_CUSTOM ||
+        // A ball button, like an added one, is always a binding.
+        target.bound = control >= C_BALL ||
                        (remappable && control >= 0 && nativeTouchControlBound(control));
         if (!target.bound) {
             pressControl(target.id);
@@ -1967,6 +2064,11 @@ final class TouchControlsView extends View {
     private int controlOf(ControlButton button) {
         if (button == turboButton) {
             return twin ? C_TTURBO : C_TURBO;
+        }
+        for (int i = 0; i < BALL_BUTTONS; ++i) {
+            if (BALL_FACE[i] == button || TWIN_BALL_FACE[i] == button) {
+                return C_BALL + i;
+            }
         }
         final int first = twin ? C_JUMP : C_A;
         for (int i = 0; i < face.length; ++i) {
@@ -2315,6 +2417,29 @@ final class TouchControlsView extends View {
         return (nativeWheelOwned() & WHEEL_MORPHED_BIT) != 0 ? LABELS_MORPH : LABELS_PLAY;
     }
 
+    // Whether play wants the Morph Ball page: morphed, outside the map, pause menu
+    // and message boxes (their face buttons do menu things).
+    private boolean inBall() {
+        return !nativeMapScreenOpen() && !nativePauseScreenOpen() && !nativeMessageBoxOpen() &&
+               (nativeWheelOwned() & WHEEL_MORPHED_BIT) != 0;
+    }
+
+    // Whether a control belongs to the page up now. The stick, START, MENU, the
+    // map (pill, button and minimap) and the eye are on both.
+    private boolean onPage(int control) {
+        switch (control) {
+        case C_LSTICK: case C_START: case C_MENU: case C_Z: case C_TZ: case C_MAP: case C_EYE:
+            return true;
+        default:
+            break;
+        }
+        if (control >= C_CUSTOM) {
+            final int page = customPage[control - C_CUSTOM];
+            return page == PAGE_BOTH || (page == PAGE_BALL) == ballPage;
+        }
+        return (control >= C_BALL && control < C_BALL + BALL_BUTTONS) == ballPage;
+    }
+
     // A shoulder pill's text for labelContextNow. In a menu, a pill that does
     // nothing there shows just its button's name.
     private String pillLabel(PillButton pill) {
@@ -2324,14 +2449,9 @@ final class TouchControlsView extends View {
         final String name = pill.label.split(" ")[0];
         final int sent = pill.axis >= 0 ? -1 : pill.button;
         switch (labelContextNow) {
-        case LABELS_MORPH: {
-            // The ball buttons follow the Morph Ball rows' touch bindings.
-            final String ball = nativeTouchBallLabel(pillControl(pill));
-            if (ball == null) {
-                return pill.label;
-            }
-            return ball.isEmpty() ? name : name + " " + ball;
-        }
+        case LABELS_MORPH:
+            // Only the map, START and MENU stay up in the ball.
+            return pill.label;
         case LABELS_PAUSE:
             // L and R page through the subscreens.
             if (pill.axis == AXIS_TRIGGER_L) {
@@ -2378,18 +2498,11 @@ final class TouchControlsView extends View {
         return pill.axis < 0 && (pill.button == BTN_START || pill.button == TOGGLE_DEBUG_OVERLAY);
     }
 
-    // A face button's function in the ball: its Morph Ball row's, else the table's.
-    private String morphFunction(ControlButton button, String fallback) {
-        final String ball = nativeTouchBallLabel(controlOf(button));
-        return ball != null ? ball : fallback;
-    }
-
-    // A face button's function for labelContextNow.
+    // A face button's function for labelContextNow (the ball hides them).
     private String faceFunction(ControlButton button) {
         if (twin) {
             final int i = controlOf(button) - C_JUMP;
             switch (labelContextNow) {
-            case LABELS_MORPH: return morphFunction(button, TWIN_MORPH_FUNCTIONS[i]);
             case LABELS_PAUSE: return TWIN_PAUSE_FUNCTIONS[i];
             case LABELS_MAP: return TWIN_MAP_FUNCTIONS[i];
             case LABELS_DIALOG: return TWIN_DIALOG_FUNCTIONS[i];
@@ -2398,7 +2511,6 @@ final class TouchControlsView extends View {
         }
         final int i = controlOf(button) - C_A;
         switch (labelContextNow) {
-        case LABELS_MORPH: return morphFunction(button, GAMECUBE_MORPH_FUNCTIONS[i]);
         case LABELS_PAUSE: return GAMECUBE_PAUSE_FUNCTIONS[i];
         case LABELS_MAP: return GAMECUBE_MAP_FUNCTIONS[i];
         case LABELS_DIALOG: return GAMECUBE_DIALOG_FUNCTIONS[i];
@@ -2429,6 +2541,14 @@ final class TouchControlsView extends View {
         } else {
             canvas.drawCircle(x, y, radius, fillPaint);
             canvas.drawCircle(x, y, radius, strokePaint);
+        }
+        final int control = controlOf(button);
+        if (control >= C_BALL && control < C_BALL + BALL_BUTTONS) {
+            // A ball button wears its action's name: the row its touch binding does.
+            final String row = nativeTouchBallLabel(touchCode(control));
+            final String name = row != null && !row.isEmpty() ? row : button.label;
+            drawCenteredLabel(canvas, name, x, y, (name.length() > 5 ? dp(10) : dp(12)) * scale);
+            return;
         }
         // The letter big (twin: the Xbox one), the function small under it.
         final boolean isTurbo = button == turboButton;
@@ -2706,6 +2826,9 @@ final class TouchControlsView extends View {
             case "toggle_original": return "Original";
             case "photo_mode": return "Photo";
             case "gyro_aim": return "Gyro";
+            case "ball_power_bomb": return "P.Bomb";
+            case "ball_boost": return "Boost";
+            case "ball_spider": return "Spider";
             default: break;
         }
         String label = actionLabel(key);
@@ -2913,6 +3036,7 @@ final class TouchControlsView extends View {
         Arrays.fill(ovHidden, false);
         Arrays.fill(ovRemoved, false);
         Arrays.fill(customAction, null);
+        Arrays.fill(customPage, PAGE_PLAY);
         for (String entry : text.split(";")) {
             final int colon = entry.indexOf(':');
             if (colon <= 0) {
@@ -2928,7 +3052,7 @@ final class TouchControlsView extends View {
             }
             final String[] parts = entry.substring(colon + 1).split(",");
             final boolean custom = control >= C_CUSTOM;
-            if (control < 0 || (custom ? parts.length != 6 : parts.length < 3 || parts.length > 5)) {
+            if (control < 0 || (custom ? parts.length < 6 || parts.length > 7 : parts.length < 3 || parts.length > 5)) {
                 continue;
             }
             final String key = custom ? parts[5].trim() : null;
@@ -2967,6 +3091,11 @@ final class TouchControlsView extends View {
                 }
                 if (custom) {
                     customAction[control - C_CUSTOM] = key;
+                    if (parts.length > 6) {
+                        final int page = Integer.parseInt(parts[6].trim());
+                        customPage[control - C_CUSTOM] =
+                            page >= PAGE_PLAY && page <= PAGE_BOTH ? page : PAGE_PLAY;
+                    }
                 }
                 if (control == C_MENU) {
                     // A hand-edited layout can't lock the only way into F1 away.
@@ -3016,6 +3145,9 @@ final class TouchControlsView extends View {
             out.append(String.format(Locale.ROOT, "%s:%.4f,%.4f,%.3f,%d,%d,%s", CONTROL_IDS[i],
                                      ovDx[i], ovDy[i], ovScale[i], ovAlpha[i],
                                      ovHidden[i] ? 1 : 0, key));
+            if (customPage[slot] != PAGE_PLAY) {
+                out.append(',').append(customPage[slot]); // older layouts lack it: Gameplay
+            }
         }
         return out.toString();
     }
@@ -3044,6 +3176,7 @@ final class TouchControlsView extends View {
         hidden = false;
         autoHidden = false;
         editing = true;
+        ballPage = false;
         selected = -1;
         editNotice = null;
         dragPointer = -1;
@@ -3071,9 +3204,14 @@ final class TouchControlsView extends View {
         return !removed(control) && layoutShows(control);
     }
 
-    // Whether the current layout and settings have this control at all, deleted
-    // or not (Add's list restores only those).
+    // Whether the current layout, settings and page have this control at all,
+    // deleted or not (Add's list restores only those).
     private boolean layoutShows(int control) {
+        return onPage(control) && layoutHas(control);
+    }
+
+    // layoutShows on either page.
+    private boolean layoutHas(int control) {
         if (control >= C_CUSTOM) {
             return customAction[control - C_CUSTOM] != null;
         }
@@ -3177,17 +3315,16 @@ final class TouchControlsView extends View {
                     out.setEmpty();
                     return;
                 }
-                faceGeometry(button, width, height, true, faceGeo);
-                if (button.isKidney()) {
-                    kidneyPath(facePath, faceGeo[0], faceGeo[1], faceGeo[2], faceGeo[3],
-                               button.arcStart, button.arcSweep);
-                    facePath.computeBounds(out, true);
-                } else {
-                    out.set(faceGeo[0] - faceGeo[2], faceGeo[1] - faceGeo[2],
-                            faceGeo[0] + faceGeo[2], faceGeo[1] + faceGeo[2]);
-                }
+                faceBoundsOf(button, width, height, out);
                 return;
             }
+            case C_BBOMB:
+            case C_BBOOST:
+            case C_BPBOMB:
+            case C_BSPIDER:
+            case C_BUNMORPH:
+                faceBoundsOf(ballFace[control - C_BALL], width, height, out);
+                return;
             case C_L:
             case C_R:
             case C_Z:
@@ -3225,6 +3362,18 @@ final class TouchControlsView extends View {
                 return;
             default:
                 bottomButtonRect(0, true, width, height, out);
+        }
+    }
+
+    private void faceBoundsOf(ControlButton button, float width, float height, RectF out) {
+        faceGeometry(button, width, height, true, faceGeo);
+        if (button.isKidney()) {
+            kidneyPath(facePath, faceGeo[0], faceGeo[1], faceGeo[2], faceGeo[3],
+                       button.arcStart, button.arcSweep);
+            facePath.computeBounds(out, true);
+        } else {
+            out.set(faceGeo[0] - faceGeo[2], faceGeo[1] - faceGeo[2],
+                    faceGeo[0] + faceGeo[2], faceGeo[1] + faceGeo[2]);
         }
     }
 
@@ -3376,6 +3525,7 @@ final class TouchControlsView extends View {
                 return;
             }
             customAction[slot] = key;
+            customPage[slot] = ballPage ? PAGE_BALL : PAGE_PLAY; // the page it was added on
             resetControl(C_CUSTOM + slot);
             selected = C_CUSTOM + slot;
         } else if (customAction[control - C_CUSTOM] != null) {
@@ -3427,6 +3577,20 @@ final class TouchControlsView extends View {
                     resetControl(i);
                 }
                 Arrays.fill(customAction, null); // the added buttons go too
+                Arrays.fill(customPage, PAGE_PLAY);
+                break;
+            case EDIT_PAGE:
+                ballPage = !ballPage;
+                selected = -1;
+                break;
+            case EDIT_CUSTOM_PAGE:
+                if (selected >= C_CUSTOM) {
+                    final int slot = selected - C_CUSTOM;
+                    customPage[slot] = (customPage[slot] + 1) % PAGE_NAMES.length;
+                    if (!onPage(selected)) {
+                        selected = -1; // it went to the other page
+                    }
+                }
                 break;
             case EDIT_ADD:
                 if (freeSlot() < 0 && restorable().length == 0) {
@@ -3636,6 +3800,10 @@ final class TouchControlsView extends View {
                 label = "Show";
             } else if (i == EDIT_OPACITY && selected >= 0) {
                 label = "Opacity " + ovAlpha[selected] + "%"; // a tap steps it down
+            } else if (i == EDIT_PAGE) {
+                label = ballPage ? "Play page" : "Ball page"; // the page a tap goes to
+            } else if (i == EDIT_CUSTOM_PAGE && selected >= C_CUSTOM) {
+                label = "On " + PAGE_NAMES[customPage[selected - C_CUSTOM]];
             }
             // Tools that can't act now are dimmed: Hide on MENU, Add with no free slot.
             final boolean idle =
@@ -3647,7 +3815,8 @@ final class TouchControlsView extends View {
             textPaint.setAlpha(255);
         }
 
-        String hint = "Tap a control to select it: drag to move, pinch to resize. Add: a new or deleted button";
+        String hint = (ballPage ? "Morph Ball page. " : "Gameplay page. ") +
+            "Tap a control to select it: drag to move, pinch to resize. Add: a new or deleted button";
         if (editNotice != null) {
             hint = editNotice;
         } else if (selected >= 0) {
