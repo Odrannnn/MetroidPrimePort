@@ -4,7 +4,6 @@
 #include "port_room_env.h"
 #include "port_vfx_particles.h"
 #include "MetroidPrime/CStateManager.hpp"
-#include "MetroidPrime/Player/CPlayerState.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptEffect.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptPlatform.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptSpecialFunction.hpp"
@@ -72,12 +71,12 @@ bool State::ResourcesReady(const CStateManager& mgr) const {
   return true;
 }
 
-bool State::Visible(const CStateManager& mgr) const {
-  // Refraction is rendered in the HDR scene; unsupported visor passes retain retail visuals.
+bool State::Visible(const CStateManager&) const {
+  // Every visor draws in the HDR scene, so the group shows in all of them; each member's own
+  // roomfx visor flags (all 1/1/1 here) decide per visor in CScriptEffect, as Remastered's do.
   // Every member asks this twice a frame; the full check runs once per tick in Update.
-  const auto visor = mgr.GetPlayerState()->GetActiveVisor(mgr);
   return started_ && ready_ && generation_ == PortMods::ResourceGeneration() && PortRoomEffects::Enabled() &&
-         PortRoomEnv::Enabled() && (visor == CPlayerState::kPV_Combat || visor == CPlayerState::kPV_Scan);
+         PortRoomEnv::Enabled();
 }
 
 bool State::Covers(uint16_t platform, const CStateManager& mgr) const {
