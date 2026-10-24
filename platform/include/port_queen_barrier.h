@@ -38,6 +38,7 @@ private:
   float elapsed_ = 0;
   bool configured_ = false;
   bool started_ = false;
+  bool ready_ = false;  // ResourcesReady as of the last Update
   bool finished_ = false;
   bool failed_ = false;
 };

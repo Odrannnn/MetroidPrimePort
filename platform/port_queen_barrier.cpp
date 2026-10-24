@@ -74,9 +74,10 @@ bool State::ResourcesReady(const CStateManager& mgr) const {
 
 bool State::Visible(const CStateManager& mgr) const {
   // Refraction is rendered in the HDR scene; unsupported visor passes retain retail visuals.
+  // Every member asks this twice a frame; the full check runs once per tick in Update.
   const auto visor = mgr.GetPlayerState()->GetActiveVisor(mgr);
-  return started_ && PortRoomEnv::Enabled() &&
-         (visor == CPlayerState::kPV_Combat || visor == CPlayerState::kPV_Scan) && ResourcesReady(mgr);
+  return started_ && ready_ && generation_ == PortMods::ResourceGeneration() && PortRoomEffects::Enabled() &&
+         PortRoomEnv::Enabled() && (visor == CPlayerState::kPV_Combat || visor == CPlayerState::kPV_Scan);
 }
 
 bool State::Covers(uint16_t platform, const CStateManager& mgr) const {
@@ -86,6 +87,7 @@ bool State::Covers(uint16_t platform, const CStateManager& mgr) const {
 
 void State::Stop(CStateManager& mgr) {
   started_ = false;
+  ready_ = false;
   finished_ = false;
   failed_ = true;
   for (uint16_t& uid : effects_) {
@@ -143,6 +145,7 @@ void State::Update(float dt, int ringState, const std::array<RingInput, 5>& inpu
     Stop(mgr);
     return;
   }
+  ready_ = true;
   if (ringState == 3) elapsed_ = std::min(group_.duration, elapsed_ + dt);
   for (size_t i = 0; i < 5; ++i) {
     CScriptPlatform* platform = TCastToPtr<CScriptPlatform>(mgr.ObjectById(RawUid(platforms_[i])));
