@@ -382,15 +382,24 @@
   the option off, menus and the map follow the gameplay bindings and the rows do nothing.
   The Morph Ball rows (issue #167: Bomb, Power Bomb, Boost Ball, Spider Ball, Unmorph;
   `ball_bomb`, `ball_power_bomb`, `ball_boost`, `ball_spider`, `ball_unmorph` in
-  controls.toml) press A, Y, B, R and X only in Morph Ball. They start unbound, so the ball
-  uses the game buttons until one is set. A key, mouse button or controller input bound to
-  one does only that in the ball, held layers included (the same mouse button under any of
+  controls.toml) press A, Y, B, R and X only in Morph Ball, so the ball's controls are
+  separate from gameplay's; the stick, Start, Z (map) and the C-stick are shared. On
+  keyboard & mouse and controller they start unbound, and an unbound row follows gameplay:
+  the game button's inputs do it in the ball. Once a row is set in one of those kinds, it
+  replaces that button in the ball for that kind only (setting Bomb on the controller
+  stops the pad's A bombing; the keyboard's A key still does). An input bound to a row
+  does only that in the ball, held layers included (the same mouse button under any of
   its codes, an axis at any threshold); outside the ball its other bindings work as before,
   and the prompts in the ball follow it. A combo on a row replaces the same combo; its
   buttons alone keep what they do, as with any combo. A row given layers in controls.toml
-  works in the ball while one is held; without it, its input does what it did. Added touch buttons can't take them; an overlay
-  control (`touch:fire`, ...) on one stops sending its own button only in the ball and
-  keeps it everywhere else.
+  works in the ball while one is held and adds to the game button rather than replacing
+  it; without the layer, its input does what it did. On touch the overlay's ball buttons
+  are the rows themselves, bound by default: A or Fire/RT bombs, B or Jump/LB boosts, X or
+  Morph unmorphs, Y or RB lays a Power Bomb and R is the Spider Ball. In the ball those
+  controls send no GameCube button of their own, a touch remap of a row moves it to
+  another control (one left with no row does nothing in the ball) and their labels follow
+  it. The Turbo button and the layout editor's added buttons (which can't take the rows)
+  keep pressing their buttons in the ball.
   "Point and click menus" (on by default; `pointer_menus=`, `MP_POINTER_MENUS`) lets
   the mouse and touch work the game's own menus (front end, pause screen, save stations,
   upgrade messages) and the map. A hover selects (a tap on touch), a click confirms (a

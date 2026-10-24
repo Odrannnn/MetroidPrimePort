@@ -985,6 +985,23 @@ void ApplyBallButtons(Profile& profile) {
         return FindBallRow(b.action) != nullptr && b.contexts == kCtxMorphBall && BindingFamily(b) != Family::Touch;
       },
       kCtxMorphBall, false);
+  // A row bound in a family replaces its game button there in the ball: that
+  // family's inputs for the button stop pressing it. A row with layers adds to it,
+  // and touch only replaces the overlay's own controls (TouchControlBound), so the
+  // turbo button and the layout's added buttons keep pressing theirs.
+  bool replaced[std::size(kBallRows)][size_t(Family::Touch)] = {};
+  for (const Binding& b : profile.bindings) {
+    const BallRow* row = FindBallRow(b.action);
+    const Family family = BindingFamily(b);
+    if (row != nullptr && b.count > 0 && b.contexts == kCtxMorphBall && family != Family::Touch)
+      replaced[size_t(row - kBallRows)][size_t(family)] = true;
+  }
+  for (Binding& b : profile.bindings) {
+    const BallRow* row = BallRowForGame(b.action);
+    const Family family = BindingFamily(b);
+    if (row != nullptr && b.count > 0 && family != Family::Touch && replaced[size_t(row - kBallRows)][size_t(family)])
+      b.blocked |= kCtxMorphBall;
+  }
 }
 
 bool TouchButtonAction(Action a) {

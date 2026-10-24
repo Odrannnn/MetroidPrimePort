@@ -68,6 +68,8 @@ SActiveProfiles ActiveUserProfiles();
 // binding reads it (then the overlay sends only the touch code, not its pad button).
 void SetTouchControl(int control, bool down);
 bool TouchControlBound(int control);
+// The Morph Ball row a stock control does in the ball now, or None.
+PortInput::Action TouchBallRow(int control);
 // Port 0's pad: its SDL GUID (32 hex digits), gamepad type string and name; false
 // (all empty) without one.
 bool ActivePad(std::string& guid, std::string& type, std::string& name);

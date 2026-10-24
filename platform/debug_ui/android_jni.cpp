@@ -95,6 +95,19 @@ Java_org_metroidprime_port_TouchControlsView_nativeTouchControlBound(JNIEnv*, jc
   return PortInputDevices::TouchControlBound(static_cast< int >(control)) ? JNI_TRUE : JNI_FALSE;
 }
 
+// What a stock control does in the ball, for its label: its Morph Ball row's
+// name, "" for a ball button left without one, null for any other control.
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_metroidprime_port_TouchControlsView_nativeTouchBallLabel(JNIEnv* env, jclass, jint control) {
+  if (const PortInput::BallRow* row = PortInput::FindBallRow(PortInputDevices::TouchBallRow(control))) {
+    return env->NewStringUTF(row->touch);
+  }
+  for (const PortInput::TouchBallControl& c : PortInput::kTouchBallControls) {
+    if (c.control == control) return env->NewStringUTF("");
+  }
+  return nullptr;
+}
+
 // The actions a layout editor button can take, as key, label, key, label... in
 // the action list's order (pad buttons, beams, visors, morph, the port's own).
 extern "C" JNIEXPORT jobjectArray JNICALL

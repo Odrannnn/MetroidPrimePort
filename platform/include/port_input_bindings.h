@@ -162,18 +162,35 @@ bool SamePhysicalInput(const Input& a, const Input& b);
 void BlockRowInputs(Profile& profile, bool (*isRow)(const Binding&), uint16_t ctx, bool everywhereOnly);
 
 // The Morph Ball rows (issue #167): each presses a GameCube button, only in Morph
-// Ball. Touch can't take them (the touch overlay keeps its own morph ball buttons).
+// Ball. Bound in a family, a row replaces that button in the ball for the family;
+// unbound, the button's own inputs do it. Touch has them bound by default on the
+// overlay's ball buttons (kTouchBallControls); its layout editor buttons can't take them.
 struct BallRow {
   Action row;
   Action game;
-  const char* hint; // the Remap page's note beside the row
+  const char* hint;  // the Remap page's note beside the row
+  const char* touch; // the overlay's label for a control doing the row
 };
 inline constexpr BallRow kBallRows[] = {
-    {Action::BallBomb, Action::PadA, "A when unset"},
-    {Action::BallPowerBomb, Action::PadY, "Y when unset"},
-    {Action::BallBoost, Action::PadB, "B when unset"},
-    {Action::BallSpider, Action::PadR, "R when unset"},
-    {Action::BallUnmorph, Action::PadX, "X when unset"},
+    {Action::BallBomb, Action::PadA, "A when unset", "Bomb"},
+    {Action::BallPowerBomb, Action::PadY, "Y when unset", "P.Bomb"},
+    {Action::BallBoost, Action::PadB, "B when unset", "Boost"},
+    {Action::BallSpider, Action::PadR, "R when unset", "Spider"},
+    {Action::BallUnmorph, Action::PadX, "X when unset", "Morph"},
+};
+// The touch overlay's stock controls that are Morph Ball rows in the ball by
+// default (touch codes, TouchControlsView's C_* ids): the GameCube layouts' A, B,
+// X, Y and R, twin stick's Jump, Fire, Morph and the LB/RT/RB pills. In the ball
+// they press no GameCube button of their own (TouchControlBound).
+struct TouchBallControl {
+  int control;
+  Action row;
+};
+inline constexpr TouchBallControl kTouchBallControls[] = {
+    {3, Action::BallBomb},       {4, Action::BallBoost},  {5, Action::BallUnmorph},
+    {6, Action::BallPowerBomb},  {8, Action::BallSpider}, {17, Action::BallBoost},
+    {18, Action::BallBomb},      {19, Action::BallUnmorph}, {22, Action::BallBoost},
+    {23, Action::BallBomb},      {24, Action::BallPowerBomb},
 };
 // The row of `a`, or nullptr; the row that presses `game`, or nullptr.
 const BallRow* FindBallRow(Action a);
@@ -181,7 +198,9 @@ const BallRow* BallRowForGame(Action game);
 // Before a poll: scopes the Morph Ball rows to Morph Ball (a row with layers to
 // Morph Ball while one is held) and blocks Morph Ball for the other bindings on
 // their keyboard, mouse and controller inputs (a row with layers blocks nothing: it
-// outranks them while one is held). A row that isn't bound changes nothing.
+// outranks them while one is held), and blocks Morph Ball for its game button's
+// bindings in each keyboard or controller family that binds the row (not with
+// layers). A row that isn't bound changes nothing.
 void ApplyBallButtons(Profile& profile);
 
 // The touch overlay's own buttons (issue #92): the layout editor adds up to

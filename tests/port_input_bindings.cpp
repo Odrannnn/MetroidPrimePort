@@ -543,6 +543,28 @@ void TestBallButtons() {
   REQUIRE(l.bindings[1].blocked == 0);
   REQUIRE(PollWith(runtime, l, kCtxMorphBall, kRB).Held(Action::SpringBall));
 
+  // A bound row replaces its game button in the ball for that family only: the
+  // pad's A stops bombing, the key and the touch turbo still press A.
+  Profile r;
+  r.chordWindowMs = 0;
+  const Input padA = In(Device::PadButton, 0), keyA = In(Device::Key, 4), turbo = In(Device::Touch, 33);
+  r.bindings = {Bind(Action::PadA, {padA}), Bind(Action::PadA, {keyA}), Bind(Action::PadA, {turbo}),
+                Bind(Action::BallBomb, {rb}), Bind(Action::BallBomb, {In(Device::Touch, 3)})};
+  ApplyBallButtons(r);
+  REQUIRE(r.bindings[0].blocked == kCtxMorphBall && r.bindings[1].blocked == 0 && r.bindings[2].blocked == 0);
+  REQUIRE(PollWith(runtime, r, kCtxGameplay, 1u).Held(Action::PadA));
+  REQUIRE(!PollWith(runtime, r, kCtxMorphBall, 1u).Held(Action::PadA));
+  REQUIRE(PollWith(runtime, r, kCtxMorphBall, kRB).Held(Action::BallBomb));
+  // A row only under a layer adds to the button.
+  Profile rl = r;
+  rl.bindings[3].contexts = kCtxLayer1;
+  rl.bindings[0].blocked = 0;
+  ApplyBallButtons(rl);
+  REQUIRE(rl.bindings[0].blocked == 0);
+  // The overlay's ball buttons are rows on their touch codes.
+  for (const TouchBallControl& c : kTouchBallControls)
+    REQUIRE(FindBallRow(c.row) != nullptr && c.control >= 0 && c.control < 29);
+
   // everywhereOnly (the Menu rows) leaves bindings scoped under Advanced alone.
   Profile e;
   Binding mapOnly = Bind(Action::PadZ, {In(Device::Key, 4)});

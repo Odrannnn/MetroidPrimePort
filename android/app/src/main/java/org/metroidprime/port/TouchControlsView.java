@@ -555,6 +555,9 @@ final class TouchControlsView extends View {
     // takes the control over, so the overlay doesn't send its own button too.
     private static native void nativeTouchControl(int control, boolean down);
     private static native boolean nativeTouchControlBound(int control);
+    // The control's Morph Ball row label in the ball: "" for a ball button with
+    // none, null for a control that does its usual button there.
+    private static native String nativeTouchBallLabel(int control);
     // The actions an added button can take: key, label, key, label...
     private static native String[] nativeTouchButtonActions();
     // The twin layout's Beam button is held: the D-pad picks beams, not visors.
@@ -2321,20 +2324,14 @@ final class TouchControlsView extends View {
         final String name = pill.label.split(" ")[0];
         final int sent = pill.axis >= 0 ? -1 : pill.button;
         switch (labelContextNow) {
-        case LABELS_MORPH:
-            if (pill.axis == AXIS_TRIGGER_R) {
-                return "R Spider";
+        case LABELS_MORPH: {
+            // The ball buttons follow the Morph Ball rows' touch bindings.
+            final String ball = nativeTouchBallLabel(pillControl(pill));
+            if (ball == null) {
+                return pill.label;
             }
-            if (sent == BTN_EAST) {
-                return "LB Boost";
-            }
-            if (sent == BTN_SOUTH) {
-                return "RT Bomb";
-            }
-            if (sent == BTN_NORTH) {
-                return "RB P.Bomb";
-            }
-            return pill.label;
+            return ball.isEmpty() ? name : name + " " + ball;
+        }
         case LABELS_PAUSE:
             // L and R page through the subscreens.
             if (pill.axis == AXIS_TRIGGER_L) {
@@ -2381,12 +2378,18 @@ final class TouchControlsView extends View {
         return pill.axis < 0 && (pill.button == BTN_START || pill.button == TOGGLE_DEBUG_OVERLAY);
     }
 
+    // A face button's function in the ball: its Morph Ball row's, else the table's.
+    private String morphFunction(ControlButton button, String fallback) {
+        final String ball = nativeTouchBallLabel(controlOf(button));
+        return ball != null ? ball : fallback;
+    }
+
     // A face button's function for labelContextNow.
     private String faceFunction(ControlButton button) {
         if (twin) {
             final int i = controlOf(button) - C_JUMP;
             switch (labelContextNow) {
-            case LABELS_MORPH: return TWIN_MORPH_FUNCTIONS[i];
+            case LABELS_MORPH: return morphFunction(button, TWIN_MORPH_FUNCTIONS[i]);
             case LABELS_PAUSE: return TWIN_PAUSE_FUNCTIONS[i];
             case LABELS_MAP: return TWIN_MAP_FUNCTIONS[i];
             case LABELS_DIALOG: return TWIN_DIALOG_FUNCTIONS[i];
@@ -2395,7 +2398,7 @@ final class TouchControlsView extends View {
         }
         final int i = controlOf(button) - C_A;
         switch (labelContextNow) {
-        case LABELS_MORPH: return GAMECUBE_MORPH_FUNCTIONS[i];
+        case LABELS_MORPH: return morphFunction(button, GAMECUBE_MORPH_FUNCTIONS[i]);
         case LABELS_PAUSE: return GAMECUBE_PAUSE_FUNCTIONS[i];
         case LABELS_MAP: return GAMECUBE_MAP_FUNCTIONS[i];
         case LABELS_DIALOG: return GAMECUBE_DIALOG_FUNCTIONS[i];
