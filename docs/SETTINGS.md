@@ -673,10 +673,10 @@
   cutscene clips and hiding the arm cannon and helmet. The Morph Ball,
   cutscenes and scripted cameras are unchanged. The camera pulls in at walls.
   It is how the Dread Samus bodies are seen in play (`docs/DREAD_SAMUS.md`).
-  `third_person_distance` (metres behind, 0.5..10, default 3),
+  `third_person_distance` (metres behind, 0.5..10, default 3.5),
   `third_person_shoulder` (metres right, -2..2, default 0.6) and
   `third_person_height` (metres above the first-person eye, -1..2, default
-  0.4) place it. Console: `thirdperson [on|off] [distance N] [shoulder N]
+  0.1) place it. Console: `thirdperson [on|off] [distance N] [shoulder N]
   [height N]`.
 - Speedrun timer and LiveSplit (F1 > Game > Speedrun; the timer also in pause Options >
   Display as In-Game Timer). `speedrun_timer` draws the in-game time (the play
