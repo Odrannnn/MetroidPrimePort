@@ -180,7 +180,8 @@ const BallRow* FindBallRow(Action a);
 const BallRow* BallRowForGame(Action game);
 // Before a poll: scopes the Morph Ball rows to Morph Ball (a row with layers to
 // Morph Ball while one is held) and blocks Morph Ball for the other bindings on
-// their keyboard, mouse and controller inputs. A row that isn't bound changes nothing.
+// their keyboard, mouse and controller inputs (a row with layers blocks nothing: it
+// outranks them while one is held). A row that isn't bound changes nothing.
 void ApplyBallButtons(Profile& profile);
 
 // The touch overlay's own buttons (issue #92): the layout editor adds up to

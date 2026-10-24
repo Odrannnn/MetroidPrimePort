@@ -977,9 +977,13 @@ void ApplyBallButtons(Profile& profile) {
     b.contexts = layers != 0 ? layers : uint16_t(kCtxMorphBall);
     b.blocked = layers != 0 ? uint16_t(kCtxAll & ~(kCtxMorphBall | kCtxLayers)) : 0;
   }
+  // A row with layers outranks the input's other bindings while one is held, and
+  // blocking them would leave the input dead in the ball without the layer.
   BlockRowInputs(
       profile,
-      [](const Binding& b) { return FindBallRow(b.action) != nullptr && BindingFamily(b) != Family::Touch; },
+      [](const Binding& b) {
+        return FindBallRow(b.action) != nullptr && b.contexts == kCtxMorphBall && BindingFamily(b) != Family::Touch;
+      },
       kCtxMorphBall, false);
 }
 

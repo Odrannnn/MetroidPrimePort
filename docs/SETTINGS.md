@@ -388,7 +388,7 @@
   its codes, an axis at any threshold); outside the ball its other bindings work as before,
   and the prompts in the ball follow it. A combo on a row replaces the same combo; its
   buttons alone keep what they do, as with any combo. A row given layers in controls.toml
-  works in the ball while one is held. Added touch buttons can't take them; an overlay
+  works in the ball while one is held; without it, its input does what it did. Added touch buttons can't take them; an overlay
   control (`touch:fire`, ...) on one stops sending its own button only in the ball and
   keeps it everywhere else.
   "Point and click menus" (on by default; `pointer_menus=`, `MP_POINTER_MENUS`) lets

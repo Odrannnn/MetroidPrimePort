@@ -539,6 +539,9 @@ void TestBallButtons() {
   REQUIRE(inBall.Held(Action::BallBomb) && !inBall.Held(Action::SpringBall));
   REQUIRE(!PollWith(runtime, l, kCtxGameplay, kLB | kRB).Held(Action::BallBomb));
   REQUIRE(!PollWith(runtime, l, kCtxMorphBall, kRB).Held(Action::BallBomb));
+  // Without the layer the input keeps its other bindings in the ball.
+  REQUIRE(l.bindings[1].blocked == 0);
+  REQUIRE(PollWith(runtime, l, kCtxMorphBall, kRB).Held(Action::SpringBall));
 
   // everywhereOnly (the Menu rows) leaves bindings scoped under Advanced alone.
   Profile e;
