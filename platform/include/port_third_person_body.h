@@ -69,7 +69,7 @@ bool Ready();
 void PreRender();
 // Draws the body (and its cannon) at the player's transform; false if it is not ready.
 bool Render(const CStateManager& mgr, const CTransform4f& xf, const CActorLights* lights);
-// The cannon's world position (the body's GUN_LCTR) as the body is posed now; false when the
+// The cannon's muzzle in the world (the body's Charge_LCTR) as the body is posed now; false when the
 // body is not ready, then the first-person muzzle stands in.
 bool CannonPosition(const CPlayer& player, CVector3f& out);
 // Drops the body (third person off, a new world).

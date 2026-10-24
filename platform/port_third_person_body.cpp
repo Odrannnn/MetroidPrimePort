@@ -259,7 +259,9 @@ bool CannonPosition(const CPlayer& player, CVector3f& out) {
   CVector3f origin = bodyXf.GetTranslation();
   origin.SetZ(player.GetBoundingBox().GetMinPoint().GetZ());
   bodyXf.SetTranslation(origin);
-  out = (bodyXf * s.body->GetScaledLocatorTransform("GUN_LCTR")).GetTranslation();
+  // GUN_LCTR is where the cannon is held, at the wrist; Charge_LCTR, where the charge forms, is
+  // its muzzle (0.56 m past the forearm at this scale, where the Dread cannon's tip is too).
+  out = (bodyXf * s.body->GetScaledLocatorTransform("Charge_LCTR")).GetTranslation();
   return true;
 }
 

@@ -14,9 +14,9 @@ class CVector3f;
 namespace PortThirdPerson {
 
 struct Params {
-  float distance = 3.0f; // metres behind the eye
+  float distance = 3.5f; // metres behind the eye
   float shoulder = 0.6f; // metres to the right
-  float height = 0.4f;   // metres above the first-person eye (over the shoulder of the 1.8x body)
+  float height = 0.1f;   // metres above the first-person eye (level with the 1.8x body's shoulder)
 };
 constexpr float kDistanceMin = 0.5f, kDistanceMax = 10.f;
 constexpr float kShoulderMin = -2.f, kShoulderMax = 2.f;
