@@ -388,7 +388,9 @@
   its codes, an axis at any threshold); outside the ball its other bindings work as before,
   and the prompts in the ball follow it. A combo on a row replaces the same combo; its
   buttons alone keep what they do, as with any combo. A row given layers in controls.toml
-  works in the ball while one is held. Touch buttons can't take them; touch is unchanged.
+  works in the ball while one is held. Added touch buttons can't take them; an overlay
+  control (`touch:fire`, ...) on one stops sending its own button only in the ball and
+  keeps it everywhere else.
   "Point and click menus" (on by default; `pointer_menus=`, `MP_POINTER_MENUS`) lets
   the mouse and touch work the game's own menus (front end, pause screen, save stations,
   upgrade messages) and the map. A hover selects (a tap on touch), a click confirms (a
@@ -425,7 +427,7 @@
   bindings stay. Touch inputs are named after the overlay controls (`touch:a`,
   `touch:fire`, `touch:missile`, `touch:morph`, ..., plus `touch:beam_shift`,
   `touch:turbo_held`, `touch:map_tap`); a bound touch control no longer sends
-  its own button. The overlay hides while F1 is open, so Record can't see touch
+  its own button wherever its binding works. The overlay hides while F1 is open, so Record can't see touch
   controls: the editor's "Add a touch control..." list picks them instead.
   The D-pad, the sticks and the menu button can't be remapped.
 - `MP_CINEMA_BARS=0|1` (Video > Display "Cutscene black bars", persisted as `cinema_bars`,

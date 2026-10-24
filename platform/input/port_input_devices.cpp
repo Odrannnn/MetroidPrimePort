@@ -791,11 +791,19 @@ bool TouchControlBound(int control) {
   return (sTouchBound[control >> 6].load(std::memory_order_relaxed) >> (control & 63)) & 1;
 }
 
+// A touch: binding takes its control over from the overlay's own button
+// (TouchControlsView.pressTarget), so only one that applies here counts: one
+// scoped elsewhere, like a Morph Ball row outside the ball (#167), would leave
+// the control dead. Layered ones count while any layer could be held.
 static void PublishTouchBound(const SActiveProfiles& active) {
+  const uint16_t here = GameContexts() | PortInput::kCtxLayers;
   uint64_t mask[2] = {};
   for (const PortInput::UserProfile* p : {active.sel.base, active.sel.pad}) {
     if (p == nullptr) continue;
     for (const Binding& b : p->bindings) {
+      // A row works only in the ball, whatever contexts it was saved with (ApplyBallButtons).
+      const bool ball = PortInput::FindBallRow(b.action) != nullptr;
+      if (ball ? (here & PortInput::kCtxMorphBall) == 0 : (b.contexts & here) == 0) continue;
       for (int i = 0; i < b.count; ++i) {
         const Input& in = b.inputs[size_t(i)];
         if (in.device == Device::Touch && TouchControlCode(in.code)) mask[in.code >> 6] |= uint64_t{1} << (in.code & 63);
