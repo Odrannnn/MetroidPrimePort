@@ -303,7 +303,7 @@
   none): a second controller button or trigger per GameCube button. Aurora maps
   one native button to each PAD button, so the port reads the alt one itself and
   ORs it in (`PortControls::HeldAltPadButtons`, from `CDolphinController`).
-- Control presets (Controls > Remap, "Reset..." beside the device list: Keyboard & mouse and Controllers). Keyboard: **Classic** (the first-run layout)
+- Control presets (Controls > Remap, "Presets..." beside the device list: one click applies a layout to Keyboard & mouse or to all Controllers, replacing your own bindings there; a selected kind or model keeps its own on top). Keyboard: **Classic** (the first-run layout)
   and **Mouse & keyboard** (WASD, E fire, Space jump, left ctrl/C morph, F
   missile, Q lock on, left alt free look, Tab/M map, 1-4 beams and 5-8 visors
   through whichever C-stick direction or D-pad button the disc's tweak gives
@@ -368,7 +368,7 @@
   Record accepts keyboard, mouse or controller input; repeated identical
   mappings are ignored. Editing a default makes it yours, and "Revert" gives the default back. Keyboard &
   mouse, Touch and Controllers are the Default profile restricted to that family of input;
-  a kind or model is its own profile on top. "Reset..." restores a preset (after a confirmation).
+  a kind or model is its own profile on top. "Reset..." removes a device's own bindings (after a confirmation), bringing back the Classic and GameCube layouts.
   "Separate menu buttons" (on by default; `menu_standard_buttons=`,
   `MP_MENU_STANDARD_BUTTONS`) makes a controller read the "Menus and map" rows instead of
   the game buttons in the pause screen, front end, map, save stations and upgrade messages

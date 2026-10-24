@@ -98,6 +98,11 @@ constexpr STouchInfo kTouchControls[] = {
     {"tturbo", "Twin stick: Turbo"},
     {"beam_shift", "Twin stick: Beam (held)"},
     {"map_tap", "Minimap tap"},
+    {"bbomb", "Morph Ball: Bomb"},
+    {"bboost", "Morph Ball: Boost"},
+    {"bpbomb", "Morph Ball: Power Bomb"},
+    {"bspider", "Morph Ball: Spider"},
+    {"bunmorph", "Morph Ball: Unmorph"},
 };
 
 UserBindings sWork;     // what the page edits; written through on every change
@@ -1234,50 +1239,74 @@ void DrawTable(const SViews& views, bool editorDrawn) {
 struct SPreset {
   const char* name;
   const char* id;
+  const char* tooltip;
 };
-constexpr SPreset kKeyPresets[] = {{"Classic", "classic"}, {"Mouse & keyboard", "mouse"}};
+constexpr SPreset kKeyPresets[] = {
+    {"Classic", "classic",
+     "The default layout: WASD move, IJKL C-stick, X/Z/C/V for A/B/X/Y,\n"
+     "Q/E for L/R, F map, arrows D-pad, left shift beam shift.\n"
+     "Sets the keys, mouse buttons and beam shift key."},
+    {"Mouse & keyboard", "mouse",
+     "For mouse aim: WASD move, left click or E fire, Space jump,\n"
+     "left ctrl or C morph ball, F or middle click missile,\n"
+     "right click or Q lock on, left alt free look, Tab or M map,\n"
+     "1-4 beams, 5-8 visors (arrows too), left shift beam shift.\n"
+     "Turns on mouse aim and Twin Stick Aim, so a controller's right\n"
+     "stick aims too."},
+};
 constexpr SPreset kPadPresets[] = {
-    {"GameCube", "gamecube"}, {"Remastered", "remastered"}, {"Modern", "modern"}, {"Southpaw", "southpaw"}};
+    {"GameCube", "gamecube",
+     "The default layout: the face buttons and shoulder as on a GameCube pad.\nTurns off Twin Stick Aim."},
+    {"Remastered", "remastered",
+     "Metroid Prime Remastered's Dual Sticks scheme (Xbox labels): RT or B\n"
+     "fire, LT lock on, A or LB jump, X morph ball, RB missile, Menu map,\n"
+     "View pause, right stick click free look. D-pad: up Combat, right Scan,\n"
+     "left X-Ray, down Thermal visor; hold Y for up Power, right Wave, left\n"
+     "Plasma, down Ice beam; in morph ball Y springs (with Spring Ball on).\n"
+     "Turns on Twin Stick Aim and the Scan/X-Ray swap."},
+    {"Modern", "modern",
+     "RT fire, LT lock on, A jump, B morph ball, RB missile, Y map,\n"
+     "right stick click free look. Turns on Twin Stick Aim; hold LB\n"
+     "and press the D-pad to change beams."},
+    {"Southpaw", "southpaw", "The GameCube layout with the two sticks swapped.\nTurns off Twin Stick Aim."},
+};
 
-// One device's reset: back to a preset (or just the defaults), behind the popup's confirmation.
-void ResetSection(const SView& v, const SPreset* presets, int count, int& preset) {
+// Removes the user's own bindings for a view: a family of the Default profile,
+// or a kind or model's whole profile.
+void ClearOwn(const SView& v) {
+  sEditing = kEditNone;
+  EndCapture();
+  if (UserProfile* p = Find(v.match)) {
+    if (v.match.empty()) {
+      PortInput::ClearFamily(*p, v.family);
+    } else {
+      p->bindings.clear();
+      p->unbind.clear();
+    }
+    Commit();
+  }
+}
+
+// One device's reset, behind the popup's confirmation. The keyboard and all
+// controllers go back to their first preset (the first-run layout).
+void ResetSection(const SView& v) {
   using PortInput::Family;
   ImGui::PushID(int(v.family));
   ImGui::SeparatorText(v.family == Family::Pad && !v.match.empty() ? (v.name.empty() ? v.match : v.name).c_str()
                                                                    : kFamilies[int(v.family)]);
-  const bool pads = v.family == Family::Pad;
-  const bool gcAdapter = PADIsGCAdapter(0) != 0;
-  const auto needsPad = [&](int i) {
-    return pads && (std::string_view(presets[i].id) == "remastered" || std::string_view(presets[i].id) == "modern");
-  };
-  if (count > 0) {
-    for (int i = 0; i < count; ++i) {
-      ImGui::BeginDisabled(needsPad(i) && gcAdapter);
-      if (i != 0) ImGui::SameLine();
-      ImGui::RadioButton(presets[i].name, &preset, i);
-      ImGui::EndDisabled();
-    }
-    if (preset >= count || (needsPad(preset) && gcAdapter)) preset = 0;
-    ImGui::TextDisabled("Your own bindings for this device are removed; the others are left alone.");
+  const bool layout = v.match.empty() && v.family != Family::Touch;
+  if (layout) {
+    ImGui::TextDisabled("Your own bindings for this device are removed and the %s layout comes back.",
+                        v.family == Family::Keyboard ? kKeyPresets[0].name : kPadPresets[0].name);
   } else if (v.family == Family::Touch) {
     ImGui::TextDisabled("Removes every touch binding of yours.");
   } else {
     ImGui::TextDisabled("Removes this controller's own bindings, so it uses Controllers' again.");
   }
   if (ImGui::Button("Reset")) {
-    sEditing = kEditNone;
-    EndCapture();
-    if (UserProfile* p = Find(v.match)) {
-      if (v.match.empty()) {
-        PortInput::ClearFamily(*p, v.family);
-      } else {
-        p->bindings.clear();
-        p->unbind.clear();
-      }
-      Commit();
-    }
-    if (count > 0 && v.family == Family::Keyboard) PortControls::ApplyKeyPresetNamed(presets[preset].id);
-    if (count > 0 && pads) PortControls::ApplyPadPresetNamed(presets[preset].id);
+    ClearOwn(v);
+    if (layout && v.family == Family::Keyboard) PortControls::ApplyKeyPresetNamed(kKeyPresets[0].id);
+    if (layout && v.family == Family::Pad) PortControls::ApplyPadPresetNamed(kPadPresets[0].id);
     ImGui::CloseCurrentPopup();
   }
   ImGui::PopID();
@@ -1286,22 +1315,64 @@ void ResetSection(const SView& v, const SPreset* presets, int count, int& preset
 // The reset buttons, one per device, behind a popup.
 void DrawReset(const SViews& views) {
   using PortInput::Family;
-  static int sKeyPreset = 0;
-  static int sPadPreset = 0;
-  if (ImGui::Button("Reset...")) {
-    sKeyPreset = 0;
-    sPadPreset = 0;
-    ImGui::OpenPopup("resetDevice");
-  }
+  if (ImGui::Button("Reset...")) ImGui::OpenPopup("resetDevice");
   if (!ImGui::BeginPopup("resetDevice")) return;
-  ResetSection(views[Family::Keyboard], kKeyPresets, int(std::size(kKeyPresets)), sKeyPreset);
-  const bool allPads = views[Family::Pad].match.empty();
-  ResetSection(views[Family::Pad], allPads ? kPadPresets : nullptr, allPads ? int(std::size(kPadPresets)) : 0,
-               sPadPreset);
-  if (kShowTouch) {
-    int none = 0;
-    ResetSection(views[Family::Touch], nullptr, 0, none);
+  ResetSection(views[Family::Keyboard]);
+  ResetSection(views[Family::Pad]);
+  if (kShowTouch) ResetSection(views[Family::Touch]);
+  ImGui::Separator();
+  if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+}
+
+// One row of preset buttons. A click replaces the family's own Default-profile
+// bindings with the preset; a kind or model's own bindings stay on top.
+void PresetRow(const SView& v, const SPreset* presets, int count) {
+  using PortInput::Family;
+  ImGui::PushID(int(v.family));
+  ImGui::SeparatorText(kFamilies[int(v.family)]);
+  const bool pads = v.family == Family::Pad;
+  // A GameCube pad has no right stick (click) for the dual-stick layouts.
+  const bool gcAdapter = pads && PADIsGCAdapter(0) != 0;
+  for (int i = 0; i < count; ++i) {
+    const std::string_view id = presets[i].id;
+    if (i != 0) ImGui::SameLine();
+    ImGui::BeginDisabled(gcAdapter && (id == "remastered" || id == "modern"));
+    if (ImGui::Button(presets[i].name)) {
+      // The presets set the all-controllers layer, so clear that one even
+      // while a kind or model is selected.
+      SView base = v;
+      base.match.clear();
+      ClearOwn(base);
+      if (pads) {
+        PortControls::ApplyPadPresetNamed(id);
+      } else {
+        PortControls::ApplyKeyPresetNamed(id);
+      }
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_AllowWhenDisabled)) {
+      ImGui::SetTooltip("%s", presets[i].tooltip);
+    }
   }
+  if (pads && !v.match.empty()) {
+    ImGui::TextDisabled("Applies to all controllers; %s keeps its own bindings on top.",
+                        (v.name.empty() ? v.match : v.name).c_str());
+  }
+  ImGui::PopID();
+}
+
+// The keyboard and controller presets, behind a popup.
+void DrawPresets(const SViews& views) {
+  using PortInput::Family;
+  if (ImGui::Button("Presets...")) ImGui::OpenPopup("presets");
+  ImGui::SetItemTooltip("Ready-made layouts: Classic or Mouse & keyboard for the keyboard; GameCube,\n"
+                        "Remastered, Modern or Southpaw for controllers.");
+  if (!ImGui::BeginPopup("presets")) return;
+  ImGui::TextDisabled("A preset replaces your own bindings for that device.");
+  PresetRow(views[Family::Keyboard], kKeyPresets, int(std::size(kKeyPresets)));
+  PresetRow(views[Family::Pad], kPadPresets, int(std::size(kPadPresets)));
   ImGui::Separator();
   if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
   ImGui::EndPopup();
@@ -1473,6 +1544,8 @@ void Draw() {
   const SViews views = MakeViews();
   UpdateCapture();
 
+  ImGui::SameLine();
+  DrawPresets(views);
   ImGui::SameLine();
   DrawReset(views);
   bool menuStandard = PortDebug::MenuStandardButtons();

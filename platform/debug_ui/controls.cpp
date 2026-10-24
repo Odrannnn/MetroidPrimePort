@@ -65,7 +65,7 @@ void DrawControlsOptions() {
     SetSwapScanXray(swapScanXray);
   }
   ImGui::SetItemTooltip("Swaps the two buttons' D-pad directions, as in Remastered's Dual Sticks "
-                        "layout.\nThe controller presets set it.");
+                        "layout.\nThe controller presets (Remap > Presets...) set it.");
 
   ImGui::SeparatorText("Aiming");
   if (ImGui::Checkbox("Auto-aim", &sAutoAim)) {
