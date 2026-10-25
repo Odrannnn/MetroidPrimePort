@@ -414,6 +414,20 @@ if(ANDROID)
         set_target_properties(mport_vkshim PROPERTIES C_VISIBILITY_PRESET hidden)
         target_link_libraries(metroid_prime_port PRIVATE adrenotools z)
     endif()
+elseif(IOS)
+    # An iOS app is a flat bundle: the executable, Info.plist and the icons side
+    # by side. Nothing signs it here; tools/ios_package.sh finishes the bundle
+    # (icons, an ad hoc signature) and players re-sign the .ipa with their own
+    # Apple ID when they sideload it.
+    add_executable(metroid_prime_port MACOSX_BUNDLE ${MP_PORT_SOURCES})
+    file(STRINGS android/app/build.gradle _mp_version_line REGEX "versionName \"[^\"]+\"")
+    string(REGEX REPLACE ".*versionName \"([^\"]+)\".*" "\\1" MP_IOS_VERSION "${_mp_version_line}")
+    set_target_properties(metroid_prime_port PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/ios/Info.plist.in"
+        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.odrannnn.metroidprimeport
+        MACOSX_BUNDLE_BUNDLE_NAME "Metroid Prime"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${MP_IOS_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${MP_IOS_VERSION}")
 else()
     add_executable(metroid_prime_port ${MP_PORT_SOURCES})
 endif()
@@ -610,7 +624,9 @@ endif()
 # <SDL_GetBasePath()> + "textures", and Aurora's pipeline cache is opened by name
 # beside the binary. They are installed to bin/ for that reason, not by accident.
 include(GNUInstallDirs)
-install(TARGETS metroid_prime_port RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS metroid_prime_port
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    BUNDLE DESTINATION .)
 if(NOT MP_EMBED_RESOURCES)
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/textures/
         DESTINATION ${CMAKE_INSTALL_BINDIR}/textures)
