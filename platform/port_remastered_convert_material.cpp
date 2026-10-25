@@ -1536,6 +1536,13 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     out.backlight = out.backlightTop = 0.0;
     out.maps[kMr].has = out.maps[kNormal].has = out.maps[kEmissive].has = false;
   }
+  if (out.kind == 44) {
+    // Every shipped EnergyField carries the transparent flag, which leaves it unlayered; its TCH0
+    // stripe is bound as the second layer's base map (stage 4) all the same, and its class blends it.
+    out.layered = true;
+    out.cutout = out.tinted = out.mask = false;
+    out.height = 0.0;
+  }
   if (out.kind == 28) {
     // Lit, with the frost map in the emissive slot and its own opacity (the base alpha).
     out.tinted = out.mask = out.maskSquared = out.unlit = false;

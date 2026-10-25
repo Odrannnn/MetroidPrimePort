@@ -577,6 +577,7 @@ void TestHologramKind() {
   {
     ModelMaterial energy = Material(0, false);
     SetShader(energy, 0x9C867F3C);
+    energy.unk1 = 0x411; // as shipped: transparent, vertex colour, 0x400
     energy.data.push_back(TexParam(FourCC('T', 'C', 'H', '0'), 0x55));
     energy.data.push_back(ColorParam(FourCC('C', 'C', 'H', '0'), 6.f, 20.f, 0.35f, 0.95f));
     energy.data.push_back(ColorParam(FourCC('C', 'C', 'H', '1'), 2.f, 1.5f, 1.f, 1.f));
