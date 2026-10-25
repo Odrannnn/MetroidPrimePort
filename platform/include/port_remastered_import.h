@@ -186,7 +186,8 @@ inline constexpr int kEffects = 111;   // exact GPSM primitive dispatch, transfo
 // 39: source placements for all matched converted effects.
 // 40: placement lookup includes every converted-effect pairing method.
 // 42: general PlatformMP1 render models and transform bindings.
-inline constexpr int kRooms = 43;      // ColorModulate state bit 0x1000 starts on Registered
+// 43: ColorModulate state bit 0x1000 starts on Registered.
+inline constexpr int kRooms = 44;      // exposure hint fluid enum, priority and initial activation
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

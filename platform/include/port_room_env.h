@@ -447,6 +447,8 @@ struct PointLight {
 // CAutoExposureHintMP1 swaps between (role 1 / 2, `pair` the instance, any mode).
 struct FluidHint {
   uint8_t mode = 1;
+  int32_t priority = 0; // version 27: higher values register first
+  bool on = true; // component/entity active at load
   uint8_t role = 0;  // 0 ordinary, 1 pair hint A (normal view), 2 pair hint B (thermal) (unverified)
   uint8_t pair = 0;
   float exposure[2] = {};
@@ -880,8 +882,8 @@ void SetExposureState(bool unmorphed, bool thermal, bool cinematic);
 //
 // CAutoExposureHintMP1GOC swaps a pair of hints (role 1 = A, 2 = B) on the thermal visor: state
 // = (unmorphed && thermal) ? inCinematic : 1; state 1 enables A and disables B, state 0 the
-// reverse. A disabled hint is out of the pick whatever its mode; a pair hint of mode 0 is
-// registered from the load, one of a mode above 2 (script driven, not modelled) never.
+// reverse. A disabled hint is out of the pick whatever its mode. Mode 0 registers at
+// load; the shipped enum has only modes 0..2 (priority is a separate signed integer).
 struct ExposureHints {
   bool inside = false; // the last fluid state told (the GOC's +0x48)
   bool seen = false; // the fluid state has changed once (mode 2 may be active)
@@ -889,6 +891,7 @@ struct ExposureHints {
   std::vector<uint8_t> active; // per FluidHint
   std::vector<uint8_t> disabled; // per FluidHint: externally disabled by the swap
   std::vector<uint64_t> order; // per FluidHint: registration number, 0 when unregistered
+  std::vector<int32_t> priority;
   uint64_t next = 1;
   // Starts the room's hints as EntityLoaded does with the camera's current state. The pair
   // hints start in `pairState` (without a snap: ConnectAreaFunctors' initial disable is type 0;

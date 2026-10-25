@@ -460,13 +460,10 @@ void Writer::Tonemap(const RoomData& r, float out[5]) const {
   }
 }
 
-// The range of exposure values the room's auto exposure is held to, the bias it adds, the
-// sigma it eases by and where in the range the static exposure sits, or 0, 0, 0, 32, 0.5
-// for a room without auto exposure. A room can have several hints: the plain
-// one for the whole room is wanted, not those with a mode (they are for a state of the
-// room, such as a cutscene) or a volume of their own. Hints with mode 1 or 2 (active while
-// the camera is inside a fluid / once it has left one) go to `fluid` with their mode. A value the hint leaves out is
-// SLdrAutoExposureHint's default.
+// Version 27 stores all exposure hints in the registration list, including plain
+// mode 0 hints. The legacy header is left at the no-hint default. Priority and
+// fluid visibility are independent fields (SLdrAutoExposureHint::Load 0x538b54).
+// No transform/volume ranking occurs in UpdateTonemapping 0xaffb18.
 //
 // The two hints a CAutoExposureHintMP1 swaps between (role 1 for the one its 0x9ea1739d link
 // reaches, 2 for its 0x4ff221ac link; which is the normal view and which the thermal one is
@@ -476,7 +473,6 @@ void Writer::Exposure(const RoomData& r, float out[5], std::vector<PortRoomEnv::
   out[0] = out[1] = out[2] = 0.f;
   out[3] = 32.f;
   out[4] = 0.5f;
-  int best = 0;
   std::map<const Component*, std::pair<uint8_t, uint8_t>> paired;  // hint -> role, pair
   {
     const auto& comps = r.room.Components();
@@ -504,7 +500,7 @@ void Writer::Exposure(const RoomData& r, float out[5], std::vector<PortRoomEnv::
           const auto hf = r.room.Flat(*hint);
           const auto mi = hf.find(kPropHintMode);
           modes += " " + std::to_string(mi != hf.end() && mi->second.size >= 4
-                                            ? int(ReadLE32(r.room.Bytes(mi->second)))
+                                            ? int(ExposureHintMode(ReadLE32(r.room.Bytes(mi->second))))
                                             : 0);
         }
       }
@@ -529,38 +525,32 @@ void Writer::Exposure(const RoomData& r, float out[5], std::vector<PortRoomEnv::
     if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[1] < range[0]) {
       continue;
     }
-    Vec3 pos, rot, scale;
-    const bool whole = !r.room.Xform(*c, pos, rot, scale) ||
-                       (std::fabs(scale[0] - 1.0) < 1e-3 && std::fabs(scale[1] - 1.0) < 1e-3 &&
-                        std::fabs(scale[2] - 1.0) < 1e-3);
     const auto modeIt = f.find(kPropHintMode);
-    const int mode = modeIt != f.end() && modeIt->second.size >= 4 ? int(ReadLE32(r.room.Bytes(modeIt->second))) : 0;
+    const uint8_t mode = modeIt != f.end() && modeIt->second.size >= 4
+                             ? ExposureHintMode(ReadLE32(r.room.Bytes(modeIt->second)))
+                             : 0;
     const auto pairIt = paired.find(c);
-    if (mode == 1 || mode == 2 || pairIt != paired.end()) {
-      if (fluid != nullptr) {
-        PortRoomEnv::FluidHint h;
-        h.mode = uint8_t(std::clamp(mode, 0, 255));
-        if (pairIt != paired.end()) {
-          h.role = pairIt->second.first;
-          h.pair = pairIt->second.second;
-        }
-        h.exposure[0] = range[0];
-        h.exposure[1] = range[1];
-        h.bias = std::isfinite(bias) ? bias : 0.f;
-        h.sigma = sigma >= 0.f && sigma < 10000.f ? sigma : 32.f;
-        h.staticLerp = lerp >= 0.f && lerp <= 1.f ? lerp : 0.5f;
-        fluid->push_back(h);
+    // All hints participate in the same priority-ordered registration list. The
+    // old importer mistook priority (0x590d6843) for a fluid mode and picked one
+    // plain hint by transform scale, neither of which the shipped loader does.
+    if (fluid != nullptr) {
+      PortRoomEnv::FluidHint h;
+      h.mode = mode;
+      h.on = r.room.Active(*c);
+      const auto priority = f.find(kPropExposureHintPriority);
+      if (priority != f.end() && priority->second.size >= 4) {
+        h.priority = int32_t(ReadLE32(r.room.Bytes(priority->second)));
       }
-      continue;
-    }
-    const int rank = modeIt != f.end() ? 1 : whole ? 3 : 2;
-    if (rank > best) {
-      best = rank;
-      out[0] = range[0];
-      out[1] = range[1];
-      out[2] = std::isfinite(bias) ? bias : 0.f;
-      out[3] = sigma >= 0.f && sigma < 10000.f ? sigma : 32.f;
-      out[4] = lerp >= 0.f && lerp <= 1.f ? lerp : 0.5f;
+      if (pairIt != paired.end()) {
+        h.role = pairIt->second.first;
+        h.pair = pairIt->second.second;
+      }
+      h.exposure[0] = range[0];
+      h.exposure[1] = range[1];
+      h.bias = std::isfinite(bias) ? bias : 0.f;
+      h.sigma = sigma >= 0.f && sigma < 10000.f ? sigma : 32.f;
+      h.staticLerp = lerp >= 0.f && lerp <= 1.f ? lerp : 0.5f;
+      fluid->push_back(h);
     }
   }
 }
@@ -3237,7 +3227,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 26);
+  AppendLE32(out, 27);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3523,12 +3513,13 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     out.push_back(h.mode);
     out.push_back(h.role);
     out.push_back(h.pair);
-    out.push_back(0);
+    out.push_back(h.on ? 1 : 0);
     AppendLEFloat(out, h.exposure[0]);
     AppendLEFloat(out, h.exposure[1]);
     AppendLEFloat(out, h.bias);
     AppendLEFloat(out, h.sigma);
     AppendLEFloat(out, h.staticLerp);
+    AppendLE32(out, uint32_t(h.priority));
   }
   AppendLE32(out, uint32_t(worldVolumes.size()));
   for (const PortRoomEnv::WorldVolume& v : worldVolumes) {

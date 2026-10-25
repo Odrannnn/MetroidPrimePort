@@ -14,7 +14,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 26;
+constexpr uint32_t kVersion = 27;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -970,7 +970,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
     }
     const uint32_t hints = ReadLE32(data.data() + at);
     at += 4;
-    constexpr size_t kHintBytes = 24;
+    const size_t kHintBytes = version >= 27 ? 28 : 24;
     if ((data.size() - at) / kHintBytes < hints) {
       error = "cut short";
       return false;
@@ -979,6 +979,10 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       const uint8_t* q = data.data() + at;
       FluidHint h;
       h.mode = q[0];
+      if (version >= 27) {
+        h.on = q[3] != 0;
+        h.priority = int32_t(ReadLE32(q + 24));
+      }
       if (version >= 25 && q[1] <= 2) {
         h.role = q[1];
         h.pair = q[2];
@@ -988,8 +992,8 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       h.bias = ReadLEFloat(q + 12);
       h.sigma = ReadLEFloat(q + 16);
       h.staticLerp = ReadLEFloat(q + 20);
-      if ((h.role == 0 && h.mode != 1 && h.mode != 2) || !std::isfinite(h.exposure[0]) || !std::isfinite(h.exposure[1]) ||
-          h.exposure[1] < h.exposure[0]) {
+      if (h.mode > 2 || (version < 27 && h.role == 0 && h.mode == 0) ||
+          !std::isfinite(h.exposure[0]) || !std::isfinite(h.exposure[1]) || h.exposure[1] < h.exposure[0]) {
         continue;
       }
       if (!std::isfinite(h.bias)) {
@@ -1157,14 +1161,16 @@ bool ExposureHints::Update(const std::vector<FluidHint>& hints, bool snapMode0) 
     disabled.assign(hints.size(), 0);
     order.assign(hints.size(), 0);
   }
-  bool registered = false;
+  const uint64_t firstRegistration = next;
+  priority.resize(hints.size());
   for (size_t i = 0; i < hints.size(); ++i) {
     const FluidHint& hint = hints[i];
+    priority[i] = hint.priority;
     disabled[i] = hint.role == 0 ? 0 : (hint.role == 1 ? pairState == 0 : pairState != 0) ? 1 : 0;
     bool eligible = false;
     switch (hint.mode) {
     case 0:
-      eligible = hint.role != 0;
+      eligible = true;
       break;
     case 1:
       eligible = inside;
@@ -1175,25 +1181,31 @@ bool ExposureHints::Update(const std::vector<FluidHint>& hints, bool snapMode0) 
     default:
       break;
     }
-    const uint8_t now = eligible && !disabled[i] ? 1 : 0;
+    const uint8_t now = eligible && hint.on && !disabled[i] ? 1 : 0;
     if (now == active[i]) {
       continue;
     }
     active[i] = now;
     if (now != 0) {
       order[i] = next++;
-      registered = registered || hint.mode != 0 || snapMode0;
     } else {
       order[i] = 0;
     }
   }
-  return registered;
+  const int selected = Pick(hints.size());
+  // The transition type belongs to the selected registration, not any other
+  // hint that happened to register this frame (UpdateTonemapping 0xaffb18).
+  return selected >= 0 && order[selected] >= firstRegistration && (hints[selected].mode != 0 || snapMode0);
 }
 
 int ExposureHints::Pick(size_t count) const {
   int best = -1;
   for (size_t i = 0; i < count && i < order.size(); ++i) {
-    if (order[i] != 0 && (best < 0 || order[i] > order[best])) {
+    // RegisterAutoExposureHintObject 0xb0029c inserts before the first priority <=
+    // the new one. UpdateTonemapping 0xaffb18 takes the first matching area:
+    // higher priority first, newest registration first only for equal priorities.
+    if (order[i] != 0 && (best < 0 || priority[i] > priority[best] ||
+                         (priority[i] == priority[best] && order[i] > order[best]))) {
       best = int(i);
     }
   }

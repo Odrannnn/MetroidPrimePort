@@ -196,7 +196,12 @@ constexpr uint32_t kPropFogWindVec = 0x0ad3c808;
 constexpr uint32_t kPropFogWindOn = 0x33c69fd5;
 constexpr uint32_t kPropHintMin = 0x682f8a1f;
 constexpr uint32_t kPropHintMax = 0x839d334c;
-constexpr uint32_t kPropHintMode = 0x590d6843;
+constexpr uint32_t kPropExposureHintPriority = 0x590d6843;
+constexpr uint32_t kPropHintMode = 0xa9aef33e;
+// LdrToEnum_AutoExposureFluidVisibilityEnum 0x89e9a0, table 0x1d16b5c.
+inline uint8_t ExposureHintMode(uint32_t value) {
+  return value == 0xe1fee72e ? 1 : value == 0xabccc097 ? 2 : 0;
+}
 constexpr uint32_t kPropHintBias = 0x038f85da;
 constexpr uint32_t kPropHintSigma = 0x3dace129;
 constexpr uint32_t kPropHintStaticLerp = 0xb9f6606a;

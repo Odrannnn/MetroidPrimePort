@@ -936,6 +936,31 @@ void TestExposureHints() {
   g.Set(one, true);
   CHECK_MSG(!g.Set(one, false) && g.Pick(1) == -1, "hints: leaving only unregisters mode 1");
 
+  // Shipped registration is priority descending, insertion-before-equal. A
+  // priority of 1 or 2 is not a fluid mode (SLdrAutoExposureHint::Load 0x538b54).
+  {
+    std::vector<FluidHint> ranked(4);
+    for (auto& hint : ranked) {
+      hint.mode = 0;
+    }
+    ranked[0].priority = 6;
+    ranked[1].priority = 1;
+    ranked[2].priority = 6;
+    ranked[3].priority = 10;
+    ranked[3].on = false;
+    ExposureHints r;
+    CHECK(!r.Load(ranked, false));
+    CHECK_MSG(r.Pick(4) == 2, "highest active priority, newest first on ties");
+    CHECK_MSG(!r.Set(ranked, true) && r.Pick(4) == 2, "plain priority-6 hints do not change underwater");
+    ranked[2].mode = 1;
+    r.Load(ranked, false);
+    CHECK(r.Pick(4) == 0);
+    CHECK(r.Set(ranked, true) && r.Pick(4) == 2);
+    ranked[2].priority = -1;
+    r.Load(ranked, false);
+    CHECK_MSG(!r.Set(ranked, true) && r.Pick(4) == 0, "a newer lower-priority fluid hint cannot override or snap");
+  }
+
   // CAutoExposureHintMP1: pair A (role 1) and B (role 2), plus an ordinary mode 1 hint.
   {
     using Swap = ExposureHints;
@@ -1135,6 +1160,26 @@ void TestWorldVolumes() {
   PortRoomEnv::File file;
   std::string error;
   const std::vector<uint8_t> good = MakeVolumeFile({a, b});
+  {
+    auto v27 = MakeVolumeFile({});
+    v27[4] = 27;
+    v27.resize(v27.size() - 8); // replace the empty hint and volume lists
+    Put32(v27, 2);
+    for (int i = 0; i < 2; ++i) {
+      v27.insert(v27.end(), {0, 0, 0, uint8_t(i == 0)}); // plain, ordinary, active/inactive
+      for (float f : {5.75f, 6.f, 0.f, 32.f, 0.5f}) PutFloat(v27, f);
+      Put32(v27, uint32_t(i == 0 ? -2 : 6));
+    }
+    Put32(v27, 0); // world volumes
+    for (float f : {0.f, 0.f, 0.f, 1.f}) PutFloat(v27, f);
+    CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(v27), file, error), "hint v27 record stride");
+    CHECK(file.fluidHints.size() == 2);
+    CHECK(file.fluidHints[0].mode == 0 && file.fluidHints[0].on && file.fluidHints[0].priority == -2);
+    CHECK(!file.fluidHints[1].on && file.fluidHints[1].priority == 6);
+    CHECK(file.fluidHints[1].exposure[0] == 5.75f && file.envFxIntensity == 1.f);
+    v27.resize(v27.size() - 20); // truncate inside the second priority
+    CHECK(!PortRoomEnv::Parse(std::move(v27), file, error));
+  }
   CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(good), file, error), "volumes: parse");
   CHECK_MSG(file.worldVolumes.size() == 2 && PortRoomEnv::SameWorldVolumes(file.worldVolumes, {a, b}),
             "volumes: read back");

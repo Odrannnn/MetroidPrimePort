@@ -1520,6 +1520,12 @@ void AuditPlatformRoom() {
 }  // namespace
 
 int main() {
+  // Shipped enum table at 0x1d16b5c; priority 0x590d6843 is NOT this enum.
+  CHECK(kPropHintMode == 0xa9aef33e && kPropExposureHintPriority == 0x590d6843);
+  CHECK(ExposureHintMode(0x2e32a658) == 0);
+  CHECK(ExposureHintMode(0xe1fee72e) == 1);
+  CHECK(ExposureHintMode(0xabccc097) == 2);
+  CHECK(ExposureHintMode(6) == 0); // unknown enumerant -> default (0x89e9a0)
   TestFluidSenders();
   TestMasterTrigger();
   TestMasterCameraWater();

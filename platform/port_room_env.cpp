@@ -614,7 +614,7 @@ void UpdateFrame() {
     const FluidHint& h = file.fluidHints[size_t(fluidPick)];
     eff = {{h.exposure[0], h.exposure[1]}, h.bias, h.sigma, h.staticLerp};
   }
-  const bool hint = eff.exposure[0] != 0.f || eff.exposure[1] != 0.f;
+  const bool hint = fluidPick >= 0 || eff.exposure[0] != 0.f || eff.exposure[1] != 0.f;
   // A hint that registered this frame is type 1: SetValue instead of the Gaussian's easing. The
   // types are cleared after every frame, wherever the view was.
   const bool hintSnap = fluidPick >= 0 && area.hintSnap;
