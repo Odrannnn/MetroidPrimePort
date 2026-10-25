@@ -11,7 +11,10 @@ The Xvfb/RADV environment (`MESA_VK_WSI_DEBUG=sw`, `SDL_VIDEODRIVER=x11`, dummy 
 every frame but presents one in 6, since an Xvfb present is a CPU copy (`shot` reads the EFB, so it is
 unaffected; `--env AURORA_PRESENT_EVERY=1` presents them all). That only pays off uncapped: `start --turbo [ticks]`
 (`MP_TURBO`, default 8 ticks per drawn frame, no frame cap) for runs that wait on game time. **Never capture on `:0`**: GPU-heavy
-runs on the real display have taken the desktop session down.
+runs on the real display have taken the desktop session down. The one exception is
+`start --host-display`, for the OpenGL backends only (Xvfb's llvmpipe can't run Dawn's GL): it
+skips Xvfb and opens a window on the user's `$DISPLAY` with the real driver (it picks up the
+newest Xwayland auth file under GNOME). Use it only with the user's OK, one run at a time.
 
 ## Setup
 
