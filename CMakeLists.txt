@@ -100,7 +100,11 @@ endif()
 # threads) experimental; the flag unlocks them and links libc++experimental.
 if(APPLE)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-fexperimental-library>)
-    add_link_options(-fexperimental-library)
+    # The iOS Simulator SDK ships no libc++experimental; jthread and stop_token
+    # are header-only, so its build compiles with the flag and links without it.
+    if(NOT CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+        add_link_options(-fexperimental-library)
+    endif()
 endif()
 
 # Aurora provides the GameCube/Wii compatibility layer (MIT): GX, OS, PAD, DVD,
