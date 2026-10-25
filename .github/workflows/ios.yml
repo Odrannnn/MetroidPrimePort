@@ -77,6 +77,7 @@ jobs:
           -DAURORA_NOD_PROVIDER=vendor
           -DAURORA_NOD_LINKAGE=static
           -DRust_CARGO_TARGET=${{ matrix.rust }}
+          -DTINT_BUILD_IR_BINARY=OFF -DDAWN_BUILD_PROTOBUF=OFF
           -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_xxHash=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_zstd=ON
