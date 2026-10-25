@@ -659,6 +659,7 @@ void CPlayerGun::PortShotFromThirdPersonCannon(const CStateManager& mgr, CTransf
     xf.SetTranslation(origin);
     return;
   }
+  PortThirdPersonBody::NoteShot(); // a fired shot (the aux beams' per-frame call passes !aim)
   CVector3f aimPoint;
   const CVector3f camFwd = mgr.GetCameraManager()->GetFirstPersonCamera()->GetTransform().GetForward();
   bool have = false;

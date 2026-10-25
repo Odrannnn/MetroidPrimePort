@@ -5,6 +5,7 @@
 #include "Kyoto/Animation/CAllFormatsAnimSource.hpp"
 #include "Kyoto/Animation/CAnimSysContext.hpp"
 #include "Kyoto/Animation/CAnimTreeTweenBase.hpp"
+#include "Kyoto/Animation/CAnimTreeTransition.hpp"
 #include "Kyoto/Animation/CAnimationManager.hpp"
 #include "Kyoto/Animation/CFBStreamedCompression.hpp"
 #include "Kyoto/Animation/CPrimitive.hpp"
@@ -625,6 +626,23 @@ void CAnimData::SetAnimation(const CAnimPlaybackParms& parms, bool noTrans) {
   ResetPOILists();
   x220_29_animationJustStarted = true;
 }
+
+#ifdef TARGET_PC
+void CAnimData::PortSetAnimationBlended(const CAnimPlaybackParms& parms, float blendSeconds) {
+  const rstl::ncrc_ptr< CAnimTreeNode > oldRoot = x1f8_animRoot;
+  SetAnimation(parms, true);
+  const rstl::ncrc_ptr< CAnimTreeNode > newTree = x1f8_animRoot;
+  if (oldRoot.GetPtr() == nullptr || newTree.GetPtr() == oldRoot.GetPtr())
+    return; // nothing to blend from, or SetAnimation kept the current clip
+  x1f8_animRoot = x1fc_transMgr->GetTransitionTree(oldRoot, newTree);
+  if (x1f8_animRoot.GetPtr() == newTree.GetPtr() && blendSeconds > 0.f) {
+    const CCharAnimTime dur(blendSeconds);
+    x1f8_animRoot = rstl::ncrc_ptr< CAnimTreeNode >(rs_new CAnimTreeTransition(
+        false, oldRoot, newTree, dur, true, 0,
+        CAnimTreeTransition::CreatePrimitiveName(oldRoot, newTree, blendSeconds)));
+  }
+}
+#endif
 
 void CAnimData::GetAnimationPrimitives(const CAnimPlaybackParms& parms,
                                        rstl::set< CPrimitive >& primsOut) const {
