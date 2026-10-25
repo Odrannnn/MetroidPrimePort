@@ -61,9 +61,15 @@ CEnergyProjectile::CEnergyProjectile(
 }
 
 void CEnergyProjectile::StopProjectile(CStateManager& mgr) {
-  DeleteProjectileLight(mgr);
 #ifdef TARGET_PC
-  xPortNestedLights.Delete(mgr, GetUniqueId());
+  // Remastered's StopProjectile (0x1011d78) leaves the light alone: it is the APSM generator's
+  // CParticleLight, which keeps lighting (emission off or not) until the generator is deleted.
+  if (!PORT_REMASTERED_PROJECTILE(Projectile())) {
+    DeleteProjectileLight(mgr);
+    xPortNestedLights.Delete(mgr, GetUniqueId());
+  }
+#else
+  DeleteProjectileLight(mgr);
 #endif
   mgr.RemoveWeaponId(GetOwnerId(), GetType());
   x2e4_24_active = false;
@@ -328,6 +334,14 @@ void CEnergyProjectile::Think(float dt, CStateManager& mgr) {
     Explode(GetTranslation(), CVector3f::Up(), kWCR_Default, mgr,
             CDamageVulnerability::NormalVulnerability(), kInvalidUniqueId);
   }
+#ifdef TARGET_PC
+  // Remastered: a stopped projectile's light dies with the APSM generator (retail already
+  // deleted it in StopProjectile).
+  const bool portRemastered = PORT_REMASTERED_PROJECTILE(projectile);
+  if (!x2e4_24_active && !projectile.GetAttachedPS1()) {
+    DeleteProjectileLight(mgr);
+  }
+#endif
   if (GetProjectileLightId() != kInvalidUniqueId) {
     if (CGameLight* light = TCastToPtr< CGameLight >(mgr.ObjectById(GetProjectileLightId()))) {
       light->SetTransform(GetTransform());
@@ -338,7 +352,8 @@ void CEnergyProjectile::Think(float dt, CStateManager& mgr) {
     }
   }
 #ifdef TARGET_PC
-  xPortNestedLights.Update(mgr, projectile.GetAttachedPS1(), GetActive() && x2e4_24_active,
+  xPortNestedLights.Update(mgr, projectile.GetAttachedPS1(),
+                           GetActive() && (x2e4_24_active || portRemastered),
                            GetUniqueId(), GetCurrentAreaId(),
                            rstl::string_l("ProjectilePHDR_GameProjectile"), x2cc_wpscId, 0);
 #endif
