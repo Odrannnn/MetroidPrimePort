@@ -178,7 +178,7 @@ inline constexpr int kEffects = 106;   // port_remastered_effect_import and the 
 // 34: a retail Effect object drawing a PART its GENP is shared with takes the actor's variables (the lava spit).
 // 36: actors with a model of Remastered's own under a retail-style id no retail object names
 //     are drawn, hiding the retail Actors they stand in for (Central Dynamo's grates).
-inline constexpr int kRooms = 36;      // Remastered stand-in actors (m_syntheticEntities)
+inline constexpr int kRooms = 37;      // flamejet source placement overrides
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

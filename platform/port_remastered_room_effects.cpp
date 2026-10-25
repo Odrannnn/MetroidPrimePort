@@ -833,11 +833,28 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
         part = own;
       }
       const bool ownPart = part != 0 && (part >> 24) == 0xFE && part != own;
-      if (!ownPart && (part == 0 || part != own || vars.empty())) {
+      // The flamejet GENP emits along source +Y (port +Z), unlike retail's PART.
+      // CEffectMP1GOC::Create (0xd9e460) passes its entity's placement directly.
+      // Keeping the retail rotation after replacing its PART turns the jet sideways.
+      const bool flamejet = own == 0x3A617BEB && part == own &&
+          UuidText(room.Bytes(genp->second)) == "6916272d-4272-4ec4-a0b2-a4f9b3160ef6";
+      if (!flamejet && !ownPart && (part == 0 || part != own || vars.empty())) {
         ++keptOwn;
         continue;
       }
-      overrides.push_back({o.id, part, std::move(vars)});
+      PortRoomEffects::Override over{o.id, part, std::move(vars)};
+      if (flamejet) {
+        PortRoomEffects::Effect placement;
+        std::vector<PortRoomEffects::Variable> placementVars;
+        Vec3 world;
+        if (ActorEffect(room, *c, area, part, true, placement, placementVars, badVars, world)) {
+          over.hasPlacement = true;
+          std::copy_n(placement.pos, 3, over.pos);
+          std::copy_n(placement.rot, 3, over.rot);
+          std::copy_n(placement.scale, 3, over.scale);
+        }
+      }
+      overrides.push_back(std::move(over));
       ++overridden;
       continue;
     }

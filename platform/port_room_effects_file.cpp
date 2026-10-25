@@ -1,5 +1,6 @@
 #include "port_room_effects.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -338,7 +339,9 @@ bool ReadEffect(const uint8_t* data, size_t size, Effect& e, size_t& used) {
 std::vector<uint8_t> Write(const File& file) {
   std::vector<uint8_t> out;
   PutLE32(out, kFileMagic);
-  PutLE32(out, kFileVersion);
+  const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
+                                    [](const Override& o) { return o.hasPlacement; });
+  PutLE32(out, placements ? kFileVersion : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -385,6 +388,16 @@ std::vector<uint8_t> Write(const File& file) {
       PutLE32(out, ring.glow);
       for (const std::array<uint8_t, 16>* guid : {&ring.breakupRefraction, &ring.motion, &ring.breakupGlow}) {
         out.insert(out.end(), guid->begin(), guid->end());
+      }
+    }
+  }
+  if (placements) {
+    for (const Override& over : file.overrides) {
+      PutLE32(out, over.hasPlacement ? 1 : 0);
+      if (over.hasPlacement) {
+        for (const float* v : {over.pos, over.rot, over.scale}) {
+          for (int i = 0; i < 3; ++i) PutLEFloat(out, v[i]);
+        }
       }
     }
   }
@@ -522,6 +535,31 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         }
       }
       file.barriers.push_back(group);
+    }
+  }
+  if (version >= 5) {
+    for (Override& over : file.overrides) {
+      uint32_t flag = 0;
+      if (!ReadLE32(data, at, flag) || flag > 1) {
+        error = "invalid override placement flag";
+        return false;
+      }
+      over.hasPlacement = flag != 0;
+      if (!over.hasPlacement) continue;
+      for (float* v : {over.pos, over.rot, over.scale}) {
+        for (int i = 0; i < 3; ++i) {
+          uint32_t bits = 0;
+          if (!ReadLE32(data, at, bits)) {
+            error = "truncated override placement";
+            return false;
+          }
+          std::memcpy(v + i, &bits, 4);
+          if (!std::isfinite(v[i])) {
+            error = "non-finite override placement";
+            return false;
+          }
+        }
+      }
     }
   }
   if (at != data.size()) {

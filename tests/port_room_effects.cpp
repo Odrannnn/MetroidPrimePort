@@ -92,10 +92,10 @@ void TestFile() {
   bad.push_back(0);
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "trailing bytes");
   bad = data;
-  bad[4] = 5;
+  bad[4] = 6;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Version 4 is the newest, and Write writes it with no barriers.
-  CHECK(data[4] == PortRoomEffects::kFileVersion && data[5] == 0 && PortRoomEffects::kFileVersion == 4);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 5);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -206,6 +206,43 @@ void TestFileOverrides() {
     many.push_back(b);
   }
   CHECK_MSG(!PortRoomEffects::Parse(many, out, error), "override count");
+}
+
+void TestOverridePlacement() {
+  File in;
+  PortRoomEffects::Override jet{0x000E01FD, 0x3A617BEB, {}};
+  jet.hasPlacement = true;
+  jet.pos[0] = 332.578125f;
+  jet.rot[1] = 180.f;
+  jet.scale[2] = 2.f;
+  in.overrides.push_back(jet);
+  in.overrides.push_back({0x000E01FE, 0xFE123456, {}});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 5);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.overrides.size() == 2);
+  CHECK(out.overrides[0].hasPlacement && out.overrides[0].pos[0] == jet.pos[0] &&
+        out.overrides[0].rot[1] == 180.f && out.overrides[0].scale[2] == 2.f);
+  CHECK(!out.overrides[1].hasPlacement);
+  for (size_t cut = 1; cut <= 44; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+    CHECK(out.overrides.empty());
+  }
+  auto old = data;
+  old.resize(old.size() - 44);
+  old[4] = 4;
+  REQUIRE_MSG(PortRoomEffects::Parse(old, out, error), error.c_str());
+  CHECK(!out.overrides[0].hasPlacement && !out.overrides[1].hasPlacement);
+  auto bad = data;
+  // Reject a non-finite placement even if its framing is intact (NaN position.x).
+  const size_t position = bad.size() - 40;
+  bad[position + 2] = 0xC0;
+  bad[position + 3] = 0x7F;
+  CHECK(!PortRoomEffects::Parse(bad, out, error));
 }
 
 // Version 4 carries a room's barrier: a controller retail Effect object, its duration, and five
@@ -536,6 +573,7 @@ int main() {
   TestFile();
   TestFileVariables();
   TestFileOverrides();
+  TestOverridePlacement();
   TestFileBarriers();
   TestExternalVariables();
   uint32_t id = 0;

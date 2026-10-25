@@ -25,7 +25,7 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 // from kFirstInstance up: no retail area uses those (the import checks).
 //
 // The file is little endian:
-//   'MPRF', u32 version (4)
+//   'MPRF', u32 version (4, or 5 when placement overrides are present)
 //   u32 skips, u32 editor id[skips] (retail objects not to create, layer bits included)
 //   u32 connected (effects left out because something connects to them; for the log)
 //   u32 layers, then per layer: u32 retail layer, u32 objects, u32 bytes, then that many
@@ -45,10 +45,12 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   ring's platform) and the add-ons this same file adds (each ring's refraction and glow
 //   effect); the codec only checks what the file itself must hold, and says nothing about
 //   which room it is: versions 1 to 3 simply have no barriers.
+//   version 5 appends one placement flag and optional nine floats per override
+//   (see Override). Files without placement overrides are still written as version 4.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 4;
+constexpr uint32_t kFileVersion = 5;
 constexpr uint8_t kEffectType = 7;
 constexpr uint32_t kEffectProps = 24;
 constexpr uint32_t kFirstInstance = 0xF000;
@@ -120,6 +122,12 @@ struct Override {
   uint32_t id = 0;
   uint32_t part = 0xFFFFFFFF;
   std::vector<Variable> vars;
+  // Version 5 appends, per override, a u32 flag and (when set) nine f32s:
+  // world position, editor Euler degrees and scale. Older files keep retail placement.
+  bool hasPlacement = false;
+  float pos[3] = {};
+  float rot[3] = {};
+  float scale[3] = {1, 1, 1};
 };
 
 // One of a barrier's five rings: its retail Platform object and the

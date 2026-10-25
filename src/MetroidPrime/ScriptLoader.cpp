@@ -1210,6 +1210,12 @@ CEntity* ScriptLoader::LoadEffect(CStateManager& mgr, CInputStream& in, int prop
   const PortRoomEffects::Override* const over = PortRoomEffects::FindOverride(info.GetEditorId().value);
   if (over != nullptr && over->part != 0xFFFFFFFF && gpResourceFactory->GetResourceTypeById(over->part) != 0)
     partId = over->part;
+  if (over != nullptr && partId == over->part && over->hasPlacement) {
+    head.x0_actorHead.x10_transform = ConvertEditorEulerToTransform4f(
+        CVector3f(over->rot[0], over->rot[1], over->rot[2]),
+        CVector3f(over->pos[0], over->pos[1], over->pos[2]));
+    head.x40_scale = CVector3f(over->scale[0], over->scale[1], over->scale[2]);
+  }
 #endif
   CAssetId elscId = in.Get< CAssetId >();
   bool hotInThermal = in.ReadBool();
