@@ -514,7 +514,7 @@ TEST_F(SceneHdrTest, InvalidWgslIsCaught) {
 
 TEST_F(SceneHdrTest, GxWritersCompileInBothModes) {
   // TEV (pbr 0) and the PBR kinds the HDR branch rewrites.
-  const std::pair<int, int> kinds[] = {{0, 0}, {1, 0}, {1, 1}, {1, 34}, {1, 36}, {1, 37}};
+  const std::pair<int, int> kinds[] = {{0, 0}, {1, 0}, {1, 1}, {1, 34}, {1, 36}, {1, 37}, {1, 45}};
   for (const auto [pbr, kind] : kinds) {
     for (const bool hdr : {false, true}) {
       SCOPED_TRACE(testing::Message() << "pbr " << pbr << " kind " << kind << " hdr " << hdr);
@@ -524,6 +524,21 @@ TEST_F(SceneHdrTest, GxWritersCompileInBothModes) {
     }
   }
   EXPECT_TRUE(g_uncapturedErrors.empty());
+}
+
+TEST_F(SceneHdrTest, RouteHologramCompilesWithVertexColor) {
+  for (bool hdr : {false, true}) {
+    auto config = writer_config(1, 45, hdr);
+    config.attrs[GX_VA_CLR0].attrType = GX_DIRECT;
+    config.attrs[GX_VA_CLR0].cnt = 4;
+    config.attrs[GX_VA_CLR0].compType = GX_RGBA8;
+    config.attrs[GX_VA_CLR0].stride = 4;
+    const auto source = gx::build_shader_source(config);
+    EXPECT_EQ(module_error(source), "");
+    EXPECT_NE(source.find(".g >= 0.1"), std::string::npos);
+    EXPECT_NE(source.find("let pbr_yv = pbr_vraw.rg"), std::string::npos);
+    EXPECT_NE(source.find("let pbr_yfade = clamp(pbr_yc3.x * pbr_yd.a"), std::string::npos);
+  }
 }
 
 // The config features that add their own WGSL around the writers' output, each on TEV and PBR.

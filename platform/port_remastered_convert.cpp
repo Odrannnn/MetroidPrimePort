@@ -639,6 +639,27 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     // The wind a material sways with: its index into the model's WIND sets (0xFF none). Only the plain lit
     // foliage (kind 0) of a standalone model, whose vertices can carry the weight in their colour alpha.
     RemMaterial& rem = mats.back();
+    if (rem.kind == 45) {
+      // 5586D988 VS000 scales source X/Z about the source origin and preserves Y.
+      // Conjugate that operation by the actual import transform, including fitted
+      // actor transforms; a hardcoded R2G apex would only work for room geometry.
+      const double apex[3] = {rem.shieldRows[8], rem.shieldRows[9], rem.shieldRows[10]};
+      double alongOffset = 0.0;
+      for (int r = 0; r < 3; ++r) alongOffset += NM[r][1] * opt.offset[r];
+      double origin[3];
+      for (int r = 0; r < 3; ++r) {
+        rem.shieldRows[8 + r] = opt.offset[r];
+        for (int c = 0; c < 3; ++c) rem.shieldRows[8 + r] += M[r][c] * apex[c];
+        rem.layerHeight[r] = M[r][1];
+        origin[r] = opt.offset[r] - M[r][1] * alongOffset;
+      }
+      rem.layerHeight[3] = NM[0][1];
+      rem.kindParam[1] = NM[1][1];
+      rem.kindParam[2] = NM[2][1];
+      rem.kindParam[3] = origin[0];
+      rem.kindStrength = origin[1];
+      rem.shieldRows[27] = origin[2];
+    }
     const size_t at = mats.size() - 1;
     if (opt.standalone && rem.kind == 0 && !rem.unlit && !rem.colorUnlit && !rem.blended && !rem.layered &&
         std::find(std::begin(kShaderWindFoliage), std::end(kShaderWindFoliage), rem.shader) !=
@@ -1418,7 +1439,7 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     const char* const baseAlpha =
         rem.cutout ? (exactCut ? "cut" : "punch")
         : rem.mask || rem.layered || rem.height > 0.0 || frostShell || inventory || rem.shader == kShaderVfxBase ||
-                rem.shader == kShaderVfxBase2 || (rem.kind >= 16 && rem.kind <= 18)
+                rem.shader == kShaderVfxBase2 || (rem.kind >= 16 && rem.kind <= 18) || rem.kind == 45
             ? (!frostShell && rem.maskSquared ? "mask2" : "mask")
         : rem.blended ? "blend"
                       : "";

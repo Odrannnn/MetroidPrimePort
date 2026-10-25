@@ -158,7 +158,7 @@ void PbrRecord(Blob& b, const RemMaterial& m, uint32_t wrap, uint32_t cube) {
     P32(b, cube);
   }
   b.insert(b.end(), tag, tag + 4);
-  if ((m.kind >= 14 && m.kind <= 19) || m.kind == 21 || m.kind == 22 || m.kind == 32 || m.kind == 35 || m.kind == 25 || m.kind == 28 || m.kind == 29 || m.kind == 11 || m.kind == 31 || m.kind == 33 || (m.kind >= 38 && m.kind <= 44) || m.wind) {
+  if ((m.kind >= 14 && m.kind <= 19) || m.kind == 21 || m.kind == 22 || m.kind == 32 || m.kind == 35 || m.kind == 25 || m.kind == 28 || m.kind == 29 || m.kind == 11 || m.kind == 31 || m.kind == 33 || (m.kind >= 38 && m.kind <= 45) || m.wind) {
     // The boundary shield's (or pickup's) constants follow the record, as a trailer the reader strips first.
     // A swaying leaf's is the model's SWindSet (v1, v2, rate, b, c) in the first nine.
     for (double v : m.shieldRows) {

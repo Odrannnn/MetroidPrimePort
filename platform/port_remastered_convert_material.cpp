@@ -184,6 +184,8 @@ constexpr uint32_t kShaderHoloGlassB = 0x3991DA00;  // HoloGlass: scrolling indi
 // the phase by CCH4.x and the screen offset by INDP.w (the draw camera's near plane) over the depth, capped at a
 // shipped 0.02, and it reflects the camera's probe (ResolveReflectionProbe), never a cube of the material's own.
 constexpr uint32_t kShaderHoloGlassE264 = 0xE2644678;
+// 5586D988 VS000: static hologram with green-selected apex collapse and X/Z fade.
+constexpr uint32_t kShaderRouteHologram = 0x5586D988;
 constexpr double kHoloGlassE264DepthCap = 0.019999999552965164;  // vp_c1[0].x, binary32 0x3ca3d70a
 constexpr uint32_t kShaderRefractGlassB = 0xCC8AFD0F;
 // SimpleGlass_DX11_1 (kind 43, kb material/084a8db5.md): HoloGlass (3991da00) without TCH1, TCH2 and DIFC. TCH0
@@ -368,6 +370,7 @@ const char* KindName(int kind) {
   case 42: return "ball-glass";
   case 43: return "simple-glass";
   case 44: return "energy-field";
+  case 45: return "route-hologram";
   default: return "kind?";
   }
 }
@@ -413,7 +416,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
   out.role = ShaderRole(shader);
   out.shell = shader == kShaderMatcapShell;
   out.shield = shader == kShaderBoundaryShield || shader == kShaderForceField || shader == kShaderPickUp || shader == kShaderHolo ||
-               shader == kShaderHoloRefl || shader == kShaderHologram || shader == kShaderGunFx || IsEyeGloss(shader) ||
+               shader == kShaderHoloRefl || shader == kShaderHologram || shader == kShaderRouteHologram || shader == kShaderGunFx || IsEyeGloss(shader) ||
                IsXrayGhost(shader) || shader == kShaderXrayMap;
   bool custom = false;
   for (const ModelMaterialData& d : mat.data) {
@@ -1250,10 +1253,10 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
         for (int i = 0; i < 4; ++i) out.shieldRows[28 + i] = ShortestDouble(d.color[i]);
       }
     }
-  } else if ((shader == kShaderHolo || shader == kShaderHoloRefl || shader == kShaderHologram) &&
-             out.maps[kBase].has && (shader != kShaderHologram || (cch[0] && cch[1] && cch[2] && cch[3]))) {
-    out.kind = shader == kShaderHolo ? 16 : shader == kShaderHoloRefl ? 17 : 18;
-    out.vcolor = out.kind == 18;
+  } else if ((shader == kShaderHolo || shader == kShaderHoloRefl || shader == kShaderHologram || shader == kShaderRouteHologram) &&
+             out.maps[kBase].has && ((shader != kShaderHologram && shader != kShaderRouteHologram) || (cch[0] && cch[1] && cch[2] && cch[3]))) {
+    out.kind = shader == kShaderHolo ? 16 : shader == kShaderHoloRefl ? 17 : shader == kShaderRouteHologram ? 45 : 18;
+    out.vcolor = out.kind == 18 || out.kind == 45;
     // DIFT (or BCLR for the hologram) is the base map. The constants go to the runtime in the PBR8
     // trailer: row 7 DIFC; row 6 the incandescence ICNC + ICMC (summed, rgb) for 16 and 17, with w
     // the gain of the material's own cube (17); ICMC alone for 18, whose rows 0-3 are CCH0..CCH3 and
@@ -1270,13 +1273,13 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
         for (int i = 0; i < 4; ++i) {
           difc[i] = ShortestDouble(d.color[i]);
         }
-      } else if (d.usage == FourCC('I', 'C', 'M', 'C') || (d.usage == FourCC('I', 'C', 'N', 'C') && out.kind != 18)) {
+      } else if (d.usage == FourCC('I', 'C', 'M', 'C') || (d.usage == FourCC('I', 'C', 'N', 'C') && out.kind != 18 && out.kind != 45)) {
         for (int i = 0; i < 3; ++i) {
           incan[i] += ShortestDouble(d.color[i]);
         }
       }
     }
-    if (out.kind == 18) {
+    if (out.kind == 18 || out.kind == 45) {
       for (int r = 0; r < 4; ++r) {
         for (int i = 0; i < 4; ++i) {
           out.shieldRows[r * 4 + i] = ShortestDouble(cch[r]->color[i]);
@@ -1522,7 +1525,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     out.backlight = out.backlightTop = 0.0;
     out.maps[kMr].has = out.maps[kEmissive].has = false;
   }
-  if (out.kind >= 16 && out.kind <= 18) {
+  if ((out.kind >= 16 && out.kind <= 18) || out.kind == 45) {
     // Unlit and additive; every colour is the shader's, and the base map's alpha is its own.
     // No second layer: the one map is the base.
     out.blended = true;
@@ -1660,7 +1663,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
   // is above, where kind 28 is assigned. Layered ice retains its historical path.
   const bool iceSingleLayerMapsBound = out.kind == 28 && !out.layered && out.maps[kBase].has && out.maps[kMr].has &&
                                        out.maps[kNormal].has && out.maps[kEmissive].has;
-  if (out.kind != 3 && out.kind != 10 && !(out.kind >= 16 && out.kind <= 18) && out.kind != 24 && out.kind != 27 &&
+  if (out.kind != 3 && out.kind != 10 && !(out.kind >= 16 && out.kind <= 18) && out.kind != 45 && out.kind != 24 && out.kind != 27 &&
       out.kind != 34 && out.kind != 36 && out.kind != 37 && out.kind != 38 && out.kind != 39 && out.kind != 41 && !out.layered && !iceSingleLayerMapsBound) {
     if (out.kind != 0) {
       out.reason += std::string("demoted ") + KindName(out.kind) + " to standard: not layered; ";

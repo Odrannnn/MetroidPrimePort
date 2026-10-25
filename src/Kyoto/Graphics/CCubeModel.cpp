@@ -510,12 +510,24 @@ void CCubeModel::PortSetFallbackGlow(const CCubeMaterial& material, const int id
 }
 
 f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fadeReplaces,
-                                   const bool frameExposed, uint* cube) const {
+                                   const bool frameExposed, uint* cube, const CModelFlags* drawFlags) const {
   f32 values[19];
   f32 lightScale[2];
   f32 shield[32];
   PortReadPBRMaterial(idx, values, nullptr, lightScale, cube, shield);
   const f32 kind = values[13];
+  if (kind == 45.f && drawFlags) {
+    // main 0x1f7f9c -> GetColor 0x15fd8c -> Float4 binder 0x163974:
+    // DIFC (ID 0x20, initializer 0x1556e0) is replaced, including its fade alpha.
+    const auto trans = drawFlags->GetTrans();
+    if (trans == CModelFlags::kT_One || trans == CModelFlags::kT_Blend || trans == CModelFlags::kT_Additive) {
+      const CColor& color = drawFlags->GetColorRef();
+      shield[28] = color.GetRed();
+      shield[29] = color.GetGreen();
+      shield[30] = color.GetBlue();
+      shield[31] = color.GetAlpha();
+    }
+  }
   if (sPortGlows) {
     values[0] = sPortGlow[0];
     values[1] = sPortGlow[1];
@@ -572,7 +584,7 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   if ((values[13] > 4.5f && values[13] < 7.5f) || (values[13] > 8.5f && values[13] < 9.5f) ||
       (values[13] > 10.5f && values[13] < 11.5f) || (values[13] > 13.5f && values[13] < 15.5f) || (values[13] > 17.5f && values[13] < 18.5f) ||
       (values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 28.5f && values[13] < 29.5f) ||
-       (values[13] > 31.5f && values[13] < 32.5f) || (values[13] > 42.5f && values[13] < 44.5f)) {
+       (values[13] > 31.5f && values[13] < 32.5f) || (values[13] > 42.5f && values[13] < 45.5f)) {
     // The Phazon3 stone and the PhazonPool blister read Remastered's scene clock (stops while paused, wraps at 15120 s).
     values[15] *= ((values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 31.5f && values[13] < 32.5f))
                       ? CGraphics::GetSimTime()
@@ -594,7 +606,7 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   }
   // EnergyField's VS supplies Remastered world X/Y, not GameCube world X/Y:
   // the converter's R2G is (-x,z,y). These rows undo that change of basis.
-  if (kind > 43.5f && kind < 44.5f) {
+  if (kind > 43.5f && kind < 45.5f) {
     shield[16] = -view.Get00();
     shield[17] = -view.Get02();
     shield[18] = view.Get01();
@@ -678,12 +690,13 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   // (the unlit cube surface, 38, the unlit vertex-coloured fx, 39, the unlit matcap, 40, and the unlit
   // METL-weighted fx, 41, the spider ball's glass, 42, and the simple glass, 43: DIFC and their glow) have constants;
   // every other material clears the last one's.
-  GXSetPBRShield(wind || (kind > 10.5f && kind < 11.5f) || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) || (kind > 34.5f && kind < 35.5f) || (kind > 37.5f && kind < 44.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
+  GXSetPBRShield(wind || (kind > 10.5f && kind < 11.5f) || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) || (kind > 34.5f && kind < 35.5f) || (kind > 37.5f && kind < 45.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
   // World up as the shader sees it: view space is right, up, -forward.
   const f32 up[3] = {view.Get20(), view.Get22(), -view.Get21()};
   GXSetPBRMaterial(values, values + 3, values[6], values[7], values + 8, values + 13, up);
   // Every material sets its own, so a back copy's factors don't reach the next one.
-  GXSetPBRLightScale(lightScale[0], lightScale[1], fade, fadeReplaces ? GX_TRUE : GX_FALSE);
+  GXSetPBRLightScale(lightScale[0], lightScale[1], kind == 45.f ? 1.f : fade,
+                     kind == 45.f ? GX_FALSE : fadeReplaces ? GX_TRUE : GX_FALSE);
   return kind;
 }
 
@@ -769,7 +782,9 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
   // PBR; the others read DIFC elsewhere (GXSetPBRShield row 7, kind 35's DIFC.w), not wired yet, so they keep TEV.
   const bool pbrOutside = outside && material.IsFlagSet(kStateFlag_PortPBR) && CCubeMaterial::PortPBRAllowed(opaqueFlags);
   const bool tintKind = (portKind > -0.5f && portKind < 0.5f) || (portKind > 2.5f && portKind < 3.5f) ||
-                        (portKind > 7.5f && portKind < 8.5f);
+                        (portKind > 7.5f && portKind < 8.5f) ||
+                        (portKind == 45.f && (trans == CModelFlags::kT_One || trans == CModelFlags::kT_Blend ||
+                                              trans == CModelFlags::kT_Additive));
   const bool tintable = pbrOutside && tintKind && !CCubeRenderer::That()->GetThermal();
   const bool tintOpaque =
       tintable && (trans == CModelFlags::kT_One || trans == CModelFlags::kT_Two || trans == CModelFlags::kT_Three);
@@ -1002,7 +1017,7 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
     uint materialCube = 0;
     const f32 kind = PortSetPBRMaterial(surface.GetMaterialIndex(), fadeBlend ? tint.GetAlpha() : 1.f,
                                         fadeBlend && (material.GetCompressedBlend() >> 16) == GX_BL_ZERO,
-                                        sortedDraw && !sPortSky, &materialCube);
+                                        sortedDraw && !sPortSky, &materialCube, &modelFlags);
     // A material with its own reflection cube (the Remastered arm cannon's) reflects that in
     // place of the room's, as Remastered draws it; the room still lights it. The cube is in
     // Remastered's world, which maps from ours as the room probes' cubes do (-x, z, y).

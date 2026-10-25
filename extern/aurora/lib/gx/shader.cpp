@@ -1063,9 +1063,15 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // (the inventory and cinematic ones) reads the missing attribute's default, (0,0,0,1)
   // (inferred; kb topic/gun-beam-glow-no-vtxcolor.md).
   std::string tint, tintAlpha, vclr = config.pbrKind == 9 ? "vec4f(0.0, 0.0, 0.0, 1.0)" : "vec4f(1.0)";
+  if (config.pbrKind == 45) vclr = "vec4f(2.0, 2.0, 2.0, 1.0)";
   if (config.attrs[GX_VA_CLR0].attrType != GX_NONE) {
     vtxOutAttrs += fmt::format("\n    @location({}) pbr_vclr: vec4f,", vtxOutIdx++);
     vtxXfrAttrs += fmt::format("\n    out.pbr_vclr = {};", vtx_attr(config, GX_VA_CLR0));
+    if (config.pbrKind == 45) {
+      // 5586D988 VS000: decode before interpolation, not in the fragment shader.
+      vtxXfrAttrs += fmt::format("\n    out.pbr_vclr = vec4f(2.0 * pow(abs({0}.rgb), vec3f(2.2)), {0}.a);",
+                                vtx_attr(config, GX_VA_CLR0));
+    }
     tint = " * pbr_vc.rgb";
     tintAlpha = " * pbr_vc.a";
     vclr = "in.pbr_vclr";
@@ -2231,9 +2237,10 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // Constants: rows 0-3 CCH0..CCH3, rows 4 and 5 world x and y (filled by the game, as the
     // pickup's), row 6 ICMC, row 7 DIFC. The vertex colour is linearised 2 pow(|c|, 2.2): red
     // scales the glow, green is a mask. Only the glow term is at the room's exposure. The
-    // fade and the vertex shader's collapse are not drawn (fade 1).
+    // Kind 18 retains its legacy fade=1. Kind 45 is 5586D988 FS000 (identical fragment),
+    // with VS000 collapse, per-vertex colour decode and CCH3.x*DIFC.a fade.
     liquid += fmt::format(R"""(
-    if (pbr_kind > 17.5 && pbr_kind < 18.5) {{
+    if ((pbr_kind > 17.5 && pbr_kind < 18.5) || pbr_kind == 45.0) {{
         let pbr_yc0 = ubuf.pbr_shield[0];
         let pbr_yc1 = ubuf.pbr_shield[1];
         let pbr_yc2 = ubuf.pbr_shield[2];
@@ -2242,31 +2249,37 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
         let pbr_yt = ubuf.pbr_param.x;
         let pbr_yw = vec2f(dot(ubuf.pbr_shield[4].xyz, in.pbr_pos) + ubuf.pbr_shield[4].w,
                            dot(ubuf.pbr_shield[5].xyz, in.pbr_pos) + ubuf.pbr_shield[5].w);
-        let pbr_yv = 2.0 * pow(abs(pbr_vraw.rg), vec2f(2.2));
-        let pbr_yper = max(pbr_yc1.z, 1e-4);
+        let pbr_yv = {2};
+        let pbr_yfade = {3};
+        let pbr_yper = {4};
         let pbr_ys = pbr_yt - pbr_yper * floor(pbr_yt / pbr_yper);
         let pbr_yk = pbr_yc1.y + pbr_ys * (1.0 - pbr_yc1.y);
-        let pbr_ysc = select(1e-4, pbr_yc0.x, abs(pbr_yc0.x) > 1e-4);
-        let pbr_yuv = vec2f(pbr_yw.x / pbr_ysc, pbr_yk * (pbr_yw.y * pbr_yc0.x + pbr_yt * pbr_yc0.y - pbr_yc1.w));
+        let pbr_ysc = {5};
+        let pbr_yuv = vec2f(pbr_yw.x * pbr_yfade / pbr_ysc, pbr_yk * (pbr_yw.y * pbr_yc0.x * pbr_yfade + pbr_yt * pbr_yc0.y - pbr_yc1.w));
         let pbr_yb = textureSampleGrad(tex{1}, tex{1}_samp, pbr_yuv, dpdx(pbr_yuv), dpdy(pbr_yuv));
-        let pbr_yj = 0.01 * pbr_yc0.z * pbr_yc0.w * sin(6.2831853 * pbr_yt * pbr_yc1.x);
+        let pbr_yj = 0.01 * pbr_yc0.z * pbr_yc0.w * sin(6.28318548 * pbr_yt * pbr_yc1.x);
         let pbr_ya = pbr_yb.a * select(0.75, 1.0, pbr_yj > 0.0);
         let pbr_ym = pbr_yv.y > 0.01;
         let pbr_yri = max(pbr_yb.rgb, vec3f(0.0)) * pbr_yd.rgb;
         let pbr_yg = pbr_yri * select(pbr_yv.x, 1.0, pbr_ym) * pbr_yc0.z + vec3f(pbr_yj);
-        let pbr_yp = pow(max(abs(pbr_ng.z), 1e-6), pbr_yc3.z);
+        let pbr_yp = pow({6}, pbr_yc3.z);
         let pbr_yrm = pbr_yc3.w + (1.0 - pbr_yc3.w) * (1.0 - pbr_yp * (1.0 - pbr_yv.y));
         var pbr_yx = 1.0;
         if (ubuf.pbr_tone[1].x > 0.0 && ubuf.pbr_tone[0].w > 0.0) {{
             // c3[0].z is the inverse tonemap exposure; the glow is scaled by the exposure below.
             pbr_yx = 1.0 / ubuf.pbr_tone[0].w;
         }}
-        pbr_alpha = clamp(pbr_yrm * select(pbr_ya, pbr_yv.y * pbr_ya * pbr_yc2.w, pbr_ym), 0.0, 1.0);
+        pbr_alpha = clamp(pbr_yrm * pbr_yfade * select(pbr_ya, pbr_yv.y * pbr_ya * pbr_yc2.w, pbr_ym), 0.0, 1.0);
         pbr_lo = vec3f(0.0);
         pbr_glow = pbr_yri + pbr_yx * pbr_yg * (1.0 + pbr_yrm * pbr_yc3.y) + ubuf.pbr_shield[6].rgb;
         pbr_pass = vec3f(0.0);
     }})""",
-                        base, underlying(config.tevStages[mapStage[0]].texMapId));
+                        base, underlying(config.tevStages[mapStage[0]].texMapId),
+                        config.pbrKind == 45 ? "pbr_vraw.rg" : "2.0 * pow(abs(pbr_vraw.rg), vec2f(2.2))",
+                        config.pbrKind == 45 ? "clamp(pbr_yc3.x * pbr_yd.a, 0.0, 1.0)" : "1.0",
+                        config.pbrKind == 45 ? "pbr_yc1.z" : "max(pbr_yc1.z, 1e-4)",
+                        config.pbrKind == 45 ? "pbr_yc0.x" : "select(1e-4, pbr_yc0.x, abs(pbr_yc0.x) > 1e-4)",
+                        config.pbrKind == 45 ? "abs(pbr_ng.z)" : "max(abs(pbr_ng.z), 1e-6)");
   }
   // EnergyField 9C867F3C, both shipped fragment permutations. Its VS passes raw
   // colour/alpha and UV0; rows 4/5 reconstruct Remastered world X/Y.
@@ -3184,6 +3197,11 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
     // Neither EnergyField permutation consumes the froxel fog terms.
     kind("pbr_alpha = max(efmask, ef1.z);",
          "pbr_alpha = max(efmask, ef1.z);\n          pbr_vfon = false;");
+    if (config.pbrKind == 45) {
+      // 5586D988 FS000..003 have no froxel inputs or fog sample.
+      kind("pbr_glow = pbr_yri + pbr_yx * pbr_yg * (1.0 + pbr_yrm * pbr_yc3.y) + ubuf.pbr_shield[6].rgb;",
+           "pbr_glow = pbr_yri + pbr_yx * pbr_yg * (1.0 + pbr_yrm * pbr_yc3.y) + ubuf.pbr_shield[6].rgb;\n          pbr_vfon = false;");
+    }
     kind("pbr_pass = pbr_sscene * pbr_h3.z * pbr_df.rgb * pbr_df.a;",
          "pbr_pass = pbr_sscene * pbr_h3.z * pbr_df.rgb * pbr_df.a;\n"
          "          pbr_vfw = vec3f(pbr_alpha);\n          pbr_vfk = true;");
@@ -3537,6 +3555,20 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
   }
   if (config.lineMode == 0) {
     std::string windPos = vtx_attr(config, GX_VA_POS);
+    if (config.pbrKind == 45) {
+      // 5586D988 VS000 c1[0].x: NVN control+0x700 points to stage+0x500,
+      // binary32 0x3dcccccd. Import conjugates source X/Z scaling by its affine
+      // transform: layer-height.xyz is source Y, the next three scalars its dual.
+      vtxXfrAttrsPre += fmt::format(R"(
+    let holo_fade = clamp(ubuf.pbr_shield[3].x * ubuf.pbr_shield[7].w, 0.0, 1.0);
+    let holo_apex = ubuf.pbr_shield[2].xyz;
+    let holo_selected = select({0}, holo_apex, {1}.g >= 0.1);
+    let holo_y = dot(vec3f(ubuf.pbr_layer_height.w, ubuf.pbr_param.yz), holo_selected);
+    let holo_origin = vec3f(ubuf.pbr_param.w, ubuf.pbr_layer.z, ubuf.pbr_shield[6].w);
+    let holo_pos = holo_fade * holo_selected + (1.0 - holo_fade) * (holo_origin + ubuf.pbr_layer_height.xyz * holo_y);
+)", windPos, config.attrs[GX_VA_CLR0].attrType != GX_NONE ? vtx_attr(config, GX_VA_CLR0) : "vec4f(1.0)");
+      windPos = "holo_pos";
+    }
     if (hasWind) {
       vtxXfrAttrsPre += windCode(windPos, vtx_attr(config, GX_VA_CLR0));
       windPos = "wind_pos";

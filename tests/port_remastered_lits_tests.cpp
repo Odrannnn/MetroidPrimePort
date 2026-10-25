@@ -854,7 +854,33 @@ void TestHoloGlassE264() {
             "3991da00: no E2644678 rows");
 }
 
+void TestRouteHologram() {
+  ModelMaterial material = Material(0, false);
+  SetShader(material, 0x5586D988);
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '0'), .1f, 1.f, .05f, 0.f));
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '1'), 1.f, 4.f, 1.f, 2.5f));
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '2'), 0.f, .8f, 0.f, .028f));
+  std::vector<MaterialDecision> incomplete;
+  ConvertDecisions(material, incomplete, true);
+  CHECK_MSG(incomplete.empty() || incomplete[0].kind != 45, "route hologram requires fade parameters");
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '3'), 1.f, 1.f, 1.f, .2f));
+  material.data.push_back(ColorParam(FourCC('D', 'I', 'F', 'C'), .5f, .25f, .125f, .75f));
+  for (bool colored : {false, true}) {
+    std::vector<MaterialDecision> decisions;
+    const auto cmdl = ConvertDecisions(material, decisions, colored);
+    REQUIRE(!decisions.empty());
+    CHECK_MSG(decisions[0].kind == 45 && decisions[0].path == "pbr", "route hologram keeps its shader with or without a color stream");
+    size_t at = 0, size = 0;
+    REQUIRE(FirstBlob(cmdl, at, size));
+    const auto t = BlobShield(cmdl, at, size);
+    CHECK_MSG(t.has && t.hasKind && t.kind == 45.f, "route hologram writes the full PBR8 trailer");
+    CHECK_MSG(Near(t.row[0], .1f) && Near(t.row[10], .8f) && Near(t.row[9], 0.f) && Near(t.row[11], .028f), "scanline/alpha survive and apex follows the import basis");
+    CHECK_MSG(Near(t.row[12], 1.f) && Near(t.row[15], .2f) && Near(t.row[31], .75f), "fade and authored DIFC alpha survive import");
+  }
+}
+
 int main() {
+  TestRouteHologram();
   TestReader();
   TestHoloGlassE264();
   TestConverter();
