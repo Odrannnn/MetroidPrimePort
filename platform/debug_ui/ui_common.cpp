@@ -29,7 +29,7 @@
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_events.h>
 
-#if defined(__ANDROID__)
+#if defined(PORT_TOUCH_CONTROLS)
 #include "touch_pad.h"
 #endif
 
@@ -49,7 +49,7 @@ std::atomic< bool > sToggleRequested{false};
 // back to the old floating tabbed window (System > Overlay as a floating
 // window); MP_TOUCH_UI forces the page layout regardless.
 bool PageLayout() {
-#if defined(__ANDROID__)
+#if defined(PORT_TOUCH_CONTROLS)
   return true;
 #else
   static const bool sForced = port::EnvFlag("MP_TOUCH_UI");
@@ -471,6 +471,9 @@ void UpdateControllerNav() {
   if (!sEventWatchRegistered) {
     sEventWatchRegistered = true;
     SDL_AddEventWatch(debug_event_watch, nullptr);
+#if defined(PORT_TOUCH_OVERLAY)
+    InstallTouchOverlay();
+#endif
   }
   UpdateUiScale();
   ApplyThemeIfChanged();

@@ -1071,7 +1071,7 @@ int CMain::RsMain(int argc, const char* const* argv) {
               (PortPhoto::Active() ? PortPhoto::MouseLook()
                                    : PortDebug::MouseAim() && PortDebug::MouseGameplayActive() &&
                                          !PortPhoto::PanelWantsCursor()) &&
-              !PortDebug::Visible() && !resumePrompt && focused;
+              !PortDebug::Visible() && !PortDebug::TouchEditing() && !resumePrompt && focused;
 #ifdef __ANDROID__
           // A free (hidden) cursor flung to the screen edge brings up the nav bar
           // or taskbar, so keep the pointer captured unless the overlay is open.
@@ -1083,7 +1083,8 @@ int CMain::RsMain(int argc, const char* const* argv) {
 #else
           // Morph ball has no mouse aim, but its bombs are on the mouse buttons:
           // keep the pointer locked so a click can't land outside the window.
-          const bool wantLock = !pointerMenu &&
+          // The touch layout editor drags its controls with the pointer.
+          const bool wantLock = !pointerMenu && !PortDebug::TouchEditing() &&
                                 (wantRelative ||
                                  (PortDebug::MouseAim() && MorphBallHoldsMouse() && !PortDebug::Visible() &&
                                   !PortPhoto::PanelWantsCursor() && !resumePrompt && focused));

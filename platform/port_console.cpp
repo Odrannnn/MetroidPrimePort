@@ -2328,6 +2328,93 @@ void CmdPointer() {
   Finish();
 }
 
+// Pushes one SDL finger event at window pixel x,y, as a touch screen would: the touch overlay's
+// event filter sees it as it is pushed. Tests the touch overlay on a desktop build.
+bool PushFinger(Uint32 type, SDL_FingerID id, float x, float y) {
+  int count = 0;
+  SDL_Window** windows = SDL_GetWindows(&count);
+  SDL_Window* window = windows != nullptr && count > 0 ? windows[0] : nullptr;
+  SDL_free(windows);
+  int w = 0;
+  int h = 0;
+  if (window == nullptr || !SDL_GetWindowSizeInPixels(window, &w, &h) || w <= 0 || h <= 0) {
+    return false;
+  }
+  // A pushed finger skips SDL_SendTouch, which on a device first sends the touch-mouse the
+  // ImGui windows (the editor's picker, F1) read: send it here the same way.
+  int ww = 0;
+  int wh = 0;
+  SDL_GetWindowSize(window, &ww, &wh);
+  const float mx = x / float(w) * float(ww);
+  const float my = y / float(h) * float(wh);
+  SDL_Event m{};
+  m.motion.type = SDL_EVENT_MOUSE_MOTION;
+  m.motion.timestamp = SDL_GetTicksNS();
+  m.motion.windowID = SDL_GetWindowID(window);
+  m.motion.which = SDL_TOUCH_MOUSEID;
+  m.motion.x = mx;
+  m.motion.y = my;
+  SDL_PushEvent(&m);
+  if (type != SDL_EVENT_FINGER_MOTION) {
+    m = {};
+    m.button.type = type == SDL_EVENT_FINGER_DOWN ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    m.button.timestamp = SDL_GetTicksNS();
+    m.button.windowID = SDL_GetWindowID(window);
+    m.button.which = SDL_TOUCH_MOUSEID;
+    m.button.button = SDL_BUTTON_LEFT;
+    m.button.down = type == SDL_EVENT_FINGER_DOWN;
+    m.button.clicks = 1;
+    m.button.x = mx;
+    m.button.y = my;
+    SDL_PushEvent(&m);
+  }
+  SDL_Event e{};
+  e.type = type;
+  e.tfinger.timestamp = SDL_GetTicksNS();
+  e.tfinger.touchID = 1;
+  e.tfinger.fingerID = id;
+  e.tfinger.x = x / float(w);
+  e.tfinger.y = y / float(h);
+  e.tfinger.pressure = type == SDL_EVENT_FINGER_UP ? 0.f : 1.f;
+  e.tfinger.windowID = SDL_GetWindowID(window);
+  SDL_PushEvent(&e);
+  return true;
+}
+
+void CmdFinger() {
+  const auto& a = sCmd.args;
+  const auto num = [&](size_t i) { return static_cast< float >(std::atof(a[i].c_str())); };
+  const char* usage =
+      "usage: finger down|move|up <id> <x> <y> | tap <x> <y> | drag <x0> <y0> <x1> <y1> [steps]";
+  if (a.size() == 5 && (a[1] == "down" || a[1] == "move" || a[1] == "up")) {
+    const Uint32 type = a[1] == "down" ? SDL_EVENT_FINGER_DOWN
+                        : a[1] == "move" ? SDL_EVENT_FINGER_MOTION
+                                         : SDL_EVENT_FINGER_UP;
+    if (!PushFinger(type, SDL_FingerID(std::atoll(a[2].c_str())), num(3), num(4))) {
+      return Finish("no window");
+    }
+  } else if (a.size() == 4 && a[1] == "tap") {
+    if (!PushFinger(SDL_EVENT_FINGER_DOWN, 1, num(2), num(3)) ||
+        !PushFinger(SDL_EVENT_FINGER_UP, 1, num(2), num(3))) {
+      return Finish("no window");
+    }
+  } else if ((a.size() == 6 || a.size() == 7) && a[1] == "drag") {
+    const int steps = a.size() == 7 ? std::max(1, std::atoi(a[6].c_str())) : 10;
+    const float x0 = num(2), y0 = num(3), x1 = num(4), y1 = num(5);
+    if (!PushFinger(SDL_EVENT_FINGER_DOWN, 1, x0, y0)) {
+      return Finish("no window");
+    }
+    for (int i = 1; i <= steps; ++i) {
+      const float t = float(i) / float(steps);
+      PushFinger(SDL_EVENT_FINGER_MOTION, 1, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+    }
+    PushFinger(SDL_EVENT_FINGER_UP, 1, x1, y1);
+  } else {
+    return Finish(usage);
+  }
+  Finish();
+}
+
 void CmdWindow() {
   int count = 0;
   SDL_Window** windows = SDL_GetWindows(&count);
@@ -2822,6 +2909,12 @@ void CmdMinimap() {
 void CmdMapTap() {
   PortDebug::RequestMapTap();
   Out("maptap queued");
+  Finish();
+}
+
+void CmdTouchEdit() {
+  PortDebug::RequestTouchEdit();
+  Out("touchedit requested");
   Finish();
 }
 
@@ -3921,6 +4014,11 @@ const CommandSpec kCommands[] = {
     {"minimap", CmdMinimap, nullptr,
      "minimap  the HUD minimap's screen rect (x0 y0 x1 y1, 0..1), or invalid"},
     {"maptap", CmdMapTap, nullptr, "maptap   a touch-overlay minimap tap: one Z press, opens the map"},
+    {"touchedit", CmdTouchEdit, nullptr,
+     "touchedit  opens the touch layout editor, as F1 > Controls > Edit layout"},
+    {"finger", CmdFinger, nullptr,
+     "finger down|move|up <id> <x> <y> | tap <x> <y> | drag <x0> <y0> <x1> <y1> [steps]  SDL touch "
+     "events at window pixels"},
     {"touchaim", CmdTouchAim, nullptr,
      "touchaim <dx> <dy> [hold s]   touch aim travel in dp (right/down +), the finger counts as down for hold seconds"},
     {"maprotate", CmdMapRotate, nullptr,

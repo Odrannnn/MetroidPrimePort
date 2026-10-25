@@ -594,6 +594,8 @@ void SetTouchLayout(const std::string& layout) {
 
 bool TakeTouchEditRequested() { return sTouchEditRequested.exchange(false, std::memory_order_acq_rel); }
 
+void RequestTouchEdit() { sTouchEditRequested.store(true, std::memory_order_release); }
+
 void SaveSettingsNow() {
   EnsureInitialized();
   // Callers change settings the overlay doesn't track (the console's gci share).

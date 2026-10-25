@@ -112,7 +112,7 @@ uint64_t sSeenVersion = 0; // the bindings version sWork matches
 // bindings) or a controller profile's match ("type:..." / "guid:..."). Keyboard
 // and touch always edit the Default profile.
 std::string sPadDevice = "pads";
-#ifdef __ANDROID__
+#if defined(PORT_TOUCH_CONTROLS)
 constexpr bool kShowTouch = true;
 #else
 constexpr bool kShowTouch = false; // the touch overlay is Android's

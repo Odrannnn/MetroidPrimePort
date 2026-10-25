@@ -413,6 +413,11 @@ void BeginTopToastStack();
 void DrawPhotoUI();
 void DrawResumePrompt();
 void DrawUpdateToast();
+#if defined(PORT_TOUCH_OVERLAY)
+// touch_overlay.cpp: the SDL event filter that feeds it, and its draw
+void InstallTouchOverlay();
+void DrawTouchOverlay();
+#endif
 void HoldBackgroundShadersOnFrontEnd();
 void DrawShaderCompilationToast();
 std::string HotkeyHint();

@@ -1,0 +1,116 @@
+name: ios
+
+# Experimental iPhone/iPad build. The device job makes an unsigned .ipa that
+# players sideload (SideStore, AltStore, Sideloadly re-sign it with their own
+# Apple ID); the simulator job starts the app on an iPhone and an iPad
+# simulator up to the point a disc image is needed, since CI has none.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Dawn's prebuilt iOS package is for devices only, so the simulator
+          # build compiles Dawn from source (ccache keeps that to the first run).
+          - sdk: iphoneos
+            rust: aarch64-apple-ios
+            dawn: package
+          - sdk: iphonesimulator
+            rust: aarch64-apple-ios-sim
+            dawn: vendor
+    name: build (${{ matrix.sdk }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Dependencies
+        run: |
+          brew install ninja
+          rustup target add ${{ matrix.rust }}
+
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: ios-${{ matrix.sdk }}
+          max-size: 2G
+          evict-old-files: job
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            build-ios/_deps/*-src
+            build-ios/_deps/*-subbuild
+          key: deps-ios-${{ matrix.sdk }}-${{ hashFiles('CMakeLists.txt', 'extern/aurora/**/CMakeLists.txt', 'extern/aurora/**/*.cmake') }}
+
+      # Everything is linked in statically: an iOS app can carry no dylibs of
+      # its own outside frameworks. No TLS library exists for iOS here yet, so
+      # the Archipelago client refuses wss:// in this build.
+      - name: Configure
+        run: >
+          cmake -S . -B build-ios -G Ninja
+          -DCMAKE_SYSTEM_NAME=iOS
+          -DCMAKE_OSX_SYSROOT=${{ matrix.sdk }}
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DMP_BUILD_TESTS=OFF
+          -DAURORA_ENABLE_TESTS=OFF
+          -DBUILD_SHARED_LIBS=OFF
+          -DAURORA_DAWN_PROVIDER=${{ matrix.dawn }}
+          -DAURORA_DAWN_LINKAGE=static
+          -DAURORA_SDL3_PROVIDER=vendor
+          -DAURORA_SDL3_LINKAGE=static
+          -DAURORA_NOD_PROVIDER=vendor
+          -DAURORA_NOD_LINKAGE=static
+          -DRust_CARGO_TARGET=${{ matrix.rust }}
+          -DTINT_BUILD_IR_BINARY=OFF -DDAWN_BUILD_PROTOBUF=OFF
+          -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_xxHash=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_zstd=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=ON
+
+      # -k 0: report every failing file in one run while the port is brought up.
+      - name: Build
+        run: cmake --build build-ios -j --target metroid_prime_port -- -k 0
+
+      - name: Package
+        run: bash tools/ios_package.sh build-ios ${{ matrix.sdk }} dist
+
+      # Only the system's own libraries and frameworks may be referenced.
+      - name: Check the executable's libraries
+        run: |
+          otool -L build-ios/metroid_prime_port.app/metroid_prime_port | tee libs.txt
+          if tail -n +2 libs.txt | grep -vE '^\s*(/usr/lib/|/System/Library/)'; then
+            echo "the app links libraries outside the system" >&2; exit 1
+          fi
+
+      - name: Simulator smoke test
+        if: matrix.sdk == 'iphonesimulator'
+        run: bash tools/ios_sim_smoke.sh dist/metroid_prime_port.app smoke
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: matrix.sdk == 'iphoneos'
+        with:
+          name: metroid_prime_port-ios
+          path: dist/MetroidPrimePort.ipa
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && matrix.sdk == 'iphonesimulator'
+        with:
+          name: ios-simulator-smoke
+          path: smoke
+          if-no-files-found: ignore

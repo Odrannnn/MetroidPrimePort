@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 project(metroid_prime_port LANGUAGES C CXX)
+if(IOS)
+    # platform/port_ios.mm. Enabled here: enabled where the target is made, it
+    # comes after the subdirectories and leaves CMake without its compile rules.
+    enable_language(OBJCXX)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build type" FORCE)
@@ -100,7 +105,11 @@ endif()
 # threads) experimental; the flag unlocks them and links libc++experimental.
 if(APPLE)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-fexperimental-library>)
-    add_link_options(-fexperimental-library)
+    # The iOS Simulator SDK ships no libc++experimental; jthread and stop_token
+    # are header-only, so its build compiles with the flag and links without it.
+    if(NOT CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+        add_link_options(-fexperimental-library)
+    endif()
 endif()
 
 # Aurora provides the GameCube/Wii compatibility layer (MIT): GX, OS, PAD, DVD,
@@ -210,6 +219,7 @@ set(MP_PORT_SOURCES
     platform/debug_ui/search.cpp
     platform/debug_ui/settings.cpp
     platform/debug_ui/tabs.cpp
+    platform/debug_ui/touch_overlay.cpp
     platform/debug_ui/tracker.cpp
     platform/debug_ui/ui_common.cpp
     platform/debug_ui/video.cpp
@@ -417,8 +427,39 @@ if(ANDROID)
         set_target_properties(mport_vkshim PROPERTIES C_VISIBILITY_PRESET hidden)
         target_link_libraries(metroid_prime_port PRIVATE adrenotools z)
     endif()
+elseif(IOS)
+    # An iOS app is a flat bundle: the executable, Info.plist and the icons side
+    # by side. Nothing signs it here; tools/ios_package.sh finishes the bundle
+    # (icons, an ad hoc signature) and players re-sign the .ipa with their own
+    # Apple ID when they sideload it.
+    add_executable(metroid_prime_port MACOSX_BUNDLE ${MP_PORT_SOURCES} platform/port_ios.mm)
+    set_source_files_properties(platform/port_ios.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    target_link_libraries(metroid_prime_port PRIVATE "-framework UIKit" "-framework UniformTypeIdentifiers")
+    file(STRINGS android/app/build.gradle _mp_version_line REGEX "versionName \"[^\"]+\"")
+    string(REGEX REPLACE ".*versionName \"([^\"]+)\".*" "\\1" MP_IOS_VERSION "${_mp_version_line}")
+    set_target_properties(metroid_prime_port PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/ios/Info.plist.in"
+        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.odrannnn.metroidprimeport
+        MACOSX_BUNDLE_BUNDLE_NAME "Metroid Prime"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${MP_IOS_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${MP_IOS_VERSION}")
 else()
     add_executable(metroid_prime_port ${MP_PORT_SOURCES})
+endif()
+# Touch settings and the virtual pad on phones and tablets. Android draws the
+# controls in Java (TouchControlsView); iOS draws them in C++ (touch_overlay.cpp).
+# The desktop switch builds the C++ overlay on a host build so its drawing and
+# event handling can be tried without a device; the console's `finger` command
+# sends the touches.
+option(MP_TOUCH_OVERLAY_DESKTOP "Draw the touch controls on a desktop build (testing)" OFF)
+if(ANDROID OR IOS)
+    target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_CONTROLS)
+endif()
+if(IOS)
+    target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_OVERLAY)
+endif()
+if(MP_TOUCH_OVERLAY_DESKTOP AND NOT ANDROID)
+    target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_CONTROLS PORT_TOUCH_OVERLAY)
 endif()
 # disc.cpp and port_pal_languages.cpp inflate compressed images and fonts. Aurora
 # provides ZLIB::ZLIB everywhere (its zlib-ng on Windows).
@@ -613,7 +654,9 @@ endif()
 # <SDL_GetBasePath()> + "textures", and Aurora's pipeline cache is opened by name
 # beside the binary. They are installed to bin/ for that reason, not by accident.
 include(GNUInstallDirs)
-install(TARGETS metroid_prime_port RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS metroid_prime_port
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    BUNDLE DESTINATION .)
 if(NOT MP_EMBED_RESOURCES)
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/textures/
         DESTINATION ${CMAKE_INSTALL_BINDIR}/textures)

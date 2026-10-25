@@ -31,7 +31,7 @@
 #include <SDL3/SDL_dialog.h>
 #include <SDL3/SDL_timer.h>
 
-#if defined(__ANDROID__)
+#if defined(PORT_TOUCH_CONTROLS)
 #include "touch_pad.h"
 #endif
 
@@ -928,7 +928,7 @@ void SetMouseAim(bool enabled) {
 }
 
 bool TouchDirectAim() {
-#if defined(__ANDROID__)
+#if defined(PORT_TOUCH_CONTROLS)
   return !sInput.touchClassic && sTouchActive.load(std::memory_order_acquire) && !Visible();
 #else
   return false;
@@ -936,7 +936,7 @@ bool TouchDirectAim() {
 }
 
 bool TouchActive() {
-#if defined(__ANDROID__)
+#if defined(PORT_TOUCH_CONTROLS)
   return sTouchActive.load(std::memory_order_acquire) && !Visible();
 #else
   return false;
@@ -949,7 +949,7 @@ bool DirectAim() { return MouseAim() || TwinStick() || TouchDirectAim(); }
 // touch overlay always does what its buttons say. The F1 menu (Visible) sees the stored values.
 bool TwinStick() {
   EnsureInitialized();
-#if defined(__ANDROID__)
+#if defined(PORT_TOUCH_CONTROLS)
   // Touch has its own twin stick (the right stick aims), apart from the pad preset.
   if (TouchActive()) {
     return sInput.touchTwinStick;
