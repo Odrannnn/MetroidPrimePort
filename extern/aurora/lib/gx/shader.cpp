@@ -1,6 +1,7 @@
 #include "../gfx/hash.hpp"
 #include "../gfx/hdr_tone.hpp"
 #include "../gfx/probe.hpp"
+#include "../gfx/resources.hpp"
 #include "../gfx/types.hpp"
 
 #include "../internal.hpp"
@@ -15,6 +16,7 @@
 #include <absl/container/flat_hash_set.h>
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -3312,6 +3314,55 @@ bool shader_has_cut_caster(const ShaderConfig& config) noexcept {
   return build_shader_source(config).find("fn fs_shadow(") != std::string::npos;
 }
 
+namespace {
+// Texture vertex fetch (gfx::g_vertexFetchTexture): the shader reads the vertex and array data from
+// R32Uint textures instead of read-only storage arrays, which a GPU with no vertex-stage storage
+// buffers cannot declare. Every word access already goes through load_word, which addresses the
+// texture as rows of 4096 texels (gfx::detail::FetchTextureRowBytes), so this only rewrites the
+// data's declarations, the helpers' parameter types and load_word's body.
+void apply_texture_vertex_fetch(std::string& source) {
+  const auto replaceAll = [&source](std::string_view from, std::string_view to) {
+    for (size_t at = source.find(from); at != std::string::npos; at = source.find(from, at + to.size())) {
+      source.replace(at, from.size(), to);
+    }
+  };
+  replaceAll("var<storage, read> vbuf: array<u32>;", "var vbuf: texture_2d<u32>;");
+  replaceAll("var<storage, read> abuf: array<u32>;", "var abuf: texture_2d<u32>;");
+  // The helpers take the data as a parameter; a texture is a value, not a pointer to one.
+  replaceAll("ptr<storage, array<u32>>", "texture_2d<u32>");
+  replaceAll("&vbuf", "vbuf");
+  replaceAll("&abuf", "abuf");
+  // The only word read: the storage version's arrayLength guard becomes the texture's extent.
+  constexpr std::string_view guard = "  if (word_idx < arrayLength(p)) {\n    return p[word_idx];\n  }\n  return 0u;\n";
+  const size_t wordAt = source.find(guard);
+  assert(wordAt != std::string::npos);
+  source.replace(wordAt, guard.size(),
+                 "  let dims = textureDimensions(p);\n"
+                 "  if (word_idx < dims.x * dims.y) {\n"
+                 "    return textureLoad(p, vec2u(word_idx & 4095u, word_idx >> 12u), 0).x;\n"
+                 "  }\n"
+                 "  return 0u;\n");
+  // A few expressions index the data directly (the fog row, the TEV colour rows); they become
+  // load_word calls, as their indices are u32 word indices and never nested.
+  for (const std::string_view name : {"vbuf"sv, "abuf"sv}) {
+    std::string needle{name};
+    needle += '[';
+    size_t at = 0;
+    while ((at = source.find(needle, at)) != std::string::npos) {
+      const size_t close = source.find(']', at + needle.size());
+      assert(close != std::string::npos);
+      std::string replacement{"load_word("};
+      replacement += name;
+      replacement += ", ";
+      replacement += source.substr(at + needle.size(), close - at - needle.size());
+      replacement += ')';
+      source.replace(at, close + 1 - at, replacement);
+      at += replacement.size();
+    }
+  }
+}
+} // namespace
+
 std::string build_shader_source(const ShaderConfig& config) noexcept {
   ZoneScoped;
   const auto hash = xxh3_hash(config);
@@ -4992,7 +5043,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {{{6}{5}
 )""",
                                         uniBufAttrs, texBindings, vtxOutAttrs, vtxInAttrs, vtxXfrAttrs, fragmentFn,
                                         fragmentFnPre, vtxXfrAttrsPre, uniformPre, shadowVs);
-  if (clamp_storage_loads()) {
+  if (clamp_storage_loads() && !gfx::g_vertexFetchTexture) {
     constexpr std::string_view guard =
         "  if (word_idx < arrayLength(p)) {\n    return p[word_idx];\n  }\n  return 0u;\n";
     const size_t at = shaderSource.find(guard);
@@ -5090,6 +5141,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {{{6}{5}
   }
   if (info.usesHdrTone) {
     shaderSource += gfx::hdr::TevBlendWgsl;
+  }
+  if (gfx::g_vertexFetchTexture) {
+    apply_texture_vertex_fetch(shaderSource);
   }
   if (EnableDebugPrints) {
     Log.info("Generated shader (hash {:x}): {}", hash, shaderSource);
@@ -5316,5 +5370,5 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config, DstAlphaMode& dstAlp
   return webgpu::g_device.CreateShaderModule(&shaderDescriptor);
 }
 
-bool storage_load_clamp_active() noexcept { return clamp_storage_loads(); }
+bool storage_load_clamp_active() noexcept { return clamp_storage_loads() && !gfx::g_vertexFetchTexture; }
 } // namespace aurora::gx

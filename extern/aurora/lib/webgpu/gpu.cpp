@@ -1120,9 +1120,39 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
   {
     wgpu::Limits supportedLimits{};
     g_adapter.GetLimits(&supportedLimits);
+    // Texture vertex fetch (aurora::gfx::g_vertexFetchTexture): a GPU without vertex-stage storage
+    // buffers (OpenGL 3.3) reads the GX shaders' vertex and array data from R32Uint textures, which
+    // every stage can sample. AURORA_VERTEX_FETCH_TEXTURE=1 forces it; otherwise the adapter's own
+    // compatibility-mode limit decides. Fixed for the life of the device, so the generated WGSL and
+    // the bind group layout agree with it.
+    uint32_t adapterVertexStorageBuffers = WGPU_LIMIT_U32_UNDEFINED;
+    {
+      wgpu::Limits probeLimits{};
+      wgpu::CompatibilityModeLimits probeCompatibility{wgpu::CompatibilityModeLimits::Init{}};
+      probeLimits.nextInChain = &probeCompatibility;
+      g_adapter.GetLimits(&probeLimits);
+      adapterVertexStorageBuffers = probeCompatibility.maxStorageBuffersInVertexStage;
+    }
+    const char* forceFetchTexture = std::getenv("AURORA_VERTEX_FETCH_TEXTURE");
+    const bool forced = forceFetchTexture != nullptr && forceFetchTexture[0] == '1' && forceFetchTexture[1] == '\0';
+    const bool adapterHasNone = adapterVertexStorageBuffers != WGPU_LIMIT_U32_UNDEFINED &&
+                                adapterVertexStorageBuffers < 2;
+    gfx::g_vertexFetchTexture = forced || adapterHasNone;
+    if (gfx::g_vertexFetchTexture) {
+      Log.info("Vertex data from textures instead of vertex-stage storage buffers ({})",
+               forced ? "AURORA_VERTEX_FETCH_TEXTURE=1"
+                      : fmt::format("the adapter allows {} of them", adapterVertexStorageBuffers));
+    } else {
+      if (adapterVertexStorageBuffers == WGPU_LIMIT_U32_UNDEFINED) {
+        Log.info("Vertex data from storage buffers (the adapter does not report vertex-stage storage buffers)");
+      } else {
+        Log.info("Vertex data from storage buffers (the adapter allows {} vertex-stage storage buffers)",
+                 adapterVertexStorageBuffers);
+      }
+    }
     wgpu::CompatibilityModeLimits compatibilityModeLimits{wgpu::CompatibilityModeLimits::Init{
-        .maxStorageBuffersInVertexStage = 2,
-        .maxStorageBuffersInFragmentStage = 2,
+        .maxStorageBuffersInVertexStage = gfx::g_vertexFetchTexture ? 0u : 2u,
+        .maxStorageBuffersInFragmentStage = gfx::g_vertexFetchTexture ? 0u : 2u,
     }};
     const wgpu::Limits requiredLimits{
         .nextInChain = &compatibilityModeLimits,

@@ -47,6 +47,9 @@ using webgpu::g_device;
 using webgpu::g_instance;
 using webgpu::g_queue;
 
+// Set once when the device is created (webgpu::initialize); see resources.hpp.
+bool g_vertexFetchTexture = false;
+
 namespace {
 constexpr Module Log{"aurora::gfx"};
 
@@ -95,17 +98,58 @@ const std::array<SharedBuffer, 4> SharedBuffers{{
      "storage"},
 }};
 
-void create_static_bind_group() {
-  const std::array entries{
-      wgpu::BindGroupEntry{
-          .binding = 0,
-          .buffer = g_resources.vertexBuffer,
-      },
-      wgpu::BindGroupEntry{
-          .binding = 1,
-          .buffer = g_resources.storageBuffer,
-      },
+// Texture vertex fetch: one fetch texture row is 4096 R32Uint texels (16 KiB), so a buffer's
+// bytes are its size / 16 KiB rows of the texture the shaders read it through.
+constexpr uint32_t FetchTextureWidth = 4096;
+
+// The allocation size a shared buffer needs: whole fetch texture rows for the kinds the shaders
+// read as textures, so its texture covers it exactly.
+uint64_t fetch_aligned_buffer_size(StagingKind kind, uint64_t bytes) noexcept {
+  if (!g_vertexFetchTexture || (kind != StagingKind::Vertex && kind != StagingKind::Storage)) {
+    return bytes;
+  }
+  return AURORA_ALIGN(bytes, FetchTextureRowBytes);
+}
+
+// Creates the fetch texture mirroring `kind`'s device buffer of `bytes` bytes.
+void create_fetch_texture(StagingKind kind, uint64_t bytes) {
+  const bool vertex = kind == StagingKind::Vertex;
+  wgpu::Texture& texture = vertex ? g_resources.vertexFetchTexture : g_resources.storageFetchTexture;
+  wgpu::TextureView& view = vertex ? g_resources.vertexFetchTextureView : g_resources.storageFetchTextureView;
+  const char* label = vertex ? "Vertex fetch texture" : "Storage fetch texture";
+  const uint64_t rows = AURORA_ALIGN(bytes, FetchTextureRowBytes) / FetchTextureRowBytes;
+  const uint32_t maxRows = g_resources.limits.maxTextureDimension2D;
+  if (maxRows != 0 && rows > maxRows) {
+    // The shaders address the data by row, so it cannot go in a smaller texture.
+    FATAL("{} needs {} rows of {} bytes, more than this device's maxTextureDimension2D of {}; "
+          "lower frameBufferScale or leave AURORA_VERTEX_FETCH_TEXTURE unset",
+          label, rows, FetchTextureRowBytes, maxRows);
+  }
+  const wgpu::TextureDescriptor descriptor{
+      .label = label,
+      .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst,
+      .dimension = wgpu::TextureDimension::e2D,
+      .size = {FetchTextureWidth, static_cast<uint32_t>(rows), 1},
+      .format = wgpu::TextureFormat::R32Uint,
+      .mipLevelCount = 1,
+      .sampleCount = 1,
   };
+  texture = g_device.CreateTexture(&descriptor);
+  view = texture.CreateView();
+}
+
+void create_static_bind_group() {
+  std::array<wgpu::BindGroupEntry, 2> entries{};
+  for (size_t i = 0; i < entries.size(); ++i) {
+    entries[i].binding = static_cast<uint32_t>(i);
+  }
+  if (g_vertexFetchTexture) {
+    entries[0].textureView = g_resources.vertexFetchTextureView;
+    entries[1].textureView = g_resources.storageFetchTextureView;
+  } else {
+    entries[0].buffer = g_resources.vertexBuffer;
+    entries[1].buffer = g_resources.storageBuffer;
+  }
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .label = "Static bind group",
       .layout = g_resources.staticBindGroupLayout,
@@ -357,6 +401,43 @@ std::optional<RegisteredEncoderTaskType> find_runtime_encoder_task_type(EncoderT
       .userdata = slot->userdata,
       .afterSubmit = slot->afterSubmit,
   };
+}
+
+void upload_fetch_texture_rows(const wgpu::CommandEncoder& encoder, StagingKind kind, uint64_t lo, uint64_t hi) {
+  if (!g_vertexFetchTexture || hi <= lo || (kind != StagingKind::Vertex && kind != StagingKind::Storage)) {
+    return;
+  }
+  const bool vertex = kind == StagingKind::Vertex;
+  const wgpu::Texture& texture = vertex ? g_resources.vertexFetchTexture : g_resources.storageFetchTexture;
+  if (!texture) {
+    return;
+  }
+  const uint64_t firstRow = lo / FetchTextureRowBytes;
+  const uint64_t lastRow = (hi + FetchTextureRowBytes - 1) / FetchTextureRowBytes;
+  const wgpu::TexelCopyBufferInfo source{
+      .layout =
+          wgpu::TexelCopyBufferLayout{
+              .offset = firstRow * FetchTextureRowBytes,
+              .bytesPerRow = FetchTextureRowBytes,
+              .rowsPerImage = static_cast<uint32_t>(lastRow - firstRow),
+          },
+      .buffer = vertex ? g_resources.vertexBuffer : g_resources.storageBuffer,
+  };
+  const wgpu::TexelCopyTextureInfo destination{
+      .texture = texture,
+      .origin =
+          wgpu::Origin3D{
+              .x = 0,
+              .y = static_cast<uint32_t>(firstRow),
+              .z = 0,
+          },
+  };
+  const wgpu::Extent3D size{
+      .width = FetchTextureWidth,
+      .height = static_cast<uint32_t>(lastRow - firstRow),
+      .depthOrArrayLayers = 1,
+  };
+  encoder.CopyBufferToTexture(&source, &destination, &size);
 }
 
 } // namespace detail
@@ -672,7 +753,27 @@ void initialize() {
   };
   for (const auto& buffer : SharedBuffers) {
     createBuffer(g_resources.*buffer.member, buffer.usage,
-                 g_bufferSizes.base(buffer.kind) + g_bufferSizes.device(buffer.kind), buffer.label);
+                 fetch_aligned_buffer_size(buffer.kind,
+                                           g_bufferSizes.base(buffer.kind) + g_bufferSizes.device(buffer.kind)),
+                 buffer.label);
+  }
+  if (g_vertexFetchTexture) {
+    const uint64_t vertexBytes = g_bufferSizes.base(StagingKind::Vertex) + g_bufferSizes.deviceVertex;
+    const uint64_t storageBytes = g_bufferSizes.base(StagingKind::Storage) + g_bufferSizes.deviceStorage;
+    create_fetch_texture(StagingKind::Vertex, vertexBytes);
+    create_fetch_texture(StagingKind::Storage, storageBytes);
+    // The new buffers are zeroed, and a read past the data has to see that (the storage buffers
+    // read 0 there), so the textures start as their copies rather than as undefined content.
+    const wgpu::CommandEncoderDescriptor encoderDescriptor{
+        .label = "Vertex fetch textures",
+    };
+    auto encoder = g_device.CreateCommandEncoder(&encoderDescriptor);
+    upload_fetch_texture_rows(encoder, StagingKind::Vertex, 0, vertexBytes);
+    upload_fetch_texture_rows(encoder, StagingKind::Storage, 0, storageBytes);
+    auto commands = encoder.Finish();
+    g_queue.Submit(1, &commands);
+    Log.info("Texture vertex fetch: {} rows of vertices, {} rows of arrays", vertexBytes / FetchTextureRowBytes,
+             storageBytes / FetchTextureRowBytes);
   }
   for (size_t i = 0; i < g_stagingBuffers.size(); ++i) {
     const auto label = fmt::format("Staging Buffer {}", i);
@@ -687,26 +788,30 @@ void initialize() {
   }
 
   {
-    constexpr std::array layoutEntries{
-        // Vertex data buffer
-        wgpu::BindGroupLayoutEntry{
-            .binding = 0,
-            .visibility = wgpu::ShaderStage::Vertex,
-            .buffer =
-                wgpu::BufferBindingLayout{
-                    .type = wgpu::BufferBindingType::ReadOnlyStorage,
-                },
-        },
-        // Storage data buffer
-        wgpu::BindGroupLayoutEntry{
-            .binding = 1,
-            .visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
-            .buffer =
-                wgpu::BufferBindingLayout{
-                    .type = wgpu::BufferBindingType::ReadOnlyStorage,
-                },
-        },
+    // The vertex and storage data as either whole read-only storage buffers or, in texture vertex
+    // fetch mode, textures the shaders textureLoad words from (resources.hpp).
+    const auto makeEntry = [](uint32_t binding, wgpu::ShaderStage visibility) {
+      wgpu::BindGroupLayoutEntry entry{
+          .binding = binding,
+          .visibility = visibility,
+      };
+      if (g_vertexFetchTexture) {
+        entry.texture =
+            wgpu::TextureBindingLayout{
+                .sampleType = wgpu::TextureSampleType::Uint,
+                .viewDimension = wgpu::TextureViewDimension::e2D,
+            };
+      } else {
+        entry.buffer =
+            wgpu::BufferBindingLayout{
+                .type = wgpu::BufferBindingType::ReadOnlyStorage,
+            };
+      }
+      return entry;
     };
+    // Vertex data, then storage data.
+    const std::array layoutEntries{makeEntry(0, wgpu::ShaderStage::Vertex),
+                                   makeEntry(1, wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment)};
     const wgpu::BindGroupLayoutDescriptor layoutDesc{
         .label = "Static bind group layout",
         .entryCount = layoutEntries.size(),
@@ -789,6 +894,10 @@ void shutdown() {
   g_resources.uniformBuffer = {};
   g_resources.indexBuffer = {};
   g_resources.storageBuffer = {};
+  g_resources.vertexFetchTexture = {};
+  g_resources.vertexFetchTextureView = {};
+  g_resources.storageFetchTexture = {};
+  g_resources.storageFetchTextureView = {};
   g_stagingBuffers.fill({});
   for (auto& packet : g_framePackets) {
     packet = {};
@@ -875,7 +984,7 @@ void grow_frame_buffer(StagingKind kind, uint64_t need, const wgpu::CommandEncod
     const wgpu::BufferDescriptor descriptor{
         .label = shared.label,
         .usage = shared.usage,
-        .size = base + grown,
+        .size = fetch_aligned_buffer_size(kind, base + grown),
     };
     wgpu::Buffer buffer = g_device.CreateBuffer(&descriptor);
     wgpu::Buffer& current = g_resources.*shared.member;
@@ -884,6 +993,12 @@ void grow_frame_buffer(StagingKind kind, uint64_t need, const wgpu::CommandEncod
              device >> 10, grown >> 10, g_frameIndex, need >> 10);
     current = std::move(buffer);
     device = grown;
+    if (g_vertexFetchTexture && (kind == StagingKind::Vertex || kind == StagingKind::Storage)) {
+      // The fetch texture is the new buffer, so it is the size of the buffer rather than of the
+      // part in use; the buffer copy above already put the old contents at the same offsets.
+      create_fetch_texture(kind, base + grown);
+      upload_fetch_texture_rows(encoder, kind, 0, base + grown);
+    }
     if (kind == StagingKind::Uniform) {
       create_uniform_bind_group();
     } else if (kind != StagingKind::Index) {

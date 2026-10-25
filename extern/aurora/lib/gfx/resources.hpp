@@ -20,6 +20,15 @@ inline constexpr uint64_t StartTextureUploadSize = 8u << 20;
 
 enum class StagingKind : uint8_t { Vertex, Uniform, Index, Storage };
 
+// Texture vertex fetch: the GX shaders read the vertex and array data from R32Uint textures
+// instead of the whole-buffer read-only storage bindings, which a fragment stage can do on any
+// backend but a vertex stage cannot on one without vertex-stage storage buffers (OpenGL 3.3).
+// One texture row is 4096 texels (16 KiB) and holds words 4096 * row .. 4096 * row + 4095 of the
+// buffer, so a shader finds word n at (n & 4095, n >> 12). Off by default; fixed once at device
+// creation (webgpu::initialize) from AURORA_VERTEX_FETCH_TEXTURE=1 or from the adapter's
+// compatibility-mode limits, and never changes after.
+extern bool g_vertexFetchTexture;
+
 // What a frame can hold of each kind of data. The constants above are the sizes at
 // AuroraConfig::frameBufferScale 1; initialize() fixes the sizes in use for the run.
 struct FrameBufferSizes {
@@ -125,6 +134,12 @@ struct Resources {
   wgpu::Buffer uniformBuffer;
   wgpu::Buffer indexBuffer;
   wgpu::Buffer storageBuffer;
+  // Texture vertex fetch: the vertex and storage buffers as textures (g_vertexFetchTexture).
+  // Each is sized to the buffer it mirrors, which is rounded up to whole rows for it.
+  wgpu::Texture vertexFetchTexture;
+  wgpu::TextureView vertexFetchTextureView;
+  wgpu::Texture storageFetchTexture;
+  wgpu::TextureView storageFetchTextureView;
   wgpu::BindGroupLayout staticBindGroupLayout;
   wgpu::BindGroup staticBindGroup;
   wgpu::BindGroupLayout uniformBindGroupLayout;
@@ -134,5 +149,11 @@ struct Resources {
 };
 
 Resources& resources() noexcept;
+// Texture vertex fetch: the bytes in one row of a fetch texture.
+inline constexpr uint64_t FetchTextureRowBytes = 16384;
+// Texture vertex fetch: copies the rows of `kind`'s device buffer that hold bytes [lo, hi) into
+// that buffer's fetch texture. Nothing when the mode is off, the kind has no fetch texture or the
+// range is empty; call it after the copies that wrote the bytes.
+void upload_fetch_texture_rows(const wgpu::CommandEncoder& encoder, StagingKind kind, uint64_t lo, uint64_t hi);
 } // namespace detail
 } // namespace aurora::gfx
