@@ -2524,7 +2524,7 @@ void CPlayer::PreRender(CStateManager& mgr, const CFrustumPlanes& frustum) {
     CActor::PreRender(mgr, frustum);
 #ifdef TARGET_PC
     if (PortThirdPerson::Active()) {
-      PortThirdPersonBody::PreRender();
+      PortThirdPersonBody::PreRender(mgr);
     }
 #endif
   }
