@@ -66,6 +66,7 @@ protected:
     aurora::gfx::g_testResidentRegions[0] = {5 << 20, 1 << 20};
     aurora::gfx::g_testResidentRegions[1] = {2 << 20, 1 << 20};
     aurora::gfx::g_testResidentRegions[2] = {8 << 20, 1 << 20};
+    aurora::gfx::g_testResidentUploads = 0;
     aurora::gx::resident::reset();
   }
 
