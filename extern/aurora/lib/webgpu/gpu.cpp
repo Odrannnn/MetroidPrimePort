@@ -1149,6 +1149,23 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
         Log.info("Vertex data from storage buffers (the adapter allows {} vertex-stage storage buffers)",
                  adapterVertexStorageBuffers);
       }
+    // Compute (aurora::gfx::g_noCompute): OpenGL 3.3 has no compute shaders, so the volumetric fog's
+    // froxels and the depth peek run as render passes with the same per-pixel math instead
+    // (gfx/volfog.cpp, gfx/depth_peek.cpp). AURORA_NO_COMPUTE=1 forces them; otherwise the adapter's
+    // own limits decide, as a device without compute reports no workgroups or no invocations.
+    const char* forceNoCompute = std::getenv("AURORA_NO_COMPUTE");
+    const bool noComputeForced = forceNoCompute != nullptr && forceNoCompute[0] == '1' && forceNoCompute[1] == '\0';
+    const bool adapterNoCompute =
+        supportedLimits.maxComputeWorkgroupsPerDimension == 0 || supportedLimits.maxComputeInvocationsPerWorkgroup == 0;
+    gfx::g_noCompute = noComputeForced || adapterNoCompute;
+    if (gfx::g_noCompute) {
+      Log.info("No compute shaders ({}): the volumetric fog froxels and the depth peek use render passes",
+               noComputeForced ? "AURORA_NO_COMPUTE=1"
+                               : fmt::format("the adapter allows {} workgroups per dimension and {} invocations "
+                                             "per workgroup",
+                                             supportedLimits.maxComputeWorkgroupsPerDimension,
+                                             supportedLimits.maxComputeInvocationsPerWorkgroup));
+    }
     }
     wgpu::CompatibilityModeLimits compatibilityModeLimits{wgpu::CompatibilityModeLimits::Init{
         .maxStorageBuffersInVertexStage = gfx::g_vertexFetchTexture ? 0u : 2u,

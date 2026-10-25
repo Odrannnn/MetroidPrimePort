@@ -28,6 +28,13 @@ enum class StagingKind : uint8_t { Vertex, Uniform, Index, Storage };
 // creation (webgpu::initialize) from AURORA_VERTEX_FETCH_TEXTURE=1 or from the adapter's
 // compatibility-mode limits, and never changes after.
 extern bool g_vertexFetchTexture;
+// Compute shaders: OpenGL 3.3 has none, so the two compute passes (the volumetric fog's froxels and
+// the depth peek readback) run as render passes over the same per-pixel math instead. Off by
+// default; fixed once at device creation (webgpu::initialize) from AURORA_NO_COMPUTE=1 or from the
+// adapter reporting no compute (0 workgroups per dimension or 0 invocations per workgroup), and
+// never changes after. Nothing may create a compute pipeline or a storage binding while it is set.
+extern bool g_noCompute;
+
 
 // What a frame can hold of each kind of data. The constants above are the sizes at
 // AuroraConfig::frameBufferScale 1; initialize() fixes the sizes in use for the run.

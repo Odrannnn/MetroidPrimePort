@@ -48,6 +48,7 @@ using webgpu::g_instance;
 using webgpu::g_queue;
 
 // Set once when the device is created (webgpu::initialize); see resources.hpp.
+bool g_noCompute = false;
 bool g_vertexFetchTexture = false;
 
 namespace {
