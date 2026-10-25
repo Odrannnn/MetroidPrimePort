@@ -137,6 +137,8 @@ struct Placed {
   uint32_t follow = 0;
   bool following = false;
   float alpha = 1.f;
+  bool modulated = false;
+  CModelFlags modulation = CModelFlags::Normal();
   size_t cluster = SIZE_MAX; // the Cluster it is drawn in, if any
   float scaleSq = 1.f; // the largest of its transform's axes, squared: model distances to world ones
   int level = -1;      // this frame's level of detail (Model::levels), -1 for the model itself
@@ -195,6 +197,14 @@ struct Cluster {
 
 // A script node now (see ScriptNode).
 struct NodeState {
+  struct TargetFlags {
+    size_t item;
+    bool modulated;
+    float alpha;
+    CModelFlags flags;
+  };
+  std::vector<TargetFlags> targetFlags;
+  AlphaModulateState modulation;
   bool active = true;
   bool inside = false; // a camera volume: the camera was in it when last looked at
   uint32_t count = 0;  // a counter's value
@@ -923,6 +933,16 @@ void ResetNodes(Area& area) {
   for (size_t i = 0; i < area.nodes.size(); ++i) {
     area.nodes[i].active = area.script.nodes[i].active;
   }
+  // CacheTargetFlags (0xd5f1bc), at InitializedInArea: each modulator owns
+  // a copy of the actual target state, not an inferred Normal endpoint.
+  for (const ScriptEdge& edge : area.script.edges) {
+    if (edge.retail || edge.action != kGroupModulate || edge.from >= area.nodes.size() ||
+        edge.to >= area.groups.size()) continue;
+    for (size_t i : area.groups[edge.to]) {
+      const Placed& item = area.items[i];
+      area.nodes[edge.from].targetFlags.push_back({i, item.modulated, item.alpha, item.modulation});
+    }
+  }
 }
 
 void ReadLods() {
@@ -1167,6 +1187,35 @@ void Send(Area& area, uint32_t node, uint8_t event, int depth) {
 
 void Apply(Area& area, const ScriptEdge& edge, int depth) {
   --sApplyBudget;
+  if (edge.action == kGroupModulate) {
+    if (edge.to >= area.groups.size()) {
+      return;
+    }
+    const auto& state = area.nodes[edge.from].modulation;
+    const auto config = area.script.nodes[edge.from].AlphaConfig();
+    for (size_t i : area.groups[edge.to]) {
+      Placed& item = area.items[i];
+      if (state.restore) {
+        for (const auto& cached : area.nodes[edge.from].targetFlags) {
+          if (cached.item != i) continue;
+          item.modulated = cached.modulated;
+          item.alpha = cached.alpha;
+          item.modulation = cached.flags;
+          break;
+        }
+        continue;
+      }
+      item.modulated = true;
+      item.alpha = state.alpha;
+      CModelFlags flags = item.alpha == 1.f ? CModelFlags::Normal() : CModelFlags::AlphaBlended(item.alpha);
+      flags = flags.DepthCompareUpdate((config.flags & 4) != 0, (config.flags & 8) != 0);
+      unsigned extra = flags.GetOtherFlags();
+      if (config.flags & 16) extra |= CModelFlags::kF_DepthGreater;
+      if ((config.flags & 512) && item.alpha != 1.f) extra |= CModelFlags::kF_DrawNormal;
+      item.modulation = CModelFlags(flags, extra);
+    }
+    return;
+  }
   if (edge.action == kGroupNextClip) {
     if (edge.to >= area.groups.size()) {
       return;
@@ -1223,6 +1272,12 @@ void Apply(Area& area, const ScriptEdge& edge, int depth) {
     break;
   }
   if (!node.active) {
+    return;
+  }
+  if (kind.kind == kAlphaModulate && (edge.action == kIncrement || edge.action == kDecrement)) {
+    if (node.modulation.Message(kind.AlphaConfig(), edge.action == kIncrement)) {
+      Send(area, edge.to, 3, depth);
+    }
     return;
   }
   if (edge.action == kFire && kind.kind == kRelay) {
@@ -1588,6 +1643,7 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     // volume instead)
     const float* lightmap;
     const Placed* driven; // its float driver's instance, or null
+    const CModelFlags* flags;
   };
   static std::vector< Visible > visible;
   visible.clear();
@@ -1597,9 +1653,9 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
   static const CTransform4f kIdentity = CTransform4f::Identity();
   const auto add = [&](Model& model, const CModel& drawn, const CTransform4f& xf, CActorLights* lights,
                        const CAABox& bounds, const float* glow = nullptr, const float* lightmap = nullptr,
-                       bool inView = true, const Placed* driven = nullptr) {
+                        bool inView = true, const Placed* driven = nullptr, const CModelFlags* flags = nullptr) {
     (inView ? visible : casters)
-        .push_back({cutout(model), distanceSq(bounds), &drawn, &xf, lights, &bounds, glow, lightmap, driven});
+        .push_back({cutout(model), distanceSq(bounds), &drawn, &xf, lights, &bounds, glow, lightmap, driven, flags});
     if (inView && !visible.back().cutout) {
       sShadowReceivers.push_back({&drawn, &xf, bounds});
     }
@@ -1673,6 +1729,16 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     if (item.level >= 0) {
       ++sDrawnCoarse;
     }
+    if (item.modulated) {
+      const auto plan = PlanAlphaRender(item.alpha, (item.modulation.GetOtherFlags() & CModelFlags::kF_DrawNormal) != 0);
+      if (plan.unsorted) {
+        add(model, cmodel, item.xf, item.lights.get(), item.bounds, item.glows ? item.glow : nullptr,
+            item.lightmap, true, item.driven ? &item : nullptr, &item.modulation);
+      }
+      if (plan.sortedOpaque || !cmodel.IsDefinitelyOpaque()) area.sorted.push_back(&item);
+      ++sDrawn;
+      continue;
+    }
     if (item.alpha < 1.f) {
       area.sorted.push_back(&item);
       ++sDrawn;
@@ -1708,7 +1774,7 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     if (draw.driven != nullptr) {
       CCubeModel::PortSetKindParam(draw.driven->driverSlot, draw.driven->driverValue);
     }
-    draw.model->DrawUnsortedParts(CModelFlags::Normal());
+    draw.model->DrawUnsortedParts(draw.flags != nullptr ? *draw.flags : CModelFlags::Normal());
     if (draw.driven != nullptr) {
       CCubeModel::PortSetKindParam(-1, 0.f);
     }
@@ -1797,7 +1863,19 @@ void DrawSorted(const void* drawable) {
   if (item.driven) {
     CCubeModel::PortSetKindParam(item.driverSlot, item.driverValue);
   }
-  if (item.alpha < 1.f) {
+  if (item.modulated) {
+    const auto plan = PlanAlphaRender(item.alpha, (item.modulation.GetOtherFlags() & CModelFlags::kF_DrawNormal) != 0);
+    // The retail wrappers interpret DrawNormal as an extra colour draw. The
+    // Remastered state (0xb42074) instead requests a depth-only opaque group.
+    const CModelFlags flags(item.modulation, item.modulation.GetOtherFlags() & ~CModelFlags::kF_DrawNormal);
+    if (plan.depthOpaque) {
+      GXPortSetDepthPrepass(1);
+      cmodel.DrawUnsortedParts(flags.DepthCompareUpdate((flags.GetOtherFlags() & CModelFlags::kF_DepthCompare) != 0, true));
+      GXPortSetDepthPrepass(0);
+    }
+    if (plan.sortedOpaque) cmodel.DrawUnsortedParts(flags);
+    if (plan.visible) cmodel.DrawSortedParts(flags);
+  } else if (item.alpha < 1.f) {
     cmodel.Draw(CModelFlags(CModelFlags::kT_Blend, item.alpha));
   } else {
     cmodel.DrawSortedParts(CModelFlags::Normal());
@@ -2051,6 +2129,12 @@ void Think(CStateManager& mgr, float dt) {
     for (size_t n = 0; n < area.nodes.size(); ++n) {
       const ScriptNode& node = area.script.nodes[n];
       NodeState& state = area.nodes[n];
+      if (node.kind == kAlphaModulate && state.active && state.modulation.enabled) {
+        const bool ended = state.modulation.Tick(node.AlphaConfig(), dt);
+        sApplyBudget = kApplyBudget;
+        Send(area, uint32_t(n), 3, 0);
+        if (ended) Send(area, uint32_t(n), 2, 0);
+      }
       // An inactive trigger does not think (CScriptTrigger::Think), so it sees nothing.
       if (node.kind != kCameraVolume || !state.active) {
         continue;
@@ -2138,7 +2222,6 @@ int GroupShown(uint32_t mrea, uint32_t group) {
 
 void ResetScriptState() {
   for (auto& [mrea, area] : Areas()) {
-    ResetNodes(area);
     area.animTime = 0.;
     area.clock = 0.;
     area.pending.clear();
@@ -2149,11 +2232,14 @@ void ResetScriptState() {
       item.clipStart = 0.;
       item.following = false;
       item.alpha = 1.f;
+      item.modulated = false;
+      item.modulation = CModelFlags::Normal();
       if (item.driven) {
         item.startAt = 1e300;
         item.driverValue = item.driverSpline.Eval(item.driverSpline.FirstTime());
       }
     }
+    ResetNodes(area);
   }
 }
 

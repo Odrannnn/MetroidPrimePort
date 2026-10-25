@@ -71,6 +71,61 @@ void TestRoundTrip() {
   }
 }
 
+void TestAlphaModulate() {
+  using namespace PortRoomGeo;
+  // Shipped Dynamo transition: opaque endpoint, depth-backed sorted fade,
+  // then ShouldRender=false. No endpoint may leave an unmodulated colour pass.
+  auto plan = PlanAlphaRender(1.f, false);
+  CHECK(plan.visible && plan.unsorted && !plan.sortedOpaque && !plan.depthOpaque);
+  plan = PlanAlphaRender(0.5f, true);
+  CHECK(plan.visible && !plan.unsorted && plan.sortedOpaque && plan.depthOpaque);
+  plan = PlanAlphaRender(0.f, true);
+  CHECK(!plan.visible && !plan.unsorted && !plan.sortedOpaque && !plan.depthOpaque);
+  plan = PlanAlphaRender(0.5f, false);
+  CHECK(plan.visible && !plan.unsorted && plan.sortedOpaque && !plan.depthOpaque);
+  AlphaModulateConfig c{1.f, 0.f, 1.2f, 0.f, 12 | 512};
+  AlphaModulateState s;
+  CHECK(s.Message(c, false) && s.alpha == 1.f && !s.toA);
+  CHECK(!s.Tick(c, 0.6f) && std::fabs(s.alpha - 0.5f) < 1e-6f);
+  CHECK(!s.Tick(c, 0.6f) && s.alpha == 0.f && s.enabled);
+  CHECK(s.Tick(c, 0.01f) && !s.enabled && !s.restore && s.alpha == 0.f);
+  CHECK(s.Message(c, true) && s.alpha == 0.f && s.toA);
+  CHECK(!s.Tick(c, 0.f) && s.alpha == 1.f && s.enabled);
+  CHECK(s.Tick(c, 0.01f) && !s.enabled && s.alpha == 1.f);
+  c.flags |= 2;
+  s.Message(c, false);
+  CHECK(s.Tick(c, 2.f) && s.restore); // restore INITIAL flags, not a clamped endpoint
+  c = {1.f, 0.f, 4.f, 2.f, 13};
+  s = {};
+  s.Message(c, true);
+  s.Tick(c, 0.5f);
+  CHECK(!s.Message(c, false) && s.time == 3.f && !s.toA); // shipped interruption formula
+  s.Tick(c, 1.1f);
+  CHECK(s.enabled && s.reversing && s.toA && s.time == 0.f);
+  CHECK(!s.Message(c, true) && !s.reversing && !s.toA);
+
+  Script script;
+  ScriptNode node;
+  node.kind = kAlphaModulate;
+  node.max = 12 | 512;
+  node.centre[0] = 1.f;
+  node.centre[1] = 0.f;
+  node.half[0] = 1.2f;
+  script.nodes.push_back(node);
+  script.edges.push_back({false, 3, kGroupModulate, 0, 0});
+  auto instance = MakeInstance(0x12345678, 0.f);
+  instance.group = 0;
+  auto file = Write({instance}, &script);
+  Script parsed;
+  std::vector<Instance> instances;
+  std::string error;
+  CHECK(Parse(file, instances, error, &parsed) && parsed.nodes.size() == 1 &&
+        parsed.nodes[0].AlphaConfig().timeA2B == 1.2f && parsed.nodes[0].max == node.max &&
+        parsed.edges[0].action == kGroupModulate);
+  file[4] = 14;
+  CHECK(!Parse(file, instances, error, &parsed));
+}
+
 void TestActorTransform() {
   auto instance = MakeInstance(0x12345678, 2.f);
   instance.links.push_back({0x000600B9, 0, PortRoomGeo::kActorTransform});
@@ -203,7 +258,7 @@ void TestClips() {
   std::vector<PortRoomGeo::Instance> out;
   std::string error;
   const std::vector<uint8_t> file = PortRoomGeo::Write(in);
-  CHECK_MSG(file.size() > 8 && file[4] == 14, "version 14 written");
+  CHECK_MSG(file.size() > 8 && file[4] == 15, "version 15 written");
   CHECK_MSG(PortRoomGeo::Parse(file, out, error), "clips file parses");
   CHECK_MSG(out.size() == 2 && out[0].anim.empty() && !out[0].animOnShow && out[1].animOnShow &&
                 out[1].anim.size() == 2 && out[1].anim[0].fps == 24.f && !out[1].anim[0].loop &&
@@ -677,6 +732,7 @@ void TestDrivers() {
 int main() {
   TestRoundTrip();
   TestActorTransform();
+  TestAlphaModulate();
   TestVersion1();
   TestVersion2();
   TestScript();

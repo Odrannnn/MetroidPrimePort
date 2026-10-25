@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <filesystem>
+#include <cstdlib>
 
 using namespace PortRemastered;
 using namespace PortRemastered::RoomDetail;
@@ -1358,6 +1360,91 @@ void TestEnvFxIntensity() {
   }
 }
 
+void TestDynamoModulateGraph() {
+  Fixture f;
+  f.comps = {Plain(kActorMP1),
+             Plain(kColorModulateMP1, {{0, 0x4ee99d94, kActionActivate}}),
+             Plain(kRelay, {{1, kEventRelayFired, 0x144d0f29},
+                            {1, kEventRelayFired, 0x8ed2a8c7}})};
+  Bytes zero, duration;
+  PutFloat(zero, 0.f);
+  PutFloat(duration, 1.2f);
+  f.comps[1].props = Props().Add(kPropModulateColorB, Props().Add(kPropColorRGBA[3], zero).b)
+                               .Add(0x23fc9f0d, duration).Add(0xd8f7b602, zero)
+                               .Add(0x3fff0f45, Bytes{1}).b;
+  Area area;
+  area.mrea = 0x12345678; // no room-specific permission to use the graph
+  const Parsed p(f);
+  const auto result = MatchScripts(p.room, area);
+  REQUIRE(result.group.count(int(f.Entity(0))) == 1);
+  REQUIRE(result.script.nodes.size() == 2);
+  const auto& node = result.script.nodes[0];
+  CHECK(node.kind == PortRoomGeo::kAlphaModulate);
+  const auto c = node.AlphaConfig();
+  CHECK(c.a == 1.f && c.b == 0.f && c.timeA2B == 1.2f && c.timeB2A == 0.f);
+  CHECK(c.flags == (12 | 512));
+  REQUIRE(result.script.edges.size() == 3);
+  CHECK(result.script.edges[0].action == PortRoomGeo::kGroupModulate);
+  CHECK(result.script.edges[1].action == PortRoomGeo::kDecrement);
+  CHECK(result.script.edges[2].action == PortRoomGeo::kIncrement);
+  // A sibling actor driven only by a relay is not a modulation target, even
+  // though a supported modulator lives in the same room.
+  f.comps.push_back(Plain(kActorMP1));
+  f.comps[2].links.push_back({3, kEventRelayFired, kActionActivate});
+  const Parsed unrelated(f);
+  CHECK(MatchScripts(unrelated.room, area).group.count(int(f.Entity(3))) == 0);
+  f.comps[1].props = Props().Add(0xf41e2ca0, Bytes{1}).b;
+  const Parsed autoStart(f);
+  CHECK(MatchScripts(autoStart.room, area).script.nodes.empty());
+  // The importer must not reinterpret a non-alpha mode as this evaluator.
+  f.comps[1].props = Props().AddU32(kPropModulateBlend, kModulateIncandescence).b;
+  const Parsed unsupported(f);
+  CHECK(MatchScripts(unsupported.room, area).script.nodes.empty());
+  // Existing added scenery stays relay-driven when the incandescence
+  // modulator is refused; its glow is still owned by port_remastered_room.cpp.
+  f.comps[0].props = Props().Add(kPropActorAdded, Bytes{1}).b;
+  f.comps[2].links.push_back({0, kEventRelayFired, kActionActivate});
+  const Parsed glow(f);
+  const auto oldPath = MatchScripts(glow.room, area);
+  REQUIRE(oldPath.script.nodes.size() == 1);
+  CHECK(oldPath.script.nodes[0].kind == PortRoomGeo::kRelay);
+  REQUIRE(oldPath.script.edges.size() == 1);
+  CHECK(oldPath.script.edges[0].action == PortRoomGeo::kGroupShow);
+}
+
+// Optional read-only shipped-data audit; no import output or game execution.
+void AuditModulateRooms() {
+  const char* root = std::getenv("PORT_MODULATE_AUDIT_ROOT");
+  if (!root) return;
+  size_t rooms = 0, affected = 0, nodes = 0, all = 0, autoStart = 0;
+  for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+    if (entry.path().extension() != ".ROOM") continue;
+    std::ifstream in(entry.path(), std::ios::binary);
+    Bytes bytes((std::istreambuf_iterator<char>(in)), {});
+    Room room;
+    std::string error;
+    REQUIRE_MSG(room.Parse(bytes, error), entry.path().string().c_str());
+    ++rooms;
+    for (const auto& c : room.Components()) {
+      if (c.type != kColorModulateMP1) continue;
+      ++all;
+      const auto f = room.Flat(c);
+      const auto p = f.find(0xf41e2ca0);
+      if (p != f.end() && p->second.size == 1 && room.Bytes(p->second)[0]) ++autoStart;
+    }
+    const auto result = MatchScripts(room, Area{});
+    size_t count = 0;
+    for (const auto& node : result.script.nodes) count += node.kind == PortRoomGeo::kAlphaModulate;
+    if (count) {
+      ++affected;
+      nodes += count;
+      std::printf("alpha-audit %s %zu\n", entry.path().string().c_str(), count);
+    }
+  }
+  std::printf("alpha-audit totals rooms=%zu modulators=%zu bit1000=%zu new_rooms=%zu new_nodes=%zu\n",
+              rooms, all, autoStart, affected, nodes);
+}
+
 }  // namespace
 
 int main() {
@@ -1368,6 +1455,8 @@ int main() {
   TestBarrierGroup();
   TestRealBarrierRoom();
   TestEnvFxIntensity();
+  TestDynamoModulateGraph();
+  AuditModulateRooms();
   if (port_test::Failures() == 0) {
     std::printf("port_remastered_room_scripts_tests: ok\n");
   }

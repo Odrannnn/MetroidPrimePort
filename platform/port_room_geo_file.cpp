@@ -12,7 +12,7 @@ namespace PortRoomGeo {
 namespace {
 
 constexpr uint32_t kMagic = 0x4752504D; // 'MPRG'
-constexpr uint32_t kVersion = 14;
+constexpr uint32_t kVersion = 15;
 constexpr size_t kHeaderBytes = 12;
 constexpr size_t kInstanceBytes = 4 + 12 * 4; // version 1; version 2 adds 4 + links
 constexpr size_t kPlatformBytes = 4 + 3 * 4;   // version 3's, after version 2's 4
@@ -47,7 +47,7 @@ bool ReadF32(const uint8_t* p, float& out) {
 }
 
 // The script section at `at`, which is moved past it.
-bool ParseScript(const std::vector<uint8_t>& data, size_t& at, std::vector<Instance>& instances, Script& script,
+bool ParseScript(const std::vector<uint8_t>& data, size_t& at, uint32_t version, std::vector<Instance>& instances, Script& script,
                  std::string& error) {
   if (data.size() - at < 12) {
     error = "truncated script";
@@ -78,7 +78,7 @@ bool ParseScript(const std::vector<uint8_t>& data, size_t& at, std::vector<Insta
         }
       }
     }
-    if (node.kind < kCameraVolume || node.kind > kRelay) {
+    if (node.kind < kCameraVolume || node.kind > (version >= 15 ? kAlphaModulate : kRelay)) {
       error = "unknown script node";
       return false;
     }
@@ -93,8 +93,10 @@ bool ParseScript(const std::vector<uint8_t>& data, size_t& at, std::vector<Insta
     edge.from = ReadLE32(p + 4);
     edge.to = ReadLE32(p + 8);
     const bool toNode = edge.action != kGroupShow && edge.action != kGroupHide && edge.action != kGroupToggle &&
-                        edge.action != kGroupNextClip;
-    if ((!edge.retail && edge.from >= nodes) || edge.action < kIncrement || edge.action > kGroupNextClip ||
+                        edge.action != kGroupNextClip && edge.action != kGroupModulate;
+    if ((!edge.retail && edge.from >= nodes) || edge.action < kIncrement ||
+        edge.action > (version >= 15 ? kGroupModulate : kGroupNextClip) ||
+        (edge.action == kGroupModulate && (edge.retail || edge.from >= nodes || script.nodes[edge.from].kind != kAlphaModulate)) ||
         (toNode && edge.to >= nodes)) {
       error = "bad script edge";
       return false;
@@ -434,7 +436,7 @@ bool Parse(const std::vector<uint8_t>& data, std::vector<Instance>& out, std::st
   // with the lightmap lookups.
   bool ok = true;
   if (version >= 3 && data.size() - at >= 4 && ReadLE32(data.data() + at) == kScriptMagic) {
-    ok = ParseScript(data, at, out, parsed, error);
+    ok = ParseScript(data, at, version, out, parsed, error);
   }
   if (ok && version >= 4 && data.size() - at >= 4 && ReadLE32(data.data() + at) == kGlowMagic) {
     ok = ParseGlow(data, at, out, error);

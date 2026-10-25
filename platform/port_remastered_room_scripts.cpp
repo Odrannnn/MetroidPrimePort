@@ -579,6 +579,55 @@ std::map<int, std::vector<SceneryScripts::Driver>> FindMaterialDrivers(const Roo
   return result;
 }
 
+// Supported subset is explicit: no guessed modes, splines, RGB tint or extra flags.
+// Loader 0xd60e1c, defaults 0xd60d00/0xd1e3dc, Create 0xd61bb0.
+static bool ReadAlphaModulate(const Room& room, const Component& c, PortRoomGeo::ScriptNode& node) {
+  const auto f = room.Flat(c);
+  if (f.count(kPropModulateBlend) || f.count(0x2e456002) || f.count(0xb031a3b8)) {
+    return false;
+  }
+  auto scalar = [&](uint32_t key, float def) {
+    const auto p = f.find(key);
+    return p != f.end() && p->second.size == 4 ? ReadLEFloat(room.Bytes(p->second)) : def;
+  };
+  auto boolean = [&](uint32_t key, bool def) {
+    const auto p = f.find(key);
+    return p != f.end() && p->second.size == 1 ? room.Bytes(p->second)[0] != 0 : def;
+  };
+  if (scalar(0x5b75f4b0, 1.f) != 1.f || scalar(0xf936079e, 1.f) != 1.f ||
+      boolean(0xf7d4111c, false) || boolean(0xeecd6985, false) ||
+      boolean(0xbc6c51a1, false)) {
+    return false;
+  }
+  // Loader0xd60e1c: F41E2CA0 -> +0xb4; Create0xd61bb0 passes it as
+  // ctor param18, setting +0xc8 bit0x1000. AcceptScriptMsg0xd5fdb8 case
+  // 0x21 self-sends Decrement when set. Leave these nodes on their existing
+  // path until that initialization message is represented in the room graph.
+  if (boolean(0xf41e2ca0, false)) return false;
+  for (int color = 0; color < 2; ++color) {
+    float rgba[4] = {1, 1, 1, 1};
+    for (int channel = 0; channel < 4; ++channel) {
+      Span p;
+      if (room.Nested(c, {color == 0 ? 0x0e9d55ffu : kPropModulateColorB, kPropColorRGBA[channel]}, p) && p.size == 4) {
+        rgba[channel] = ReadLEFloat(room.Bytes(p));
+      }
+    }
+    if (rgba[0] != 1.f || rgba[1] != 1.f || rgba[2] != 1.f || !std::isfinite(rgba[3])) {
+      return false;
+    }
+    node.centre[color] = rgba[3];
+  }
+  node.half[0] = scalar(0x23fc9f0d, 1.f);
+  node.half[1] = scalar(0xd8f7b602, 1.f);
+  if (!std::isfinite(node.half[0]) || !std::isfinite(node.half[1])) {
+    return false;
+  }
+  node.max = (boolean(0x976a1cfc, false) ? 1u : 0u) | (boolean(0xa51953a4, false) ? 2u : 0u) |
+             (boolean(0xee2b08a7, true) ? 4u : 0u) | (boolean(0x48c52c78, true) ? 8u : 0u) |
+             (boolean(0x22ec5b19, false) ? 16u : 0u) | (boolean(0x3fff0f45, false) ? 512u : 0u);
+  return true;
+}
+
 SceneryScripts MatchScripts(const Room& room, const Area& area) {
   SceneryScripts result;
   const std::vector<Component>& comps = room.Components();
@@ -800,6 +849,11 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       kind = PortRoomGeo::kCounter;
     } else if (c.type == kRelay) {
       kind = PortRoomGeo::kRelay;
+    } else if (c.type == kColorModulateMP1) {
+      PortRoomGeo::ScriptNode config;
+      if (ReadAlphaModulate(room, c, config)) {
+        kind = PortRoomGeo::kAlphaModulate;
+      }
     }
     if (kind != 0) {
       scriptObject[c.entity] = {kind, i};
@@ -1057,8 +1111,20 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
   // camera is on, the counters they count with and the relays in between.
   // The same objects switch the suns (the hangar's intro shots and its escape's camera).
   std::set<int> geometry;  // entities with a ModCon, an added actor or a sun, point or spot light
+  // CacheTargetFlags visits Play/Activate actor targets, regardless of room.
+  // Refused modulators are absent from scriptObject and retain existing paths.
+  std::set<int> alphaTargets;
+  for (const Connection& link : conns) {
+    const auto from = scriptObject.find(comps[link.sender].entity);
+    if (from != scriptObject.end() && from->second.first == PortRoomGeo::kAlphaModulate &&
+        link.event == 0x4ee99d94 && link.action == kActionActivate) {
+      const int target = targetEntity(link);
+      if (target >= 0) alphaTargets.insert(target);
+    }
+  }
   for (const Component& c : comps) {
-    if (c.entity >= 0 && (c.type == kModCon || (c.type == kActorMP1 && room.Flat(c).count(kPropActorAdded) != 0))) {
+    if (c.entity >= 0 && (c.type == kModCon || (c.type == kActorMP1 &&
+        (room.Flat(c).count(kPropActorAdded) != 0 || alphaTargets.count(c.entity) != 0)))) {
       geometry.insert(c.entity);
     } else if (c.entity >= 0 && c.type == kLightDynamic) {
       const auto f = room.Flat(c);
@@ -1084,6 +1150,9 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     PortRoomGeo::ScriptNode node;
     node.kind = kind;
     node.active = room.Active(c);
+    if (kind == PortRoomGeo::kAlphaModulate) {
+      ReadAlphaModulate(room, c, node);
+    }
     if (kind == PortRoomGeo::kCounter) {
       const auto f = room.Flat(c);
       const auto max = f.find(kPropCounterMax);
@@ -1113,6 +1182,8 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       return event == kEventEntered ? 0 : event == kEventExited ? 1 : -1;
     case PortRoomGeo::kCounter:
       return event == kEventCounterNonZero ? 0 : event == kEventCounterZero ? 1 : event == kEventCounterMax ? 2 : -1;
+    case PortRoomGeo::kAlphaModulate:
+      return event == 0x4ee99d94 ? 3 : RetailState(kColorModulateMP1, event) == kStateMaxReached ? 2 : -1;
     default:
       return event == kEventRelayFired ? 0 : -1;
     }
@@ -1138,6 +1209,10 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
              : action == kActionCounterDecrement ? PortRoomGeo::kDecrement
                                                  : 0;
     }
+    if (kind == PortRoomGeo::kAlphaModulate) {
+      return action == 0x8ed2a8c7 ? PortRoomGeo::kIncrement :
+             action == 0x144d0f29 ? PortRoomGeo::kDecrement : 0;
+    }
     return kind == PortRoomGeo::kRelay && action == kActionRelayFire ? PortRoomGeo::kFire : 0;
   };
   // The edges into a geometry entity (group: from the script objects only, the walk above
@@ -1155,7 +1230,9 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       if (sender.type == kTemplateManager || sender.type == kDebugOptions || (group && !fromScript && !keyframe)) {
         continue;
       }
-      const uint8_t action =
+      const bool modulate = group && fromScript && scriptObject.at(sender.entity).first == PortRoomGeo::kAlphaModulate &&
+                            c->event == 0x4ee99d94 && c->action == kActionActivate;
+      const uint8_t action = modulate ? static_cast<uint8_t>(PortRoomGeo::kGroupModulate) :
           keyframe ? static_cast<uint8_t>(PortRoomGeo::kGroupNextClip) : scriptAction(kind, c->action);
       int event = -1;
       if (fromScript) {
