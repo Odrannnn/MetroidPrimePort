@@ -223,6 +223,9 @@ public:
   bool xPortVelocityAtCreation = false;
   // DVVN: defaults version for the missing-EMTR velocity; zero preserves retail behavior.
   u8 xPortDefaultValuesVersion = 0;
+  // DVVN and IEXP update this in stream order. The marker supersedes legacy VMAT exposure pins.
+  bool xPortExposurePolicy = false;
+  bool xPortInverseExposure = false;
   // port-only PISV: Remastered's ISVF, the factor of the system's per-tick translation change
   // (PEMV's delta, no time step) added to a new particle's velocity. Owned here; null = none.
   CRealElement* xPortInheritVel = nullptr;

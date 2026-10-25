@@ -25,6 +25,11 @@ void* IElement::operator new(size_t n, const char*, const char*) { return ::oper
 void IElement::operator delete(void* p, size_t) { ::operator delete(p); }
 const CPortVarMemory* CPortVarGlobals::sCurrent = nullptr;
 
+// Distinct exposures verify which frame the production renderer selects.
+namespace PortRoomEnv {
+float ParticleInverseExposure(bool blended) { return blended ? 0.25f : 0.5f; }
+}
+
 namespace {
 int failures = 0;
 void Check(bool ok, const char* what) {
@@ -239,6 +244,22 @@ void TestDynamic() {
 
 int main() {
   TestParsing(); TestPhysicalTruncation(); TestDynamic(); TestHdrEvaluation();
+  CGenDescription exposure;
+  exposure.xPortVfx = std::make_unique<CPortVfxData>();
+  exposure.xPortExposurePolicy = true;
+  exposure.xPortInverseExposure = true;
+  exposure.xPortVfx->mat.blend = uint32_t(aurora::gfx::vfx::Blend::Opaque);
+  Check(PortVfxExposureGain(exposure) == 0.5f, "opaque particles select static inverse exposure");
+  exposure.xPortVfx->mat.blend = uint32_t(aurora::gfx::vfx::Blend::Alpha);
+  Check(PortVfxExposureGain(exposure) == 0.25f, "blended particles select auto inverse exposure");
+  exposure.xPortVfx->mat.features = aurora::gfx::vfx::ParticleLit;
+  Check(PortVfxExposureGain(exposure) == 1.f, "lit sprites do not consume the intensity scalar");
+  Check(PortVfxExposureGain(exposure, true) == 0.25f, "model instances consume inverse exposure even when lit");
+  exposure.xPortInverseExposure = false;
+  Check(PortVfxExposureGain(exposure, true) == 1.f, "explicit IEXP false leaves intensity unchanged");
+  exposure.xPortInverseExposure = true;
+  exposure.xPortExposurePolicy = false;
+  Check(PortVfxExposureGain(exposure, true) == 1.f, "legacy PART keeps its separate compatibility policy");
   if (!failures) { std::puts("port_vfx_material: ok"); }
   return failures ? 1 : 0;
 }

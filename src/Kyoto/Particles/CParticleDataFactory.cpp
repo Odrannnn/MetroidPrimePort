@@ -935,6 +935,13 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('DVVN'):
       GetClassID(in);
       desc->xPortDefaultValuesVersion = u8(in.ReadLong());
+      desc->xPortExposurePolicy = true;
+      desc->xPortInverseExposure = desc->xPortDefaultValuesVersion == 3 || desc->xPortDefaultValuesVersion == 4;
+      break;
+    case SBIG('IEXP'):
+      GetClassID(in);
+      desc->xPortExposurePolicy = true;
+      desc->xPortInverseExposure = in.ReadLong() != 0;
       break;
     case SBIG('PSHT'):
       delete desc->xPortShutdownTime;

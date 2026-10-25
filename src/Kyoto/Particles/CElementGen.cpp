@@ -4236,7 +4236,7 @@ void CElementGen::RenderModels() {
           }
           vfxMeshes.Add(*x28_loadedGenDesc->xPortVfx,
                         x10c_globalScaleTransform * partTrans * x178_localScaleTransform, particle,
-                        partFrame, x338_moduColor);
+                        partFrame, x338_moduColor, PortVfxExposureGain(*x28_loadedGenDesc, true));
           continue;
         }
         CModel* model = x28_loadedGenDesc->x48_PMDL->GetObject();

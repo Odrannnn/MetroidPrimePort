@@ -931,6 +931,8 @@ void BakedLightModulation(float rgb[3]);
 float MeasureExposure();
 // The frame's exposure (2^(3 - EV)); 0 before it has one.
 float FrameExposure();
+// resolve_inverse_exposure 0x20eba0: blended particle draws use auto, opaque use static.
+float ParticleInverseExposure(bool blended);
 // Whether the exposure follows the frame (MP_ROOM_ENV_AUTO_EXPOSURE, the console's
 // `roomenv auto`); otherwise it is the tonemap's EV.
 void SetAutoExposure(bool on);

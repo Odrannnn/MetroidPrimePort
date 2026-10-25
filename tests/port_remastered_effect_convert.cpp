@@ -500,7 +500,7 @@ void TestConvert() {
   root.end();
   CHECK_MSG(parts[0].root && parts[0].part == root.bytes, "root converts to retail's bytes");
   CHECK_MSG(parts[0].droppedRetail == 1, "PMDL with no retail id is the one retail property dropped");
-  CHECK_MSG(parts[0].dropped.size() == 2, "DVVN and PMDL dropped");
+  CHECK_MSG(parts[0].dropped.size() == 2, "PMDL and IEXP without a material are diagnosed");
 
   Retail child;
   child.f("GPSM");
@@ -2366,6 +2366,34 @@ void TestInheritedMotion() {
 // A drawing sprite with DVVN 1..4 and no SIZE gets Remastered's default SIZE 1.0 (retail's is 0.1);
 // DVVN 0 or an authored SIZE writes none.
 void TestDvvnDefaultSize() {
+  // The source reader mutates IEXP at each DVVN/IEXP occurrence; test both orders and resets.
+  for (const bool versionLast : {false, true}) {
+    const auto exposureParts = ConvertOne(OneGenerator([=](auto& o) {
+      const auto property = [&](const char* name, uint8_t value) {
+        PutProperty(o, name, 1);
+        o.push_back(value);
+      };
+      if (versionLast) {
+        property("IEXP", 0);
+        property("DVVN", 4);
+      } else {
+        property("DVVN", 4);
+        property("IEXP", 0);
+      }
+      PutTexr(o, 0x1234ABCD);
+    }), {});
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(exposureParts.size() == 1 &&
+                  SplitRetailPart(exposureParts[0].part.data(), exposureParts[0].part.size(), properties, error),
+              "exposure properties survive conversion");
+    CHECK_MSG(properties.size() >= 2 &&
+                  properties[0].fourcc == EffectFourCC(versionLast ? "IEXP" : "DVVN") &&
+                  properties[1].fourcc == EffectFourCC(versionLast ? "DVVN" : "IEXP"),
+              "DVVN and IEXP preserve source property order");
+    CHECK_MSG(exposureParts.size() == 1 && exposureParts[0].dropped.size() == size_t(versionLast),
+              "only enabled inverse exposure needs a material; DVVN itself is handled");
+  }
   const auto one = [](uint8_t dvvn, bool size) {
     return ConvertOne(OneGenerator([=](auto& o) {
                         PutProperty(o, "DVVN", 0);
@@ -4227,8 +4255,14 @@ void TestPowerChargeExposurePolicy() {
   plain.hasIexp = true;
   std::vector<uint8_t> plainBytes;
   const uint32_t plainFeatures = ConvertPowerBallFeatures(plain, &plainBytes);
-  CHECK_MSG(plainFeatures == kPortVfxModelOpacityFeatures, "held charge explicit IEXP keeps room exposure");
-  // Identical render state and material: the only emitted byte delta is feature bit31.
+  CHECK_MSG(plainFeatures == kPortVfxModelOpacityFeatures, "explicit IEXP uses the runtime policy, not the legacy pin");
+  const auto iexpBytes = Retail().f("IEXP").f("CNST").w(plain.iexp).bytes;
+  const auto iexpAt = std::search(plainBytes.begin(), plainBytes.end(), iexpBytes.begin(), iexpBytes.end());
+  CHECK_MSG(iexpAt != plainBytes.end(), "explicit IEXP is serialized for the runtime reader");
+  if (iexpAt != plainBytes.end()) {
+    plainBytes.erase(iexpAt, iexpAt + iexpBytes.size());
+  }
+  // Apart from the new explicit property, only the legacy compatibility feature bit differs.
   size_t differences = 0;
   bool onlyPolicyBit = flaggedBytes.size() == plainBytes.size();
   for (size_t i = 0; i < std::min(flaggedBytes.size(), plainBytes.size()); ++i) {

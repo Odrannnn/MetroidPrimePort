@@ -696,6 +696,15 @@ float MeasureExposure() { return sFrame.measuring ? sFrame.exposure : 0.f; }
 
 float FrameExposure() { return sFrame.exposure; }
 
+float ParticleInverseExposure(bool blended) {
+  if (!sFrame.hasTone || !Enabled() || (blended && sFrame.exposure <= 0.f)) {
+    return 1.f;
+  }
+  // The same frame/tonemap values used by FrameExposure and GlowScale, before material shading.
+  const float inverse = blended ? 1.f / sFrame.exposure : std::exp2(sFrame.shown[5] - 3.f);
+  return std::isfinite(inverse) && inverse > 0.f ? inverse : 1.f;
+}
+
 float GlowScale() {
   if (sStatic < 0) {
     sStatic = port::EnvFlag("MP_ROOM_ENV_STATIC_EXPOSURE", true) ? 1 : 0;

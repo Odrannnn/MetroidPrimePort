@@ -24,6 +24,7 @@ void PortVfxEvalParticle(const CGenDescription& desc, CElementGen::CParticle& pa
 
 // Stores the unit launch direction (zero when the particle launched at rest); for VORN 1.
 void PortVfxSetLaunchDir(CElementGen::CParticle& particle);
+float PortVfxExposureGain(const CGenDescription& desc, bool model = false);
 
 // Model particles with a VMSH mesh: RenderModels adds each live particle's CPU-transformed
 // triangles (world space) and PortRenderMeshesVfx draws them all in one aurora draw with the
@@ -45,7 +46,7 @@ struct CPortVfxMeshBatch {
 
   // `model` is the particle's full model matrix; the particle's UV context must be set.
   void Add(const CPortVfxData& vfx, const CTransform4f& model, const CElementGen::CParticle& particle,
-           int partFrame, const CColor& modulate);
+           int partFrame, const CColor& modulate, float inverseExposure = 1.f);
 };
 
 // Fills the draw description from the VMAT and the VSMT overrides in `vsmt` (bit i of

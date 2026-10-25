@@ -4139,6 +4139,7 @@ public:
     AppendBE32(out, HeaderOf(type));
     const auto& retail = PropertiesOf(type);
     const bool part = type == F("PART");
+    bool inverseExposed = false;
     const bool swoosh = type == F("SWHC");
     // An ELC2 (CParticleElectric2) is written as an ELSC stream that starts with the port-only PEL2
     // marker and carries the ELC2 fields; it draws through its VMAT like a swoosh.
@@ -5101,15 +5102,18 @@ public:
         continue;  // consumed as PIR0/POR0/PLIX below
       }
       const auto found = retail.find(fourcc);
-      // DVVN's missing-emitter velocity is independent of SIZE/material support.
-      // Preserve the drop diagnostic for its still-unhandled general exposure default.
-      if (part && fourcc == F("DVVN")) {
-        uint32_t version = 0;
-        if (SmallInteger(property, version) && version <= 255) {
-          AppendBE32(out, F("DVVN"));
+      // CreateGPSM 0x25acc4 resets IEXP whenever DVVN is read. Preserve stream order.
+      if (part && (fourcc == F("DVVN") || fourcc == F("IEXP"))) {
+        uint32_t value = 0;
+        if (SmallInteger(property, value) && value <= (fourcc == F("DVVN") ? 255u : 1u)) {
+          inverseExposed = fourcc == F("DVVN") ? (value == 3 || value == 4) : value != 0;
+          AppendBE32(out, fourcc);
           AppendBE32(out, F("CNST"));
-          AppendBE32(out, version);
+          AppendBE32(out, value);
+        } else {
+          result.dropped.push_back(EffectFourCCString(fourcc) + ": invalid constant");
         }
+        continue;
       }
       if (found == retail.end()) {
         result.dropped.push_back(EffectFourCCString(property.fourcc) + ": Remastered only");
@@ -5245,6 +5249,9 @@ public:
     const bool vmat = (part || swoosh || electric) && material != nullptr &&
                       Material(*material, node, result, swoosh || electric, electric);
     if (!vmat) {
+      if (part && inverseExposed) {
+        result.dropped.push_back("IEXP: no VMAT");
+      }
       for (const uint32_t fourcc : portOnly) {
         result.dropped.push_back(EffectFourCCString(fourcc) + ": no VMAT");
       }
@@ -6174,7 +6181,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") ||
-                         fourcc == F("VMPC") || fourcc == F("DVVN") ||
+                         fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
                (vfx && fourcc == F("PIRN"))) {
