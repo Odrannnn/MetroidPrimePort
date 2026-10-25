@@ -802,7 +802,8 @@ TEST_F(SceneHdrTest, ScreenKindsFogAsTheirFogPermsInHdr) {
     EXPECT_EQ(count(hdr, "pbr_vf = vec4f(0.0, 0.0, 0.0, 1.0);"), 1u);
     EXPECT_EQ(count(hdr, "prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);"), 1u);
     if (kind == 14) {
-      EXPECT_EQ(count(hdr, "pbr_vfon = false;"), 1u);
+      // Anchored on 14's own pass: the EnergyField branch (kind 44) also turns the fog off.
+      EXPECT_EQ(count(hdr, "pbr_pass = pbr_sfb * pbr_c4.x * pbr_vraw.rgb;\n          pbr_vfon = false;"), 1u);
     }
     if (kind == 23 || kind == 30) {
       EXPECT_EQ(count(hdr, "pbr_keep = pbr_xw * pbr_xscene;"), 1u);
