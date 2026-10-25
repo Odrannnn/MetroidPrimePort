@@ -9,6 +9,9 @@
 #include "MetaRender/CCubeRenderer.hpp"
 #include "Collision/CollisionUtil.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
+#ifdef TARGET_PC
+#include "port_dread_samus_mod.h"
+#endif
 #include "rstl/math.hpp"
 #include "MetroidPrime/CAnimRes.hpp"
 #include "MetroidPrime/Player/CMorphBall.hpp"
@@ -52,6 +55,12 @@ static SObjectTag PortSuitVariantTag(const char* name, int suit) {
   const SObjectTag* tag = gpResourceFactory->GetResourceIdByName(name);
   return SObjectTag(tag->GetType(),
                     CMorphBall::PortSuitVariant(tag->GetId(), tag->GetType(), suit));
+}
+
+// Whether the dread-samus mod serves this suit's doll body: one mesh with its own boots, cannon
+// and visor, so the suit's other parts, boots, beam and visor models are not drawn.
+static bool PortDreadDoll(int suit) {
+  return PortDreadSamus::Replaces(PortDreadSamus::DollBody(suit));
 }
 #endif
 
@@ -153,6 +162,11 @@ bool CSamusDoll::CheckLoadComplete() {
   xc8_suitModel0 = BuildSuitModelData1(x44_suit);
   for (int i = 0; i < 2; ++i) {
     const int character = skSuitToCharacterType2[x44_suit][i];
+#ifdef TARGET_PC
+    if (PortDreadDoll(x44_suit)) {
+      break;
+    }
+#endif
     if (character != -1) {
       CAnimRes res(gpResourceFactory->GetResourceIdByName("ANCS_ItemScreenSamus")->GetId(),
                    character, skDefaultScale, 2, true);
@@ -426,6 +440,11 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
                                         CColor::White().WithAlphaOf(drawAlpha * suitPulse));
       xc8_suitModel0->AnimationData()->SubstituteModelData(backupModel);
     }
+#ifdef TARGET_PC
+    // Port: a Dread body has its own boots, cannon and visor (PortDreadDoll).
+    const bool portDread = PortDreadDoll(x44_suit);
+    if (!portDread)
+#endif
     x134_suitModelBoots->MultiLightingDraw(CModelData::kWM_Normal, CTransform4f::Identity(),
                                            x24c_actorLights.get(),
                                            CColor::White().WithAlphaOf(drawAlpha),
@@ -433,6 +452,9 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
     CGraphics::LoadLight(kLight0, x23c_lights[0]);
     CGraphics::EnableLight(kLight0);
     CGraphics::SetAmbientColor(CColor(0x00000000));
+#ifdef TARGET_PC
+    if (!portDread) {
+#endif
     CGraphics::SetModelMatrix(gunXf);
     beam->Draw(CModelFlags::AlphaBlended(drawAlpha));
     beam->Draw(CModelFlags::Additive(drawAlpha * itemPulse * x5c_beamPulseFactor)
@@ -472,6 +494,9 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
     visor->Draw(CModelFlags::AlphaBlended(visorColor));
     visor->Draw(CModelFlags::Additive(drawAlpha * addBlend * x68_visorPulseFactor)
                     .DepthCompareUpdate(true, false));
+#endif
+#ifdef TARGET_PC
+    }
 #endif
     if (x270_25_hasGrappleBeam) {
       CGraphics::SetModelMatrix(grappleXf);

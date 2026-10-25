@@ -18,7 +18,8 @@ inline constexpr const char* kStampName = ".dread-samus-version";
 // 4: Dread proportions: meshes keep their own bind, with Dread-proportioned CINFs (D7EAD001-006).
 // 5: Phazon = Dread's Metroid Suit (samushyper), skeletons D7EAD007-008.
 // 6: all four suit Morph Balls, normal/Spider and low-poly, with rigid animated skins.
-inline constexpr int kVersion = 6;
+// 7: the pause-screen doll's four suit bodies (CINF F76E70A6), skeletons D7EAD009-00C.
+inline constexpr int kVersion = 7;
 
 struct BallTarget {
   int suit;
@@ -98,6 +99,23 @@ inline uint32_t CutsceneBody(int charIdx) {
   }
 }
 
+// The pause-screen doll's body CMDL of a CPlayerState::EPlayerSuit (ANCS_ItemScreenSamus's first
+// part of the suit), 0 for the others.
+inline uint32_t DollBody(int suit) {
+  switch (suit) {
+  case 0:
+    return 0xCC25E002;
+  case 1:
+    return 0x11A5BC8A;
+  case 2:
+    return 0xA602C954;
+  case 3:
+    return 0x5644E7A1;
+  default:
+    return 0;
+  }
+}
+
 // Whether the Dread body stands in for a retail body CMDL now: the dread-samus mod is loaded and
 // serves that id (PortMods). Its skinned cannon replaces Prime's separate one, which is then not drawn.
 bool Replaces(uint32_t bodyCmdl);
@@ -143,6 +161,14 @@ inline uint32_t DreadCinf(uint32_t bodyCmdl) {
     return 0xD7EAD007;
   case 0x891E00FD:
     return 0xD7EAD008;
+  case 0xCC25E002:
+    return 0xD7EAD009;
+  case 0x11A5BC8A:
+    return 0xD7EAD00A;
+  case 0xA602C954:
+    return 0xD7EAD00B;
+  case 0x5644E7A1:
+    return 0xD7EAD00C;
   default:
     return 0;
   }

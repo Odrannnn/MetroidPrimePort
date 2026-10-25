@@ -80,7 +80,7 @@ Dread's bodies do not fit Prime's skeletons: pinning and stretching Dread's
 mesh onto Prime's bone lengths stretches the skin between the hips, chest and
 shoulders. So Dread keeps its own proportions. For each body the import writes
 a skeleton with Prime's CINF joint layout but Dread's bind offsets (its own ids,
-`D7EAD001`-`D7EAD008`, one per suit and per Prime skeleton), binds Dread's mesh
+`D7EAD001`-`D7EAD00C`, one per suit and per Prime skeleton), binds Dread's mesh
 to it with Dread's own weights, and writes the CMDL/CSKR/TXTR under the retail
 body ids so the game's characters draw them with no code change of their own.
 At run time Prime's animations are retargeted onto it rotation-only
@@ -94,6 +94,11 @@ suit materials are Dread's own (albedo, normal, metal/rough/AO, emissive) on the
 Remastered import's PBR shader path.
 
 ## After an update
+
+Version 7 also dresses the pause screen's Samus (`ANCS_ItemScreenSamus`, CINF
+`F76E70A6`): each suit's first part is the Dread body, and the doll then leaves
+out that suit's other parts, its boots, beam and visor models, which the Dread
+body carries itself. The grapple beam still shows once it is collected.
 
 Version 6 also imports Power/Varia/Gravity/Hyper Morph Balls (Hyper for Phazon),
 including normal, Spider-equipped and low-poly paths. Low-poly paths reuse the
@@ -132,7 +137,7 @@ replaces the old mod.
   (.nsz/.xcz) are not supported; decompress it first"), and an `.xci` needs the
   key file's `key_area_key_application_XX` keys.
 - In first-person play the body is hidden, as in retail, so the mod shows in
-  cutscenes and in the Morph Ball transition unless the third-person camera
+  cutscenes, on the pause screen and in the Morph Ball transition unless the third-person camera
   (Video > Display, `third_person`, off by default; see `docs/SETTINGS.md`) is
   on. That camera is experimental.
 - Only the Power, Varia, Gravity and Phazon bodies and balls: Fusion keeps its models,

@@ -51,6 +51,12 @@ inline constexpr Target kTargets[] = {
     {"samusvaria", "game20", 0xA496DA02, 0xE449874A, {0x8F66289C, 0}},
     {"samusgravity", "game20", 0xA496DA02, 0x57489AD3, {0x3C673505, 0}},
     {"samushyper", "game20", 0xA496DA02, 0x891E00FD, {0xE231AF2B, 0}},
+    // The pause screen's doll (ANCS_ItemScreenSamus 72DCEC67, NoARAM.pak): each suit's first
+    // part on CINF F76E70A6. The doll then leaves out the suit's other parts, boots, beam and visor.
+    {"samuspower", "doll49", 0xF76E70A6, 0xCC25E002, {0xA70A4FD4, 0}},
+    {"samusvaria", "doll49", 0xF76E70A6, 0xA602C954, {0xCD2D6682, 0}},
+    {"samusgravity", "doll49", 0xF76E70A6, 0x11A5BC8A, {0x7A8A135C, 0}},
+    {"samushyper", "doll49", 0xF76E70A6, 0x5644E7A1, {0x3D6B4877, 0}},
 };
 
 struct Io {

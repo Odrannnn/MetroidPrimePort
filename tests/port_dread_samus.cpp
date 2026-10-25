@@ -467,7 +467,9 @@ void TestTables() {
     }
   }
   CHECK(PortDreadSamus::BallModel(4, false) == 0);
-  CHECK(std::size(PortDreadSamus::kTargets) == 8);
+  CHECK(std::size(PortDreadSamus::kTargets) == 12);
+  CHECK(PortDreadSamus::DollBody(3) == 0x5644E7A1);
+  CHECK(PortDreadSamus::DreadCinf(0x5644E7A1) == 0xD7EAD00C);
   CHECK(PortDreadSamus::InGameBody(3) == 0x891E00FD);
   CHECK(PortDreadSamus::CutsceneBody(3) == 0x2782648E);
   CHECK(PortDreadSamus::CutsceneSkin(0x2782648E) == 0x4CADCB58);
@@ -480,7 +482,10 @@ void TestTables() {
     CHECK(cinfs.insert(cinf).second);
     bool listed = false;
     for (int i = 0; i < 4; ++i) {
-      listed |= (t.cinf == 0x19C53902 ? PortDreadSamus::CutsceneBody(i) : PortDreadSamus::InGameBody(i)) == t.cmdl;
+      const uint32_t body = t.cinf == 0x19C53902   ? PortDreadSamus::CutsceneBody(i)
+                            : t.cinf == 0xF76E70A6 ? PortDreadSamus::DollBody(i)
+                                                   : PortDreadSamus::InGameBody(i);
+      listed |= body == t.cmdl;
     }
     CHECK_MSG(listed, std::string(t.suit) + " " + t.skeleton + " body is not in the suit table");
     if (t.cinf == 0x19C53902) {
@@ -491,7 +496,8 @@ void TestTables() {
         PortDreadSamus::CutsceneSkin(PortDreadSamus::kPhazonCutsceneBody));
   CHECK(PortDreadSamus::DreadCinf(PortDreadSamus::kPhazonCutsceneAlias) ==
         PortDreadSamus::DreadCinf(PortDreadSamus::kPhazonCutsceneBody));
-  CHECK(PortDreadSamus::InGameBody(4) == 0 && PortDreadSamus::CutsceneBody(4) == 0);
+  CHECK(PortDreadSamus::InGameBody(4) == 0 && PortDreadSamus::CutsceneBody(4) == 0 &&
+        PortDreadSamus::DollBody(4) == 0);
 }
 
 void TestBallOwnership() {
