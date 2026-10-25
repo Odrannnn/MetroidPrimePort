@@ -58,7 +58,7 @@ struct LightSource {
   float nearD = 0.f;
   float farD = 0.f;
   bool spot = false;
-  float innerDeg = 0.f; // the cone's inner and outer half angles, degrees
+  float innerDeg = 0.f; // the authored full cone angles, degrees (halved by the loader)
   float outerDeg = 0.f;
   int falloff = 3; // ELightDistanceAttn: 0 none, 1 linear, 2 squared, 3 smooth
 };
@@ -67,7 +67,8 @@ struct LightSource {
 // A = 1/(far-near), B = -near*A. `far` comes back as the record's and node's far.
 void DistanceAttenuation(float nearD, float farD, float& a, float& b, float& far);
 // SLightAngleAttenuation::FromValues 0x173a50 (and CLight ctor's None for a point light):
-// the half angles in degrees, cos of each, scale = 1/(cosIn - cosOut), bias = -cosOut * scale.
+// Halve the authored degree angles, wrap to [0,2pi), widen outer<=inner by 0.001 rad,
+// then scale = 1/(cosIn - cosOut), bias = -cosOut * scale.
 void ConeAttenuation(bool spot, float innerDeg, float outerDeg, float& scale, float& bias);
 // The distance falloff cubic, stored a3, a2, a1, a0 (SLightDistanceAttenuation's table:
 // (0,0,0,1), (0,0,-1,1), (0,1,-2,1), (2,-3,0,1) for types 0 to 3).

@@ -1293,7 +1293,6 @@ void RoomLights(const float worldToView[3][4], std::vector<float>& out) {
   }
   // As the sun's (see Sun).
   const float scale = exposure * LightGain() / 3.14159265f;
-  constexpr float kDegrees = 3.14159265f / 180.f;
   ForEachRoomLight([&](const PointLight& l, const LightNow& n) {
     float color[3];
     for (int c = 0; c < 3; ++c) {
@@ -1309,18 +1308,7 @@ void RoomLights(const float worldToView[3][4], std::vector<float>& out) {
     const float b = -near * a;
     float coneScale = 0.f;
     float coneBias = 1.f;
-    if (l.spot) {
-      const float cosIn = std::cos(n.cone[0] * 0.5f * kDegrees);
-      const float cosOut = std::cos(n.cone[1] * 0.5f * kDegrees);
-      const float span = cosIn - cosOut;
-      if (std::fabs(span) > 1e-6f) {
-        coneScale = 1.f / span;
-        coneBias = -cosOut / span;
-      } else {
-        coneScale = 0.f;
-        coneBias = 0.f;
-      }
-    }
+    PortClusteredLights::ConeAttenuation(l.spot, n.cone[0], n.cone[1], coneScale, coneBias);
     float pos[3];
     float axis[3];
     for (int r = 0; r < 3; ++r) {

@@ -77,16 +77,22 @@ void ConeAttenuation(bool spot, float innerDeg, float outerDeg, float& scale, fl
     return;
   }
   constexpr float kDegrees = 3.14159265f / 180.f;
-  const float cosIn = std::cos(innerDeg * 0.5f * kDegrees);
-  const float cosOut = std::cos(outerDeg * 0.5f * kDegrees);
-  const float span = cosIn - cosOut;
-  if (std::fabs(span) > 1e-6f) {
-    scale = 1.f / span;
-    bias = -cosOut / span;
-  } else {
-    scale = 0.f;
-    bias = 0.f;
+  // build_light_angle_attenuation 0x89d2a0 constructs CAbsAngle half angles;
+  // FromValues 0x173a50 widens an equal/reversed cone by 0.001 radians.
+  const auto wrap = [](float radians) {
+    const float value = radians - std::trunc(radians * 0.15915494f) * 6.2831855f;
+    return value < 0.f ? value + 6.2831855f : value;
+  };
+  const float inner = wrap(innerDeg * 0.5f * kDegrees);
+  float outer = wrap(outerDeg * 0.5f * kDegrees);
+  if (outer <= inner) {
+    outer = wrap(inner + 0.001f);
   }
+  const float cosIn = std::cos(inner);
+  const float cosOut = std::cos(outer);
+  const float span = cosIn - cosOut;
+  scale = 1.f / span;
+  bias = -cosOut / span;
 }
 
 void FalloffCubic(int falloff, float cubic[4]) {

@@ -1,6 +1,7 @@
 #include "port_clustered_lights.h"
 #include "port_test.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -134,6 +135,26 @@ int main() {
     CHECK_MSG(Near(cubic[1], 1.f) && Near(cubic[2], -2.f), "type 2 is (1-t)^2");
     FalloffCubic(9, cubic);
     CHECK_MSG(Near(cubic[0], 2.f), "an unknown type clamps to the smooth row");
+  }
+
+  // Equal/reversed cones retain a lit centre, rather than becoming black. Source
+  // FromValues widens their half-angle by 0.001 radians, including after angle wrapping.
+  {
+    float scale, bias;
+    for (float outer : {60.f, 30.f}) {
+      ConeAttenuation(true, 60.f, outer, scale, bias);
+      CHECK(scale > 1000.f && std::isfinite(scale));
+      CHECK(std::clamp(scale + bias, 0.f, 1.f) == 1.f);
+      CHECK(std::clamp(std::cos(31.f * 3.14159265f / 180.f) * scale + bias, 0.f, 1.f) == 0.f);
+    }
+    float referenceScale, referenceBias;
+    ConeAttenuation(true, 60.f, 120.f, referenceScale, referenceBias);
+    for (float shift : {-720.f, 720.f}) {
+      ConeAttenuation(true, 60.f + shift, 120.f + shift, scale, bias);
+      CHECK(Near(scale, referenceScale, 1e-4f) && Near(bias, referenceBias, 1e-4f));
+    }
+    ConeAttenuation(false, 60.f, 30.f, scale, bias);
+    CHECK(scale == 0.f && bias == 1.f);
   }
 
   // A light in the middle of the view sets the centre cluster of its own slice and nothing else.
