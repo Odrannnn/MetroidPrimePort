@@ -372,7 +372,13 @@ void encode_frame_snapshot(const wgpu::CommandEncoder& cmd, const wgpu::TextureV
     return;
   }
   if (msaaSamples > 1) {
-    Log.fatal("Depth Peek from multisampled EFB targets is not supported");
+    // No multisampled snapshot pipeline: GXPeekZ keeps its last value rather than ending the game.
+    static bool warned = false;
+    if (!warned) {
+      warned = true;
+      Log.warn("Depth Peek from a {}x multisampled EFB is not supported; skipped", msaaSamples);
+    }
+    return;
   }
 
   const Params params = make_params(sourceSize, dstSize);

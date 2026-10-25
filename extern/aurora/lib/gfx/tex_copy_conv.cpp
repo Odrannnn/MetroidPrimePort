@@ -10,6 +10,7 @@
 #include "../gx/gx_fmt.hpp"
 
 #include <absl/container/flat_hash_map.h>
+#include <absl/container/flat_hash_set.h>
 
 #include "texture_convert.hpp"
 #include "hdr_tone.hpp"
@@ -579,6 +580,16 @@ static wgpu::BindGroupLayout hdr_bind_group_layout() {
 // A scaled HdrDisplay copy filters the light and post-tones the filtered sample, where an LDR copy
 // filters display values: the two are not filter-for-filter equal, by design (no exact copy-filter
 // parity is claimed; the curve is not linear, so they differ only where the filter mixes texels).
+// Once per kind and format: a copy with no pipeline is skipped (see run).
+static void warn_missing_pipeline(std::string_view kind, GXTexFmt fmt) {
+  static std::mutex mutex;
+  static absl::flat_hash_set<std::pair<std::string_view, GXTexFmt>> warned;
+  std::lock_guard lock{mutex};
+  if (warned.emplace(kind, fmt).second) {
+    Log.warn("No {} pipeline for format {}; copy not supported; skipped", kind, static_cast<int>(fmt));
+  }
+}
+
 static wgpu::RenderPipeline domain_pipeline(GXTexFmt fmt, CopyDomain domain, wgpu::TextureFormat outputFormat) {
   std::lock_guard lock{g_domainMutex};
   const auto key = std::make_tuple(fmt, domain, outputFormat);
@@ -589,8 +600,8 @@ static wgpu::RenderPipeline domain_pipeline(GXTexFmt fmt, CopyDomain domain, wgp
   if (fmt != GX_TF_RGBA8) {
     const auto it = std::ranges::find(ConvPipelines, fmt, &ConvPipeline::fmt);
     if (it == ConvPipelines.end() || (domain == CopyDomain::Linear && fmt != GX_TF_RGB565)) {
-      Log.fatal("No {} copy pipeline for format {}", domain == CopyDomain::Linear ? "linear" : "HDR",
-                static_cast<int>(fmt));
+      warn_missing_pipeline(domain == CopyDomain::Linear ? "linear copy" : "HDR copy", fmt);
+      return {};
     }
     frag = it->fragShader;
   }
@@ -893,20 +904,17 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
 
 void run(const wgpu::CommandEncoder& cmd, const ConvRequest& req) {
   if (req.domain != CopyDomain::Display) {
-    execute(cmd, req, domain_pipeline(req.fmt, req.domain, req.dst->format));
-    return;
-  }
-  if (req.srcSamples > 1) {
-    const auto it = g_depthPipelinesMS.find(req.fmt);
-    if (it == g_depthPipelinesMS.end()) {
-      Log.fatal("No multisampled copy conversion pipeline for format {}", static_cast<int>(req.fmt));
+    if (const auto pipeline = domain_pipeline(req.fmt, req.domain, req.dst->format)) {
+      execute(cmd, req, pipeline);
     }
-    execute(cmd, req, it->second);
     return;
   }
-  const auto it = g_pipelines.find(req.fmt);
-  if (it == g_pipelines.end()) {
-    Log.fatal("No copy conversion pipeline for format {}", static_cast<int>(req.fmt));
+  // A format with no pipeline leaves the destination as it was, rather than ending the game.
+  const auto& pipelines = req.srcSamples > 1 ? g_depthPipelinesMS : g_pipelines;
+  const auto it = pipelines.find(req.fmt);
+  if (it == pipelines.end()) {
+    warn_missing_pipeline(req.srcSamples > 1 ? "multisampled conversion" : "conversion", req.fmt);
+    return;
   }
   execute(cmd, req, it->second);
 }
