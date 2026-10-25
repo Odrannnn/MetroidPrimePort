@@ -86,17 +86,26 @@ void CPlasmaBeam::Fire(const bool underwater, const float dt,
                        CStateManager& mgr, TUniqueId homingTarget, const float chargeFactor1,
                        const float chargeFactor2) {
   bool fired = false;
+#ifdef TARGET_PC
+  // CPlasmaBeamMP1::Fire: Remastered fires both shots 0.2 down the gun's up axis.
+  CTransform4f shotXf = xf;
+  if (PortRemasteredMuzzle()) {
+    shotXf.SetTranslation(xf.GetTranslation() + xf.GetUp() * -0.2f);
+  }
+#else
+  const CTransform4f& shotXf = xf;
+#endif
   if (chargeState == CPlayerState::kCS_Normal) {
     if (x230_fireShotDelayTimer < 0.01f) {
       ActivateCharge(false, true);
-      CGunWeapon::Fire(underwater, dt, chargeState, xf, mgr, homingTarget, chargeFactor1,
+      CGunWeapon::Fire(underwater, dt, chargeState, shotXf, mgr, homingTarget, chargeFactor1,
                        chargeFactor2);
       x230_fireShotDelayTimer += 0.33f;
       x234_fireShotDelay = 0.33f;
       fired = true;
     }
   } else {
-    CGunWeapon::Fire(underwater, dt, chargeState, xf, mgr, homingTarget, chargeFactor1, 1.f);
+    CGunWeapon::Fire(underwater, dt, chargeState, shotXf, mgr, homingTarget, chargeFactor1, 1.f);
     mgr.CameraManager()->AddCameraShaker(CameraShaker, false);
     x238_lightingResetDelayTimer = 0.65f;
     SetWorldLighting(mgr, mgr.GetPlayer()->GetCurrentAreaId(), 8.f, 0.7f);
