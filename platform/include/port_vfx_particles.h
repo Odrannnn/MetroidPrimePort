@@ -6,6 +6,8 @@
 // A PART without VMAT never reaches any of it.
 
 #include "Kyoto/Particles/CElementGen.hpp"
+#include <cmath>
+#include <cstdint>
 #include <vector>
 
 #include "Kyoto/Particles/CGenDescription.hpp"
@@ -62,7 +64,28 @@ uint PortVfxEvalVsmt(const CPortVfxData& vfx, int frame, float vsmt[kPortVfxVsmt
 // CParticleGlobals' particle context.
 void PortVfxEvalPoint(const CPortVfxData& vfx, int frame, float& iten, float vpmt[4][4]);
 
-// The VTMT rows evaluated at one frame: uv = (A, B) + 0.5 + R(E) diag(C, D) (q - 0.5), layer F.
+// A TRSS UV offset (A or B) after pack_texture_transform 0x20e8f0 and the VS unpack: the signed
+// fraction goes out as the u16 trunc((f + 1) / 2 * 65535) and comes back as u16 * (2 / 65535) - 1.
+inline float PortVfxTrssOffset(float x) {
+  const float f = x - std::trunc(x);
+  return std::fma(float(uint32_t((f + 1.f) * 0.5f * 65535.f)), 2.f / 65535.f, -1.f);
+}
+
+// A TRSS rotation (E, in degrees: GetValue 0x2de7dc takes it times 0.0174533) in radians as the VS
+// sees it: wrapped to [0, 2pi), packed as the u16 trunc(min(E / 2pi, 1) * 65535), unpacked as
+// u16 * 2pi / 65536.
+inline float PortVfxTrssAngle(float degrees) {
+  float a = degrees * 0.017453292f;
+  a -= float(int(a * 0.15915494f)) * 6.2831855f;
+  if (a < 0.f) {
+    a += 6.2831855f;
+  }
+  return float(uint32_t(std::fmin(a / 6.2831855f, 1.f) * 65535.f)) * 9.58752644e-05f;
+}
+
+// The VTMT rows evaluated at one frame, as the shipped particle VS (461071b8 and 5f2a0715 perm
+// 000/012) applies them: uv = (A, B) + 0.5 + R(-E) diag(C, D) (q - 0.5), layer F, i.e.
+// u' = A + 0.5 + cos E du + sin E dv, v' = B + 0.5 - sin E du + cos E dv.
 struct CPortVfxUvXf {
   float a[3] = {}, b[3] = {}, c[3] = {1.f, 1.f, 1.f}, d[3] = {1.f, 1.f, 1.f};
   float cosE[3] = {1.f, 1.f, 1.f}, sinE[3] = {}, f[3] = {};

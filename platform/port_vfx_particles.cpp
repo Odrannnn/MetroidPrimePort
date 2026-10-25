@@ -65,6 +65,21 @@ float EvalReal(CRealElement* e, int frame, float def) {
   return v;
 }
 
+// One TMTR TRSS(A..F) as the shipped vertex shaders see it: GetValue 0x2de7dc packs it with
+// pack_texture_transform 0x20e8f0 (A, B and E as 16-bit fields), and the VS unpacks them.
+Tm EvalTrss(CRealElement* const* r, int frame) {
+  Tm t;
+  t.a = PortVfxTrssOffset(EvalReal(r[0], frame, 0.f));
+  t.b = PortVfxTrssOffset(EvalReal(r[1], frame, 0.f));
+  t.c = EvalReal(r[2], frame, 1.f);
+  t.d = EvalReal(r[3], frame, 1.f);
+  const float e = PortVfxTrssAngle(EvalReal(r[4], frame, 0.f));
+  t.cosE = std::cos(e);
+  t.sinE = std::sin(e);
+  t.f = EvalReal(r[5], frame, 0.f);
+  return t;
+}
+
 // Evaluates a VPMT/VSMT element into up to four floats; returns the count.
 int EvalElem(const CPortVfxElem& e, int frame, float out[4]) {
   switch (e.kind) {
@@ -292,14 +307,14 @@ void PortVfxEvalPoint(const CPortVfxData& vfx, int frame, float& iten, float vpm
 void CPortVfxUvXf::Eval(const CPortVfxData& vfx, int frame) {
   for (u32 s = 0; s < 3 && s < vfx.vtmtCount; ++s) {
     CRealElement* const* r = &vfx.vtmt[s * 6];
-    a[s] = EvalReal(r[0], frame, 0.f);
-    b[s] = EvalReal(r[1], frame, 0.f);
-    c[s] = EvalReal(r[2], frame, 1.f);
-    d[s] = EvalReal(r[3], frame, 1.f);
-    const float e = EvalReal(r[4], frame, 0.f);
-    cosE[s] = std::cos(e);
-    sinE[s] = std::sin(e);
-    f[s] = EvalReal(r[5], frame, 0.f);
+    const Tm t = EvalTrss(r, frame);
+    a[s] = t.a;
+    b[s] = t.b;
+    c[s] = t.c;
+    d[s] = t.d;
+    cosE[s] = t.cosE;
+    sinE[s] = t.sinE;
+    f[s] = t.f;
   }
 }
 
@@ -307,8 +322,8 @@ void CPortVfxUvXf::Apply(float qx, float qy, float uv[3][3]) const {
   for (int s = 0; s < 3; ++s) {
     const float dx = (qx - 0.5f) * c[s];
     const float dy = (qy - 0.5f) * d[s];
-    uv[s][0] = a[s] + 0.5f + cosE[s] * dx - sinE[s] * dy;
-    uv[s][1] = b[s] + 0.5f + sinE[s] * dx + cosE[s] * dy;
+    uv[s][0] = a[s] + 0.5f + cosE[s] * dx + sinE[s] * dy;
+    uv[s][1] = b[s] + 0.5f - sinE[s] * dx + cosE[s] * dy;
     uv[s][2] = f[s];
   }
 }
@@ -577,18 +592,11 @@ void CElementGen::PortRenderParticlesVfx() {
       CParticleGlobals::mParticleAccessParameters = x60_advValues[item.x0_partIdx].values;
     }
 
-    // VTMT, one 6-element row per UV set: uv = (A, B) + 0.5 + R(E) diag(C, D) (q - 0.5), layer F.
+    // VTMT, one 6-element row per UV set: uv = (A, B) + 0.5 + R(-E) diag(C, D) (q - 0.5), layer F.
     Tm tm[3];
     for (u32 s = 0; s < 3 && s < vfx.vtmtCount; ++s) {
       CRealElement* const* r = &vfx.vtmt[s * 6];
-      tm[s].a = EvalReal(r[0], partFrame, 0.f);
-      tm[s].b = EvalReal(r[1], partFrame, 0.f);
-      tm[s].c = EvalReal(r[2], partFrame, 1.f);
-      tm[s].d = EvalReal(r[3], partFrame, 1.f);
-      const float e = EvalReal(r[4], partFrame, 0.f);
-      tm[s].cosE = std::cos(e);
-      tm[s].sinE = std::sin(e);
-      tm[s].f = EvalReal(r[5], partFrame, 0.f);
+      tm[s] = EvalTrss(r, partFrame);
     }
 
     // A lit perm (ParticleLit) reads no ITEN: Remastered's 080_1 passes the colour through without it.
@@ -697,8 +705,8 @@ void CElementGen::PortRenderParticlesVfx() {
         const Tm& t = tm[s];
         const float dx = (qx - 0.5f) * t.c;
         const float dy = (qy - 0.5f) * t.d;
-        v.uv[s][0] = t.a + 0.5f + t.cosE * dx - t.sinE * dy;
-        v.uv[s][1] = t.b + 0.5f + t.sinE * dx + t.cosE * dy;
+        v.uv[s][0] = t.a + 0.5f + t.cosE * dx + t.sinE * dy;
+        v.uv[s][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
         v.uv[s][2] = t.f;
       }
       for (int i = 0; i < 4; ++i) {
@@ -795,8 +803,8 @@ static void AddIce(const CPortVfxData& vfx, const CTransform4f& model, const CEl
       const Tm& t = tm[st];
       const float dx = (m[6] - 0.5f) * t.c;
       const float dy = (m[7] - 0.5f) * t.d;
-      v.uv[st][0] = t.a + 0.5f + t.cosE * dx - t.sinE * dy;
-      v.uv[st][1] = t.b + 0.5f + t.sinE * dx + t.cosE * dy;
+      v.uv[st][0] = t.a + 0.5f + t.cosE * dx + t.sinE * dy;
+      v.uv[st][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
       v.uv[st][2] = t.f;
     }
     v.uv[1][0] = m[14];
@@ -860,8 +868,8 @@ static void AddIceCollision(const CPortVfxData& vfx, const CTransform4f& model, 
       const Tm& t = tm[st];
       const float dx = (m[6] - 0.5f) * t.c;
       const float dy = (m[7] - 0.5f) * t.d;
-      v.uv[st][0] = t.a + 0.5f + t.cosE * dx - t.sinE * dy;
-      v.uv[st][1] = t.b + 0.5f + t.sinE * dx + t.cosE * dy;
+      v.uv[st][0] = t.a + 0.5f + t.cosE * dx + t.sinE * dy;
+      v.uv[st][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
       v.uv[st][2] = t.f;
     }
     for (int k = 0; k < 4; ++k) {
@@ -914,8 +922,8 @@ static void AddBarrierShield(const CPortVfxData& vfx, const CTransform4f& model,
       const Tm& t = tm[st];
       const float dx = (m[6] - 0.5f) * t.c;
       const float dy = (m[7] - 0.5f) * t.d;
-      v.uv[st][0] = t.a + 0.5f + t.cosE * dx - t.sinE * dy;
-      v.uv[st][1] = t.b + 0.5f + t.sinE * dx + t.cosE * dy;
+      v.uv[st][0] = t.a + 0.5f + t.cosE * dx + t.sinE * dy;
+      v.uv[st][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
       v.uv[st][2] = t.f;
     }
     for (int k = 0; k < 4; ++k) {
@@ -977,14 +985,7 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
   Tm tm[3];
   for (u32 s = 0; s < 3 && s < vfx.vtmtCount; ++s) {
     CRealElement* const* r = &vfx.vtmt[s * 6];
-    tm[s].a = EvalReal(r[0], partFrame, 0.f);
-    tm[s].b = EvalReal(r[1], partFrame, 0.f);
-    tm[s].c = EvalReal(r[2], partFrame, 1.f);
-    tm[s].d = EvalReal(r[3], partFrame, 1.f);
-    const float e = EvalReal(r[4], partFrame, 0.f);
-    tm[s].cosE = std::cos(e);
-    tm[s].sinE = std::sin(e);
-    tm[s].f = EvalReal(r[5], partFrame, 0.f);
+    tm[s] = EvalTrss(r, partFrame);
   }
   // Model instance writers 0x2bfd08/0x2bfe4c multiply ITEN * inverse exposure into RGB,
   // leaving alpha alone. The lit-sprite shader's ITEN exception does not apply to models.
@@ -1026,8 +1027,8 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
       const Tm& t = tm[s];
       const float dx = (m[6] - 0.5f) * t.c;
       const float dy = (m[7] - 0.5f) * t.d;
-      v.uv[s][0] = t.a + 0.5f + t.cosE * dx - t.sinE * dy;
-      v.uv[s][1] = t.b + 0.5f + t.sinE * dx + t.cosE * dy;
+      v.uv[s][0] = t.a + 0.5f + t.cosE * dx + t.sinE * dy;
+      v.uv[s][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
       v.uv[s][2] = t.f;
     }
     for (int k = 0; k < 4; ++k) {
