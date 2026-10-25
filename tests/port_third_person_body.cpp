@@ -12,21 +12,35 @@ bool Near(float a, float b) { return std::fabs(a - b) < 1e-3f; }
 } // namespace
 
 int main() {
-  // Stances: standing, walking, holding the ready pose airborne or strafing.
-  CHECK(ChooseStance(0.f, 0.f, true, Stance::Idle, true) == Stance::Idle);
-  CHECK(ChooseStance(0.2f, 0.1f, true, Stance::Idle, true) == Stance::Idle);
-  CHECK(ChooseStance(5.f, 0.f, true, Stance::Idle, true) == Stance::Loco);
-  CHECK(ChooseStance(-5.f, 0.f, true, Stance::Idle, true) == Stance::Loco);
-  CHECK(ChooseStance(0.4f, 5.f, true, Stance::Loco, true) == Stance::Idle); // strafing
-  CHECK(ChooseStance(9.f, 0.f, false, Stance::Loco, true) == Stance::Idle); // airborne
+  // Stances: standing, walking, holding the ready pose strafing.
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Idle, true, false) == Stance::Idle);
+  CHECK(ChooseStance(0.2f, 0.1f, true, 0.f, Stance::Idle, true, false) == Stance::Idle);
+  CHECK(ChooseStance(5.f, 0.f, true, 0.f, Stance::Idle, true, false) == Stance::Loco);
+  CHECK(ChooseStance(-5.f, 0.f, true, 0.f, Stance::Idle, true, false) == Stance::Loco);
+  CHECK(ChooseStance(0.4f, 5.f, true, 0.f, Stance::Loco, true, false) == Stance::Idle); // strafing
   // Stopping from a walk plays the stop clip to its end, unless the body moves again.
-  CHECK(ChooseStance(0.f, 0.f, true, Stance::Loco, true) == Stance::Stop);
-  CHECK(ChooseStance(0.f, 0.f, true, Stance::Stop, false) == Stance::Stop);
-  CHECK(ChooseStance(0.f, 0.f, true, Stance::Stop, true) == Stance::Idle);
-  CHECK(ChooseStance(5.f, 0.f, true, Stance::Stop, false) == Stance::Loco);
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Loco, true, false) == Stance::Stop);
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Stop, false, false) == Stance::Stop);
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Stop, true, false) == Stance::Idle);
+  CHECK(ChooseStance(5.f, 0.f, true, 0.f, Stance::Stop, false, false) == Stance::Loco);
+  // In the air: rising jumps, dropping falls, at any speed.
+  CHECK(ChooseStance(9.f, 0.f, false, 3.f, Stance::Loco, true, false) == Stance::Jump);
+  CHECK(ChooseStance(9.f, 0.f, false, -3.f, Stance::Jump, true, false) == Stance::Fall);
+  CHECK(ChooseStance(0.f, 0.f, false, -1.f, Stance::Idle, true, false) == Stance::Fall);
+  // Landing: a long fall plays Land (even at the touchdown's speed blip), to its end standing
+  // still; a short hop doesn't, and moving leaves it.
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Fall, true, true) == Stance::Land);
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Jump, true, true) == Stance::Land);
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Fall, true, false) == Stance::Idle);
+  CHECK(ChooseStance(5.f, 0.f, true, 0.f, Stance::Fall, true, true) == Stance::Land);
+  CHECK(ChooseStance(5.f, 0.f, true, 0.f, Stance::Fall, true, false) == Stance::Loco);
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Land, false, false) == Stance::Land);
+  CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Land, true, false) == Stance::Idle);
+  CHECK(ChooseStance(5.f, 0.f, true, 0.f, Stance::Land, false, false) == Stance::Loco);
 
   // The walk clips by speed: one alone outside their range, the bracketing two linearly inside,
   // continuous where the pairs meet.
+  constexpr int kLocoClips = 3;
   const float speeds[kLocoClips] = {1.5f, 2.f, 9.f};
   float w[kLocoClips];
   LocoWeights(1.f, speeds, w);

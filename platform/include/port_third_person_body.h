@@ -20,10 +20,11 @@ namespace PortThirdPersonBody {
 
 // The body is posed by blending the clips itself (port_third_person_body.cpp): each clip is
 // sampled at its own phase and the samples are slerped together, as CAnimTreeBlend blends two.
-// Stance: what the legs do. Idle and Hold stand in the ready pose (Hold: airborne or strafing,
-// there being no jump or strafe clip); Stop plays the walk's settle into it once; Loco walks or
-// runs, the walk clips blended by speed.
-enum class Stance { Idle, Stop, Loco, Count };
+// Stance: what the legs do. Idle stands in the ready pose (also strafing: Prime has no strafe
+// clip); Stop plays the walk's settle into it once; Loco walks or runs, the walk clips blended by
+// speed; Jump plays a jump's push-off and holds its tuck while rising, Fall a fall's pose while
+// dropping; Land plays a landing's crouch and rise once, after a fall long enough to want one.
+enum class Stance { Idle, Stop, Loco, Jump, Fall, Land, Count };
 
 // How long the cannon stays raised after a shot, in seconds.
 inline constexpr float kGunUpSeconds = 1.f;
@@ -42,17 +43,34 @@ inline constexpr float kStandSpeed = 0.5f;
 inline constexpr float kAimGridSpeed = 3.f;
 inline constexpr float kAimGridAccel = 10.f;
 
+// An airborne body lands with Land only after this long in the air, in seconds (a step off a
+// kerb doesn't crouch).
+inline constexpr float kLandAirSeconds = 0.5f;
+
 // The stance the movement asks for. fwd and side are the speeds along the facing (+ forward)
-// and across it. Stopping from a walk plays Stop until stopDone, unless the body moves again.
-inline Stance ChooseStance(float fwd, float side, bool grounded, Stance current, bool stopDone) {
+// and across it, rise the vertical one; landing: the body was in the air kLandAirSeconds.
+// Stopping from a walk plays Stop, and landing Land, until done (the current stance's clip
+// played out), unless the body moves (again: the touchdown tick's own speed, a blip of the
+// collision, doesn't count).
+inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Stance current,
+                           bool done, bool landing) {
+  if (!grounded) {
+    return rise > 0.f ? Stance::Jump : Stance::Fall;
+  }
+  if ((current == Stance::Jump || current == Stance::Fall) && landing) {
+    return Stance::Land;
+  }
   const float speed = std::sqrt(fwd * fwd + side * side);
   if (speed < kStandSpeed) {
-    if (current == Stance::Loco || (current == Stance::Stop && !stopDone)) {
+    if (current == Stance::Loco || (current == Stance::Stop && !done)) {
       return Stance::Stop;
+    }
+    if (current == Stance::Land && !done) {
+      return Stance::Land;
     }
     return Stance::Idle;
   }
-  if (!grounded || std::fabs(side) > std::fabs(fwd) || std::fabs(fwd) < kStandSpeed) {
+  if (std::fabs(side) > std::fabs(fwd) || std::fabs(fwd) < kStandSpeed) {
     return Stance::Idle;
   }
   return Stance::Loco;
@@ -60,16 +78,18 @@ inline Stance ChooseStance(float fwd, float side, bool grounded, Stance current,
 
 // The walk clips' weights at a ground speed: the two whose own speeds (speeds[], ascending)
 // bracket it, linearly; below the slowest or above the fastest that one alone.
-inline constexpr int kLocoClips = 3; // slowwalk, walk, run
-inline void LocoWeights(float speed, const float (&speeds)[kLocoClips], float (&w)[kLocoClips]) {
-  for (float& x : w) {
-    x = 0.f;
+inline void LocoWeights(float speed, const float* speeds, int N, float* w) {
+  for (int i = 0; i < N; ++i) {
+    w[i] = 0.f;
+  }
+  if (N <= 0) {
+    return;
   }
   if (speed <= speeds[0]) {
     w[0] = 1.f;
     return;
   }
-  for (int i = 0; i + 1 < kLocoClips; ++i) {
+  for (int i = 0; i + 1 < N; ++i) {
     if (speed <= speeds[i + 1]) {
       const float span = speeds[i + 1] - speeds[i];
       const float t = span > 1e-4f ? (speed - speeds[i]) / span : 1.f;
@@ -78,7 +98,12 @@ inline void LocoWeights(float speed, const float (&speeds)[kLocoClips], float (&
       return;
     }
   }
-  w[kLocoClips - 1] = 1.f;
+  w[N - 1] = 1.f;
+}
+
+template <int N>
+inline void LocoWeights(float speed, const float (&speeds)[N], float (&w)[N]) {
+  LocoWeights(speed, speeds, N, w);
 }
 
 // Where in a loop a foot curve (n samples over one loop, e.g. left minus right ankle forward)
