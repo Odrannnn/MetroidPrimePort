@@ -1,7 +1,7 @@
 # Metroid Prime — native port
 
-A native build of **Metroid Prime** for Linux, Windows and Android (plus an
-experimental, untested-on-hardware macOS build), compiled
+A native build of **Metroid Prime** for Linux, Windows and Android (plus
+experimental, untested-on-hardware macOS and iPhone/iPad builds), compiled
 from the [PrimeDecomp](https://github.com/PrimeDecomp/prime) decompilation and
 rendered through Aurora (SDL3/WebGPU). There's no emulator involved. Supported
 discs: USA 1.00, 1.01 and 1.02, and PAL.
@@ -70,7 +70,8 @@ macOS, the CMake options and what CI runs are in
 
 - **Where are the logs?** `metroid_prime_port.log` in the user folder (F1 >
   System shows its path); the previous run's is `metroid_prime_port.old.log`. On
-  Android a copy goes to `Documents/MetroidPrime/`. Attach it to a bug report.
+  Android a copy goes to `Documents/MetroidPrime/`; on iOS it is in Files > On
+  My iPhone (or iPad) > Metroid Prime. Attach it to a bug report.
 - **"unsupported disc"**: the image is not one of the revisions above (see the
   log for the disc id it found). Re-dump it, or check you picked the GameCube disc.
 - **Stuck at startup on a GNOME Wayland session**: run with
@@ -117,6 +118,7 @@ Nintendo and Retro Studios, and ships no game data.
 | `tools/README.md` | What each script in `tools/` does and what runs it |
 | `docs/RELEASING.md` | What a release contains and must carry |
 | `docs/ANDROID.md` | The Android port's status and build |
+| `docs/IOS.md` | The experimental iPhone/iPad build: sideloading, the disc, where files are |
 | `docs/REMASTERED_EFFECTS.md` | Importing Remastered particle effects |
 | `docs/FRAME_INTERPOLATION.md`, `docs/HIGH_FPS_AUDIT.md` | High frame rate design notes |
 | `decomp/` | The original decompilation's GameCube build and notes (not used by the port) |
