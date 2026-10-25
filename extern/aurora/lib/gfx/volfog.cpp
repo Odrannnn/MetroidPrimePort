@@ -610,7 +610,8 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
   ensure_targets(width, height, format);
   const auto& apply = g_state.apply;
   const auto& frame = g_state.frame;
-  const bool volume = params.volume != 0 && probe::has_volume(params.volume);
+  const uint32_t volumeId = params.volume;
+  const bool volume = volumeId != 0 && probe::has_volume(volumeId);
   // misc.x: the volume's light is read, else a white texel's; the bindings always hold a texture.
   params.volume = volume ? 1 : 0;
   ctx.queue.WriteBuffer(uniforms, 0, &params, sizeof(params));
@@ -620,7 +621,7 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
       wgpu::BindGroupEntry{.binding = 1, .sampler = g_state.repeatSampler},
       wgpu::BindGroupEntry{.binding = 2, .textureView = g_state.noise},
       wgpu::BindGroupEntry{.binding = 3, .sampler = g_state.clampSampler},
-      wgpu::BindGroupEntry{.binding = 4, .textureView = probe::volume_view(volume ? params.volume : 0, 0)},
+      wgpu::BindGroupEntry{.binding = 4, .textureView = probe::volume_view(volume ? volumeId : 0, 0)},
       wgpu::BindGroupEntry{.binding = 5, .textureView = froxelView},
   };
   const wgpu::BindGroupDescriptor computeGroupDescriptor{
