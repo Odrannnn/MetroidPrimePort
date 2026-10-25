@@ -166,6 +166,48 @@ start the game with `--start-arg=--env --start-arg=MP_SAVESTATE_FIELDS=0`. Expec
 physics bookkeeping (`x9c_renderBounds`, `xc8_drawnToken`, `xfc_constantForce`), and what the AI state
 machine, body controller and animation change on the first tick (no codec for them yet).
 
+## Crash soak
+
+`tools/mpsoak.py` is the pre-release smoke: it drives `mprig` through the shipping matrix -- Remastered
+and retail (`--mods none`), Dawn validation and robustness on (`--env
+MP_DAWN_DISABLE=skip_validation,disable_robustness`, which makes any WebGPU error fatal in game) and
+the release toggles -- at MSAA 1 and 4, switched inside the same game with the console's `msaa N`.
+Every run also passes `MP_GX_CHECK_ARRAYS=1`: aurora then walks each indexed draw's vertex indices and
+drops a draw that would read past one of its arrays (the bind pose read through TEX7 included, the
+807013b1e Vulkan crash), logging `gx: vertex array overrun:` once per array. A texture coordinate no
+texgen reads is not checked: retail's packed-lightmap draws index TEX0 past its array that way, which
+nothing reads. It costs about 1 ns per
+vertex per indexed attribute, so it is off in release builds unless set (`0` turns it off), and on in
+builds without `NDEBUG`.
+
+    python3 tools/mpsoak.py --evidence-dir build/s-release-<date>/soak
+    python3 tools/mpsoak.py --dry-run --evidence-dir /tmp/soak-dry    # the commands only, no game
+
+One game per (mode, toggles), `soak-<mode>-<toggles>`, started with `--turbo`. Each room is one
+`mprig shot` that warps into it (`shots` starts and stops a game of its own, so it cannot share one
+process across two MSAA values). Screenshots land in `<evidence>/<mode>-<toggles>-msaa<N>/<NN>-<room>.png`;
+`summary.tsv` has a row per (mode, toggles, msaa, room) with `ok`, `warn` or `FAIL` and the first
+matching log line, and the exit status is 1 when any row FAILs.
+
+A room FAILs on `port: crashed:`, `WebGPU error`, `Device lost`, `gx: vertex array overrun:`, an aurora
+`[fatal]` line (desktop aurora logs `fmt`'s `[level] [module] message`, so `Log.fatal`/`FATAL` starts
+`[fatal]`) and on the game process going away; `not supported; skipped` lines are `warn`. After a death
+it writes `mprig crash <run>` to `<evidence>/<mode>-<toggles>-msaa<N>-<room>-crash.txt`, restarts the run
+(`--replace`) and carries on with the next room. It stops its own runs by exact name at exit (`--keep`
+leaves them up).
+
+`--rooms` overrides the tour (comma-separated names or `MLVL:MREA`; a name that does not resolve or that
+matches two rooms lists the candidates; `room@<editor id>` also turns to face that object with `look`
+before the shot), `--modes`/`--toggles`/`--msaa` narrow the matrix, and `--build` / `--disc` go to
+`mprig start`. The default tour is 12 rooms across all seven worlds: Exterior Docking Hangar, Tallon
+Canyon, Root Cave, both ends of the Tallon Overworld <-> Magmoor elevator, Phendrana Shorelines, Main
+Plaza, Main Quarry, Sunchamber, Hive Totem, Crater Entry Point, and the Frigate's Reactor Core. Tallon
+Canyon and the Magmoor elevator room face their water and lava: a fog volume only copies depth while it
+is on screen, and a spawn view that misses it hid issue #200 (an `@id` tour entry reproduces it on the
+build before the fix). Keep rooms whose warp lands on a save station out of the tour: the save prompt
+pauses the game and every later warp fails as "not ticking" (Landing Site does this). The full matrix
+takes a few minutes: the warps are the cost (~2 s in a cached world, ~10 s into a Frigate room).
+
 ## Shaders
 
 From "this pixel looks wrong" to the material, its PBR record and the generated WGSL:

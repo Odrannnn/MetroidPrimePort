@@ -169,8 +169,11 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
    Every release ships all nine assets (AppImage and tarball, each x86_64 and
    aarch64, Flatpak, Windows x86_64 and arm64, macOS, APK); start all the builds
    together.
-3. Check each artefact's version string, then `git tag -a vX` and `git push user vX`.
-4. `gh release create vX --notes-file …` with every asset passed explicitly, and
+3. Crash soak the release commit before tagging:
+   `python3 tools/mpsoak.py --evidence-dir build/s-release-<date>/soak`; every
+   row in `summary.tsv` must be `ok` (a `warn` only after reading it), exit 0.
+4. Check each artefact's version string, then `git tag -a vX` and `git push user vX`.
+5. `gh release create vX --notes-file …` with every asset passed explicitly, and
    confirm with `gh release view vX --json assets`. Base the notes on the
    previous release's.
 

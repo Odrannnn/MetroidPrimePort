@@ -46,6 +46,7 @@ Their output is committed, so a build does not need them or their inputs.
 | Script | What it does |
 |---|---|
 | `mprig.py` | Isolated headless runs of the port (Xvfb + game + debug console); see `docs/DEBUGGING.md` |
+| `mpsoak.py` | Pre-release crash soak over the mprig rig (Remastered/retail x validation x MSAA); see `docs/DEBUGGING.md` |
 | `mpcon.py` | Client for the debug command console (`MP_CONSOLE`) |
 | `rando_seed.py` | Creates item-randomizer seed JSON from location-dump logs |
 | `pbr_shots.py` | A/B contact sheets of models under the PBR reflection probe (smoke builds) |
