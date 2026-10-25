@@ -481,8 +481,21 @@ void TestRoomEffects() {
   REQUIRE_MSG(file.overrides.size() == 1, "one override");
   const PortRoomEffects::Override& over = file.overrides[0];
   CHECK(over.id == 0x041A0015 && over.part == (0xFE000000u | SwapUuid(Guid(103).data())[0]));
+  CHECK(over.hasPlacement && over.pos[0] == 10.f && over.pos[1] == 20.f && over.pos[2] == 30.f);
   REQUIRE(over.vars.size() == 1);
   CHECK(over.vars[0].real == 0.65f && std::equal(over.vars[0].guid.begin(), over.vars[0].guid.end(), Guid(200).begin()));
+
+  // A carried retail fallback above kept its placement. Once io.matched proves
+  // the PART was converted from this GENP, import placement even without variables.
+  io.matched = [](const std::array<uint8_t, 16>& genp) -> std::vector<uint32_t> {
+    return genp == SwapUuid(Guid(101).data()) ? std::vector<uint32_t>{kOwnRetailPart} : std::vector<uint32_t>{};
+  };
+  WriteRoomEffects("room", p.room, area.mrea, area, scripts, io);
+  REQUIRE_MSG(PortRoomEffects::Parse(written.begin()->second, file, error), error.c_str());
+  REQUIRE(file.overrides.size() == 2);
+  CHECK(file.overrides[0].id == 0x041A0014 && file.overrides[0].vars.empty());
+  CHECK(file.overrides[0].hasPlacement && file.overrides[0].pos[0] == 10.f &&
+        file.overrides[0].pos[1] == 20.f && file.overrides[0].pos[2] == 30.f);
 
   // A retail object already in the add-on range: nothing written.
   written.clear();

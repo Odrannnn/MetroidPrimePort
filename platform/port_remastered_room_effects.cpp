@@ -829,21 +829,22 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       // the one the mod gives the object's own retail id (its own of the GENP's, as big and
       // small spit share one).
       const uint32_t own = o.props.size() >= 40 ? ReadBE32(&o.props[36]) : 0;
-      if (std::find(paired.begin(), paired.end(), own) != paired.end()) {
+      const bool replacedPart = std::find(paired.begin(), paired.end(), own) != paired.end();
+      if (replacedPart) {
         part = own;
       }
       const bool ownPart = part != 0 && (part >> 24) == 0xFE && part != own;
-      // The flamejet GENP emits along source +Y (port +Z), unlike retail's PART.
-      // CEffectMP1GOC::Create (0xd9e460) passes its entity's placement directly.
-      // Keeping the retail rotation after replacing its PART turns the jet sideways.
-      const bool flamejet = own == 0x3A617BEB && part == own &&
-          UuidText(room.Bytes(genp->second)) == "6916272d-4272-4ec4-a0b2-a4f9b3160ef6";
-      if (!flamejet && !ownPart && (part == 0 || part != own || vars.empty())) {
+      // CEffectMP1GOC::Create (0xd9e460) passes every entity's own placement.
+      // Apply it whenever we have its converted GENP: either a synthetic PART,
+      // or a paired replacement whose presence io.matched verified. A carried
+      // retail-id fallback from io.effect is not proof of converted source data.
+      const bool sourcePlacement = replacedPart || ownPart;
+      if (!sourcePlacement && (part == 0 || part != own || vars.empty())) {
         ++keptOwn;
         continue;
       }
       PortRoomEffects::Override over{o.id, part, std::move(vars)};
-      if (flamejet) {
+      if (sourcePlacement) {
         PortRoomEffects::Effect placement;
         std::vector<PortRoomEffects::Variable> placementVars;
         Vec3 world;
