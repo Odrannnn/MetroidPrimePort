@@ -17,7 +17,8 @@ function(_aurora_dawn_set_platform_backends)
     set(DAWN_ENABLE_D3D11 ON CACHE INTERNAL "")
     set(DAWN_ENABLE_VULKAN ON CACHE INTERNAL "")
     set(DAWN_ENABLE_METAL OFF CACHE INTERNAL "")
-    set(DAWN_ENABLE_DESKTOP_GL OFF CACHE INTERNAL "")
+    # Desktop GL through the fork's EGL-on-WGL shim (Odrannnn/dawn, branch mpp).
+    set(DAWN_ENABLE_DESKTOP_GL ON CACHE INTERNAL "")
     set(DAWN_ENABLE_OPENGLES OFF CACHE INTERNAL "")
     set(DAWN_ENABLE_NULL ON CACHE INTERNAL "")
   elseif (APPLE)
@@ -134,7 +135,7 @@ if (_aurora_dawn_provider STREQUAL "vendor")
 
     include(FetchContent)
     FetchContent_Declare(dawn
-      URL "https://github.com/encounter/dawn/archive/${AURORA_DAWN_REF}.tar.gz"
+      URL "https://github.com/Odrannnn/dawn/archive/${AURORA_DAWN_REF}.tar.gz"
       DOWNLOAD_EXTRACT_TIMESTAMP FALSE
       EXCLUDE_FROM_ALL
     )
@@ -183,7 +184,7 @@ elseif (_aurora_dawn_provider STREQUAL "package")
         " with CMAKE_OSX_ARCHITECTURES='${CMAKE_OSX_ARCHITECTURES}'.")
     endif ()
     set(AURORA_DAWN_PACKAGE_URL
-      "https://github.com/encounter/dawn/releases/download/${AURORA_DAWN_VERSION}/dawn-${_dawn_system}-${_dawn_arch}.tar.gz")
+      "https://github.com/Odrannnn/dawn/releases/download/${AURORA_DAWN_VERSION}/dawn-${_dawn_system}-${_dawn_arch}.tar.gz")
     aurora_url_hash(_dawn_url_hash dawn "${AURORA_DAWN_VERSION}_${_dawn_system}-${_dawn_arch}" "${AURORA_DAWN_PACKAGE_SHA256}")
   else ()
     aurora_url_hash(_dawn_url_hash dawn "custom" "${AURORA_DAWN_PACKAGE_SHA256}")

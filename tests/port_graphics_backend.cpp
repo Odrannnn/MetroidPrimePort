@@ -132,9 +132,9 @@ int main() {
     CheckRoundTrip(backend);
   }
 #if defined(_WIN32)
-  CHECK_MSG(choices.size() == 4, "windows offers four choices");
-  CHECK_MSG(choices[1] == kD3D12 && choices[2] == kVulkan && choices[3] == kD3D11,
-            "windows offers D3D12, Vulkan, D3D11");
+  CHECK_MSG(choices.size() == 5, "windows offers five choices");
+  CHECK_MSG(choices[1] == kD3D12 && choices[2] == kVulkan && choices[3] == kD3D11 && choices[4] == kOpenGL,
+            "windows offers D3D12, Vulkan, D3D11, OpenGL");
 #elif defined(__linux__) && !defined(__ANDROID__)
   CHECK_MSG(choices.size() == 3, "linux offers three choices");
   CHECK_MSG(choices[1] == kVulkan && choices[2] == kOpenGL, "linux offers Vulkan, then OpenGL");

@@ -545,10 +545,11 @@
 - Renderer (Video > Compatibility, **Windows and desktop Linux**, persisted as
   `graphics_backend`: `auto`, `d3d12`, `vulkan`, `d3d11` or `opengl`, default
   `auto`, issue #135): which graphics API the port asks Aurora for. Only this
-  platform's choices are offered: Windows lists Auto, Direct3D 12, Vulkan and
-  Direct3D 11; desktop Linux lists Auto, Vulkan and OpenGL (Dawn's desktop GL,
-  4.4 or newer, for GPUs whose Vulkan driver is missing or draws wrong; Windows
-  has no WGL backend yet). `auto` asks for nothing in particular, so Aurora takes
+  platform's choices are offered: Windows lists Auto, Direct3D 12, Vulkan,
+  Direct3D 11 and OpenGL; desktop Linux lists Auto, Vulkan and OpenGL. OpenGL
+  is Dawn's desktop GL, 4.4 or newer, through EGL on Linux and WGL on Windows,
+  for GPUs whose other drivers are missing or draw wrong; Windows support is
+  new and less tested. `auto` asks for nothing in particular, so Aurora takes
   its own order (Direct3D 12, then Vulkan, then Direct3D 11 on Windows; Vulkan,
   then OpenGL ES on Linux); an explicit choice is tried first, and if the driver
   can't start it, that run falls back to the same order. The setting is left as it
@@ -562,8 +563,8 @@
   describes what the override asked for, not what the file says. Read at window
   creation, so a change needs a restart: the page shows "Restart to apply" while
   the saved selection differs from the one this run started with, and selecting
-  the startup choice again clears it. On desktop Linux OpenGL starts through a
-  driver that can crash outright (Mesa does); an `opengl_starting` marker in the
+  the startup choice again clears it. OpenGL starts through a driver that can
+  crash outright (Mesa does); an `opengl_starting` marker in the
   user folder outlives such a crash and the next start logs "the last start on
   OpenGL did not finish", sets the setting back to Auto and uses Vulkan. OpenGL ES
   still has its own toggle on Linux (`opengles`), and it wins over this setting.

@@ -17,14 +17,15 @@
 namespace PortGraphicsBackend {
 
 // The choices this build offers, in the order the F1 Video page lists them. An API
-// with no Aurora backend here is not offered (no WGL on Windows, no Direct3D outside
-// it, OpenGL only on desktop Linux for now); Android keeps its `opengles` toggle and
-// offers nothing from this setting.
+// with no Aurora backend here is not offered (no Direct3D outside Windows; OpenGL on
+// desktop Linux through EGL, on Windows through Dawn's EGL-on-WGL shim); Android keeps
+// its `opengles` toggle and offers nothing from this setting.
 inline std::span<const PortDebug::EGraphicsBackend> Choices() {
 #if defined(_WIN32)
   static constexpr PortDebug::EGraphicsBackend kChoices[] = {
       PortDebug::kGraphicsBackend_Auto, PortDebug::kGraphicsBackend_D3D12,
-      PortDebug::kGraphicsBackend_Vulkan, PortDebug::kGraphicsBackend_D3D11};
+      PortDebug::kGraphicsBackend_Vulkan, PortDebug::kGraphicsBackend_D3D11,
+      PortDebug::kGraphicsBackend_OpenGL};
 #elif defined(__linux__) && !defined(__ANDROID__)
   static constexpr PortDebug::EGraphicsBackend kChoices[] = {
       PortDebug::kGraphicsBackend_Auto, PortDebug::kGraphicsBackend_Vulkan,
