@@ -68,16 +68,19 @@ constexpr ClipNames kStop{"B_intorreadyfromwalk_samus", "B_rready_samus"};
 // Each plays by the ground covered, backward when the body moves the other way; the walk back
 // plays forward as the body moves back.
 enum LocoSlot { kWalkBack, kSlowWalk, kWalk, kSlowRun, kFastRun, kLocoSlots };
+// How fast the legs turn to a new strafe direction (radians per second): a quarter turn in 0.2 s.
+constexpr float kLegTurnSpeed = 8.f;
 constexpr ClipNames kLoco[kLocoSlots] = {{"Phazon_Struggle_walkback", nullptr},
                                          {"B_slowwalk_samus", "B_walk_samus"},
                                          {"B_walk_samus", "B_slowwalk_samus"},
                                          {"B_slowrunloop_samus", "B_walk_samus"},
                                          {"Thardus_fastrun_samus", nullptr}};
 constexpr float kLocoDir[kLocoSlots] = {-1.f, 1.f, 1.f, 1.f, 1.f};
-// The walk clips by speed, slowest first (LocoWeights): forward, and back (no run back: the walk
-// back, then the walk and run reversed).
+// The walk clips by speed, slowest first (LocoWeights): forward, and back (the walk back alone,
+// played as fast as the ground goes: there is no shipped run back; the forward ones reversed
+// without it).
 constexpr LocoSlot kForwardTiers[] = {kSlowWalk, kWalk, kSlowRun, kFastRun};
-constexpr LocoSlot kBackTiers[] = {kWalkBack, kWalk, kSlowRun};
+constexpr LocoSlot kBackTiers[] = {kWalkBack};
 // The clips played once (or held) for a stance or over the upper body, as phases of the clip:
 // from, to (held there once reached). The jump is the run-and-jump's push-off into its tuck; the
 // fall the crater jump's drop; the landing the hangar landing's crouch and rise (after it she
@@ -155,6 +158,7 @@ struct State {
   bool upper[kSegs] = {};     // Spine_1 and everything under it: what the aim clips pose
   CSegId hips = CSegId::Invalid(); // the top posed bone, which carries a clip's height
   float hipsHeight = 0.f;          // its height in the skeleton
+  CSegId spine = CSegId::Invalid(); // Spine_1, the upper body's top bone
   int idle = -1;
   int stop = -1;
   Clip loco[kLocoSlots];
@@ -176,6 +180,8 @@ struct State {
   float stanceWeight[int(Stance::Count)] = {1.f};
   float locoWeight[kLocoSlots] = {};
   float stride = 0.f;     // where the feet are, in loops; each walk clip is at stride + its peak
+  bool legsBack = false;  // the legs walk back (LegsBackward)
+  float legYaw = 0.f;     // the legs' turn from the facing (LegYaw), eased
   float clock = 0.f;      // seconds, for the clips that play by time (ready, aim)
   float stanceTime[int(Stance::Count)] = {}; // seconds since each stance was last entered
   float airTime = 0.f;    // seconds off the ground
@@ -828,6 +834,18 @@ void PoseBody(CAnimData& data) {
       }
     }
   }
+  // Strafing: the hips turn the legs the way they walk (about the model's up), and Spine_1
+  // turns back, so the upper body keeps its orientation in the model.
+  if (std::fabs(s.legYaw) > 1e-4f && s.hips != CSegId::Invalid() && s.spine != CSegId::Invalid()) {
+    ModelRotations(data, sAcc, sModel);
+    const CQuaternion turn = CQuaternion::ZRotation(CRelAngle::FromRadians(s.legYaw));
+    const int h = s.hips.val();
+    const int sp = s.spine.val();
+    const CQuaternion hipsModel = sModel.rot[h];
+    const CQuaternion spineParent = sModel.rot[sp] * sAcc.rot[sp].BuildInverted();
+    sAcc.rot[h] = sAcc.rot[h] * hipsModel.BuildInverted() * turn * hipsModel;
+    sAcc.rot[sp] = spineParent.BuildInverted() * turn.BuildInverted() * sModel.rot[sp];
+  }
   CHierarchyPoseBuilder& pb = data.PoseBuilder();
   for (const CSegId& seg : s.segs) {
     pb.Insert(seg, sAcc.rot[seg.val()]);
@@ -869,6 +887,7 @@ void Build(CStateManager& mgr) {
       s.upper[seg.val()] = spine != CSegId::Invalid() && (seg == spine || IsAncestor(layout, spine, seg));
     }
   }
+  s.spine = spine;
   s.hips = CSegId::Invalid();
   for (const CSegId& seg : s.segs) {
     const CSegId parent = layout.GetOriginalParent(seg);
@@ -995,11 +1014,13 @@ void Update(CStateManager& mgr, float dt) {
   }
   const bool scanning = player.GetPlayerScanState() == CPlayer::kSS_Scanning;
   s.scanWeight = Approach(s.scanWeight, scanning ? 1.f : 0.f, dt / kBlendSeconds);
-  // Walking, the speed picks the walk clips' weights (kept while the walk fades out) from the
-  // tiers for the way the body goes and the floor, and the feet move a loop for each stride of
-  // ground covered, backward when walking backward: the clips play at the speed the body
-  // moves, in step with each other.
+  // Walking, the legs turn the way the body goes (strafing: LegYaw) and the ground speed picks
+  // the walk clips' weights (kept while the walk fades out) from the tiers for the way they
+  // walk, and the feet move a loop for each stride of ground covered: the clips play at the
+  // speed the body moves, in step with each other.
+  const float speed = std::sqrt(fwd * fwd + side * side);
   if (stance == Stance::Loco) {
+    s.legsBack = LegsBackward(fwd, side, s.legsBack);
     LocoSlot tier[4];
     int n = 0;
     const auto add = [&](const LocoSlot* slots, int count) {
@@ -1009,9 +1030,10 @@ void Update(CStateManager& mgr, float dt) {
         }
       }
     };
-    if (fwd < 0.f) {
+    if (s.legsBack) {
       add(kBackTiers, int(std::size(kBackTiers)));
-    } else {
+    }
+    if (n == 0) {
       add(kForwardTiers, int(std::size(kForwardTiers)));
     }
     float speeds[4] = {};
@@ -1019,18 +1041,20 @@ void Update(CStateManager& mgr, float dt) {
     for (int i = 0; i < n; ++i) {
       speeds[i] = s.locoSpeed[tier[i]];
     }
-    LocoWeights(std::fabs(fwd), speeds, n, w);
+    LocoWeights(speed, speeds, n, w);
     std::fill(std::begin(s.locoWeight), std::end(s.locoWeight), 0.f);
     for (int i = 0; i < n; ++i) {
       s.locoWeight[tier[i]] = w[i];
     }
   }
+  const float legYaw = stance == Stance::Loco ? LegYaw(fwd, side, s.legsBack) : 0.f;
+  s.legYaw = s.legYaw + std::clamp(legYaw - s.legYaw, -kLegTurnSpeed * dt, kLegTurnSpeed * dt);
   float stride = 0.f;
   for (int i = 0; i < kLocoSlots; ++i) {
     stride += s.locoWeight[i] * s.locoStride[i];
   }
   if (stride > 0.1f) {
-    s.stride = Wrap(s.stride + dt * fwd / stride);
+    s.stride = Wrap(s.stride + dt * (s.legsBack ? -speed : speed) / stride);
   }
 
   // The aim point is the one the shots head for (CPlayerGun::PortShotFromThirdPersonCannon).
@@ -1198,6 +1222,9 @@ std::string DescribeFeet() {
                 kStanceNames[int(s.stance)], s.airTime, s.flinchTime, s.scanWeight,
                 int(s.jump.Valid()), int(s.fall.Valid()), int(s.land.Valid()), int(s.flinch.Valid()),
                 int(s.scan.Valid()));
+  out += line;
+  std::snprintf(line, sizeof(line), "legs %s yaw %.1f deg\n", s.legsBack ? "back" : "forward",
+                s.legYaw * 57.29578f);
   out += line;
   for (int i = 0; i < s.changeCount; ++i) {
     const auto& c = s.changes[i];

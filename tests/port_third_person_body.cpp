@@ -12,12 +12,28 @@ bool Near(float a, float b) { return std::fabs(a - b) < 1e-3f; }
 } // namespace
 
 int main() {
-  // Stances: standing, walking, holding the ready pose strafing.
+  // Stances: standing, walking any way.
   CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Idle, true, false) == Stance::Idle);
   CHECK(ChooseStance(0.2f, 0.1f, true, 0.f, Stance::Idle, true, false) == Stance::Idle);
   CHECK(ChooseStance(5.f, 0.f, true, 0.f, Stance::Idle, true, false) == Stance::Loco);
   CHECK(ChooseStance(-5.f, 0.f, true, 0.f, Stance::Idle, true, false) == Stance::Loco);
-  CHECK(ChooseStance(0.4f, 5.f, true, 0.f, Stance::Loco, true, false) == Stance::Idle); // strafing
+  CHECK(ChooseStance(0.4f, 5.f, true, 0.f, Stance::Idle, true, false) == Stance::Loco); // strafing
+
+  // Strafing legs: forward they turn toward the way the body goes (+ left), backward toward
+  // the way it came from; at the side they keep walking the way they were, swapping only
+  // kLegFlip past it.
+  constexpr float kQuarter = 1.5707963f;
+  CHECK(Near(LegYaw(5.f, 0.f, false), 0.f));
+  CHECK(Near(LegYaw(0.f, 5.f, false), -kQuarter)); // right
+  CHECK(Near(LegYaw(0.f, -5.f, false), kQuarter)); // left
+  CHECK(Near(LegYaw(-5.f, 0.f, true), 0.f));
+  CHECK(Near(LegYaw(-5.f, 5.f, true), kQuarter / 2.f)); // back right: legs to the front left
+  CHECK(!LegsBackward(0.f, 5.f, false));
+  CHECK(LegsBackward(0.f, 5.f, true));
+  CHECK(!LegsBackward(-0.5f, 5.f, false));
+  CHECK(LegsBackward(-2.f, 5.f, false));
+  CHECK(!LegsBackward(2.f, 5.f, true));
+  CHECK(LegsBackward(-5.f, 0.f, false));
   // Stopping from a walk plays the stop clip to its end, unless the body moves again.
   CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Loco, true, false) == Stance::Stop);
   CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Stop, false, false) == Stance::Stop);

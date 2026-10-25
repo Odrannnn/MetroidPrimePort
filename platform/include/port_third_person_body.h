@@ -70,10 +70,20 @@ inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Sta
     }
     return Stance::Idle;
   }
-  if (std::fabs(side) > std::fabs(fwd) || std::fabs(fwd) < kStandSpeed) {
-    return Stance::Idle;
-  }
   return Stance::Loco;
+}
+
+// Strafing: the legs walk the way the body goes, turned from the facing by the angle LegYaw
+// gives (radians, + to the left, at most a quarter turn past the side), the upper body turned
+// back to the facing. Backward (back, kept within kLegFlip of the side so the legs don't swap
+// over at it) they walk back, the way the body came from.
+inline constexpr float kLegFlip = 0.2f;
+inline bool LegsBackward(float fwd, float side, bool backward) {
+  const float speed = std::sqrt(fwd * fwd + side * side);
+  return backward ? fwd < kLegFlip * speed : fwd < -kLegFlip * speed;
+}
+inline float LegYaw(float fwd, float side, bool backward) {
+  return backward ? std::atan2(side, -fwd) : std::atan2(-side, fwd);
 }
 
 // The walk clips' weights at a ground speed: the two whose own speeds (speeds[], ascending)
