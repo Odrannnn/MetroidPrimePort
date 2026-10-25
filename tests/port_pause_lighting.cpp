@@ -30,5 +30,22 @@ int main() {
   CHECK(!active);
   { Scope outer(active); CHECK(active); { Scope inner(active, false); CHECK(!active); } CHECK(active); }
   CHECK(!active);
+  std::vector<int> order;
+  {
+    TextPass text(true);
+    TextPass::Queue([&] { CHECK(!TextPass::Deferring()); order.push_back(3); });
+    TextPass::Queue([&] { order.push_back(4); });
+    order.push_back(1); // post
+    order.push_back(2); // helmet
+    CHECK_EQ(order.size(), 2u);
+    { TextPass retail(false); CHECK(!TextPass::Deferring()); }
+    CHECK(TextPass::Deferring());
+    text.Flush();
+    CHECK(!TextPass::Deferring());
+    CHECK((order == std::vector<int>{1, 2, 3, 4}));
+    text.Flush();
+    CHECK_EQ(order.size(), 4u); // replay exactly once
+  }
+  CHECK(!TextPass::Deferring());
   return PORT_TEST_RESULT();
 }

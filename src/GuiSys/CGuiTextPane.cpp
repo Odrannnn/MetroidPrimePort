@@ -7,6 +7,33 @@
 
 #ifdef TARGET_PC
 #include "port_pointer.h"
+#include "port_pause_lighting.h"
+#include <dolphin/gx.h>
+
+namespace {
+// Capture the pane's camera, not the doll/helmet camera current at replay.
+// Widget hit testing stays in the original traversal, while text/image draws
+// replay with their original alpha, blend flags and model transform.
+struct TextViewState {
+  CGraphics::CProjectionState projection = CGraphics::GetProjectionState();
+  CTransform4f view = CGraphics::GetViewMatrix();
+  CTransform4f model = CGraphics::GetModelMatrix();
+  CViewport viewport = CGraphics::GetViewport();
+  float near = CGraphics::GetDepthNear(), far = CGraphics::GetDepthFar();
+  u32 left, top, width, height;
+  TextViewState() { GXGetScissor(&left, &top, &width, &height); }
+  void Apply() const {
+    CGraphics::SetViewport(viewport.mLeft,
+                           CGraphics::GetRenderMode().efbHeight - viewport.mTop - viewport.mHeight,
+                           viewport.mWidth, viewport.mHeight);
+    CGraphics::SetDepthRange(near, far);
+    CGraphics::SetProjectionState(projection);
+    CGraphics::SetViewPointMatrix(view);
+    CGraphics::SetModelMatrix(model);
+    GXSetScissor(left, top, width, height);
+  }
+};
+} // namespace
 #endif
 
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
@@ -125,11 +152,20 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
     }
   }
 #endif
+  const CColor geomCol = GetModifiedColor().WithAlphaModulatedBy(parms.GetAlpha());
+  const EGuiModelDrawFlags flags = GetDrawFlags();
+  const bool depthRead = GetIsAlwaysDepthRead(), depthWrite = GetIsAlwaysDepthWrite();
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
-  CColor geomCol = GetModifiedColor().WithAlphaModulatedBy(parms.GetAlpha());
-  CGraphics::SetDepthWriteMode(GetIsAlwaysDepthRead(), kE_LEqual, GetIsAlwaysDepthWrite());
+  const bool drawShadow = xd00_drawShadow;
+#else
+  const bool drawShadow = false;
+#endif
+#ifdef TARGET_PC
+  const auto render = [this, model, geomCol, flags, depthRead, depthWrite, drawShadow]() {
+#endif
+  CGraphics::SetDepthWriteMode(depthRead, kE_LEqual, depthWrite);
 
-  if (xd00_drawShadow) {
+  if (drawShadow) {
     CGraphics::SetModelMatrix(model * CTransform4f::Translate(2.f, 0.f, -2.f));
     xd4_textSupport.SetGeometryColor(
         CColor(static_cast< uchar >(0), static_cast< uchar >(0), static_cast< uchar >(0))
@@ -141,16 +177,8 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
   CGraphics::SetModelMatrix(model);
   CGuiTextSupport& text = xd4_textSupport;
   text.SetGeometryColor(geomCol);
-#else
-  CGraphics::SetModelMatrix(model);
 
-  CColor geomCol = GetModifiedColor().WithAlphaModulatedBy(parms.GetAlpha());
-  CGuiTextSupport& text = xd4_textSupport;
-  text.SetGeometryColor(geomCol);
-  CGraphics::SetDepthWriteMode(GetIsAlwaysDepthRead(), kE_LEqual, GetIsAlwaysDepthWrite());
-#endif
-
-  switch (GetDrawFlags()) {
+  switch (flags) {
   case kGMDF_Shadeless:
   case kGMDF_Opaque:
     CGraphics::SetBlendMode(kBM_Blend, kBF_One, kBF_Zero, kLO_Clear);
@@ -176,6 +204,20 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
     break;
   }
   }
+#ifdef TARGET_PC
+  };
+  if (PortPauseLighting::TextPass::Deferring()) {
+    const TextViewState state;
+    PortPauseLighting::TextPass::Queue([state, render]() {
+      const TextViewState restore;
+      state.Apply();
+      render();
+      restore.Apply();
+    });
+  } else {
+    render();
+  }
+#endif
 }
 
 void CGuiTextPane::ScaleDimensions(const CVector3f&) {}

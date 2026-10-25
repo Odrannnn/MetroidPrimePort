@@ -2,6 +2,9 @@
 
 #include <cmath>
 #include <cstring>
+#include <functional>
+#include <utility>
+#include <vector>
 
 // UI_HUDMPR1.ROOM inventory lighting. These are lighting parameters, not textures.
 // Scene consumers: 0xfa1428; direction: 0x2e0744 (entity local +Z).
@@ -9,6 +12,29 @@ namespace PortPauseLighting {
 inline bool active = false;
 inline bool doll = false;
 inline bool phazon = false;
+
+// Remastered queues CGuiTextPane to StoreVisorHUDCommand (0xbde370),
+// consumed after pause post and helmet by RenderHUD (0xfa0dac).
+class TextPass {
+  inline static TextPass* current = nullptr;
+  TextPass* previous;
+  std::vector<std::function<void()>> draws;
+public:
+  explicit TextPass(bool enabled) : previous(current) { current = enabled ? this : nullptr; }
+  ~TextPass() { current = previous; }
+  TextPass(const TextPass&) = delete;
+  TextPass& operator=(const TextPass&) = delete;
+  static bool Deferring() { return current != nullptr; }
+  static void Queue(std::function<void()> draw) { current->draws.push_back(std::move(draw)); }
+  void Flush() {
+    // End collection as well as preventing recursive deferral: later save/UI
+    // draws in this frame must render immediately after this one-shot flush.
+    current = nullptr;
+    auto pending = std::move(draws);
+    draws.clear();
+    for (const auto& draw : pending) draw();
+  }
+};
 
 struct Scope {
   bool previous;

@@ -445,10 +445,13 @@ void CInGameGuiManager::Draw(const CStateManager& mgr) const {
   }
 
   bool pauseDrawn = false;
-  {
 #ifdef TARGET_PC
   const bool ui = !x48_pauseScreen.null() && x48_pauseScreen->PortDrawsInventory() &&
                   PortRoomEnv::Enabled() && PortMods::RoomEnvLoaded();
+  PortPauseLighting::TextPass pauseText(ui);
+#endif
+  {
+#ifdef TARGET_PC
   float previousTone[3][4];
   const bool hadTone = PortRoomEnv::Tone(previousTone);
   // RenderPauseScreenElements (0xfa1428) selects the HDR target BEFORE the
@@ -536,6 +539,12 @@ void CInGameGuiManager::Draw(const CStateManager& mgr) const {
     const float cameraOffset = x48_pauseScreen.null() ? 0.f : x48_pauseScreen->GetHelmetCamYOff();
     x34_samusHud->DrawHelmet(mgr, cameraOffset);
   }
+#ifdef TARGET_PC
+  // CGuiTextPane::Draw -> QueueRender_HUD -> StoreVisorHUDCommand in MPR.
+  // RenderHUD consumes that list after RenderPauseScreenElements (including
+  // its helmet): text and embedded prompt images must not feed UI bloom.
+  pauseText.Flush();
+#endif
   if (!x4c_saveUI.null()) {
     x4c_saveUI->Draw();
   }
