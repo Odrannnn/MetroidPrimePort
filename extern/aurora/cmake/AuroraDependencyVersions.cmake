@@ -13,10 +13,10 @@ macro(_aurora_dependency_version name value doc)
 endmacro()
 
 # Dependency versions
-_aurora_dependency_version(AURORA_DAWN_VERSION "v20261025.204802" "Dawn prebuilt version tag (https://github.com/Odrannnn/dawn/releases, branch mpp)"
-        "v20260523.201736" "v20260603.191052" "v20260618.032059" "v20260807.225922" "v20261025.182847") # Previous versions
-_aurora_dependency_version(AURORA_DAWN_REF "f3a9fa72535b5a333766bafcd48187bc4c055b2b" "Dawn commit ref (https://github.com/Odrannnn/dawn)"
-        "9aa45f938d4b36626722bbfdc2f18447179337e6" "13abc3bc8ea2d3c2050f9e77a12d012108ceee24" "266c1cf8de969a364afa4fa49311631fc99a881e" "1155e0ed531126f33a1279afa029349651ca1c93" "738a656da3a19d51a1d553814febebe9468a2757") # Previous versions
+_aurora_dependency_version(AURORA_DAWN_VERSION "v20261025.224144" "Dawn prebuilt version tag (https://github.com/Odrannnn/dawn/releases, branch mpp)"
+        "v20260523.201736" "v20260603.191052" "v20260618.032059" "v20260807.225922" "v20261025.182847" "v20261025.204802") # Previous versions
+_aurora_dependency_version(AURORA_DAWN_REF "a04c63840d530f771de754a6991da392e109e0a6" "Dawn commit ref (https://github.com/Odrannnn/dawn)"
+        "9aa45f938d4b36626722bbfdc2f18447179337e6" "13abc3bc8ea2d3c2050f9e77a12d012108ceee24" "266c1cf8de969a364afa4fa49311631fc99a881e" "1155e0ed531126f33a1279afa029349651ca1c93" "738a656da3a19d51a1d553814febebe9468a2757" "f3a9fa72535b5a333766bafcd48187bc4c055b2b") # Previous versions
 _aurora_dependency_version(AURORA_SDL3_VERSION "3.4.10" "SDL3 prebuilt version tag (https://github.com/libsdl-org/SDL/releases)")
 _aurora_dependency_version(AURORA_SDL3_REF "refs/tags/release-3.4.10" "SDL3 commit ref (https://github.com/libsdl-org/SDL)")
 _aurora_dependency_version(AURORA_NOD_VERSION "v2.0.0-alpha.12" "nod version tag (https://github.com/encounter/nod/releases)"
@@ -26,14 +26,14 @@ _aurora_dependency_version(AURORA_NOD_VERSION "v2.0.0-alpha.12" "nod version tag
 # changed or replaced archive fails the configure instead of being linked in.
 # A version without an entry here downloads unverified, with a warning; a custom
 # package URL can name its own digest with AURORA_<DEP>_PACKAGE_SHA256.
-set(_aurora_dawn_sha256_v20261025.204802_windows-amd64 e6da9c1022d58ea696cbd5e7682ab5d72f969bfd01e299187f8632ca9bc99ee2)
-set(_aurora_dawn_sha256_v20261025.204802_windows-arm64 9889302008a4f88a19818a70907581a359be9aa678eef954f6eaa2871f3e55f7)
-set(_aurora_dawn_sha256_v20261025.204802_linux-x86_64 1cf637190ae9c69309dc308fdd7f98733ff139506890fb0b8e766d51f1c8df3c)
-set(_aurora_dawn_sha256_v20261025.204802_linux-aarch64 b72ed506fea55dbffa40fae4843beaeaceb6b819b8e5a8946ce1fc81df86bbe8)
-set(_aurora_dawn_sha256_v20261025.204802_darwin-arm64 6f6e7dfe5e07496ee069398254d85b6ed390f95e09f88dcccc5f6ae021db6573)
-set(_aurora_dawn_sha256_v20261025.204802_darwin-x86_64 ae5205721669cd502e603a5753b9a8603b59044b69137be876c3b673a64d30f1)
-set(_aurora_dawn_sha256_v20261025.204802_ios-arm64 87f92d18619209c14e65ec48b80475422b8798ac73ecccbcc70e3a09d237d0b9)
-set(_aurora_dawn_sha256_v20261025.204802_android-aarch64 3446446833e398ddcf4a85fcfcca99f45bde4af03e8bb4e01d7ba10540a24346)
+set(_aurora_dawn_sha256_v20261025.224144_windows-amd64 d3cd82e16bb36b59a43876378006f60377ac356458165d74c2314a9559413b93)
+set(_aurora_dawn_sha256_v20261025.224144_windows-arm64 1317068fa9ab83d9bb72a241d9a4f5efb5d10c84483bec9eca8cb6d9e1577e78)
+set(_aurora_dawn_sha256_v20261025.224144_linux-x86_64 fd73b2399966e99c3da3383c83de907cbbd423109f4a6b438efe65077ad49a7d)
+set(_aurora_dawn_sha256_v20261025.224144_linux-aarch64 b414a6ef770ebdcd8b44bc7bc1c37773f16575893575c63ebae58af3d1af116a)
+set(_aurora_dawn_sha256_v20261025.224144_darwin-arm64 b824abae06d58119d68a91662d01dcffa511ac87b581d26fe493f23c707cc5f2)
+set(_aurora_dawn_sha256_v20261025.224144_darwin-x86_64 ecc2c98549060f6d99992a1f6c7b04b4532ab4218952e795fdf40a7a04b45ffc)
+set(_aurora_dawn_sha256_v20261025.224144_ios-arm64 68e81bd1753b80cd310d5a72be336571af4c61832a223f46f4ec640b3ebd4536)
+set(_aurora_dawn_sha256_v20261025.224144_android-aarch64 df61176a146806bf47697eafc082c395f11366e064f7c3b4e5260a372f28814d)
 set(_aurora_nod_sha256_v2.0.0-alpha.12_windows-x86_64 c9dfecf8e52066a5222f3cb1cad18d0740c958ce65bf60cb84e780a3856ed881)
 set(_aurora_nod_sha256_v2.0.0-alpha.12_windows-arm64 24f3a5d2aea299415438917d0078b48731af66f95ff17a6cf6a47ea6993b6c0f)
 set(_aurora_nod_sha256_v2.0.0-alpha.12_linux-x86_64 920adb1d2386c8728e0521f8d52809057c04bd46913433a0000ee0931d08d69f)
