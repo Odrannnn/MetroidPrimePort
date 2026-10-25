@@ -419,7 +419,10 @@ elseif(IOS)
     # by side. Nothing signs it here; tools/ios_package.sh finishes the bundle
     # (icons, an ad hoc signature) and players re-sign the .ipa with their own
     # Apple ID when they sideload it.
-    add_executable(metroid_prime_port MACOSX_BUNDLE ${MP_PORT_SOURCES})
+    enable_language(OBJCXX)
+    add_executable(metroid_prime_port MACOSX_BUNDLE ${MP_PORT_SOURCES} platform/port_ios.mm)
+    set_source_files_properties(platform/port_ios.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    target_link_libraries(metroid_prime_port PRIVATE "-framework UIKit" "-framework UniformTypeIdentifiers")
     file(STRINGS android/app/build.gradle _mp_version_line REGEX "versionName \"[^\"]+\"")
     string(REGEX REPLACE ".*versionName \"([^\"]+)\".*" "\\1" MP_IOS_VERSION "${_mp_version_line}")
     set_target_properties(metroid_prime_port PROPERTIES

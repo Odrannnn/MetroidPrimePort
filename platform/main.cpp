@@ -46,6 +46,10 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_hints.h>
+#include <SDL3/SDL_platform_defines.h>
+#if defined(SDL_PLATFORM_IOS)
+#include "port_ios.h"
+#endif
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_messagebox.h>
 #include <SDL3/SDL_properties.h>
@@ -165,11 +169,15 @@ DiscMatch MatchDiscImage(const std::filesystem::path& path) {
 
 // Looks for a disc image next to the executable (and in its immediate
 // subdirectories) so a copied build is self-contained and starts without
-// asking. For an AppImage that is the folder the .AppImage file is in.
+// asking. For an AppImage that is the folder the .AppImage file is in. On iOS,
+// whose app bundle is signed and read-only, it is the Documents folder the
+// Files app shows, so an image copied there starts without asking.
 std::string FindDiscNextToExecutable() {
 #if defined(__ANDROID__)
     const char* rawBase = SDL_GetBasePath();
     const std::string base = rawBase != nullptr ? rawBase : "";
+#elif defined(SDL_PLATFORM_IOS)
+    const std::string base = PortIos::DocumentsFolder();
 #else
     const std::string base = PortPaths::detail::ExecutableFolder();
 #endif
@@ -575,17 +583,20 @@ std::string AskForDiscImage(bool* cancelled = nullptr) {
     SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
     SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING,
                           "Select your Metroid Prime disc image (GameCube, USA v1.00, or PAL: experimental)");
-    SDL_ShowFileDialogWithProperties(
-        SDL_FILEDIALOG_OPENFILE,
-        [](void*, const char* const* files, int) {
-            if (files != nullptr && files[0] != nullptr) {
-                chosen = files[0];
-            }
-            // An empty list is a cancel; a null one is SDL's error.
-            dismissed.store(files != nullptr && files[0] == nullptr);
-            answered.store(true);
-        },
-        nullptr, props);
+    const SDL_DialogFileCallback onAnswer = [](void*, const char* const* files, int) {
+        if (files != nullptr && files[0] != nullptr) {
+            chosen = files[0];
+        }
+        // An empty list is a cancel; a null one is SDL's error.
+        dismissed.store(files != nullptr && files[0] == nullptr);
+        answered.store(true);
+    };
+#if defined(SDL_PLATFORM_IOS)
+    // SDL has no file dialog on iOS.
+    PortIos::ShowDiscPicker(window, onAnswer, nullptr);
+#else
+    SDL_ShowFileDialogWithProperties(SDL_FILEDIALOG_OPENFILE, onAnswer, nullptr, props);
+#endif
     SDL_DestroyProperties(props);
     // Wait for the answer, but not forever: a dialog that never calls back
     // would otherwise hang a scripted or headless run.
@@ -644,7 +655,12 @@ std::string PickDisc() {
         if (!disc.empty() || !cancelled) {
             return disc;
         }
-        if (!AskPickDisc("Metroid Prime: no disc image", std::string("No disc image was picked.\n\n") + SupportedDiscText(),
+        std::string message = std::string("No disc image was picked.\n\n") + SupportedDiscText();
+#if defined(SDL_PLATFORM_IOS)
+        message += "\n\nOr copy the image into On My iPhone (or iPad) > Metroid Prime in the Files app "
+                   "and start the game again.";
+#endif
+        if (!AskPickDisc("Metroid Prime: no disc image", message,
                          "Pick a disc", true)) {
             return {};
         }
