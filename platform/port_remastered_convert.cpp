@@ -570,6 +570,19 @@ struct Converter::State {
 };
 
 void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
+  // NModelDataMP1::is_null_model_id (0xfa4830), called before creating the
+  // static render proxy (0xfa56c0). These are collision/bounds placeholders,
+  // not an invisible shader family. Match the source, including when imported
+  // under a generated room-model id; never suppress its separate X-ray model.
+  std::string sourceId;
+  for (char c : opt.source) {
+    if (c != '-') {
+      sourceId.push_back(c >= 'A' && c <= 'F' ? char(c + ('a' - 'A')) : c);
+    }
+  }
+  const bool nullModel = sourceId == "100000000000f000f00000003801de98" ||
+                         sourceId == "100000000000f000f000000012dbb060" ||
+                         sourceId == "100000000000f000f00000001c0b0bef";
   Retail retail;
   if (opt.standalone) {
     // What retail's own opaque lit world materials carry (measured over every
@@ -2117,6 +2130,15 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
   Pad(secUV);
 
   std::vector<Blob> secs;
+  if (nullModel) {
+    // Retain bounds and vertex data for actor/collision queries, but no draw
+    // surfaces in any material set, mirroring the absent Remastered proxy.
+    surfs.clear();
+    if (opt.vmsh != nullptr) {
+      opt.vmsh->clear();
+    }
+    Log("  null model: no render proxy (" + opt.source + ")");
+  }
   for (size_t si = 0; si < retail.nmat; ++si) {
     Blob b;
     P32(b, uint32_t(setTex[si].size()));

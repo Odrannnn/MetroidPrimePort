@@ -146,7 +146,8 @@ std::vector<uint8_t> RetailModel(uint32_t src, uint32_t dst) {
 }
 
 // Standalone with an empty retail; otherwise against that disc model, as the game imports one.
-bool Convert(const Model& model, std::vector<uint8_t>& cmdl, const std::vector<uint8_t>& retail = {}) {
+bool Convert(const Model& model, std::vector<uint8_t>& cmdl, const std::vector<uint8_t>& retail = {},
+             const std::string& source = {}) {
   ConvertIO io;
   io.texture = [](const ModelUuid&, Image& out, std::string&) {
     out.width = out.height = 4;
@@ -162,6 +163,7 @@ bool Convert(const Model& model, std::vector<uint8_t>& cmdl, const std::vector<u
   ConvertOptions opt;
   opt.standalone = retail.empty();
   opt.retail = 0xABCD1234;
+  opt.source = source;
   opt.skip.clear();
   if (!opt.standalone) {
     io.retail = [&retail, &opt](uint32_t type, uint32_t id, std::vector<uint8_t>& out) {
@@ -228,6 +230,27 @@ bool Factors(const std::vector<uint8_t>& d, std::vector<std::pair<uint32_t, uint
 }
 
 void TestClasses() {
+  // Source identity, not output id or LambertFx, determines null rendering.
+  // The output uses an unrelated generated id, as room-model imports do.
+  const Model nullFixture = BuildModel({{0, 0}});
+  for (const char* source : {"10000000-0000-f000-f000-00003801de98",
+                             "100000000000F000F000000012DBB060",
+                             "10000000-0000-f000-f000-00001c0b0bef",
+                             "10000000-0000-f000-f000-000083dba724"}) {
+    for (bool replacement : {false, true}) {
+      std::vector<uint8_t> out;
+      REQUIRE(Convert(nullFixture, out, replacement ? RetailModel(1, 1) : std::vector<uint8_t>{}, source));
+      const uint32_t sections = Be32(out, 36), sets = Be32(out, 40);
+      size_t at = (44 + 4 * size_t(sections) + 31) & ~size_t(31);
+      for (size_t i = 0; i < sets + 5; ++i) {
+        at += Be32(out, 44 + 4 * i);
+      }
+      REQUIRE(at + 4 <= out.size());
+      const bool xray = std::string(source).find("83dba724") != std::string::npos;
+      CHECK(Be32(out, at) == (xray ? 1u : 0u));
+      CHECK(Be32(out, 12) != Be32(out, 24)); // nonempty bounds survive
+    }
+  }
   std::vector<uint8_t> cmdl;
   if (!Convert(BuildModel({{0, 0}, {0x1, 1}, {0x1, 3}}), cmdl)) {
     return;
