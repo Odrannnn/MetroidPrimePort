@@ -171,6 +171,13 @@ void CPhazonBeam::Fire(const bool underwater, const float dt,
 
     const int iterations = mFireTime > 0.33334f ? 5 : 2;
 
+    // Port: CPhazonBeamMP1::Fire (0xd691f0) loops CGunWeaponMP1::Fire with no seed writes.
+    if (PortRemasteredBeam()) {
+      for (int n = 0; n < iterations; ++n) {
+        CGunWeapon::Fire(underwater, dt, chargeState, xf, mgr, homingTarget, chargeFactor1,
+                         chargeFactor2);
+      }
+    } else {
     uint seed = 0;
     int i = 0;
     for (i = 0, seed = 0; i < iterations; ++i) {
@@ -179,6 +186,7 @@ void CPhazonBeam::Fire(const bool underwater, const float dt,
                        chargeFactor2);
       CProjectileWeapon::SetGlobalSeed(mgr.GetUpdateFrameIndex());
       seed += 1000;
+    }
     }
     mFireTime = 0.f;
     playSound = true;
