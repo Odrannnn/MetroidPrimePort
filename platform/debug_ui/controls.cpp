@@ -444,8 +444,9 @@ void DrawControlsTouchGyro() {
   ImGui::BeginDisabled(sInput.gyroMode == 0);
   // With pointer aim the gyro moves the pointer at its own speed; the camera
   // sensitivity then only matters if the gyro also turns the camera.
+  // Lock-on free aim's pointer moves at Pointer speed too, with or without pointer aim.
   const bool gyroPointer = PointerAim();
-  if (gyroPointer) {
+  if (gyroPointer || LockOnFreeAim()) {
     float cursorAngle = sInput.gyroCursorAngle;
     if (ImGui::SliderFloat("Pointer speed##gyro", &cursorAngle, PortInput::kGyroCursorAngleMin,
                            PortInput::kGyroCursorAngleMax, "%.0f deg across the screen")) {
@@ -454,6 +455,9 @@ void DrawControlsTouchGyro() {
       MarkDirty();
     }
     ItemHelp("How far the pad turns to sweep the pointer across the screen. Smaller is faster.");
+  }
+  // A lock owns the view, so this only matters under pointer aim.
+  if (gyroPointer) {
     bool cursorCamera = sInput.gyroCursorCamera;
     if (ImGui::Checkbox("Gyro also turns the camera", &cursorCamera)) {
       sInput.gyroCursorCamera = cursorCamera;

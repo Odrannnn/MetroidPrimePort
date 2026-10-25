@@ -85,6 +85,8 @@ PortMouse::PointerAim sPointerAim;
 bool sPointerAimFree = false;
 // The last update left the pointer free under a lock (lock-on free aim).
 bool sPointerAimLocked = false;
+// The last update held the pointer still under a lock (UpdateMouseAim's pointerHold).
+bool sPointerAimHeld = false;
 // A locked update this tick moved the pointer (TickAim's job for the pointer under a lock).
 bool sLockPointerRecorded = false;
 PortMouse::ButtonGate sMouseMenuGate;
@@ -460,7 +462,8 @@ void PollGyro() {
   const float scale = sInput.gyroSensitivity * dt / perPixel;
   const float ySense = sInput.gyroSplit ? sInput.gyroSensitivityY : sInput.gyroSensitivity;
   const float scaleY = ySense * dt / perPixel;
-  if (!PointerAim()) {
+  // A lock-on free aim pointer is a pointer too, with or without pointer aim (issue #188).
+  if (!PointerAim() && !sPointerAimLocked) {
     sGyroPendingX += sx * yaw * scale;
     sGyroPendingY -= sy * pitch * scaleY;
     return;
@@ -487,6 +490,7 @@ void ResetMouseAim() {
   sPointerAim.Center();
   sPointerAimFree = false;
   sPointerAimLocked = false;
+  sPointerAimHeld = false;
   sMouseGameplayActive = false;
   sMouseButtonGate.Reset();
   sMousePendingX = sMousePendingY = sMouseFrameX = sMouseFrameY = 0.f;
@@ -563,6 +567,8 @@ bool PointerAimPosition(float& x, float& y) {
 }
 bool PresentedPointerAimPosition(float fraction, float& x, float& y) {
   if (!PointerAimPosition(x, y)) return false;
+  // Held, the pointer stays put: travel since the tick does not move it.
+  if (sPointerAimHeld) return true;
   // The travel since the tick, so the drawn pointer moves every frame, and the
   // last tick's stick travel drawn after its tick (PresentedAimDelta).
   float touchX = 0.f, touchY = 0.f;
@@ -606,7 +612,8 @@ void NoteMouseButton(bool synthetic, unsigned mask, bool down) {
 void ClearMouseButtons() { sMouseHeldButtons.Clear(); }
 unsigned MouseHeldButtons() { return sMouseHeldButtons.Held(); }
 
-bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool pointerLock) {
+bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool pointerLock,
+                    bool pointerHold) {
   SetMouseGameplayActive(active);
   const PortMouse::AimState lastAim = sMouseAimState;
   const PortMouse::PointerAim lastPointer = sPointerAim;
@@ -615,6 +622,9 @@ bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool po
   // centre, where the target is.
   const bool lockFree = active && locked && pointerLock && LockOnFreeAim();
   const bool pointer = PointerAim() || lockFree;
+  // A held pointer stays where the lock found it, and neither moves nor turns the view.
+  const bool held = active && locked && !lockFree && pointerHold && PointerAim();
+  sPointerAimHeld = held;
   if (lockFree != sPointerAimLocked) {
     sPointerAim.Center();
     sPointerAimLocked = lockFree;
@@ -648,6 +658,8 @@ bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool po
       } else {
         sPointerAim.MoveLagged(dx * sx, dy * sy, sStickFrameX * sx, sStickFrameY * sy);
       }
+    } else if (held) {
+      sPointerAim.lagX = sPointerAim.lagY = 0.f;
     } else {
       sPointerAim.Center();
     }
@@ -666,7 +678,7 @@ bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool po
                                   dpitch);
     sMouseAimState.Turn(dyaw, dpitch);
   }
-  sPointerAimFree = pointer && (applied || lockFree);
+  sPointerAimFree = pointer && (applied || lockFree || held);
   if (!sPointerAimFree) sPointerAim.Center();
   if (applied) {
     sAimTick.Applied(sMouseAimState, lastAim, sPointerAim, lastPointer, sPointerAimFree);
