@@ -1690,8 +1690,18 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       }
     }
     if (opt.boneWeights.empty()) {
+      // The joints' pivots, in the space P is in.
+      std::vector<std::array<double, 3>> pivots;
+      for (const auto& p : opt.jointPivots) {
+        auto& q = pivots.emplace_back();
+        for (int a = 0; a < 3; ++a) {
+          q[a] = opt.orient[a][0] * p[0] + opt.orient[a][1] * p[1] + opt.orient[a][2] * p[2] + opt.offset[a];
+        }
+      }
+      const bool pivoted = skinned && !pivots.empty() && !opt.retailBones.empty();
       perVertex = SkinWeights(P, n, skinned ? &J : nullptr, skinned ? &W : nullptr, retail, refSpan,
-                              [this](const std::string& line) { Log(Hex8(this->model) + line); });
+                              [this](const std::string& line) { Log(Hex8(this->model) + line); },
+                              pivoted ? &pivots : nullptr, pivoted ? &opt.retailBones : nullptr);
     }
     std::map<WeightKey, int> intern;
     weights.resize(n);

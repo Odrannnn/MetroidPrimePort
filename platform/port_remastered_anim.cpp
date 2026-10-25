@@ -1147,7 +1147,7 @@ void ReadSkeleton(const Bytes& d, Character& out, Header& header) {
 
 }  // namespace
 
-bool ReadCharacter(const std::vector<uint8_t>& chpr, Character& out, std::string& error) {
+bool ReadCharacter(const std::vector<uint8_t>& chpr, Character& out, std::string& error, bool anims) {
   out = Character();
   try {
     const Bytes d{chpr.data(), chpr.size()};
@@ -1182,8 +1182,8 @@ bool ReadCharacter(const std::vector<uint8_t>& chpr, Character& out, std::string
     if (primary && afterPrimary.size() == recs.size()) {
       animNames = afterPrimary;
     }
-    const std::vector<std::vector<double>> pools = FindPools(d, recs[0].offset);
-    for (size_t i = 0; i < recs.size(); ++i) {
+    const std::vector<std::vector<double>> pools = anims ? FindPools(d, recs[0].offset) : std::vector<std::vector<double>>();
+    for (size_t i = 0; anims && i < recs.size(); ++i) {
       Anim anim = DecodeAnim(d, recs[i], pools);
       anim.name = animNames.size() == recs.size() ? animNames[i] : std::string();
       out.anims.push_back(std::move(anim));

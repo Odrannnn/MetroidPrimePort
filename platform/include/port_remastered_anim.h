@@ -82,7 +82,9 @@ struct Character {
 
 // Parses a whole CHPR file. Returns false with a message in `error` for input that is
 // malformed or uses a track layout that is not implemented; never reads out of range.
-bool ReadCharacter(const std::vector<uint8_t>& chpr, Character& out, std::string& error);
+// With `anims` false the animations are not decoded (`anims` stays empty), so a file whose
+// tracks are not implemented still gives its skeleton and model.
+bool ReadCharacter(const std::vector<uint8_t>& chpr, Character& out, std::string& error, bool anims = true);
 
 // The animation called `name`, or nullptr.
 const Anim* Find(const Character& c, std::string_view name);

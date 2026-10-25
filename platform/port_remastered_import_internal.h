@@ -119,6 +119,7 @@ constexpr uint32_t kELC2 = 0x454C4332;  // the same, in the newer form
 constexpr uint32_t kMATI = 0x4D415449;  // a material instance
 constexpr uint32_t kVECF = 0x56454346;  // a vector field (curl noise)
 constexpr uint32_t kWPSM = 0x5750534D;  // a projectile weapon (Remastered's WPSC)
+constexpr uint32_t kCHPR = 0x43485052;  // a character (retail ANCS), id the ANCS's
 constexpr uint32_t kWPSC = 0x57505343;  // the disc's projectile weapon
 constexpr uint32_t kCRSC = 0x43525343;  // the disc's projectile collision response
 constexpr uint32_t kPART = 0x50415254;  // a disc particle effect
@@ -197,6 +198,8 @@ public:
 
   bool ReadModel(const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const;
   bool HasModel(const ModelUuid& id) const { return m_models.count(id) != 0; }
+  // A character (CHPR) by id; a retail ANCS's is 10000000-0000-f000-f000-0000 and the ANCS id.
+  bool ReadCharacter(const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const;
   bool ReadTexture(const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const;
 
   // The FONT assets, in id order. There are several, with different sets of characters.
@@ -292,6 +295,7 @@ private:
   std::vector<std::unique_ptr<Pak>> m_paks;
   std::vector<std::string> m_paths;  // of m_paks, in the image
   Index m_models;
+  Index m_characters;
   Index m_textures;
   Index m_texts;
   Index m_fonts;

@@ -48,6 +48,8 @@ bool Remastered::Open(const std::string& nspPath, const std::string& keysPath, s
         for (const std::string& name : assets[a].names) {
           m_textureNames.emplace(FrameKey(name), Where{m_paks.size(), a});
         }
+      } else if (type == kCHPR) {
+        m_characters.emplace(assets[a].id, Where{m_paks.size(), a});
       } else if (type == kMSBT) {
         m_texts.emplace(assets[a].id, Where{m_paks.size(), a});
       } else if (type == kFONT) {
@@ -116,6 +118,10 @@ bool Remastered::Open(const std::string& nspPath, const std::string& keysPath, s
 
 bool Remastered::ReadModel(const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const {
   return Read(m_models, id, out, error);
+}
+
+bool Remastered::ReadCharacter(const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const {
+  return Read(m_characters, id, out, error);
 }
 
 bool Remastered::ReadTexture(const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const {

@@ -3,6 +3,8 @@
 #include "port_queen_barrier_validate.h"
 #include "port_envfx_file.h"
 #include "port_retail_placement.h"
+#include "port_dread_reskin.h"
+#include "port_remastered_anim.h"
 
 namespace PortRemastered {
 namespace ImportDetail {
@@ -2012,6 +2014,97 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
   const bool modelsReused =
       beginStage("models", std::to_string(ImportStage::kModels) + " table " + TableKey() + keyConverter, true,
                   "reports/parts/models.materials.tsv");
+  // Each skinned model's skeletons, for the votes (ConvertOptions::jointPivots):
+  // the retail ANCS that binds the model to its first skin names the CINF, and
+  // the CHPR under that ANCS's id is the Remastered character, whose joints are
+  // the model's if its skinned model is the one converted.
+  struct Rig {
+    std::vector<std::array<double, 3>> pivots;
+    std::vector<ConvertOptions::RetailBone> bones;
+  };
+  std::vector<Rig> rigs(modelsReused ? 0 : count);
+  if (!modelsReused) {
+    SetMessage("Reading the skeletons");
+    std::unordered_map<uint64_t, std::vector<size_t>> byPair;
+    for (size_t i = 0; i < count; ++i) {
+      if (table[i].skinCount > 0 && looks[i].ok) {
+        byPair[uint64_t(table[i].retail) << 32 | TableSkins(table[i])[0]].push_back(i);
+      }
+    }
+    size_t rigged = 0;
+    for (uint32_t ancs : retail.Ids(kANCS)) {
+      std::vector<uint8_t> data;
+      if (byPair.empty() || !retail.Read(kANCS, ancs, data)) {
+        continue;
+      }
+      std::vector<std::pair<size_t, uint32_t>> bound;  // table entry, CINF
+      for (size_t at = 0; at + 12 <= data.size(); ++at) {
+        const auto it = byPair.find(uint64_t(port::ReadBE32(&data[at])) << 32 | port::ReadBE32(&data[at + 4]));
+        if (it != byPair.end()) {
+          for (size_t i : it->second) {
+            bound.emplace_back(i, port::ReadBE32(&data[at + 8]));
+          }
+        }
+      }
+      if (bound.empty()) {
+        continue;
+      }
+      ModelUuid chprId = {0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x00, 0xf0, 0x00, 0x00, 0x00,
+                          uint8_t(ancs >> 24), uint8_t(ancs >> 16), uint8_t(ancs >> 8), uint8_t(ancs)};
+      std::vector<uint8_t> chpr;
+      std::string why;
+      PortRemasteredAnim::Character character;
+      if (!remastered.ReadCharacter(chprId, chpr, why) ||
+          !PortRemasteredAnim::ReadCharacter(chpr, character, why, false) || character.inverseBind.empty()) {
+        continue;
+      }
+      // The CHPR names its models in property order; a pak id swaps the first three fields.
+      // Searched for rather than read from Character::skinnedModel, whose position is wrong
+      // in some files (the Queen's AAA2D50D, with 2 stream infos).
+      static const int kOrder[16] = {3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15};
+      const auto names = [&chpr](const uint8_t* rem) {
+        uint8_t id[16];
+        for (int b = 0; b < 16; ++b) {
+          id[kOrder[b]] = rem[b];
+        }
+        return std::search(chpr.begin(), chpr.end(), id, id + 16) != chpr.end();
+      };
+      for (const auto& [i, cinf] : bound) {
+        std::vector<uint8_t> cinfData;
+        PortDread::PrimeSkeleton skeleton;
+        if (!rigs[i].pivots.empty() || !names(table[i].rem) ||
+            !retail.Read(kCINF, cinf, cinfData) ||
+            !PortDread::ParseCinf(cinfData.data(), cinfData.size(), skeleton, &why)) {
+          continue;
+        }
+        // A joint's pivot: the translation of its inverse bind's inverse, -R^-1 t,
+        // R^-1 by the adjugate (the bind is a rotation, maybe scaled).
+        for (const auto& m : character.inverseBind) {
+          const double a = m[0], b = m[1], c = m[2], d = m[4], e = m[5], f = m[6], g = m[8], h = m[9], k = m[10];
+          const double det = a * (e * k - f * h) - b * (d * k - f * g) + c * (d * h - e * g);
+          const double inv[3][3] = {{e * k - f * h, c * h - b * k, b * f - c * e},
+                                    {f * g - d * k, a * k - c * g, c * d - a * f},
+                                    {d * h - e * g, b * g - a * h, a * e - b * d}};
+          auto& p = rigs[i].pivots.emplace_back();
+          for (int r = 0; r < 3; ++r) {
+            p[size_t(r)] = std::abs(det) > 1e-12
+                               ? -(inv[r][0] * m[3] + inv[r][1] * m[7] + inv[r][2] * m[11]) / det
+                               : 0.0;
+          }
+        }
+        for (const PortDread::PrimeJoint& joint : skeleton.joints) {
+          auto& bone = rigs[i].bones.emplace_back();
+          bone.id = joint.id;
+          bone.parent = joint.parent;
+          for (int a = 0; a < 3; ++a) {
+            bone.head[a] = joint.head[a];
+          }
+        }
+        ++rigged;
+      }
+    }
+    AddLine("skeletons: " + std::to_string(rigged) + " skinned models with their Remastered joints");
+  }
   auto work = [&](int worker) {
     YieldToGame();
     ConvertIO io = makeIO(worker, staging);
@@ -2036,6 +2129,10 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         options.outputModel = look.model;
         options.source = UuidText(id);
         options.outputSkins = look.skins;
+        if (i < rigs.size()) {
+          options.jointPivots = rigs[i].pivots;
+          options.retailBones = rigs[i].bones;
+        }
         ok = look.ok && remastered.ReadModel(id, raw, modelError) &&
              ParseModel(raw.data(), raw.size(), model, modelError) && converter.Convert(model, options, modelError);
       } catch (const std::exception& e) {

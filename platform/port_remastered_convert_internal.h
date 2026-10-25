@@ -566,7 +566,9 @@ Blob PbrMaterial(const RetailMaterial& pm, uint32_t vtx, const uint32_t* texIdx,
 
 std::vector<WeightKey> SkinWeights(const std::vector<double>& P, size_t n, const std::vector<uint16_t>* J,
                                    const std::vector<float>* W, const Retail& retail, Span cskr,
-                                   const std::function<void(const std::string&)>& log);
+                                   const std::function<void(const std::string&)>& log,
+                                   const std::vector<std::array<double, 3>>* pivots = nullptr,
+                                   const std::vector<ConvertOptions::RetailBone>* skeleton = nullptr);
 // Each vertex's weights cut to kMaxSkinWeights, quantised to 1/64 and renormalised (the votes' last step).
 std::vector<WeightKey> QuantiseWeights(std::vector<std::vector<std::pair<uint32_t, double>>>& weights);
 Blob CskrBytes(const std::vector<std::pair<const WeightKey*, uint32_t>>& runs, size_t total);
