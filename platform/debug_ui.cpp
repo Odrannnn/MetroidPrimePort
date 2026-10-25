@@ -58,7 +58,7 @@ bool sVsyncEnabled = true;
 bool sVsyncEnabled = false;
 #endif
 // Android hides the status and navigation bars by default; a desktop starts windowed.
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(SDL_PLATFORM_IOS)
 bool sFullscreen = true;
 #else
 bool sFullscreen = false;
@@ -95,7 +95,7 @@ std::atomic< int > sPromptGlyphs{0};
 bool sShowShaderCompilation = true;
 bool sShowMenuHint = true;
 int sHudScale = PortDebug::kHudScaleMax;
-#if defined(__ANDROID__)
+#if defined(PORT_TOUCH_CONTROLS)
 int sScanSpread = PortDebug::kScanSpreadMin; // touch controls cover the screen edges
 #else
 int sScanSpread = PortDebug::kScanSpreadMax;

@@ -357,6 +357,9 @@ void DrawUI() {
   DrawUpdateToast();
   DrawPhotoUI();
   DrawResumePrompt();
+#if defined(PORT_TOUCH_OVERLAY)
+  DrawTouchOverlay();
+#endif
   if (sTouchLayoutSavePending.exchange(false, std::memory_order_acq_rel)) {
     MarkDirty();
     SaveSettings();

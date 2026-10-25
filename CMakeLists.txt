@@ -219,6 +219,7 @@ set(MP_PORT_SOURCES
     platform/debug_ui/search.cpp
     platform/debug_ui/settings.cpp
     platform/debug_ui/tabs.cpp
+    platform/debug_ui/touch_overlay.cpp
     platform/debug_ui/tracker.cpp
     platform/debug_ui/ui_common.cpp
     platform/debug_ui/video.cpp
@@ -441,6 +442,14 @@ elseif(IOS)
         MACOSX_BUNDLE_BUNDLE_VERSION "${MP_IOS_VERSION}")
 else()
     add_executable(metroid_prime_port ${MP_PORT_SOURCES})
+endif()
+# Touch settings and the virtual pad on phones and tablets. Android draws the
+# controls in Java (TouchControlsView); iOS draws them in C++ (touch_overlay.cpp).
+if(ANDROID OR IOS)
+    target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_CONTROLS)
+endif()
+if(IOS)
+    target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_OVERLAY)
 endif()
 # disc.cpp and port_pal_languages.cpp inflate compressed images and fonts. Aurora
 # provides ZLIB::ZLIB everywhere (its zlib-ng on Windows).
