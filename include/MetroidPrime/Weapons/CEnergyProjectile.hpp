@@ -53,6 +53,10 @@ public:
   void PlayImpactSound(const CVector3f& pos, EWeaponCollisionResponseTypes type);
   void ChangeProjectileOwner(TUniqueId owner, CStateManager& mgr);
   void ResolveCollisionWithWorld(const CRayCastResult& res, CStateManager& mgr);
+#ifdef TARGET_PC
+  // CEnergyProjectileMP1::SetRemainingRicochetCount (0x1013554); read only by Remastered Explode.
+  void PortSetRemainingRicochetCount(int count) { xPortRicochets = count; }
+#endif
 
 private:
   CSfxHandle x2e8_sfx;
@@ -66,6 +70,7 @@ private:
   float x3d4_curTime;
 #ifdef TARGET_PC
   CPortNestedLights xPortNestedLights; // lights of the nested PHDR children of the APSM effect
+  int xPortRicochets = 8; // CEnergyProjectileMP1 +0x528, ctor 0x1011bdc
 #endif
 
   static const CMaterialList kCheckMaterial;

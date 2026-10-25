@@ -85,7 +85,15 @@ const bool CEnergyProjectile::Explode(const CVector3f& pos, const CVector3f& nor
   CVector3f targetPos = CVector3f::Zero();
   const EVulnerability vulnerability =
       dVuln.GetVulnerability(GetCurrentDamageInfo().GetWeaponMode(), CDamageVulnerability::kRD_No);
-  if (vulnerability == kVN_Deflect) {
+#ifdef TARGET_PC
+  // Remastered's Explode (0x1011e6c) stops a projectile with no ricochets left before any
+  // deflection test.
+  const bool portRemastered = PORT_REMASTERED_PROJECTILE(Projectile());
+  const bool portRicochetsSpent = portRemastered && xPortRicochets < 1;
+#else
+  const bool portRicochetsSpent = false;
+#endif
+  if (vulnerability == kVN_Deflect && !portRicochetsSpent) {
     const EDeflectionType deflection =
         dVuln.GetDeflectionType(GetCurrentDamageInfo().GetWeaponMode());
     deflect = true;
@@ -121,15 +129,28 @@ const bool CEnergyProjectile::Explode(const CVector3f& pos, const CVector3f& nor
       ChangeProjectileOwner(hitActor, mgr);
     }
   }
-  if (vulnerability != kVN_Immune && !deflect) {
+  if (vulnerability != kVN_Immune && !deflect && !portRicochetsSpent) {
     deflect = type == kWCR_Unknown15 || type == kWCR_EnemyShielded ||
               (type >= kWCR_Unknown69 && type <= kWCR_AtomicAlphaReflect);
   }
   SetTranslation(offsetPos);
+  EWeaponCollisionResponseTypes soundType = type;
   if (deflect) {
     done = false;
     SetHomingTargetId(kInvalidUniqueId);
     x3d0_25_ = false;
+#ifdef TARGET_PC
+    if (portRemastered) {
+      // A bounce spends a ricochet and plays the deflect sound of a plain hit (sound only;
+      // the collision particle and decal keep the real type).
+      --xPortRicochets;
+      if (type == kWCR_Unknown14) {
+        soundType = kWCR_Unknown15;
+      } else if (type == kWCR_EnemyNormal) {
+        soundType = kWCR_EnemyShielded;
+      }
+    }
+#endif
   } else {
     StopProjectile(mgr);
     if (x3d0_27_camShakeDirty) {
@@ -137,7 +158,7 @@ const bool CEnergyProjectile::Explode(const CVector3f& pos, const CVector3f& nor
       mgr.CameraManager()->AddCameraShaker(x2fc_camShake, false);
     }
   }
-  PlayImpactSound(pos, type);
+  PlayImpactSound(pos, soundType);
   mgr.InformListeners(pos, kLNT_ProjectileExplode);
   CProjectileWeapon& projectile = Projectile();
   const rstl::optional_object< TLockedToken< CGenDescription > > particle =

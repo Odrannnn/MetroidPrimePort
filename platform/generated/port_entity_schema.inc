@@ -918,8 +918,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CEnergyProjectile
       {"x3d0_27_camShakeDirty", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CEnergyProjectile, x3d0_27_camShakeDirty), PES_SETI(CEnergyProjectile, x3d0_27_camShakeDirty)},
       {"x3d4_curTime", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CEnergyProjectile::x3d4_curTime), PES_ADDR(CEnergyProjectile, x3d4_curTime), nullptr, nullptr},
       {"xPortNestedLights", "CPortNestedLights", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CEnergyProjectile::xPortNestedLights), PES_ADDR(CEnergyProjectile, xPortNestedLights), nullptr, nullptr},
+      {"xPortRicochets", "int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CEnergyProjectile::xPortRicochets), PES_ADDR(CEnergyProjectile, xPortRicochets), PES_GETI(CEnergyProjectile, xPortRicochets), PES_SETI(CEnergyProjectile, xPortRicochets)},
   };
-  static const PortSchemaClass desc = {"CEnergyProjectile", "CGameProjectile", fields, 10, 0x2A0D06AE9DE38F3Bull};
+  static const PortSchemaClass desc = {"CEnergyProjectile", "CGameProjectile", fields, 11, 0x8A1FDF1D767E8BC4ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CExplosion >() {
@@ -4662,4 +4663,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3388;
+const int PortEntitySchema::kFieldCount = 3389;

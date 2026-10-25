@@ -534,6 +534,13 @@ void CGunWeapon::SpawnProjectile(const TToken< CWeaponDescription >& weapon, con
       kInvalidAreaId, GetPlayerId(), homingTarget, projectileAttribs, underwater, scale,
       rstl::optional_object_null(), CSfxManager::kInternalInvalidSfxId, false);
   if (proj) {
+#ifdef TARGET_PC
+    // CGunWeaponMP1::Fire (0xca2d3c) applies GetProjectileRicochetCountOverride; only
+    // CPlasmaBeamMP1 (0xd6a3c0) has one, 1.
+    if (x1c0_weaponType == kWT_Plasma) {
+      proj->PortSetRemainingRicochetCount(1);
+    }
+#endif
     mgr.AddObject(proj);
     proj->Think(dt, mgr);
   }
