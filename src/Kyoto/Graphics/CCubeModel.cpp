@@ -24,6 +24,8 @@
 
 static bool sDrawingOccluders = false;
 static bool sDrawingWireframe = false;
+// Port: the current arrays carry a bind pose at GX_VA_TEX7 (SetSkinningArraysCurrent).
+static bool sPortBindPose = false;
 bool CCubeModel::sUsingPackedLightmaps = false;
 
 inline uint GetMaterialOffset(const uchar* materialData, const int idx) {
@@ -112,7 +114,9 @@ void CCubeModel::SetStaticArraysCurrent() const {
 void CCubeModel::SetArraysCurrent() const {
   CGX::SetArray(GX_VA_POS, x0_instance.GetVertexPointer(), x0_instance.GetVertexSize(),
                 sizeof(CVector3f));
-  // Not a skinned draw: no bind pose (see SetSkinningArraysCurrent).
+  // Not a skinned draw: no bind pose (see SetSkinningArraysCurrent). SetStaticArraysCurrent
+  // puts the UVs at TEX7, so DrawSurface asks for no bind-pose height either.
+  sPortBindPose = false;
   CGX::ClearArray(GX_VA_TEX7);
   const int stride = HasNbtNormals()          ? sizeof(float) * 3 * NormalVecs()
                      : (x41_visorFlags & 1) ? sizeof(short) * 3
@@ -133,12 +137,14 @@ void CCubeModel::SetSkinningArraysCurrent(const float* positions, const float* n
   // backend to drop its cached copy or the new vertex data is never uploaded.
   CGX::ClearArray(GX_VA_POS);
   CGX::ClearArray(GX_VA_NRM);
-  // The bind pose (the file's positions) goes in as GX_VA_TEX7's array for the PBR backlight,
-  // which fades by the bind-pose height, as Remastered's CharacterBacklight does.
-  CGX::SetArray(GX_VA_TEX7, x0_instance.GetVertexPointer(), x0_instance.GetVertexSize(), sizeof(CVector3f));
   CGraphics::sRenderState.SetVtxState(positions, normals,
                                       static_cast< const uint* >(x0_instance.GetColorPointer()));
   SetStaticArraysCurrent();
+  // The bind pose (the file's positions) goes in as GX_VA_TEX7's array for the PBR backlight,
+  // which fades by the bind-pose height, as Remastered's CharacterBacklight does. It must come
+  // after SetStaticArraysCurrent, which fills TEX1..TEX7 with the UVs.
+  sPortBindPose = true;
+  CGX::SetArray(GX_VA_TEX7, x0_instance.GetVertexPointer(), x0_instance.GetVertexSize(), sizeof(CVector3f));
 }
 
 void CCubeModel::SetUsingPackedLightmaps(const bool use) const {
@@ -950,7 +956,9 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
       float top = 2.f;
       float back = 4.f;
       PortRoomEnv::Backlight(top, back);
-      GXSetPBRBacklight(plane, backDir, back, top, scale, -bottom * scale);
+      // Only a skinned draw has a bind pose; a zero scale selects the plane height above.
+      const f32 bindScale = sPortBindPose ? scale : 0.f;
+      GXSetPBRBacklight(plane, backDir, back, top, bindScale, -bottom * bindScale);
     }
     // An opaque material's own alpha (dst factor zero) means nothing to a blend.
     uint materialCube = 0;
