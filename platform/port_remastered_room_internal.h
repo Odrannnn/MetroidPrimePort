@@ -684,6 +684,9 @@ constexpr uint8_t kRetailIdPrefix[12] = {0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x0
 constexpr uint8_t kRetailActor = 0x00;
 // How far Remastered moved a scenery actor off the retail one it stands for (0.38 at most).
 constexpr double kRetailActorNear = 0.5;
+// How far outside a Remastered stand-in model's world box a dropped retail Actor's origin
+// may lie and still be hidden with it (WriteGeometry): a floor's box is a few cm thick.
+constexpr double kStandinMargin = 0.25;
 // Retail's debris: what a scenery actor that breaks apart is made of, shown when it does.
 constexpr uint8_t kRetailDebris = 0x1B;
 constexpr uint8_t kRetailDebrisExtended = 0x45;

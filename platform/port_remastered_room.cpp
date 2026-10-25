@@ -239,6 +239,14 @@ private:
   // keeps the entities that placed one in m_retailEntities, for WriteGeometry to leave out.
   void PairRetailModels(const RoomData& r, const Area& area);
   std::set<int> m_retailEntities;
+  // Entities carrying a model under a retail-style id (10000000-...-XXXXXXXX) that no retail
+  // object of the area names: Remastered's own models standing in for retail objects (Central
+  // Dynamo's floor grates). WriteGeometry draws them, though they lack kPropActorAdded.
+  std::set<int> m_syntheticEntities;
+  // The retail ids the room's entities carry (models it keeps), and where its entities stand
+  // (GC world space): what WriteGeometry checks before hiding a retail object.
+  std::set<uint32_t> m_roomRetailIds;
+  std::vector<Vec3> m_entityPositions;
   // The room's static geometry (its ModCon components), as "<MREA id>.roomgeo".
   void WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area);
   // The room's liquid surfaces (its water and lava render volumes), as "<MREA id>.roomliquid".
@@ -2285,8 +2293,8 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
         " retail objects hidden");
     return made != 0;
   };
-  // Whether a static model's bounds hold its origin, give or take half a metre.
-  auto aroundOrigin = [&](const uint8_t* id) {
+  // A static model's bounds in its own (Remastered) axes; false when it does not read.
+  auto modelBounds = [&](const uint8_t* id, Vec3& lo, Vec3& hi) {
     std::vector<uint8_t> data;
     PortRemastered::Model cmdl;
     std::string error;
@@ -2294,7 +2302,8 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
         !PortRemastered::ParseModel(data.data(), data.size(), cmdl, error)) {
       return false;
     }
-    Vec3 lo{HUGE_VAL, HUGE_VAL, HUGE_VAL}, hi{-HUGE_VAL, -HUGE_VAL, -HUGE_VAL};
+    lo = Vec3{HUGE_VAL, HUGE_VAL, HUGE_VAL};
+    hi = Vec3{-HUGE_VAL, -HUGE_VAL, -HUGE_VAL};
     for (const PortRemastered::ModelVertexBuffer& vb : cmdl.vertexBuffers) {
       for (size_t v = 0; v + 2 < vb.positions.size(); v += 3) {
         for (size_t k = 0; k < 3; ++k) {
@@ -2302,6 +2311,14 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
           hi[k] = std::max(hi[k], double(vb.positions[v + k]));
         }
       }
+    }
+    return lo[0] <= hi[0];
+  };
+  // Whether a static model's bounds hold its origin, give or take half a metre.
+  auto aroundOrigin = [&](const uint8_t* id) {
+    Vec3 lo, hi;
+    if (!modelBounds(id, lo, hi)) {
+      return false;
     }
     for (size_t k = 0; k < 3; ++k) {
       if (!(lo[k] <= 0.5 && hi[k] >= -0.5)) {
@@ -2345,6 +2362,13 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     return true;
   };
   size_t posed = 0, drivenActors = 0;
+  // The synthetic-model actors written (m_syntheticEntities): their instance and the world
+  // box (GC axes) their model covers, for the retail objects they stand in for.
+  struct Standin {
+    uint32_t instance;
+    Vec3 pos, lo, hi;
+  };
+  std::vector<Standin> standins;
   for (const Component* c : r.room.Of(kActorMP1)) {
     const auto f = r.room.Flat(*c);
     const auto prop = f.find(kPropActorModel);
@@ -2354,7 +2378,9 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
                          chprProp.size == 16 && r.room.Nested(*c, {kPropActorAnim, kPropAnimName}, nameProp) &&
                          nameProp.size == 8;
     Vec3 pos, rot, scale;
-    if (f.find(kPropActorAdded) == f.end() || (!hasModel && !hasAnim) || !r.room.Xform(*c, pos, rot, scale)) {
+    const bool synthetic = hasModel && m_syntheticEntities.count(c->entity) != 0;
+    if ((f.find(kPropActorAdded) == f.end() && !synthetic) || (!hasModel && !hasAnim) ||
+        !r.room.Xform(*c, pos, rot, scale)) {
       continue;
     }
     const bool active = r.room.Active(*c);
@@ -2456,6 +2482,26 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     PortRoomGeo::Instance& inst = instances.emplace_back();
     inst.model = known->second;
     place(inst, pos, rot, scale);
+    if (Vec3 lo, hi; synthetic && modelBounds(r.room.Bytes(prop->second), lo, hi)) {
+      Standin& s = standins.emplace_back();
+      s.instance = uint32_t(instances.size() - 1);
+      s.pos = Apply(area.xf, MulR2G(pos));
+      s.lo = Vec3{HUGE_VAL, HUGE_VAL, HUGE_VAL};
+      s.hi = Vec3{-HUGE_VAL, -HUGE_VAL, -HUGE_VAL};
+      for (int corner = 0; corner < 8; ++corner) {
+        const Vec3 v = MulR2G(Vec3{(corner & 1) ? hi[0] : lo[0], (corner & 2) ? hi[1] : lo[1], (corner & 4) ? hi[2] : lo[2]});
+        Vec3 local;
+        for (size_t row = 0; row < 3; ++row) {
+          local[row] = inst.transform[4 * row] * v[0] + inst.transform[4 * row + 1] * v[1] +
+                       inst.transform[4 * row + 2] * v[2] + inst.transform[4 * row + 3];
+        }
+        const Vec3 w = Apply(area.xf, local);
+        for (size_t k = 0; k < 3; ++k) {
+          s.lo[k] = std::min(s.lo[k], w[k]);
+          s.hi[k] = std::max(s.hi[k], w[k]);
+        }
+      }
+    }
     if (anim != nullptr) {
       // The bone's pose in GC axes: the axis change is a rotation, so a quaternion's
       // vector part and a translation change the same way a position does.
@@ -2499,6 +2545,49 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
       ++riding;
     }
     ++actors;
+  }
+  // The retail Actors the synthetic-model actors stand in for, hidden while those are drawn:
+  // one standing where such an actor does, and one Remastered dropped whose origin its model
+  // covers (Central Dynamo's three grates under the wider centre one). Neither may draw a model
+  // the room keeps under its retail id, nor (the dropped one) stand where any entity does.
+  size_t standinHidden = 0;
+  if (!standins.empty()) {
+    for (const ScriptObject& o : area.objects) {
+      if (o.type != kRetailActor || !o.hasPos ||
+          std::any_of(m_roomRetailIds.begin(), m_roomRetailIds.end(), [&](uint32_t id) {
+            const uint8_t be[4] = {uint8_t(id >> 24), uint8_t(id >> 16), uint8_t(id >> 8), uint8_t(id)};
+            return std::search(o.props.begin(), o.props.end(), be, be + 4) != o.props.end();
+          })) {
+        continue;
+      }
+      const Standin* by = nullptr;
+      for (const Standin& s : standins) {
+        if (MaxAbs(s.pos, o.pos) < kRetailActorNear) {
+          by = &s;
+          break;
+        }
+      }
+      if (by == nullptr && std::none_of(m_entityPositions.begin(), m_entityPositions.end(), [&](const Vec3& p) {
+            return MaxAbs(p, o.pos) < kRetailActorNear;
+          })) {
+        for (const Standin& s : standins) {
+          if (o.pos[0] >= s.lo[0] - kStandinMargin && o.pos[0] <= s.hi[0] + kStandinMargin &&
+              o.pos[1] >= s.lo[1] - kStandinMargin && o.pos[1] <= s.hi[1] + kStandinMargin &&
+              o.pos[2] >= s.lo[2] - kStandinMargin && o.pos[2] <= s.hi[2] + kStandinMargin) {
+            by = &s;
+            break;
+          }
+        }
+      }
+      if (by != nullptr) {
+        scripts.script.hidden.push_back({o.id & 0x3FFFFFFu, by->instance});
+        ++standinHidden;
+      }
+    }
+  }
+  if (!m_syntheticEntities.empty()) {
+    Log("  " + r.name + ": " + std::to_string(standins.size()) + " of " + std::to_string(m_syntheticEntities.size()) +
+        " Remastered stand-in actors drawn, " + std::to_string(standinHidden) + " retail actors hidden");
   }
   // The room's skies, drawn in place of the world's: retail has one per world, Remastered
   // one per room, each turned and scaled to suit it (and two in the Frigate's hangar, one
@@ -2844,6 +2933,9 @@ static void EditorBasis(const Vec3& rot, const Vec3& scale, double out[3][3]) {
 // inverse transform times the entity's (orient) and applied to the entity's position (offset).
 void Writer::PairRetailModels(const RoomData& r, const Area& area) {
   m_retailEntities.clear();
+  m_syntheticEntities.clear();
+  m_roomRetailIds.clear();
+  m_entityPositions.clear();
   if (!m_io.retailModel) {
     return;
   }
@@ -2856,10 +2948,15 @@ void Writer::PairRetailModels(const RoomData& r, const Area& area) {
     Vec3 pos;            // in GC world space
   };
   std::map<uint32_t, std::pair<Id16, std::vector<Placed>>> byRetail;
+  std::vector<int> seenEntities;
   for (const Component& c : r.room.Components()) {
     Vec3 pos, rot, scale;
     if (c.entity < 0 || c.raw.size < 16 || !r.room.Xform(c, pos, rot, scale)) {
       continue;
+    }
+    if (std::find(seenEntities.begin(), seenEntities.end(), c.entity) == seenEntities.end()) {
+      seenEntities.push_back(c.entity);
+      m_entityPositions.push_back(Apply(area.xf, MulR2G(pos)));
     }
     const uint8_t* b = r.room.Bytes(c.raw);
     for (size_t at = 0; at + 16 <= c.raw.size; ++at) {
@@ -2900,6 +2997,13 @@ void Writer::PairRetailModels(const RoomData& r, const Area& area) {
         named.push_back(&o);
       }
     }
+    if (named.empty()) {
+      for (const Placed& p : placed) {
+        m_syntheticEntities.insert(p.entity);
+      }
+      continue;
+    }
+    m_roomRetailIds.insert(retail);
     for (size_t n = 0; n < named.size(); ++n) {
       const ScriptObject& o = *named[n];
       RetailPlacement out;

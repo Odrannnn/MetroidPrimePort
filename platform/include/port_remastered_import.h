@@ -175,7 +175,9 @@ inline constexpr int kEffects = 106;   // port_remastered_effect_import and the 
 // 29: a retail model's objects pair with its entities by order (RetailPlacement orient, entity).
 // 30: roomenv version 26, the EnvironmentFX colour intensity (a RelayAutoFire-fired density controller).
 // 34: a retail Effect object drawing a PART its GENP is shared with takes the actor's variables (the lava spit).
-inline constexpr int kRooms = 35;      // atomic Queen barrier controller group in roomfx v4
+// 36: actors with a model of Remastered's own under a retail-style id no retail object names
+//     are drawn, hiding the retail Actors they stand in for (Central Dynamo's grates).
+inline constexpr int kRooms = 36;      // Remastered stand-in actors (m_syntheticEntities)
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).
