@@ -51,8 +51,11 @@ void CPhazonBeam::ReInitVariables() {
   mClipWipeTranslate = 0.f;
   mIndirectAlpha = 1.f;
 #ifdef TARGET_PC
-  mDisintegration = 0.f;
-  CCubeModel::PortSetDisintegration(0.f);
+  // CPhazonBeamMP1::ReInitVariables leaves DisintegrationAmount alone: a reload keeps the fade.
+  if (!PortRemasteredBeam()) {
+    mDisintegration = 0.f;
+    CCubeModel::PortSetDisintegration(0.f);
+  }
 #endif
   mChargeFxGen = nullptr;
   mVeinsData = nullptr;
@@ -85,7 +88,7 @@ void CPhazonBeam::PreRenderGunFx(const CStateManager& mgr, const CTransform4f& x
 }
 
 void CPhazonBeam::PostRenderGunFx(const CStateManager& mgr, const CTransform4f& xf) {
-  if (!mChargeFxGen.null()) {
+  if (!mChargeFxGen.null() && mPortChargeFxShown) {
     mChargeFxGen->Render();
   }
 
@@ -250,9 +253,11 @@ void CPhazonBeam::UpdateBeam(const float dt, const CTransform4f& xf, const CVect
                              CStateManager& mgr) {
   if (!mChargeFxGen.null()) {
 #ifdef TARGET_PC
-    // Port: CPhazonBeamMP1::UpdateBeam keeps the Remastered Phazon2nd_1 emitting the whole
-    // time the beam is up; retail's emits only while firing.
-    mChargeFxGen->SetParticleEmission(mChargeFxGen->PortIsRemastered() || IsFiring(mgr));
+    // CPhazonBeamMP1::UpdateBeam: EnableSystem(true); the emission stays as CreateBeam set it.
+    if (mChargeFxGen->PortIsRemastered())
+      mPortChargeFxShown = true;
+    else
+      mChargeFxGen->SetParticleEmission(IsFiring(mgr));
 #else
     mChargeFxGen->SetParticleEmission(IsFiring(mgr));
 #endif
@@ -265,6 +270,13 @@ void CPhazonBeam::StopBeam(CStateManager& mgr, bool reset) {
     return;
   }
 
+#ifdef TARGET_PC
+  // CPhazonBeamMP1::StopBeam: EnableSystem(false).
+  if (mChargeFxGen->PortIsRemastered()) {
+    mPortChargeFxShown = false;
+    return;
+  }
+#endif
   mChargeFxGen->SetParticleEmission(false);
 }
 void CPhazonBeam::Load(CStateManager& mgr, const bool subtypeBasePose) {
@@ -288,7 +300,13 @@ void CPhazonBeam::CreateBeam(CStateManager& mgr) {
   mChargeFxGen = rs_new CElementGen(mPhazon2nd1);
   if (!mChargeFxGen.null()) {
     mChargeFxGen->SetGlobalScale(x4_scale);
+#ifdef TARGET_PC
+    // CPhazonBeamMP1::CreateBeam: SetParticleEmission(true, recursive) and never off again.
+    mChargeFxGen->SetParticleEmission(mChargeFxGen->PortIsRemastered());
+    mPortChargeFxShown = true;
+#else
     mChargeFxGen->SetParticleEmission(false);
+#endif
   }
 }
 

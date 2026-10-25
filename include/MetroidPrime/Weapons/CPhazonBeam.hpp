@@ -51,6 +51,9 @@ private:
   float mClipWipeTranslate;
   float mIndirectAlpha;
   float mDisintegration = 0.f; // Port: Remastered veins fade, 0..1
+  // Port: Remastered switches Phazon2nd_1 with EnableSystem (UpdateBeam on, StopBeam off) and
+  // leaves its emission on; a disabled system keeps updating but isn't drawn.
+  bool mPortChargeFxShown = true;
   bool mLoaded : 1;
   bool mClipWipeActive : 1;
   bool mVeinsAlphaActive : 1;
