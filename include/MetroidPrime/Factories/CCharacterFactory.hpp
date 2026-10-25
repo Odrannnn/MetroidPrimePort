@@ -43,6 +43,9 @@ public:
                                              const TLockedToken< CCharacterFactory >& factory,
                                              int defaultAnim) const;
   const CCharacterInfo& GetCharInfo(int charIdx) const;
+#ifdef TARGET_PC
+  int PortNumCharacters() const { return x4_charInfoDB.size(); }
+#endif
   const rstl::vector< rstl::pair< uint, CAdditiveAnimationInfo > >& GetAdditiveAnimInfoList() const {
     return x40_additiveInfo;
   }

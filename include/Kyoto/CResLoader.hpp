@@ -56,6 +56,9 @@ public:
   // Port: closes every PAK, calls `between`, then opens them again and reads
   // their tables anew (the mods folder changed). No load may be in flight.
   void PortReopenPaks(void (*between)());
+  // Port: whether a load of asset finds it, in a loaded PAK or (copied from it) in any PAK on
+  // the disc, as PortCustomResource answers loads no loaded PAK can.
+  bool PortLoadable(CAssetId asset) { return PortPakResourceExists(asset) || PortCustomResource(asset) != nullptr; }
 #endif
 
   int GetPakCount() const;

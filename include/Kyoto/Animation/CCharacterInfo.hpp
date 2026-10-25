@@ -53,6 +53,12 @@ public:
   const CPASDatabase& GetPASDatabase() const { return x30_pasDatabase; }
   const CParticleResData& GetParticleResData() const { return x44_partRes; }
   const rstl::vector< uint >& GetAnimationIndexList() const { return xb0_animIdxs; }
+#ifdef TARGET_PC
+  const rstl::vector< rstl::pair< int, rstl::pair< rstl::string, rstl::string > > >&
+  PortAnimInfo() const {
+    return x20_animInfo;
+  }
+#endif
   const rstl::vector< rstl::pair< rstl::string, CAABox > >& GetAnimBBoxList() const {
     return x88_aabbs;
   }
