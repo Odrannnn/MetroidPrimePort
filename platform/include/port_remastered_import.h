@@ -118,7 +118,8 @@ inline constexpr int kTextures = 5;
 //     (the Parasite Queen's jaw); the 12 artifacts each take their own Remastered model
 //     (CHPR FAA9C708's model node N is name-pool character N), Truth/Lifegiver/Chozo/World added;
 //     the elevator platforms 32103B70/F33A6018 take 6FA561D0's model, not a Frigate rubble sheet.
-inline constexpr int kModels = 20;
+// 21: intra-Mines elevator C0A4DF30 uses the shipped E8E0AB8D platform, not a VFX model.
+inline constexpr int kModels = 21;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.
