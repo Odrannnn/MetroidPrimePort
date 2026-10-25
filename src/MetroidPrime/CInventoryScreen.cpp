@@ -14,10 +14,6 @@
 #include "rstl/math.hpp"
 #ifdef TARGET_PC
 #include "port_pointer_menu.h"
-#include "port_pause_lighting.h"
-#include "port_room_env.h"
-#include "port_mods.h"
-#include <dolphin/gx/GXExtra.h>
 #endif
 #include <limits.h>
 
@@ -271,32 +267,9 @@ uint CInventoryScreen::GetRightTableCount() const {
 }
 
 void CInventoryScreen::Draw(float transInterp, float totalAlpha, float yOff) const {
-#ifdef TARGET_PC
-  const bool ui = PortRoomEnv::Enabled() && PortMods::RoomEnvLoaded();
-  float previousTone[3][4];
-  const bool hadTone = PortRoomEnv::Tone(previousTone);
-  const bool hdr = ui && GXPortPauseSceneHdr();
-  const PortPauseLighting::Scope scene(PortPauseLighting::active, ui);
-  if (ui) {
-    float tone[3][4];
-    PortRoomEnv::Tone(tone);
-    GXSetPBRTone(tone);
-  }
-#endif
   CPauseScreenBase::Draw(transInterp, totalAlpha,
                          CMath::AbsF(x19c_samusDoll->GetViewInterpolation()));
   x19c_samusDoll->Draw(x4_mgr, transInterp * (1.f - x1a4_textBodyAlpha));
-#ifdef TARGET_PC
-  if (hdr) {
-    float tone[3][4], tints[5][3];
-    PortRoomEnv::Tone(tone);
-    PortPauseLighting::Bloom(tints);
-    // Post replaces the display target (Remastered blend mode 0); no grade
-    // is selected until the UI ColorGradeHint activation is established.
-    GXPortPostProcessScene(GX_TRUE, 0.8f, tints, tone, 0, 0, 0.f, 0.f);
-  }
-  if (ui) GXSetPBRTone(hadTone ? previousTone : nullptr);
-#endif
 }
 
 void CInventoryScreen::Touch() {

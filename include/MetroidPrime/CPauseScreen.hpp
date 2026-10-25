@@ -22,6 +22,9 @@ public:
   void Draw() const;
   bool IsLoaded() const;
   bool IsTransitioning() const { return x8_curSubscreen != xc_nextSubscreen; }
+#ifdef TARGET_PC
+  bool PortDrawsInventory() const { return IsLoaded() && x8_curSubscreen == kSS_Inventory; }
+#endif
   bool ShouldSwitchToMapScreen() const;
   bool ShouldSwitchToInGame() const;
   float GetHelmetCamYOff() const;
