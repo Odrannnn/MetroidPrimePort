@@ -187,6 +187,11 @@ struct State {
   float clock = 0.f;      // seconds, for the clips that play by time (ready, aim)
   float stanceTime[int(Stance::Count)] = {}; // seconds since each stance was last entered
   float airTime = 0.f;    // seconds off the ground
+  // Where the player and the platform it rides stood last tick (GroundVelocity).
+  bool haveLast = false;
+  CVector3f lastPos = CVector3f::Zero(), lastPlatformPos = CVector3f::Zero();
+  CVector3f lastVelocity = CVector3f::Zero();
+  TUniqueId lastPlatform = kInvalidUniqueId;
   // The last stance changes, oldest first (thirdperson feet): when, to what, at what speeds.
   struct Change {
     float clock;
@@ -270,6 +275,7 @@ void Drop() {
   s.wantChar = s.loadedChar = s.beam = -1;
   s.ancs = 0;
   s.animating = false;
+  s.haveLast = false;
 }
 
 uint32_t PickAncs() {
@@ -948,6 +954,40 @@ void PumpBeam(const CStateManager& mgr) {
   }
 }
 
+// Faster than this (world units per second) the player warped rather than moved.
+constexpr float kWarpSpeed = 60.f;
+
+// How fast the player goes over the ground: how far it moved since last tick, less the ride of
+// the platform it stands on. Not its velocity: walking into a wall that swings between the
+// walk's speed and none every tick, the collision undoing each step, while the player stays put.
+CVector3f GroundVelocity(const CStateManager& mgr, const CPlayer& player, float dt) {
+  const CVector3f pos = player.GetTranslation();
+  const TUniqueId platformId = player.GetRidingPlatformId();
+  const CActor* platform =
+      platformId != kInvalidUniqueId ? TCastToConstPtr< CActor >(mgr.GetObjectById(platformId)) : nullptr;
+  const CVector3f platformPos = platform != nullptr ? platform->GetTranslation() : CVector3f::Zero();
+  if (s.haveLast && dt <= 0.f) {
+    return s.lastVelocity;
+  }
+  CVector3f v = CVector3f::Zero();
+  if (s.haveLast) {
+    CVector3f moved = pos - s.lastPos;
+    if (platform != nullptr && platformId == s.lastPlatform) {
+      moved = moved - (platformPos - s.lastPlatformPos);
+    }
+    v = moved * (1.f / dt);
+    if (v.Magnitude() > kWarpSpeed) {
+      v = CVector3f::Zero();
+    }
+  }
+  s.haveLast = true;
+  s.lastPos = pos;
+  s.lastPlatform = platform != nullptr ? platformId : kInvalidUniqueId;
+  s.lastPlatformPos = platformPos;
+  s.lastVelocity = v;
+  return v;
+}
+
 } // namespace
 
 void Update(CStateManager& mgr, float dt) {
@@ -961,6 +1001,7 @@ void Update(CStateManager& mgr, float dt) {
     Build(mgr);
   }
   if (!s.body || !s.animating) {
+    s.haveLast = false;
     return;
   }
   PumpBeam(mgr);
@@ -972,10 +1013,11 @@ void Update(CStateManager& mgr, float dt) {
   }
   if (s.pinned.Valid()) {
     s.aimWeight = 0.f;
+    s.haveLast = false;
     return;
   }
   const CTransform4f& xf = player.GetTransform();
-  const CVector3f vel = player.GetVelocityWR();
+  const CVector3f vel = GroundVelocity(mgr, player, dt);
   const float fwd = CVector3f::Dot(vel, xf.GetForward());
   const float side = CVector3f::Dot(vel, xf.GetRight());
   const bool grounded = player.GetPlayerMovementState() == NPlayer::kMS_OnGround;
