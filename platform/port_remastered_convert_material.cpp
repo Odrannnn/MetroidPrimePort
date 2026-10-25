@@ -227,6 +227,9 @@ uint32_t ShaderFamily(uint32_t shader) {
 // TEXCOORD_0.zw (logical coord 1) default. Call this with RemMaterial::family so
 // exact shader twins inherit their source family's coordinate rule.
 constexpr uint32_t kLightmapCoord3Families[] = {
+    // Door frames tile ICAN on TEXCOORD_0.zw; their independent baked atlas UV is
+    // TEXCOORD_1.zw. Reusing the glow coordinates samples unlit atlas regions.
+    0xC78982B4,
     0x41A12C9E, 0x72B34E42, 0x9AB899E7, 0xA978D507, 0xB9E899F3,
     0xD363D694, 0xD37039F7, 0xD6AA2A3A, 0xDF0677FF, 0xDFEC1A87,
     0xE538B757, 0xE9DF2188, 0xF22FEB5B, 0x557A7DE4, 0xF84AC32D,

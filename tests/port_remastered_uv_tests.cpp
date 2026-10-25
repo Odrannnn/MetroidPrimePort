@@ -589,6 +589,7 @@ void TestLightmapUv() {
       {0xD37039F7, "d37039f7"}, {0xD6AA2A3A, "d6aa2a3a"}, {0xDF0677FF, "df0677ff"},
       {0xDFEC1A87, "dfec1a87"}, {0xE538B757, "e538b757"}, {0xE9DF2188, "e9df2188"},
       {0xF22FEB5B, "f22feb5b"}, {0x557A7DE4, "557a7de4"}, {0xF84AC32D, "f84ac32d"},
+      {0xC78982B4, "door-frame-c78982b4"},
   };
   constexpr uint32_t kOrdinaryPbr = 0xBFB300B6;
   std::vector<uint8_t> cmdl;
@@ -609,6 +610,25 @@ void TestLightmapUv() {
     if (!outputs.empty()) {
       CHECK_MSG(AllLightmapCoords(outputs[0], 31.f, 32.f), selected.c_str());
     }
+  }
+
+  {  // A door frame tiles its incandescence on coord 1; its bake has independent coord 3.
+    ModelMaterial material = LightmapMaterial(0xC78982B4, "door-frame-incandescence");
+    material.data[1].texture.texCoord = 0;
+    Fixture fixture(0, 0, 0);
+    material.data.push_back(fixture.Texture(FourCC('I', 'C', 'A', 'N'), 0x33333333, 1));
+    const Model model = LightmapModel({material}, {LightmapBuffer(0.f, true)}, {{0, 0}});
+    cmdl.clear();
+    outputs.clear();
+    CHECK_MSG(Convert(model, cmdl, error, true), "converted door frame with separate glow and baked UVs");
+    CHECK_MSG(ReadLightmapOutputs(cmdl, 3, outputs), "read door frame's LMUV attribute");
+    if (!outputs.empty()) {
+      CHECK_MSG(AllLightmapCoords(outputs[0], 31.f, 32.f), "door frame's bake uses TEXCOORD_1.zw");
+    }
+    std::vector<uint32_t> mapCoords;
+    CHECK_MSG(ReadMapCoords(cmdl, mapCoords), "read door frame's texture map coordinates");
+    CHECK_MSG(mapCoords.size() >= 4 && mapCoords[0] == 0 && mapCoords[1] == 0 && mapCoords[3] == 1,
+              "door frame keeps base and metal on coord 0 and incandescence on coord 1");
   }
 
   {  // A verbatim twin of a978d507 resolves to its family before selecting UVs.
