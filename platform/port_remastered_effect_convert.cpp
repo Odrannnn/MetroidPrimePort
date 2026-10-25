@@ -4383,9 +4383,20 @@ public:
     // independently of textures/materials. Primitive 2 is a transformed square:
     // table 0x1d0b9b4 maps 1/2/3 to render kinds 1/2/0, and Render 0x2b23e8
     // sends kinds 1 AND 2 to RenderSpriteEntries. Nil BCLR is opaque black.
-    const bool drawsNothing = part && (node.primitiveType == 0 || node.primitiveType == 4 ||
-                                      node.primitiveType == 5 ||
-                                      (node.primitiveType == 3 && !has(F("PMDL"))));
+    const bool inactivePrimitive = part && (node.primitiveType == 0 || node.primitiveType == 4 ||
+                                           node.primitiveType == 5 ||
+                                           (node.primitiveType == 3 && !has(F("PMDL"))));
+    const bool customMaterial = std::any_of(node.properties.begin(), node.properties.end(), [](const auto& p) {
+      return p.fourcc == F("MTIN") && std::any_of(p.value.begin(), p.value.end(), [](const auto& v) {
+        return v.kind == EffectValue::Kind::Guid && v.guid != EffectGuid{};
+      });
+    });
+    // RenderSpriteEntries 0x2b13a8 requires node+0x140. The ctor 0x28bfc4
+    // loads either nonnil MTIN or the header MTRL; TEXR cannot supply it.
+    // This gates drawing only: active SIZE and child/light evaluation survive.
+    const bool nullMaterial = part && (node.primitiveType == 1 || node.primitiveType == 2) &&
+                              node.baseMaterial == EffectGuid{} && !customMaterial;
+    const bool drawsNothing = inactivePrimitive || nullMaterial;
     result.drawsNothing = drawsNothing;
     for (const EffectProperty& property : node.properties) {
       uint32_t fourcc = property.fourcc;
@@ -4394,7 +4405,7 @@ public:
         result.dropped.push_back(EffectFourCCString(fourcc) + ": a swoosh has no per-particle variables");
         continue;
       }
-      if (drawsNothing && fourcc == F("SIZE")) {
+      if (inactivePrimitive && fourcc == F("SIZE")) {
         // Both sprite Fixup and transformed Fixup (0x28ec98) consume SIZE.
         // Only inactive primitives clear it; do not substitute SIZE=0 to hide draws.
         continue;
@@ -5195,7 +5206,7 @@ public:
         out.erase(out.begin() + v->begin, out.begin() + v->end);
       }
     }
-    if (part && node.primitiveType >= 0 && node.primitiveType != 1) {
+    if (part && node.primitiveType >= 0 && (node.primitiveType != 1 || nullMaterial)) {
       AppendBE32(out, F("PPRM"));
       AppendBE32(out, F("CNST"));
       AppendBE32(out, drawsNothing ? 0u : uint32_t(node.primitiveType));

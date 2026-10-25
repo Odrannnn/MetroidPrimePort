@@ -3,6 +3,11 @@
 Effects import stage: **111**. Evidence is from the shipped Switch binary;
 addresses are offsets in decompressed `main.raw`.
 
+Material/readiness follow-up: [REMASTERED_MATERIAL_READINESS.md](REMASTERED_MATERIAL_READINESS.md).
+The 41 changes are eligibility changes: 23 nodes use a header MTRL and 18 use
+nil-BCLR MATIs. None has a null resource. Actual authored output includes
+zero-capacity/zero-alpha nodes, additive black and two alpha-black sprites.
+
 ## Removed suppression heuristics
 
 1. PART without TEXR, MTIN or PMDL was treated as drawing nothing.

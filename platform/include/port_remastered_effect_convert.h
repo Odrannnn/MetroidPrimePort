@@ -99,7 +99,7 @@ struct ConvertedPart {
   EffectGuid id{};  // the child id it was embedded under; zero for the root
   uint32_t type = 0;  // the retail asset type: 'PART', 'SWHC' or 'ELSC'
   bool root = false;  // the effect's own PART, not an embedded child
-  bool drawsNothing = false;  // inactive GPSM primitive (not a material inference)
+  bool drawsNothing = false;  // inactive primitive or proven null sprite material resource
   std::vector<uint8_t> part;          // the retail file, of that type
   std::vector<std::string> dropped;   // "FOURCC: why", one per left-out property
   // Properties retail reads that were left out. Remastered-only ones are not

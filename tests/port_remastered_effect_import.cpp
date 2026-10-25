@@ -68,6 +68,7 @@ void PutProperty(std::vector<uint8_t>& out, const char* name, uint8_t tag) {
 void PutGenerator(std::vector<uint8_t>& out, bool root) {
   PutFourCC(out, "GPSM");
   out.resize(out.size() + 17);
+  out[out.size() - 16] = 1; // base MTRL for active synthetic sprites
   Put32(out, root ? 2 : 0); // GPSM sprite primitive + 1
 }
 

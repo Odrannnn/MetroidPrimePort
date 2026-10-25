@@ -531,7 +531,7 @@ int Convert(const std::string& romfs, const std::string& retailDir, const std::s
     size_t primitiveEnabled = 0, primitiveDisabled = 0;
     std::map<int, size_t> primitives;
     std::ofstream rows(std::filesystem::path(outDir) / "primitive-census.tsv");
-    rows << "asset\tnode\tname\tprimitive\told_sprite_suppressed\tnew_sprite_suppressed\told_draws_nothing\tnew_draws_nothing\n";
+    rows << "asset\tnode\tname\tprimitive\told_sprite_suppressed\tnew_sprite_suppressed\told_draws_nothing\tnew_draws_nothing\tbase_material\tcustom_material\n";
     for (const auto& [id, data] : effects) {
       EffectNode root;
       std::string error;
@@ -566,8 +566,15 @@ int Convert(const std::string& romfs, const std::string& retailDir, const std::s
           }
           const bool oldNothing = !has("TEXR") && (!has("MTIN") || nil) && !has("PMDL");
           const bool oldSprite = oldNothing || (!has("TEXR") && !has("MTIN") && has("PMDL"));
+          const bool custom = std::any_of(node.properties.begin(), node.properties.end(), [](const auto& p) {
+            return p.fourcc == EffectFourCC("MTIN") && std::any_of(p.value.begin(), p.value.end(), [](const auto& v) {
+              return v.kind == EffectValue::Kind::Guid && v.guid != EffectGuid{};
+            });
+          });
           const bool newNothing = node.primitiveType == 0 || node.primitiveType == 4 || node.primitiveType == 5 ||
-                                  (node.primitiveType == 3 && !has("PMDL"));
+                                  (node.primitiveType == 3 && !has("PMDL")) ||
+                                  ((node.primitiveType == 1 || node.primitiveType == 2) &&
+                                   node.baseMaterial == EffectGuid{} && !custom);
           const bool newSprite = newNothing || node.primitiveType == 3;
           ++generators;
           ++primitives[node.primitiveType];
@@ -576,7 +583,8 @@ int Convert(const std::string& romfs, const std::string& retailDir, const std::s
           primitiveEnabled += oldNothing && !newNothing;
           primitiveDisabled += !oldNothing && newNothing;
           rows << IdToString(id) << '\t' << path << '\t' << names[id] << '\t' << node.primitiveType
-               << '\t' << oldSprite << '\t' << newSprite << '\t' << oldNothing << '\t' << newNothing << '\n';
+               << '\t' << oldSprite << '\t' << newSprite << '\t' << oldNothing << '\t' << newNothing
+               << '\t' << EffectGuidString(node.baseMaterial) << '\t' << custom << '\n';
         }
         for (size_t i = 0; i < node.children.size(); ++i) visit(node.children[i], path + "/" + std::to_string(i));
       };

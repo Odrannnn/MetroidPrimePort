@@ -72,6 +72,8 @@ struct EffectNode {
   // GPSM's header word is primitive type + 1 (LoadGeneratorDesc 0x256880).
   // -1 means unavailable/invalid; 1 is a sprite. Kept separately from parser child-list handling.
   int primitiveType = -1;
+  // GPSM+5: base MTRL used when MTIN is nil (static-state ctor 0x28bfc4).
+  EffectGuid baseMaterial{};
   std::vector<EffectProperty> properties;
   std::vector<EffectNode> children;
 };

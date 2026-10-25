@@ -56,6 +56,7 @@ void PutConstant(std::vector<uint8_t>& out, uint32_t word) {
 void PutGenerator(std::vector<uint8_t>& out, bool root) {
   PutFourCC(out, "GPSM");
   out.resize(out.size() + 17);
+  out[out.size() - 16] = 1; // nonnil base MTRL; null-material dispatch has separate cases
   Put32(out, root ? 2 : 0); // GPSM header encodes primitive + 1; sprite = 2.
 }
 
@@ -2170,6 +2171,46 @@ void TestModelChoice() {
 // left out and a SIZE of 0 written before _END instead. One with a TEXR keeps
 // its SIZE.
 void TestDrawsNothing() {
+  // Material resource selection precedes sprite drawing. TEXR is merely an
+  // instance parameter: it cannot replace a null header MTRL and nil MTIN.
+  for (int primitive : {1, 2}) {
+    for (unsigned mask = 0; mask < 16; ++mask) {
+      auto data = OneGenerator([&](auto& out) {
+        PutProperty(out, "SIZE", 3);
+        PutConstant(out, Bits(2.f));
+        if (mask & 2) PutTexr(out, 0x1234ABCD);
+        if (mask & 4) {
+          PutProperty(out, "MTIN", 0);
+          out.push_back(0);
+          PutGuid(out, (mask & 8) ? Fresh(1) : EffectGuid{});
+        }
+      }, primitive);
+      if (!(mask & 1)) std::fill(data.begin() + 0x41, data.begin() + 0x51, 0);
+      EffectNode parsed;
+      std::string error;
+      CHECK_MSG(ParseEffect(data.data(), data.size(), parsed, error), "material header parses");
+      CHECK_MSG((parsed.baseMaterial != EffectGuid{}) == bool(mask & 1), "header MTRL is retained");
+      auto converted = ConvertOne(data, {});
+      const bool missing = !(mask & 1) && (mask & 12) != 12;
+      CHECK_MSG(converted.size() == 1 && converted[0].drawsNothing == missing,
+                "only absent base MTRL AND absent/nil MTIN skip sprite dispatch");
+      if (converted.empty()) continue;
+      std::vector<RetailPartProperty> props;
+      CHECK_MSG(SplitRetailPart(converted[0].part.data(), converted[0].part.size(), props, error), "dispatch parses");
+      Retail size;
+      size.f("CNST").w(Bits(2.f));
+      CHECK_MSG(std::any_of(props.begin(), props.end(), [&](const auto& p) {
+        return p.fourcc == EffectFourCC("SIZE") && p.value == size.bytes;
+      }), "null material leaves the active SIZE evaluator intact");
+      if (missing) {
+        Retail dispatch;
+        dispatch.f("CNST").w(0);
+        CHECK_MSG(std::any_of(props.begin(), props.end(), [&](const auto& p) {
+          return p.fourcc == EffectFourCC("PPRM") && p.value == dispatch.bytes;
+        }), "null material suppresses the draw through PPRM");
+      }
+    }
+  }
   auto parts = ConvertOne(OneGenerator([](auto& o) {
                  PutProperty(o, "MAXP", 1);
                  PutConstant(o, 4);
