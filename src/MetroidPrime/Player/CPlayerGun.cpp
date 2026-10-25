@@ -32,6 +32,7 @@
 #include "MetroidPrime/HUD/CSamusHud.hpp"
 #include "MetroidPrime/Player/CGrappleArm.hpp"
 #include "MetroidPrime/Cameras/CFirstPersonCamera.hpp"
+#include "MetroidPrime/Player/CMorphBall.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/SFX/PhazonGun.h"
 #include "MetroidPrime/SFX/Weapons.h"
@@ -367,6 +368,8 @@ CPlayerGun::CPlayerGun(TUniqueId playerId)
 , mPortRapidTimer(0.f)
 , mPortPointerAimValid(false)
 , mPortPointerAimPoint(CVector3f::Zero())
+, mPortBubbleXf(CTransform4f::Identity())
+, mPortBubbleTimer(0.f)
 #endif
 {
 
@@ -761,6 +764,9 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   const CVector3f probePos = mgr.GetPlayer()->GetTranslation();
   const float probeXyz[3] = {probePos.GetX(), probePos.GetY(), probePos.GetZ()};
   const PortRoomEnv::ProbeOverrideScope probeScope(probeXyz);
+  // CPlayerGunMP1::Render draws the underwater bubbles first, in world space.
+  gpRender->SetModelMatrix(CTransform4f::Identity());
+  mPortBubbleGens.Render();
 #endif
   const CTransform4f worldView = CGraphics::GetViewMatrix();
 #ifdef TARGET_PC
@@ -1195,10 +1201,12 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   // CGunWeaponMP1::UpdateChargeEffects drives it. Its drive isn't the charge factor but
   // CPlayerGunMP1::Update's own accumulator: past the charge FX start (warm-up) it rises
   // at 1/1.45 per second, otherwise it falls at 1 per second. Ice keeps retail's timing,
-  // so the warm-up is kChargeFxStart.
+  // so the warm-up is kChargeFxStart. It grows through the combo phases too (+0x4c <= 9,
+  // i.e. up to kCP_ComboFireDone).
   {
     static float sShellFactor = 0.f;
-    const bool charging = x32c_chargePhase >= kCP_AnimAndSfx && x32c_chargePhase <= kCP_FxGrown;
+    const bool charging =
+        x32c_chargePhase >= kCP_ChargeRequested && x32c_chargePhase <= kCP_ComboFireDone;
     if (charging && x340_chargeBeamFactor >= kChargeFxStart) {
       sShellFactor += advDt / 1.45f;
       if (sShellFactor > 1.f) {
@@ -1229,6 +1237,9 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
 
   UpdateWeaponFire(advDt, playerState, mgr);
   UpdateGunIdle(x364_gunStrikeCoolTimer > 0.f, cameraBobT, advDt, mgr);
+#ifdef TARGET_PC
+  PortUpdateUnderWaterBubbles(advDt, mgr);
+#endif
 
   if ((x2ec_lastFireButtonStates & 0x1) != 0) {
     x378_shotSmokeStartTimer = 0.f;
@@ -1816,6 +1827,8 @@ void CPlayerGun::UpdateChargeState(float dt, CStateManager& mgr) {
 #ifdef TARGET_PC
     if (PortRapidChargeShot(dt, mgr)) {
       x340_chargeBeamFactor = 0.f;
+      // Remastered sets the charging flag before its quick-shot phase, so it bubbles.
+      PortGenerateUnderWaterBubbles(mgr);
       return;
     }
 #endif
@@ -1903,6 +1916,11 @@ void CPlayerGun::UpdateChargeState(float dt, CStateManager& mgr) {
       x340_chargeBeamFactor = 1.f;
     }
   }
+#ifdef TARGET_PC
+  if (x834_24_charging) {
+    PortGenerateUnderWaterBubbles(mgr);
+  }
+#endif
 }
 
 void CPlayerGun::Reset(CStateManager& mgr, bool b1) {
@@ -2231,6 +2249,12 @@ void CPlayerGun::PortInitFlashes() {
       PortRemastered::SyntheticEffectId("plasmachargemuzzleflash"),
       PortRemastered::SyntheticEffectId("phazonchargemuzzleflash"),
   };
+  mPortBubbleGens.Clear();
+  mPortBubbleToken = rstl::optional_object_null();
+  const SObjectTag bubbleTag('PART', PortRemastered::SyntheticEffectId("underwaterbubblesweaponfire"));
+  if (gpResourceFactory->CanBuild(bubbleTag)) {
+    mPortBubbleToken = TLockedToken< CGenDescription >(gpSimplePool->GetObj(bubbleTag));
+  }
   mPortFlashTokens = rstl::reserved_vector< TLockedToken< CGenDescription >, kPortFlashCount >();
   for (int i = 0; i < kPortFlashCount; ++i) {
     mPortFlashToken[i] = -1;
@@ -2259,6 +2283,49 @@ void CPlayerGun::PortRenderFlashes(int first, int end) const {
   for (int i = first; i < end; ++i) {
     mPortFlashGens[i].Render();
   }
+}
+
+// CPlayerMP1::ShouldGenerateUnderWaterBubbles 0xcf14bc: in normal water with the ball's top
+// (morphed) or the camera at least 0.9 below the surface.
+static bool PortShouldGenerateUnderWaterBubbles(const CPlayer& player, const CStateManager& mgr) {
+  if (!player.IsInFluid()) {
+    return false;
+  }
+  const CScriptWater* water = TCastToConstPtr< CScriptWater >(mgr.GetObjectById(player.InFluidId()));
+  if (water == nullptr || water->GetFluidPlane().GetFluidType() != CFluidPlane::kFT_NormalWater) {
+    return false;
+  }
+  const float surfaceZ = water->GetTriggerBoundsWR().GetMaxPoint().GetZ();
+  float depth;
+  if (player.GetMorphballTransitionState() == CPlayer::kMS_Morphed) {
+    depth = surfaceZ - (player.GetBallPosition().GetZ() + player.GetMorphBall()->GetBallRadius());
+  } else {
+    depth = surfaceZ - mgr.GetCameraManager()->GetCurrentCameraTransform(mgr).GetTranslation().GetZ();
+  }
+  return depth >= 0.9f;
+}
+
+// CPlayerGunMP1::GenerateUnderWaterBubbles 0xc9a780, every frame while charging: start (or
+// resume) the module 0.55 along the muzzle's forward axis, placed by translation only
+// (transform mode 2), and keep it alive for 0.25 s.
+void CPlayerGun::PortGenerateUnderWaterBubbles(CStateManager& mgr) {
+  if (!mPortBubbleToken || !PortShouldGenerateUnderWaterBubbles(*mgr.GetPlayer(), mgr)) {
+    return;
+  }
+  mPortBubbleGens.StartOrResume(*mPortBubbleToken);
+  const CTransform4f muzzleXf = x4a8_gunWorldXf * x418_beamLocalXf;
+  mPortBubbleXf =
+      CTransform4f::Translate(muzzleXf.GetTranslation() + muzzleXf.GetForward() * 0.55f);
+  mPortBubbleTimer = 0.25f;
+}
+
+// UpdateUnderWaterBubbles (inlined in CPlayerGunMP1::Update after UpdateGunIdle).
+void CPlayerGun::PortUpdateUnderWaterBubbles(float dt, CStateManager& mgr) {
+  mPortBubbleTimer = rstl::max_val(mPortBubbleTimer - dt, 0.f);
+  if (!PortShouldGenerateUnderWaterBubbles(*mgr.GetPlayer(), mgr) || mPortBubbleTimer <= 0.f) {
+    mPortBubbleGens.FadeActive();
+  }
+  mPortBubbleGens.Update(dt, mPortBubbleXf, CVector3f(1.f, 1.f, 1.f));
 }
 #endif
 

@@ -50,6 +50,7 @@ inline constexpr const char* kSyntheticEffectNames[] = {
     "ballinnerglow_variawithspiderball",
     "ballinnerglow_gravity",
     "ballinnerglow_phazon",
+    "underwaterbubblesweaponfire",
 };
 
 }  // namespace PortRemastered

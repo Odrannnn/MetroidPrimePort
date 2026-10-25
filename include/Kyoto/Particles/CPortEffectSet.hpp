@@ -41,6 +41,28 @@ public:
     mHasActive = true;
   }
 
+  // Start behaviour 1: an active effect turns its emission back on and nothing is created;
+  // otherwise a new effect is added and the fading ones are kept.
+  void StartOrResume(const TToken< CGenDescription >& desc) {
+    if (mHasActive) {
+      mEffects[mCount - 1]->SetParticleEmission(true);
+      return;
+    }
+    if (mCount == kMaxEffects) {
+      Remove(0);
+    }
+    mEffects[mCount++] = rs_new CElementGen(desc);
+    mHasActive = true;
+  }
+
+  // Stop behaviour 0 (Stop 0x6ab46c, FadeActive): the active effect stops emitting and fades.
+  void FadeActive() {
+    if (mHasActive) {
+      mEffects[mCount - 1]->SetParticleEmission(false);
+      mHasActive = false;
+    }
+  }
+
   void Update(float dt, const CTransform4f& xf, const CVector3f& scale) {
     for (int i = 0; i < mCount;) {
       CElementGen* gen = mEffects[i];

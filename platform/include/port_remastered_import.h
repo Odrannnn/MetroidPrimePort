@@ -162,7 +162,7 @@ inline constexpr int kModels = 20;
 // 102: visor rain splash (VFX_VisorRain 0ec41df0, BC978532 paired).
 // 103: the FlickerBat's 0B9E48EB paired with 3b29b0b3 (#visual-inferred: inferred from the
 // look, not proven by any CHPR or other serialized reference).
-inline constexpr int kEffects = 104;   // both Queen barrier shaders and ten room-only effects
+inline constexpr int kEffects = 105;   // UnderWaterBubblesWeaponFire
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

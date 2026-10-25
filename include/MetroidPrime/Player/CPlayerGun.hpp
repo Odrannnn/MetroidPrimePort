@@ -525,6 +525,15 @@ private:
   rstl::reserved_vector< TLockedToken< CGenDescription >, kPortFlashCount > mPortFlashTokens;
   int mPortFlashToken[kPortFlashCount];
   CPortEffectSet mPortFlashGens[kPortFlashCount];
+
+  // Port: Remastered's UnderWaterBubblesWeaponFire module (CPlayerGunMP1 +0x760, timer +0x768),
+  // a synthetic PART; absent = not imported.
+  void PortGenerateUnderWaterBubbles(CStateManager& mgr);
+  void PortUpdateUnderWaterBubbles(float dt, CStateManager& mgr);
+  rstl::optional_object< TLockedToken< CGenDescription > > mPortBubbleToken;
+  CPortEffectSet mPortBubbleGens;
+  CTransform4f mPortBubbleXf;
+  float mPortBubbleTimer;
 #endif
 };
 CHECK_SIZEOF(CPlayerGun, 0x838)
