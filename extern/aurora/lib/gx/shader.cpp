@@ -2245,6 +2245,43 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     }})""",
                         base, underlying(config.tevStages[mapStage[0]].texMapId));
   }
+  // EnergyField 9C867F3C, both shipped fragment permutations. Its VS passes raw
+  // colour/alpha and UV0; rows 4/5 reconstruct Remastered world X/Y.
+  if (mapStage[0] != -1 && mapStage[4] != -1) {
+    liquid += fmt::format(R"""(
+    if (pbr_kind > 43.5 && pbr_kind < 44.5) {{
+        let ef0 = ubuf.pbr_shield[0];
+        let ef1 = ubuf.pbr_shield[1];
+        let efd = ubuf.pbr_shield[7];
+        let eft = ubuf.pbr_param.x;
+        let efw = vec2f(dot(ubuf.pbr_shield[4].xyz, in.pbr_pos) + ubuf.pbr_shield[4].w,
+                       dot(ubuf.pbr_shield[5].xyz, in.pbr_pos) + ubuf.pbr_shield[5].w);
+        let efuv = (efw - vec2f(1.0 - efd.a)) * ef0.y;
+        let efscroll = eft * vec2f(2.25, 0.150000006);
+        let efr = textureSampleGrad(tex{0}, tex{0}_samp, efuv - efscroll, dpdx(efuv), dpdy(efuv)).r;
+        let efg = textureSampleGrad(tex{0}, tex{0}_samp, efuv + efscroll, dpdx(efuv), dpdy(efuv)).g;
+        let efstripeuv = tex{2}_uv - vec2f(0.0, eft);
+        let efs = textureSampleGrad(tex{1}, tex{1}_samp, efstripeuv, dpdx(efstripeuv), dpdy(efstripeuv)).r;
+        let efv = pbr_vraw;
+        let efrim = 1.0 - pow(abs(pbr_ng.z), ef0.x);
+        let efthreshold = max(min(efrim * efrim - (1.0 - efd.a), ef0.w), ef0.z);
+        let efmask = select(0.0, 1.0, efr > 1.0 - efv.a) + select(0.0, 1.0, efg > 1.0 - efthreshold);
+        let efbase = efv.a * efv.rgb;
+        let efstripe = efv.a * ceil(efv.a - 0.5) * ef1.w;
+        var efinverse = 1.0;
+        if (ubuf.pbr_tone[1].x > 0.0 && ubuf.pbr_tone[0].w > 0.0) {{
+            efinverse = 1.0 / ubuf.pbr_tone[0].w;
+        }}
+        pbr_lo = vec3f(0.0);
+        pbr_glow = efd.a * efd.rgb * (efbase * ef1.x + efinverse *
+                   clamp(efmask * efbase * ef1.y + efstripe * efs * efv.rgb * efd.a, vec3f(0.0), vec3f(1.0)));
+        pbr_alpha = max(efmask, ef1.z);
+        pbr_pass = vec3f(0.0);
+    }})""",
+        underlying(config.tevStages[mapStage[0]].texMapId),
+        underlying(config.tevStages[mapStage[4]].texMapId),
+        underlying(config.tevStages[mapStage[4]].texCoordId));
+  }
   // Kind 19, Remastered's lit sphere-map shader 98F0556D (permutation 002_0): L is the ambient
   // plus the lights' N.L; rgb = REFV x REFS(0.5 + 0.5 n.xy) x luminance(L) + DIFT x DIFC x L / pi
   // + ICNC + ICMC (the base map's albedo is DIFT; row 7 = DIFC; no 1/pi, as for the other lit kinds). Map 4 is REFS, map 5 REFV.
@@ -3121,6 +3158,9 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
          "          pbr_keep = pbr_sdst * (vec3f(1.0) - pbr_vfw);");
     kind("pbr_pass = pbr_sfb * pbr_c4.x * pbr_vraw.rgb;",
          "pbr_pass = pbr_sfb * pbr_c4.x * pbr_vraw.rgb;\n          pbr_vfon = false;");
+    // Neither EnergyField permutation consumes the froxel fog terms.
+    kind("pbr_alpha = max(efmask, ef1.z);",
+         "pbr_alpha = max(efmask, ef1.z);\n          pbr_vfon = false;");
     kind("pbr_pass = pbr_sscene * pbr_h3.z * pbr_df.rgb * pbr_df.a;",
          "pbr_pass = pbr_sscene * pbr_h3.z * pbr_df.rgb * pbr_df.a;\n"
          "          pbr_vfw = vec3f(pbr_alpha);\n          pbr_vfk = true;");

@@ -574,6 +574,26 @@ void TestHoloReflKind() {
 // rows 0-3 are CCH0..3, row 6 is ICMC alone (ICNC ignored), row 7 DIFC, and it reads the
 // vertex colour.
 void TestHologramKind() {
+  {
+    ModelMaterial energy = Material(0, false);
+    SetShader(energy, 0x9C867F3C);
+    energy.data.push_back(TexParam(FourCC('T', 'C', 'H', '0'), 0x55));
+    energy.data.push_back(ColorParam(FourCC('C', 'C', 'H', '0'), 6.f, 20.f, 0.35f, 0.95f));
+    energy.data.push_back(ColorParam(FourCC('C', 'C', 'H', '1'), 2.f, 1.5f, 1.f, 1.f));
+    energy.data.push_back(ColorParam(FourCC('D', 'I', 'F', 'C'), 0.5f, 0.25f, 0.125f, 0.75f));
+    std::vector<MaterialDecision> decisions;
+    const auto cmdl = ConvertDecisions(energy, decisions, true);
+    REQUIRE(!decisions.empty());
+    CHECK(decisions[0].kind == 44 && decisions[0].path == "pbr");
+    size_t at = 0, size = 0;
+    REQUIRE(FirstBlob(cmdl, at, size));
+    const auto trailer = BlobShield(cmdl, at, size);
+    CHECK(trailer.has && trailer.hasKind && trailer.kind == 44.f);
+    CHECK(Near(trailer.row[0], 6.f) && Near(trailer.row[1], 20.f));
+    CHECK(Near(trailer.row[4], 2.f) && Near(trailer.row[5], 1.5f));
+    CHECK(Near(trailer.row[28], 0.5f) && Near(trailer.row[31], 0.75f));
+    CHECK((BlobVtx(cmdl, at) & 0x30u) == 0x30u);
+  }
   ModelMaterial material = Material(0, false);
   SetShader(material, 0x4CA0017C);
   material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '0'), 1.f, 2.f, 3.f, 4.f));

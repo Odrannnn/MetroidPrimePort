@@ -114,6 +114,7 @@ constexpr uint32_t kShaderBoundaryShield = 0x6C1A4768;
 // the same pixel and vertex code as 6C1A4768 (perms 002_0/002_1/004_0 fold identically), only a
 // different shader id, so it takes the same kind.
 constexpr uint32_t kShaderForceField = 0x6F53C775;
+constexpr uint32_t kShaderEnergyField = 0x9C867F3C;
 // PickUp (PickUp_Blue_Mat / PickUp_Orange_Mat, build/mpr/artifact/NOTES.md): unlit, a normal-map
 // fresnel pair over a gradient that scrolls through world space. PBR kind 15, constants in the
 // same PBR8 trailer (rows 0-3 CCH0..CCH3, row 7 DIFC, rows 4-5 filled at run time).
@@ -293,6 +294,7 @@ std::string ShaderRole(uint32_t shader) {
   add(shader == kShaderHolo, "holo");
   add(shader == kShaderHoloRefl, "holo-refl");
   add(shader == kShaderHologram, "hologram");
+  add(shader == kShaderEnergyField, "energy-field");
   add(shader == kShaderLambertFx, "lambert-fx");
   add(shader == kShaderGunFx, "gun-fx");
   add(IsEyeGloss(shader), "eye-gloss");
@@ -360,6 +362,7 @@ const char* KindName(int kind) {
   case 41: return "unlit-add";
   case 42: return "ball-glass";
   case 43: return "simple-glass";
+  case 44: return "energy-field";
   default: return "kind?";
   }
 }
@@ -1209,6 +1212,30 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     }
     for (int i = 0; i < 4; ++i) {
       out.shieldRows[28 + i] = difc[i];
+    }
+  } else if (shader == kShaderEnergyField && out.maps[kBase].has && tch[0] && cch[0] && cch[1]) {
+    // Ore Processing EnergyField: 000/001 fragments are identical. BCLR.r/g
+    // are the two counter-scrolling threshold masks; TCH0.r is the UV stripe.
+    // VS emits world position, view normal, UV0 and raw vertex RGBA.
+    out.kind = 44;
+    out.shield = true;
+    out.vcolor = true;
+    out.unlit = true;
+    out.maps[kBase].raw = true;
+    set(kBase, tch[0]->texture, &out.layer[kBase]);
+    out.layer[kBase].raw = true;
+    out.kindParam[0] = 1.0;
+    out.tint[0] = out.tint[1] = out.tint[2] = 0.0;
+    for (int r = 0; r < 2; ++r) {
+      for (int i = 0; i < 4; ++i) {
+        out.shieldRows[r * 4 + i] = ShortestDouble(cch[r]->color[i]);
+      }
+    }
+    for (int i = 0; i < 4; ++i) out.shieldRows[28 + i] = 1.0;
+    for (const ModelMaterialData& d : mat.data) {
+      if (d.kind == ModelMaterialData::Kind::Color && d.usage == FourCC('D', 'I', 'F', 'C')) {
+        for (int i = 0; i < 4; ++i) out.shieldRows[28 + i] = ShortestDouble(d.color[i]);
+      }
     }
   } else if ((shader == kShaderHolo || shader == kShaderHoloRefl || shader == kShaderHologram) &&
              out.maps[kBase].has && (shader != kShaderHologram || (cch[0] && cch[1] && cch[2] && cch[3]))) {

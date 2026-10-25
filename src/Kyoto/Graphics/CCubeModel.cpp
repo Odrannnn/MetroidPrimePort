@@ -564,7 +564,7 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   if ((values[13] > 4.5f && values[13] < 7.5f) || (values[13] > 8.5f && values[13] < 9.5f) ||
       (values[13] > 10.5f && values[13] < 11.5f) || (values[13] > 13.5f && values[13] < 15.5f) || (values[13] > 17.5f && values[13] < 18.5f) ||
       (values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 28.5f && values[13] < 29.5f) ||
-      (values[13] > 31.5f && values[13] < 32.5f) || (values[13] > 42.5f && values[13] < 43.5f)) {
+       (values[13] > 31.5f && values[13] < 32.5f) || (values[13] > 42.5f && values[13] < 44.5f)) {
     // The Phazon3 stone and the PhazonPool blister read Remastered's scene clock (stops while paused, wraps at 15120 s).
     values[15] *= ((values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 31.5f && values[13] < 32.5f))
                       ? CGraphics::GetSimTime()
@@ -583,6 +583,18 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
     shield[21] = view.Get12();
     shield[22] = -view.Get11();
     shield[23] = view.Get13();
+  }
+  // EnergyField's VS supplies Remastered world X/Y, not GameCube world X/Y:
+  // the converter's R2G is (-x,z,y). These rows undo that change of basis.
+  if (kind > 43.5f && kind < 44.5f) {
+    shield[16] = -view.Get00();
+    shield[17] = -view.Get02();
+    shield[18] = view.Get01();
+    shield[19] = -view.Get03();
+    shield[20] = view.Get20();
+    shield[21] = view.Get22();
+    shield[22] = -view.Get21();
+    shield[23] = view.Get23();
   }
   // The Phazon Beam's veins (kind 35) take DIFC.w, the "DisintegrationAmount" variable, from the
   // beam's fade (PortSetDisintegration); the record holds only its initial value.
@@ -642,7 +654,7 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   // (the unlit cube surface, 38, the unlit vertex-coloured fx, 39, the unlit matcap, 40, and the unlit
   // METL-weighted fx, 41, the spider ball's glass, 42, and the simple glass, 43: DIFC and their glow) have constants;
   // every other material clears the last one's.
-  GXSetPBRShield(wind || (kind > 10.5f && kind < 11.5f) || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) || (kind > 34.5f && kind < 35.5f) || (kind > 37.5f && kind < 43.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
+  GXSetPBRShield(wind || (kind > 10.5f && kind < 11.5f) || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) || (kind > 34.5f && kind < 35.5f) || (kind > 37.5f && kind < 44.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
   // World up as the shader sees it: view space is right, up, -forward.
   const f32 up[3] = {view.Get20(), view.Get22(), -view.Get21()};
   GXSetPBRMaterial(values, values + 3, values[6], values[7], values + 8, values + 13, up);
