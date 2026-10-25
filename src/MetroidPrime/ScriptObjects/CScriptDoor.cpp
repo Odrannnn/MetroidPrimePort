@@ -219,12 +219,16 @@ CScriptDoor::EDoorOpenCondition CScriptDoor::GetDoorOpenCondition(CStateManager&
     // list (PCA + Phazon Processing Center + Elite Quarters in backwards Lower
     // Mines), and AllocateUniqueId then hangs in the error handler. Release
     // those rooms first, as the doorway trigger's SetToZero would; TravelToArea
-    // deallocates them before it streams the new one. Only in PCA, the one room
-    // where this can happen, so every other door keeps the original behaviour.
+    // deallocates them before it streams the new one. Always in PCA; elsewhere
+    // only once the list is half full, so uncrowded doors keep the original
+    // behaviour. Central Dynamo (621 objects) behind Quarantine Access A (231)
+    // plus Metroid Quarantine A hung the same way on a tablet.
     const CAssetId kProcessingCenterAccess = 0xED6DE73B;
+    const int kCrowdedObjects = 512;
     if (mgr.GetNextAreaId() == dock->GetAreaId() &&
-        mgr.GetWorld()->GetAreaAlways(dock->GetAreaId()).IGetAreaAssetId() ==
-            kProcessingCenterAccess) {
+        (mgr.GetObjectListById(kOL_All).size() >= kCrowdedObjects ||
+         mgr.GetWorld()->GetAreaAlways(dock->GetAreaId()).IGetAreaAssetId() ==
+             kProcessingCenterAccess)) {
       bool otherOpen = false;
       CObjectList& doors = mgr.ObjectListById(kOL_PlatformAndDoor);
       for (int i = doors.GetFirstObjectIndex(); i != -1; i = doors.GetNextObjectIndex(i)) {
