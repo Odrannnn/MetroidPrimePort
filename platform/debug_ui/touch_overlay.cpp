@@ -1,13 +1,30 @@
-// iOS touch controls: the Android overlay's default layout (TouchControlsView.java), drawn with
-// ImGui over the game and fed by an SDL event filter. Same geometry, the same virtual pad
-// (touch_pad.h) and the same native calls the Java view makes through android_jni.cpp, so the
-// game, its bindings and the F1 settings treat both alike. Not here yet: the layout editor, the
-// classic and twin-stick layouts (C-stick, D-pad), map pinch and rotate, and wheel icons.
+// The touch overlay in C++: a faithful translation of Android's TouchControlsView.java, drawn with
+// ImGui over the game and fed by an SDL event filter. The Java view is the reference: the same
+// fractions, dp constants, tables, hit tests, press and release rules, colours, labels and saved
+// layout string, so a layout made on a phone plays the same here. Every Java `nativeX(...)` call is
+// the C++ function its JNI wrapper (android_jni.cpp) calls, called directly.
+//
+// What Java does with a Canvas becomes ImDrawList drawing in the pixels of the main viewport, and a
+// Canvas layer opened for one control's own opacity (pushLayer/popLayer) becomes the `sLocal`
+// multiplier: every colour goes through Argb(), which folds in F1's opacity (sGlobal) and the
+// control's (sLocal).
+//
+// Android-only parts left out: the mouse (fromMouse, onHoverEvent — a mouse is not a finger on the
+// overlay), performClick, attach and detach (a view lifecycle with no C++ equivalent; the poll
+// these scheduled runs from the draw), and the layout editor (stage B: its touch handling and
+// drawing are not translated yet, but the data model, controlBounds, clampToScreen, layoutHas,
+// layoutShows, editShown and the editing flag are, so it plugs in).
+//
+// Wheel icons: the Java traces nativeWheelIcon's ARGB bitmaps into outlines (IconTracer) and fills
+// them. That needs the bitmap as an ImGui texture or a tracer here, so a wheel item and the wheel
+// buttons wear their text labels instead, as the previous C++ overlay did.
 #include "debug_ui_internal.h"
 
 #if defined(PORT_TOUCH_OVERLAY)
 
+#include "port_input_bindings.h"
 #include "port_input_devices.h"
+#include "port_input_engine.h"
 #include "port_log.h"
 #include "port_photo.h"
 #include "port_pointer.h"
@@ -15,145 +32,410 @@
 #include "port_savestate.h"
 #include "touch_pad.h"
 
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_joystick.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <map>
 #include <mutex>
+#include <optional>
+#include <set>
+#include <string>
+#include <vector>
 
 namespace {
 
 constexpr float kPi = 3.14159265358979f;
 
-// Gamepad buttons and axes, as the Java view sends them.
+// Touch target types.
+enum Type { kLeftStick, kRightStick, kButton, kHide, kAim, kMapTap, kMapPan, kMapPan2, kWheel };
+
+// Port-only actions, not game inputs.
+constexpr int kToggleDebugOverlay = -1;
+// Twin stick's Beam button: held, it turns the D-pad into the beam picker. Sends no GameCube button.
+constexpr int kBeamShift = -2;
+// The Turbo button: held, the game behaves as if Fire were mashed. Sends no GameCube button.
+constexpr int kTurboFire = -3;
+// A button added in the layout editor: its action is a touch: binding. Sends no GameCube button.
+constexpr int kCustomButton = -4;
+// Axis-held controls are tracked with ids above this, to share one press map.
+constexpr int kAxisIdBase = 100;
+
+// SDL gamepad ids: the port maps these onto the GameCube pad itself.
 constexpr int kBtnSouth = 0, kBtnEast = 1, kBtnWest = 2, kBtnNorth = 3, kBtnStart = 6,
-              kBtnRightShoulder = 10;
-constexpr int kAxisLeftX = 0, kAxisLeftY = 1, kAxisTriggerL = 4, kAxisTriggerR = 5;
+              kBtnRightShoulder = 10, kBtnDpadUp = 11, kBtnDpadDown = 12, kBtnDpadLeft = 13,
+              kBtnDpadRight = 14;
+constexpr int kAxisLeftX = 0, kAxisLeftY = 1, kAxisRightX = 2, kAxisRightY = 3, kAxisTriggerL = 4,
+              kAxisTriggerR = 5;
 
-// Every control the overlay can hold. Ball* replace A, B, X, Y on the Morph Ball page.
-enum Ctl {
-  kA, kB, kX, kY, kBallBomb, kBallBoost, kBallPowerBomb, kBallSpider, kBallUnmorph,
-  kTurbo, kL, kR, kZ, kStart, kMenu, kEye, kMap, kBack, kVisorWheel, kBeamWheel, kCtlCount
-};
+// The layout's fractions of the height stop growing at this many dp, so a tablet gets phone-sized
+// controls that keep their distance to the nearest edge.
+constexpr float kMaxLayoutDp = 520.f;
+constexpr float kStickRadius = 0.16f;    // drawn and read through, so the two cannot disagree
+constexpr float kLeftStickReach = 1.5f;  // grab area, in stick radii
+constexpr float kStickDeadZone = 0.12f;
+// The GameCube C-stick: smaller, just below and left of the face buttons.
+constexpr float kGcCstickFromRight = 0.60f;
+constexpr float kGcCstickY = 0.76f;
+constexpr float kGcCstickRadius = 0.115f;
 
-struct CtlDef {
-  int code;   // touch binding code (TouchControlsView's C_*), -1 for none
-  int button; // gamepad button, -1 for none
-  int axis;   // trigger axis, -1 for none
-};
-constexpr CtlDef kDefs[kCtlCount] = {
-    {3, kBtnSouth, -1},   {4, kBtnEast, -1},  {5, kBtnWest, -1}, {6, kBtnNorth, -1},
-    {PortInputDevices::kTouchBallBase + 0, -1, -1}, {PortInputDevices::kTouchBallBase + 1, -1, -1},
-    {PortInputDevices::kTouchBallBase + 2, -1, -1}, {PortInputDevices::kTouchBallBase + 3, -1, -1},
-    {PortInputDevices::kTouchBallBase + 4, -1, -1},
-    {-1, -1, -1},         {7, -1, kAxisTriggerL}, {8, -1, kAxisTriggerR}, {9, kBtnRightShoulder, -1},
-    {12, kBtnStart, -1},  {13, -1, -1},       {15, -1, -1},      {14, -1, -1},
-    {-1, -1, -1},         {10, -1, -1},       {11, -1, -1},
-};
+// The GameCube pad's colours, as RGB; the fill alpha follows the press state.
+constexpr uint32_t kGcGreen = 0x2FA864, kGcRed = 0xC8343A, kGcGrey = 0x8A8A94, kGcYellow = 0xE0C020,
+                   kGcPurple = 0x6A4FB0;
 
-// Face buttons, anchored to A (GC_A_FROM_RIGHT, GC_A_Y): offsets and sizes in layout units.
-struct FaceDef {
-  Ctl ctl;
-  bool kidney;
-  float x, y, r;                 // round: centre offset and radius
-  float ring, half, start, sweep; // kidney: around A, degrees
-  uint32_t rgb;
-  const char* letter;
-  const char* label;
-};
-constexpr uint32_t kGreen = 0x2FA864, kRed = 0xC8343A, kGrey = 0x8A8A94, kPurple = 0x6A4FB0;
-constexpr FaceDef kFace[] = {
-    {kA, false, 0.f, 0.f, 0.085f, 0, 0, 0, 0, kGreen, "A", "Fire"},
-    {kB, false, -0.123f, 0.103f, 0.050f, 0, 0, 0, 0, kRed, "B", "Jump"},
-    {kX, true, 0, 0, 0, 0.158f, 0.040f, -37.f, 55.f, kGrey, "X", "Morph"},
-    {kY, true, 0, 0, 0, 0.158f, 0.040f, -150.f, 55.f, kGrey, "Y", "Missile"},
-};
-constexpr FaceDef kBallFace[] = {
-    {kBallBomb, false, 0.f, 0.f, 0.085f, 0, 0, 0, 0, kGreen, "A", "Bomb"},
-    {kBallBoost, false, -0.123f, 0.103f, 0.050f, 0, 0, 0, 0, kRed, "B", "Boost"},
-    {kBallPowerBomb, false, -0.085f, -0.133f, 0.055f, 0, 0, 0, 0, kGrey, "Y", "P.Bomb"},
-    {kBallSpider, false, 0.05f, -0.27f, 0.050f, 0, 0, 0, 0, kGrey, "R", "Spider"},
-    {kBallUnmorph, false, 0.156f, -0.026f, 0.055f, 0, 0, 0, 0, kGrey, "X", "Unmorph"},
-};
-constexpr FaceDef kTurboDef = {kTurbo, false, 0.05f, -0.27f, 0.045f, 0, 0, 0, 0, kGrey, "T", "Turbo"};
+// A's centre: from the right edge and from the top, in view heights. The cluster is laid out in
+// heights around it, so it keeps the pad's shape whatever the screen's aspect.
+constexpr float kGcAFromRight = 0.235f, kGcAY = 0.700f;
 
-// Wheel sector (up, right, down, left) -> visor or beam index, and the sector labels.
-constexpr int kWheelItems[2][4] = {{0, 1, 3, 2}, {0, 2, 1, 3}};
+// The D-pad is one cross: its centre as fractions of the view, its arms in view heights.
+constexpr float kDpadX = 0.115f, kDpadY = 0.335f, kDpadArm = 0.130f, kDpadHalf = 0.045f;
+constexpr int kDpadButtons[4] = {kBtnDpadUp, kBtnDpadDown, kBtnDpadLeft, kBtnDpadRight};
+constexpr int kDpadDx[4] = {0, 0, -1, 1};
+constexpr int kDpadDy[4] = {-1, 1, 0, 0};
+
+// Twin stick (Remastered): a diamond in Xbox positions, round A's spot.
+constexpr float kTwinDiamond = 0.095f;
+// The Xbox letter drawn big on each twin diamond button.
+constexpr const char* kTwinLetters[4] = {"A", "B", "X", "Y"};
+
+// The round buttons along the bottom: START and MENU on the left, the map and the eye on the right.
+constexpr float kBottomButtonRadiusDp = 22.f, kBottomButtonSideDp = 28.f,
+                kBottomButtonBottomDp = 12.f, kBottomButtonGapDp = 8.f;
+
+// The Visor and Beam buttons and their wheels.
+constexpr const char* kWheelButtonLabels[2] = {"Visor", "Beam"};
+// Sectors run up, right, down, left, as the stock D-pad (visors) and C-stick (beams) do. Items are
+// numbered as the native side does: visors Combat/X-Ray/Scan/Thermal, beams Power/Ice/Wave/Plasma.
 constexpr const char* kWheelLabels[2][4] = {{"Combat", "X-Ray", "Thermal", "Scan"},
                                             {"Power", "Wave", "Ice", "Plasma"}};
+constexpr int kWheelItems[2][4] = {{0, 1, 3, 2}, {0, 2, 1, 3}};
+// The bit of WheelState that is set once there is a player.
+constexpr uint32_t kWheelValidBit = 1u << 12;
+// Set while Samus is morphed or morphing.
+constexpr uint32_t kWheelMorphedBit = 1u << 13;
+constexpr float kWheelButtonRadius = 0.072f, kWheelButtonGapDp = 8.f, kWheelButtonAnchorDp = 16.f;
+constexpr float kWheelRadiusDp = 112.f, kWheelDeadDp = 30.f, kWheelIconDp = 44.f;
 
-enum class Mode { PassThrough, Pointer, Minimal, Full };
+// A swipe up that springs the morph ball: at least this far, in dp, within this many ms.
+constexpr float kSwipeUpDp = 40.f;
+constexpr Uint64 kSwipeUpMs = 150;
+// Finger spread, in dp, under which a pinch is ignored (the ratio blows up).
+constexpr float kMapPinchMinDp = 20.f;
+// Travel, in dp, past which a touch is a drag and not a tap (minimap, wheel, A).
+constexpr float kMapTapSlopDp = 12.f;
+// Tells the game a finger is still down on the map, so it doesn't drift back.
+constexpr Uint64 kMapPanKeepAliveMs = 100;
+constexpr Uint64 kMapButtonPollMs = 200;
+constexpr Uint64 kPhysicalInputPollMs = 250;
+constexpr Uint64 kWheelTapMs = 250;
+
+// Every control is one movable unit: an override offset in layout units, a size scale and an
+// opacity, applied on top of the default position, which still follows the F1 margins.
+constexpr int kCLStick = 0, kCCStick = 1, kCDpad = 2, kCA = 3, kCB = 4, kCX = 5, kCY = 6, kCL = 7,
+              kCR = 8, kCZ = 9, kCVisor = 10, kCBeam = 11, kCStart = 12, kCMenu = 13, kCMap = 14,
+              kCEye = 15;
+// Twin stick's own controls, so a layout made there doesn't move the other layouts' buttons.
+constexpr int kCRstick = 16, kCJump = 17, kCFire = 18, kCMorph = 19, kCMissile = 20, kCLt = 21,
+              kCLb = 22, kCRt = 23, kCRb = 24, kCTz = 25, kCTr = 26;
+// The Turbo button, once for the default/classic layouts and once for twin.
+constexpr int kCTurbo = 27, kCTurboTwin = 28;
+// The Morph Ball page's buttons (kBallFace's order), shown only in the ball.
+constexpr int kCBall = 29, kCBbomb = 29, kCBboost = 30, kCBpbomb = 31, kCBspider = 32,
+              kCBunmorph = 33;
+constexpr int kBallButtons = 5;
+// An added button's page, saved as its entry's 7th field.
+constexpr int kPagePlay = 0, kPageBall = 1, kPageBoth = 2;
+constexpr const char* kPageNames[3] = {"Gameplay", "Ball", "Both"};
+constexpr int kControls = 34;
+constexpr int kCustomSlots = 64;
+constexpr int kCCustom = kControls;
+constexpr int kAllControls = kControls + kCustomSlots;
+// An added button's radius, in layout heights (A's is 0.085).
+constexpr float kCustomRadius = 0.07f;
+constexpr float kMinScale = 0.5f, kMaxScale = 2.5f, kMaxOffset = 4.f;
+
+// A control's own opacity cycles through these (percent). MENU stops at kMenuMinAlpha: it is the
+// only way into F1 on a touch-only device.
+constexpr int kAlphaSteps[] = {100, 75, 50, 25, 0};
+constexpr int kMenuMinAlpha = 25;
+// The editor draws a control at its own opacity, but hidden and 0% ones at this.
+constexpr int kEditMinAlpha = 15;
+// The ids the saved layout uses; never rename one.
+constexpr const char* kControlIdsStock[kControls] = {
+    "lstick", "cstick", "dpad", "a", "b", "x", "y", "l", "r", "z", "visor", "beam", "start",
+    "menu", "map", "eye", "rstick", "jump", "fire", "morph", "missile", "lt", "lb", "rt", "rb",
+    "tz", "tr", "turbo", "tturbo", "bbomb", "bboost", "bpbomb", "bspider", "bunmorph"};
+constexpr const char* kControlNames[kControls] = {
+    "Left stick", "C-stick", "D-pad", "A", "B", "X", "Y", "L", "R", "Z", "Visor", "Beam", "Start",
+    "Menu", "Map", "Hide", "Right stick", "Jump", "Fire", "Morph", "Missile", "LT Lock", "LB Jump",
+    "RT Fire", "RB Missile", "Map (Z)", "R", "Turbo", "Turbo", "Bomb", "Boost", "P.Bomb", "Spider",
+    "Unmorph"};
+
+// The buttons' labels for each context (#106): play, morph ball, pause menu, map, message box.
+enum LabelContext { kLabelsPlay, kLabelsMorph, kLabelsPause, kLabelsMap, kLabelsDialog };
+
+// What each GameCube face button does, drawn small under its letter.
+constexpr const char* kGamecubeFunctions[4] = {"Fire", "Jump", "Morph", "Missile"};
+// In the pause menu (Y turns the inventory's suit view), on the map screen (A switches area and
+// world map, Y shows the legend) and in save station or message boxes; blank where it does nothing.
+constexpr const char* kGamecubePauseFunctions[4] = {"Select", "Back", "", "View"};
+constexpr const char* kGamecubeMapFunctions[4] = {"World", "Exit", "", "Legend"};
+constexpr const char* kGamecubeDialogFunctions[4] = {"OK", "", "", ""};
+constexpr const char* kTwinPauseFunctions[4] = {"Back", "Select", "", ""};
+constexpr const char* kTwinMapFunctions[4] = {"Exit", "World", "", ""};
+constexpr const char* kTwinDialogFunctions[4] = {"", "OK", "", ""};
+
+struct ControlButton {
+  const char* label;
+  int button;
+  // A plain button's x is a fraction of the width and its y one of the height. An anchored one's
+  // are offsets from GameCube A, in heights.
+  bool anchored;
+  float x, y;
+  // A kidney's radius is its centre arc's, round its x/y.
+  float radius;
+  // Kidneys only: the band's half width and its arc in degrees, clockwise from +x.
+  float halfWidth, arcStart, arcSweep;
+  // An RGB fill, or 0 for the overlay's own.
+  uint32_t rgb;
+  bool Kidney() const { return arcSweep != 0.f; }
+};
+
+constexpr ControlButton Round(const char* label, int button, float x, float y, float radius,
+                              uint32_t rgb) {
+  return {label, button, true, x, y, radius, 0.f, 0.f, 0.f, rgb};
+}
+constexpr ControlButton Kidney(const char* label, int button, float ring, float halfWidth,
+                               float arcStart, float arcSweep, uint32_t rgb) {
+  return {label, button, true, 0.f, 0.f, ring, halfWidth, arcStart, arcSweep, rgb};
+}
+
+// A big green A, a small red B at its lower left, X and Y as kidneys curving round A.
+constexpr ControlButton kGamecubeFace[4] = {
+    Round("A", kBtnSouth, 0.f, 0.f, 0.085f, kGcGreen),
+    Round("B", kBtnEast, -0.123f, 0.103f, 0.050f, kGcRed),
+    Kidney("X", kBtnWest, 0.158f, 0.040f, -37.f, 55.f, kGcGrey),
+    Kidney("Y", kBtnNorth, 0.158f, 0.040f, -150.f, 55.f, kGcGrey),
+};
+// Twin stick: Jump is B, Fire is A, Morph is X, and Beam held shifts the D-pad to beams. Bottom,
+// right, left, top, so the controls are kCJump + index. Each takes the colour of the button it
+// sends.
+constexpr ControlButton kTwinFace[4] = {
+    Round("Jump", kBtnEast, 0.f, kTwinDiamond, 0.055f, kGcRed),
+    Round("Fire", kBtnSouth, kTwinDiamond, 0.f, 0.055f, kGcGreen),
+    Round("Morph", kBtnWest, -kTwinDiamond, 0.f, 0.055f, kGcGrey),
+    Round("Beam", kBeamShift, 0.f, -kTwinDiamond, 0.055f, kGcGrey),
+};
+// The optional Turbo button, above the cluster on the right. Not in the face arrays: those index
+// the editor ids and are always drawn.
+constexpr ControlButton kGamecubeTurbo = Round("Turbo", kTurboFire, 0.05f, -0.27f, 0.045f, kGcGreen);
+constexpr ControlButton kTwinTurbo = Round("Turbo", kTurboFire, 0.f, -0.21f, 0.045f, kGcGreen);
+
+// The Morph Ball page's buttons, kCBall + index, where the face buttons that do the same in the ball
+// sit: Bomb on A (Fire in twin), Boost on B (Jump), Unmorph on X (Morph), P.Bomb on Y and Spider on
+// R (twin: above P.Bomb). No button id: they only report their touch code.
+constexpr ControlButton kBallFace[5] = {
+    Round("Bomb", -1, 0.f, 0.f, 0.085f, kGcGreen),
+    Round("Boost", -1, -0.123f, 0.103f, 0.050f, kGcRed),
+    Round("P.Bomb", -1, -0.085f, -0.133f, 0.055f, kGcGrey),
+    Round("Spider", -1, 0.05f, -0.27f, 0.050f, kGcGrey),
+    Round("Unmorph", -1, 0.156f, -0.026f, 0.055f, kGcGrey),
+};
+constexpr ControlButton kTwinBallFace[5] = {
+    Round("Bomb", -1, kTwinDiamond, 0.f, 0.055f, kGcGreen),
+    Round("Boost", -1, 0.f, kTwinDiamond, 0.055f, kGcRed),
+    Round("P.Bomb", -1, 0.f, -kTwinDiamond, 0.055f, kGcGrey),
+    Round("Spider", -1, 0.f, -0.21f, 0.055f, kGcGrey),
+    Round("Unmorph", -1, -kTwinDiamond, 0.f, 0.055f, kGcGrey),
+};
+
+struct PillButton {
+  const char* label;
+  int axis;
+  int button;
+  float left, top, right, bottom;
+  // An RGB fill, or 0 for the overlay's own.
+  uint32_t rgb;
+  // The editor control this pill is, or -1 to go by its axis/button (PillControl).
+  int control;
+  // One identity for the press map and the held highlight, whether it is a button or an axis.
+  int Id() const { return axis >= 0 ? kAxisIdBase + axis : button; }
+};
+
+// L and R are the pad's analog triggers; Z is its digital shoulder. START and MENU ignore their
+// rects: see CornerSlot.
+constexpr PillButton kGamecubePills[5] = {
+    {"L Lock", kAxisTriggerL, -1, 0.020f, 0.030f, 0.150f, 0.190f, kGcGrey, -1},
+    {"R Look", kAxisTriggerR, -1, 0.850f, 0.030f, 0.980f, 0.190f, kGcGrey, -1},
+    {"Z Map", -1, kBtnRightShoulder, 0.870f, 0.205f, 0.960f, 0.265f, kGcPurple, -1},
+    {"START", -1, kBtnStart, 0.f, 0.f, 0.f, 0.f, 0, -1},
+    {"MENU", -1, kToggleDebugOverlay, 0.f, 0.f, 0.f, 0.f, 0, -1},
+};
+// Twin stick's shoulders, like Remastered's: LT locks on, RT fires, LB jumps, RB fires missiles. Z
+// (the map) sits inboard of the right pair; R (free look) has no use with a right stick that aims.
+constexpr PillButton kTwinPills[7] = {
+    {"LT Lock", kAxisTriggerL, -1, 0.020f, 0.030f, 0.150f, 0.100f, kGcGrey, kCLt},
+    {"LB Jump", -1, kBtnEast, 0.020f, 0.115f, 0.150f, 0.185f, kGcRed, kCLb},
+    {"RT Fire", -1, kBtnSouth, 0.850f, 0.030f, 0.980f, 0.100f, kGcGreen, kCRt},
+    {"RB Missile", -1, kBtnNorth, 0.850f, 0.115f, 0.980f, 0.185f, kGcGrey, kCRb},
+    {"Map", -1, kBtnRightShoulder, 0.730f, 0.030f, 0.830f, 0.100f, kGcPurple, kCTz},
+    {"START", -1, kBtnStart, 0.f, 0.f, 0.f, 0.f, 0, -1},
+    {"MENU", -1, kToggleDebugOverlay, 0.f, 0.f, 0.f, 0.f, 0, -1},
+};
 
 struct Rect {
   float x0 = 0.f, y0 = 0.f, x1 = 0.f, y1 = 0.f;
   bool Contains(float x, float y) const { return x >= x0 && x < x1 && y >= y0 && y < y1; }
+  bool Empty() const { return x1 <= x0 || y1 <= y0; }
   float Cx() const { return (x0 + x1) * 0.5f; }
   float Cy() const { return (y0 + y1) * 0.5f; }
+  float Width() const { return x1 - x0; }
+  float Height() const { return y1 - y0; }
+  void SetEmpty() { x0 = y0 = x1 = y1 = 0.f; }
+  void Inset(float d) {
+    x0 -= d;
+    y0 -= d;
+    x1 += d;
+    y1 += d;
+  }
 };
 
-struct Finger {
-  enum Type { kControl, kStick, kAim, kWheel, kMapPan, kMinimap, kSwallow } type = kSwallow;
-  Ctl ctl = kCtlCount;
-  float x = 0.f, y = 0.f;   // latest position
-  float x0 = 0.f, y0 = 0.f; // where it went down (or started aiming)
-  Uint64 t0 = 0;
-  bool aiming = false; // a held A, B or Turbo slid into aiming
+// A finger's target: one entry of the Java's `targets` map.
+struct TouchTarget {
+  int type = kButton;
+  int id = 0;
+  float x = 0.f, y = 0.f, startX = 0.f, startY = 0.f;
+  Uint64 startMs = 0;
+  // A held A button that also aims; see StartButtonAim.
+  bool aiming = false;
+  // The pill or face button a BUTTON target pressed. Twin sends one GameCube button from two
+  // controls, so the highlight follows the control, not `held`.
+  const ControlButton* faceButton = nullptr;
+  const PillButton* pill = nullptr;
+  // Its editor control (kC*), still reported as held, or -1.
+  int touchControl = -1;
+  // A touch: binding took the control over: no button of its own to release.
+  bool bound = false;
+  // The aiming finger's current upward stroke (TrackSwipe): where and when it began (swipeMs -1:
+  // none yet), and whether it already sprang.
+  float swipeX = 0.f, swipeY = 0.f;
+  int64_t swipeMs = -1;
   bool swiped = false;
 };
 
-// Everything below is guarded by sMutex: the filter runs inside SDL's event pump, the draw in
-// the frame, both on the main thread today, but nothing here relies on it.
+// Everything below is guarded by sMutex: the filter runs inside SDL's event pump, the draw in the
+// frame, both on the main thread today, but nothing here relies on it.
 std::recursive_mutex sMutex;
 bool sInstalled = false;
 PortTouchPad::Pad sPad;
-int sHeld[kCtlCount] = {};
-std::map< SDL_FingerID, Finger > sFingers;
-bool sAimTaken = false;
-Mode sMode = Mode::PassThrough;
-bool sHidden = false; // physical input or the eye button; the next touch brings it back
 
-// Layout, rebuilt every frame (pixels of the ImGui main viewport).
-struct Layout {
-  bool valid = false;
-  float w = 0.f, h = 0.f, dp = 1.f, u = 1.f;
-  float side = 0.f, bottomInset = 0.f, buttonInset = 0.f, stickInset = 0.f;
-  float ax = 0.f, ay = 0.f; // A's centre: the face cluster's anchor
-  Rect face;                // union of the face shapes
-  float stickX = 0.f, stickY = 0.f, stickR = 0.f;
-  Rect pillL, pillR, pillZ;
-  bool showR = false, showZ = false;
-  Rect start, menu, eye, map;
-  bool showMap = false;
-  bool minimapValid = false;
-  Rect minimap;
-  float wheelR = 0.f, wheelY = 0.f, visorX = 0.f, beamX = 0.f;
-  bool showWheels = false;
-  uint32_t wheelState = 0;
-  bool morphed = false, mapOpen = false;
-  bool turbo = false, labels = true, colours = false, floating = true;
-};
-Layout sL;
+// The view's size in draw pixels, one dp in those pixels, and iOS's safe-area insets.
+float sW = 0.f, sH = 0.f, sDensity = 1.f, sInsetSide = 0.f, sBottomInset = 0.f;
 
-// The floating stick's centre while a finger holds it.
-float sStickCx = 0.f, sStickCy = 0.f;
-float sStickVx = 0.f, sStickVy = 0.f;
-SDL_FingerID sStickFinger = 0;
-bool sStickHeld = false;
+// F1's settings and the layout, re-read every draw (as the Java's members are).
+bool sColored = false, sLabels = true, sFloating = false;
+float sSideMargin = 0.f, sStickInset = 0.f, sButtonInset = 0.f;
+bool sTurbo = false;
+const ControlButton* sTurboButton = nullptr;
+bool sCStick = false, sTwin = false, sAim = true, sWheels = false, sVisorTapScan = false,
+     sMapTap = false;
+std::array< const ControlButton*, 4 > sFace = {&kGamecubeFace[0], &kGamecubeFace[1],
+                                               &kGamecubeFace[2], &kGamecubeFace[3]};
+const ControlButton* sBallFace = kBallFace;
+const PillButton* sPills = kGamecubePills;
+int sPillCount = int(std::size(kGamecubePills));
 
-// An open wheel.
-struct Wheel {
-  bool open = false;
-  int which = 0; // 0 visor, 1 beam
-  float cx = 0.f, cy = 0.f;
-  SDL_FingerID finger = 0;
-};
-Wheel sWheel;
+// Touch state. The Java's `targets` is keyed by pointer id, its `held` by the id a press sends.
+std::map< SDL_FingerID, TouchTarget > sTargets;
+std::map< int, int > sHeld;
+std::array< int, kAllControls > sTouchHeld{};
+// Fingers passed on to SDL (the Java's `forwarded`).
+std::set< SDL_FingerID > sForwarded;
+// Fingers on the left and right sticks, the aim drag, and the open map's two.
+SDL_FingerID sLeftPointer = 0, sRightPointer = 0, sAimPointer = 0, sPanPointer = 0,
+             sPan2Pointer = 0;
+bool sAnyLeft = false, sAnyRight = false, sAnyAim = false, sAnyPan = false, sAnyPan2 = false;
+// The floating stick: where the thumb came down, and whether the held one floats.
+float sFloatX = 0.f, sFloatY = 0.f;
+bool sLeftFloated = false;
+// The open wheel (the kWheel target's finger).
+SDL_FingerID sWheelPointer = 0;
+bool sWheelOpen = false;
+float sWheelCx = 0.f, sWheelCy = 0.f;
+
+// The HUD's minimap rect (fractions, then 1 when drawn there), and the map button beside the eye.
+float sMinimapRect[5] = {};
+Rect sMapButtonRect, sBackButtonRect, sCogButtonRect, sHideBounds;
+bool sMapButtonShown = false;
+// RHidden() as of the last draw; touches go by what is drawn.
+bool sRHiddenNow = false;
+// nativePointerMenuActive() as of the last draw: then only the back button shows.
+bool sPointerMenuNow = false;
+// nativeTouchControlsEnabled() as of the last draw.
+bool sControlsOn = true;
+int sLabelContextNow = kLabelsPlay;
+bool sHidden = false;      // the eye button; the next touch brings the controls back
+bool sAutoHidden = false;  // a real pad, keyboard or mouse was used
+bool sBallPage = false;
+// Stage B's flag: the layout editor takes every touch and shows every control. Off until its touch
+// handling and drawing are translated.
+bool sEditing = false;
+
+// The layout (`syncLayout`): the per-control overrides, then the player's added buttons.
+std::array< float, kAllControls > sOvDx{}, sOvDy{};
+std::array< float, kAllControls > sOvScale{};
+std::array< int, kAllControls > sOvAlpha{};
+std::array< bool, kAllControls > sOvHidden{};
+std::array< bool, kControls > sOvRemoved{};
+std::array< std::string, kCustomSlots > sCustomAction{};
+std::array< int, kCustomSlots > sCustomPage{};
+// The layout string last read from or written to the native config.
+std::string sLayoutText;
+
+// Drawing: F1's opacity for the whole overlay, and the control being drawn (its own layer).
+float sGlobal = 1.f, sLocal = 1.f;
+
+void InitDefaults() {
+  sOvScale.fill(1.f);
+  sOvAlpha.fill(100);
+  sCustomPage.fill(kPagePlay);
+}
+
+// Java's dp(): a dp length in view pixels, rounded as it is there.
+float Dp(float value) { return std::round(value * sDensity); }
+
+// The layout height: the view's, capped at a phone's.
+float LayoutU(float height) { return std::min(height, Dp(kMaxLayoutDp)); }
+
+float LayoutScale(float height) { return height > 0.f ? LayoutU(height) / height : 1.f; }
+
+// A horizontal fraction of the width, from the nearest side edge, plus the side margin.
+float LayoutX(float fraction, float width, float height) {
+  const float s = LayoutScale(height);
+  return fraction < 0.5f ? sSideMargin + fraction * width * s
+                         : fraction * width + (1.f - fraction) * width * (1.f - s) - sSideMargin;
+}
+
+float LayoutYFromBottom(float fraction, float height) {
+  return fraction * height + (1.f - fraction) * (height - LayoutU(height));
+}
+
+// A vertical fraction: the layout sits in a phone-height band at the bottom, so the top half is
+// still in reach.
+float LayoutY(float fraction, float height) {
+  return fraction < 0.5f ? (height - LayoutU(height)) + fraction * LayoutU(height)
+                         : LayoutYFromBottom(fraction, height);
+}
 
 PortTouchPad::Pad& Pad() {
   if (!sPad.ok()) {
@@ -182,445 +464,2511 @@ void SetAxis(int axis, float value) {
   }
 }
 
-// Refcounted, as the Java view's held map: two fingers on one button release it once.
-void Press(Ctl ctl, bool down) {
-  int& count = sHeld[ctl];
-  if (down ? count++ > 0 : (count == 0 || --count > 0)) {
-    return;
-  }
-  const CtlDef& def = kDefs[ctl];
-  if (def.code >= 0) {
-    PortInputDevices::SetTouchControl(def.code, down);
-  }
-  switch (ctl) {
-  case kMenu:
-    if (down) PortDebug::RequestToggle();
-    return;
-  case kTurbo:
-    sTouchTurboFire.store(down, std::memory_order_release);
-    return;
-  case kEye:
-    if (down) sHidden = true;
-    return;
-  case kMap:
-    if (down && PortDebug::TouchMapTap()) PortDebug::RequestMapTap();
-    return;
-  case kBack:
-    if (down) PortPointer::ScriptBack();
-    return;
-  case kVisorWheel:
-  case kBeamWheel:
-    return;
-  default:
-    break;
-  }
-  if (def.code >= 0 && PortInputDevices::TouchControlBound(def.code)) {
-    return; // a touch: binding owns it
-  }
-  if (def.button >= 0) {
-    SetButton(def.button, down);
-  } else if (def.axis >= 0) {
-    SetAxis(def.axis, down ? 1.f : -1.f);
-  }
+// Tells the game which set of prompts this overlay is showing.
+void SetTouchDevice(bool xbox) {
+  sTouchActive.store(true, std::memory_order_release);
+  PortPrompts::NoteTouchInput(xbox);
 }
 
-void SetStick(float vx, float vy) {
-  sStickVx = vx;
-  sStickVy = vy;
-  SetAxis(kAxisLeftX, vx);
-  SetAxis(kAxisLeftY, vy);
+// The native touch code of an editor control: the stock ones are their kC* id.
+int TouchCode(int control) {
+  return control >= kCCustom ? PortInputDevices::kTouchCustomBase + control - kCCustom
+         : control >= kCBall ? PortInputDevices::kTouchBallBase + control - kCBall
+                             : control;
 }
 
-// Lets a finger go. `act` false drops a wheel or minimap tap instead of acting on it.
-void EndFinger(SDL_FingerID id, Finger& f, bool act) {
-  if (f.aiming) {
-    sAimTaken = false;
-    PortDebug::SetTouchAimDown(false);
-  }
-  switch (f.type) {
-  case Finger::kControl:
-    Press(f.ctl, false);
-    break;
-  case Finger::kStick:
-    if (sStickHeld && sStickFinger == id) {
-      sStickHeld = false;
-      SetStick(0.f, 0.f);
-    }
-    break;
-  case Finger::kWheel:
-    if (sWheel.open && sWheel.finger == id) {
-      sWheel.open = false;
-      Press(f.ctl, false);
-      if (!act) break;
-      const float dx = f.x - sWheel.cx, dy = f.y - sWheel.cy;
-      const float moved = std::hypot(f.x - f.x0, f.y - f.y0);
-      const uint32_t state = sL.wheelState;
-      if (sWheel.which == 0 && SDL_GetTicks() - f.t0 < 250 && moved < 12.f * sL.dp &&
-          PortDebug::TouchVisorTapScan() && (state & (1u << 2)) != 0) {
-        PortDebug::RequestVisor(2); // a quick tap on Visor scans
-      } else if (std::hypot(dx, dy) > 30.f * sL.dp) {
-        const int sector = std::abs(dx) > std::abs(dy) ? (dx > 0.f ? 1 : 3) : (dy < 0.f ? 0 : 2);
-        const int item = kWheelItems[sWheel.which][sector];
-        if ((state & (1u << (sWheel.which * 4 + item))) != 0) {
-          if (sWheel.which == 0) {
-            PortDebug::RequestVisor(item);
-          } else {
-            PortDebug::RequestBeam(item);
-          }
-        }
+// The actions an added button can take, key then label, in the action list's order.
+const std::vector< std::string >& ButtonActions() {
+  static const std::vector< std::string > list = [] {
+    std::vector< std::string > out;
+    for (int i = 0; i < PortInput::kActionCount; ++i) {
+      const auto a = static_cast< PortInput::Action >(i);
+      if (!PortInput::TouchButtonAction(a)) {
+        continue;
       }
+      const PortInput::ActionInfo& info = PortInput::Info(a);
+      out.emplace_back(info.key);
+      out.emplace_back(info.label);
     }
-    break;
-  case Finger::kMinimap:
-    if (act && std::hypot(f.x - f.x0, f.y - f.y0) < 12.f * sL.dp && PortDebug::TouchMapTap()) {
-      PortDebug::RequestMapTap();
-    }
-    break;
-  default:
-    break;
-  }
+    return out;
+  }();
+  return list;
 }
 
-void ReleaseAll() {
-  for (auto& [id, f] : sFingers) {
-    EndFinger(id, f, false);
-  }
-  sFingers.clear();
-  for (int i = 0; i < kCtlCount; ++i) {
-    if (sHeld[i] > 0) {
-      sHeld[i] = 1;
-      Press(static_cast< Ctl >(i), false);
-    }
-  }
-  sWheel.open = false;
-  sAimTaken = false;
-}
-
-Mode CurrentMode() {
-  PortSaveState::ResumeInfo info;
-  bool yes = true;
-  if (!sL.valid || PortDebug::OverlayVisible() || PortPhoto::Active() ||
-      PortSaveState::ResumePromptShown(info, yes)) {
-    return Mode::PassThrough;
-  }
-  if (PortPointer::ScreenActive()) {
-    return Mode::Pointer;
-  }
-  return PortDebug::TouchControlsEnabled() ? Mode::Full : Mode::Minimal;
-}
-
-void UpdateMode() {
-  const Mode mode = CurrentMode();
-  if (mode != sMode) {
-    ReleaseAll();
-    sMode = mode;
-  }
-}
-
-// Kidney geometry: the band's angles in radians and the ring centre (A's centre).
-void KidneyAngles(const FaceDef& d, float& a0, float& a1) {
-  a0 = d.start * kPi / 180.f;
-  a1 = (d.start + d.sweep) * kPi / 180.f;
-}
-
-bool InFace(const FaceDef& d, float x, float y) {
-  const float u = sL.u;
-  if (!d.kidney) {
-    const float cx = sL.ax + d.x * u, cy = sL.ay + d.y * u;
-    return std::hypot(x - cx, y - cy) <= d.r * u;
-  }
-  float a0, a1;
-  KidneyAngles(d, a0, a1);
-  const float dx = x - sL.ax, dy = y - sL.ay;
-  const float dist = std::hypot(dx, dy);
-  const float ring = d.ring * u, half = d.half * u;
-  float a = std::atan2(dy, dx);
-  while (a < a0) a += 2.f * kPi;
-  if (a <= a1 && std::abs(dist - ring) <= half) {
-    return true;
-  }
-  for (const float end : {a0, a1}) {
-    if (std::hypot(x - (sL.ax + ring * std::cos(end)), y - (sL.ay + ring * std::sin(end))) <= half) {
+// nativeTouchButtonActions' lookup: an action's label, or false when a button can't take it.
+bool ActionLabel(const std::string& key, std::string& out) {
+  const std::vector< std::string >& list = ButtonActions();
+  for (size_t i = 0; i + 1 < list.size(); i += 2) {
+    if (list[i] == key) {
+      out = list[i + 1];
       return true;
     }
   }
   return false;
 }
 
-void GrowFace(Rect& r, bool& any, float x0, float y0, float x1, float y1) {
-  if (!any) {
-    r = {x0, y0, x1, y1};
-    any = true;
-    return;
+// nativeTouchBallLabel: the Morph Ball row's name for a control, "" for a ball button left without
+// one, and nothing for any other control.
+std::optional< std::string > TouchBallLabel(int code) {
+  if (const PortInput::BallRow* row = PortInput::FindBallRow(PortInputDevices::TouchBallRow(code))) {
+    return std::string(row->touch);
   }
-  r.x0 = std::min(r.x0, x0);
-  r.y0 = std::min(r.y0, y0);
-  r.x1 = std::max(r.x1, x1);
-  r.y1 = std::max(r.y1, y1);
+  for (const PortInput::TouchBallControl& c : PortInput::kTouchBallControls) {
+    if (c.control == code) {
+      return std::string();
+    }
+  }
+  return std::nullopt;
 }
 
-Rect FaceBounds() {
-  Rect r;
-  bool any = false;
-  const float u = sL.u;
-  for (const FaceDef& d : kFace) {
-    if (!d.kidney) {
-      const float cx = sL.ax + d.x * u, cy = sL.ay + d.y * u, rr = d.r * u;
-      GrowFace(r, any, cx - rr, cy - rr, cx + rr, cy + rr);
+const std::array< std::string, kAllControls >& ControlIds() {
+  static const std::array< std::string, kAllControls > ids = [] {
+    std::array< std::string, kAllControls > out{};
+    for (int i = 0; i < kControls; ++i) {
+      out[i] = kControlIdsStock[i];
+    }
+    for (int slot = 0; slot < kCustomSlots; ++slot) {
+      out[kCCustom + slot] = "k" + std::to_string(slot);
+    }
+    return out;
+  }();
+  return ids;
+}
+
+// --- the layout string -------------------------------------------------------
+// `id:dx,dy,scale[,opacity[,hidden]];...` (opacity in percent, hidden 0 or 1), and for an added
+// button `k<slot>:dx,dy,scale,opacity,hidden,<action key>[,page]`. Unknown ids and actions and
+// malformed entries are skipped, so a layout from another version still loads what this one knows.
+
+std::string Trim(const std::string& s) {
+  const size_t first = s.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return std::string();
+  }
+  const size_t last = s.find_last_not_of(" \t\r\n");
+  return s.substr(first, last - first + 1);
+}
+
+std::vector< std::string > Split(const std::string& s, char sep) {
+  std::vector< std::string > out;
+  size_t start = 0;
+  for (;;) {
+    const size_t at = s.find(sep, start);
+    if (at == std::string::npos) {
+      out.push_back(s.substr(start));
+      return out;
+    }
+    out.push_back(s.substr(start, at - start));
+    start = at + 1;
+  }
+}
+
+// Float.parseFloat for one field: the whole trimmed field must be a number.
+bool ParseFloat(const std::string& field, float& out) {
+  const std::string text = Trim(field);
+  if (text.empty()) {
+    return false;
+  }
+  char* end = nullptr;
+  const float value = std::strtof(text.c_str(), &end);
+  if (end == text.c_str() || *end != '\0') {
+    return false;
+  }
+  if (std::isnan(value) || std::isinf(value)) {
+    return false;
+  }
+  out = value;
+  return true;
+}
+
+bool ParseInt(const std::string& field, int& out) {
+  const std::string text = Trim(field);
+  if (text.empty()) {
+    return false;
+  }
+  char* end = nullptr;
+  const long value = std::strtol(text.c_str(), &end, 10);
+  if (end == text.c_str() || *end != '\0') {
+    return false;
+  }
+  out = static_cast< int >(value);
+  return true;
+}
+
+void LoadLayout(const std::string& text) {
+  sOvDx.fill(0.f);
+  sOvDy.fill(0.f);
+  sOvScale.fill(1.f);
+  sOvAlpha.fill(100);
+  sOvHidden.fill(false);
+  sOvRemoved.fill(false);
+  for (std::string& key : sCustomAction) {
+    key.clear();
+  }
+  sCustomPage.fill(kPagePlay);
+  const std::array< std::string, kAllControls >& ids = ControlIds();
+  for (const std::string& entry : Split(text, ';')) {
+    const size_t colon = entry.find(':');
+    if (colon == std::string::npos || colon == 0) {
       continue;
     }
-    float a0, a1;
-    KidneyAngles(d, a0, a1);
-    const float ring = d.ring * u, half = d.half * u;
-    for (int i = 0; i <= 8; ++i) {
-      const float a = a0 + (a1 - a0) * static_cast< float >(i) / 8.f;
-      const float px = sL.ax + ring * std::cos(a), py = sL.ay + ring * std::sin(a);
-      GrowFace(r, any, px - half, py - half, px + half, py + half);
+    const std::string id = Trim(entry.substr(0, colon));
+    int control = -1;
+    for (int i = 0; i < kAllControls; ++i) {
+      if (ids[i] == id) {
+        control = i;
+        break;
+      }
+    }
+    const std::vector< std::string > parts = Split(entry.substr(colon + 1), ',');
+    const bool custom = control >= kCCustom;
+    if (control < 0 ||
+        (custom ? parts.size() < 6 || parts.size() > 7 : parts.size() < 3 || parts.size() > 5)) {
+      continue;
+    }
+    std::string key;
+    if (custom) {
+      key = Trim(parts[5]);
+      std::string label;
+      if (!ActionLabel(key, label)) {
+        continue;
+      }
+    }
+    float dx = 0.f, dy = 0.f, scale = 1.f, alpha = 100.f;
+    if (!ParseFloat(parts[0], dx) || !ParseFloat(parts[1], dy) || !ParseFloat(parts[2], scale)) {
+      continue;
+    }
+    bool off = false, gone = false;
+    if (parts.size() > 3 && !ParseFloat(parts[3], alpha)) {
+      continue;
+    }
+    if (parts.size() > 4) {
+      float flag = 0.f;
+      if (!ParseFloat(parts[4], flag)) {
+        continue;
+      }
+      off = flag != 0.f;
+      gone = flag == 2.f && !custom; // an added button is deleted outright
+    }
+    sOvDx[control] = std::clamp(dx, -kMaxOffset, kMaxOffset);
+    sOvDy[control] = std::clamp(dy, -kMaxOffset, kMaxOffset);
+    sOvScale[control] = std::clamp(scale, kMinScale, kMaxScale);
+    sOvAlpha[control] =
+        std::clamp(static_cast< int >(std::lround(alpha)), 0, 100);
+    sOvHidden[control] = off;
+    if (gone) {
+      sOvRemoved[control] = true;
+    }
+    if (custom) {
+      sCustomAction[control - kCCustom] = key;
+      if (parts.size() > 6) {
+        int page = kPagePlay;
+        if (!ParseInt(parts[6], page) || page < kPagePlay || page > kPageBoth) {
+          page = kPagePlay;
+        }
+        sCustomPage[control - kCCustom] = page;
+      }
+    }
+    if (control == kCMenu) {
+      // A hand-edited layout can't lock the only way into F1 away.
+      sOvAlpha[control] = std::max(kMenuMinAlpha, sOvAlpha[control]);
+      sOvHidden[control] = false;
+      sOvRemoved[control] = false;
     }
   }
-  return r;
 }
 
-void BuildLayout() {
-  Layout& L = sL;
-  const ImGuiViewport* vp = ImGui::GetMainViewport();
-  L.w = vp->Size.x;
-  L.h = vp->Size.y;
-  SDL_Window* window = PortDebug::MainWindow();
-  int pointsW = 0, pointsH = 0;
-  if (window == nullptr || !SDL_GetWindowSize(window, &pointsW, &pointsH) || pointsW <= 0 ||
-      L.w <= 0.f || L.h <= 0.f) {
-    L.valid = false;
-    return;
-  }
-  L.valid = true;
-  L.dp = L.w / static_cast< float >(pointsW); // one dp is one iOS point
-  const float dp = L.dp;
-  // The notch, rounded corners and the home indicator.
-  SDL_Rect safe{0, 0, pointsW, pointsH};
-  SDL_GetWindowSafeArea(window, &safe);
-  const float insetSide = static_cast< float >(std::max(safe.x, pointsW - safe.x - safe.w)) * dp;
-  L.bottomInset = static_cast< float >(std::max(0, pointsH - safe.y - safe.h)) * dp;
-  L.u = std::min(L.h, dp * 520.f);
-  const float u = L.u, w = L.w, h = L.h, s = u / h;
-  L.side = PortDebug::TouchSideMarginDp() * dp + insetSide;
-  L.buttonInset = PortDebug::TouchButtonInsetDp() * dp;
-  L.stickInset = PortDebug::TouchStickInsetDp() * dp;
-  auto layoutX = [&](float f) {
-    return f < 0.5f ? L.side + f * w * s : f * w + (1.f - f) * w * (1.f - s) - L.side;
-  };
-  auto layoutY = [&](float f) { return f < 0.5f ? (h - u) + f * u : f * h + (1.f - f) * (h - u); };
-
-  L.ax = w - L.side - L.buttonInset - 0.235f * u;
-  L.ay = layoutY(0.700f);
-  L.face = FaceBounds();
-  L.stickR = 0.16f * u;
-  L.stickX = (w - L.face.x1 - L.buttonInset) + L.stickInset + L.stickR;
-  L.stickY = L.face.Cy();
-
-  L.wheelState = PortDebug::WheelState();
-  L.morphed = (L.wheelState & (1u << 13)) != 0;
-  L.mapOpen = PortDebug::MapScreenOpen();
-  L.showWheels = (L.wheelState & (1u << 12)) != 0 && !L.mapOpen && !L.morphed;
-  L.turbo = PortDebug::TouchTurboFlag() && !L.morphed;
-  L.labels = PortDebug::TouchLabelsFlag();
-  L.colours = PortDebug::TouchColorsFlag();
-  L.floating = PortDebug::TouchFloatingStickFlag();
-
-  // Pills: L Lock, R Look (morph ball, pause and map only), Z Map (without minimap taps).
-  L.showR = L.morphed || PortDebug::PauseScreenOpen() || L.mapOpen;
-  L.showZ = !PortDebug::TouchMapTap();
-  L.pillL = {layoutX(0.020f), layoutY(0.030f), layoutX(0.150f), layoutY(0.190f)};
-  L.pillR = {layoutX(0.850f), layoutY(0.030f), layoutX(0.980f), layoutY(0.190f)};
-  L.pillZ = {layoutX(0.870f), layoutY(0.205f), layoutX(0.960f), layoutY(0.265f)};
-  if (u < h && L.showWheels) {
-    // A tall screen: bring the pills down to the thumbs, dp(12) above the cluster.
-    const float lowest = L.showZ ? L.pillZ.y1 : L.pillL.y1;
-    const float shift =
-        std::max(0.f, std::min(L.stickY - L.stickR, L.face.y0) - 12.f * dp - lowest);
-    for (Rect* r : {&L.pillL, &L.pillR, &L.pillZ}) {
-      r->y0 += shift;
-      r->y1 += shift;
+// Only the controls that were changed, so a default layout is the empty string. (Stage B saves
+// through this.)
+[[maybe_unused]] std::string SerializeLayout() {
+  std::string out;
+  const std::array< std::string, kAllControls >& ids = ControlIds();
+  char field[64];
+  for (int i = 0; i < kControls; ++i) {
+    if (sOvDx[i] == 0.f && sOvDy[i] == 0.f && sOvScale[i] == 1.f && sOvAlpha[i] == 100 &&
+        !sOvHidden[i] && !sOvRemoved[i]) {
+      continue;
+    }
+    if (!out.empty()) {
+      out += ';';
+    }
+    std::snprintf(field, sizeof(field), "%.4f,%.4f,%.3f", double(sOvDx[i]), double(sOvDy[i]),
+                  double(sOvScale[i]));
+    out += ids[i] + ":" + field;
+    // Only as many fields as needed, so older layouts serialize as before.
+    if (sOvRemoved[i]) {
+      out += "," + std::to_string(sOvAlpha[i]) + ",2";
+    } else if (sOvHidden[i]) {
+      out += "," + std::to_string(sOvAlpha[i]) + ",1";
+    } else if (sOvAlpha[i] != 100) {
+      out += "," + std::to_string(sOvAlpha[i]);
     }
   }
-
-  // Bottom corners: START, MENU on the left; eye, map on the right.
-  const float d = 2.f * 22.f * dp;
-  const float bottom = h - 12.f * dp - L.bottomInset;
-  auto corner = [&](bool right, int slot) {
-    const float fromSide = L.side + 28.f * dp + static_cast< float >(slot) * (d + 8.f * dp);
-    return right ? Rect{w - fromSide - d, bottom - d, w - fromSide, bottom}
-                 : Rect{fromSide, bottom - d, fromSide + d, bottom};
-  };
-  L.start = corner(false, 0);
-  L.menu = corner(false, 1);
-  L.eye = corner(true, 0);
-  L.map = corner(true, 1);
-  float mini[4] = {};
-  bool drawn = true;
-  L.minimapValid = PortDebug::TouchMapTap() && PortDebug::MinimapRect(mini, &drawn);
-  L.showMap = PortDebug::TouchMapTap() && ((L.minimapValid && !drawn) || L.mapOpen);
-  L.minimapValid = L.minimapValid && drawn;
-  L.minimap = {mini[0] * w, mini[1] * h, mini[2] * w, mini[3] * h};
-
-  // Wheel buttons: Visor right of the stick, Beam left of the face cluster.
-  L.wheelR = 0.072f * u;
-  const float edge = 16.f * dp + L.wheelR;
-  const float lo = 112.f * dp, hi = w - 112.f * dp;
-  L.visorX = std::clamp(L.stickX + L.stickR + edge, lo, std::max(lo, hi));
-  L.beamX = std::clamp(L.face.x0 - edge, lo, std::max(lo, hi));
-  L.wheelY = h - 112.f * dp - 8.f * dp - L.bottomInset;
+  // The added buttons, after the stock controls, so a layout without any is what it was before
+  // they existed.
+  for (int slot = 0; slot < kCustomSlots; ++slot) {
+    if (sCustomAction[slot].empty()) {
+      continue;
+    }
+    const int i = kCCustom + slot;
+    if (!out.empty()) {
+      out += ';';
+    }
+    std::snprintf(field, sizeof(field), "%.4f,%.4f,%.3f,%d,%d,", double(sOvDx[i]), double(sOvDy[i]),
+                  double(sOvScale[i]), sOvAlpha[i], sOvHidden[i] ? 1 : 0);
+    out += ids[i] + ":" + field + sCustomAction[slot];
+    if (sCustomPage[slot] != kPagePlay) {
+      out += "," + std::to_string(sCustomPage[slot]); // older layouts lack it: Gameplay
+    }
+  }
+  return out;
 }
 
-bool InCircle(float x, float y, float cx, float cy, float r) { return std::hypot(x - cx, y - cy) <= r; }
+// The layout is stored natively (the F1 config), so a reset there, or the editor's save, reaches the
+// next draw. Re-parsed only when the text changes.
+void SyncLayout() {
+  const std::string text = PortDebug::TouchLayout();
+  if (text != sLayoutText) {
+    sLayoutText = text;
+    LoadLayout(text);
+  }
+}
 
-const FaceDef* FaceAt(float x, float y) {
-  if (sL.morphed) {
-    for (const FaceDef& d : kBallFace) {
-      if (InFace(d, x, y)) return &d;
+[[maybe_unused]] void ResetControl(int control) {
+  sOvDx[control] = 0.f;
+  sOvDy[control] = 0.f;
+  sOvScale[control] = 1.f;
+  sOvAlpha[control] = 100;
+  sOvHidden[control] = false;
+  if (control < kControls) {
+    sOvRemoved[control] = false;
+  }
+}
+
+bool Removed(int control) { return control >= 0 && control < kControls && sOvRemoved[control]; }
+
+// --- pages, labels, what is shown -------------------------------------------
+
+// Whether play wants the Morph Ball page: morphed, outside the map, pause menu and message boxes
+// (their face buttons do menu things).
+bool InBall() {
+  return !PortDebug::MapScreenOpen() && !PortDebug::PauseScreenOpen() &&
+         !(PortDebug::PausedMenuOpen() && !PortDebug::PauseScreenOpen()) &&
+         (PortDebug::WheelState() & kWheelMorphedBit) != 0;
+}
+
+// Whether a control belongs to the page up now. The stick, START, MENU, the map (pill, button and
+// minimap) and the eye are on both.
+bool OnPage(int control) {
+  switch (control) {
+  case kCLStick:
+  case kCStart:
+  case kCMenu:
+  case kCZ:
+  case kCTz:
+  case kCMap:
+  case kCEye:
+    return true;
+  default:
+    break;
+  }
+  if (control >= kCCustom) {
+    const int page = sCustomPage[control - kCCustom];
+    return page == kPageBoth || (page == kPageBall) == sBallPage;
+  }
+  return ((control >= kCBall && control < kCBall + kBallButtons) == sBallPage);
+}
+
+// Whether a saved layout hides this control from play. Not in the editor (which still shows and
+// selects it) nor in the controls-off view, where START and MENU ignore the layout.
+bool CtrlHidden(int control) {
+  return sControlsOn &&
+         (!OnPage(control) || (!sEditing && (sOvHidden[control] || Removed(control))));
+}
+
+// The percent this control is drawn at, or -1 for not at all.
+int ControlAlpha(int control) {
+  if (Removed(control)) {
+    return -1; // the controls-off view draws START and MENU without this
+  }
+  if (sControlsOn && !OnPage(control)) {
+    return -1;
+  }
+  if (sEditing) {
+    return sOvHidden[control] ? kEditMinAlpha : std::max(kEditMinAlpha, sOvAlpha[control]);
+  }
+  if (!sControlsOn) {
+    return 100;
+  }
+  return sOvHidden[control] ? -1 : sOvAlpha[control];
+}
+
+// Which functions the buttons wear. The map screen comes first: the pause menu's map is one too.
+int LabelContext() {
+  if (sEditing) {
+    return kLabelsPlay;
+  }
+  if (PortDebug::MapScreenOpen()) {
+    return kLabelsMap;
+  }
+  if (PortDebug::PauseScreenOpen()) {
+    return kLabelsPause;
+  }
+  if (PortDebug::PausedMenuOpen() && !PortDebug::PauseScreenOpen()) {
+    return kLabelsDialog;
+  }
+  return (PortDebug::WheelState() & kWheelMorphedBit) != 0 ? kLabelsMorph : kLabelsPlay;
+}
+
+bool IsMenuPill(const PillButton& pill) {
+  return pill.axis < 0 && (pill.button == kBtnStart || pill.button == kToggleDebugOverlay);
+}
+
+int CornerSlot(const PillButton& pill) {
+  if (pill.axis >= 0) {
+    return -1;
+  }
+  return pill.button == kBtnStart ? 0 : pill.button == kToggleDebugOverlay ? 1 : -1;
+}
+
+int PillControl(const PillButton& pill) {
+  const int slot = CornerSlot(pill);
+  if (slot >= 0) {
+    return slot == 0 ? kCStart : kCMenu;
+  }
+  if (pill.control >= 0) {
+    return pill.control;
+  }
+  if (pill.axis == kAxisTriggerL) {
+    return kCL;
+  }
+  if (pill.axis == kAxisTriggerR) {
+    return kCR;
+  }
+  return pill.button == kBtnRightShoulder ? kCZ : kCL;
+}
+
+const PillButton* PillOf(int control) {
+  for (int i = 0; i < sPillCount; ++i) {
+    if (CornerSlot(sPills[i]) < 0 && PillControl(sPills[i]) == control) {
+      return &sPills[i];
     }
-    return nullptr;
-  }
-  for (const FaceDef& d : kFace) {
-    if (InFace(d, x, y)) return &d;
-  }
-  if (sL.turbo && InFace(kTurboDef, x, y)) {
-    return &kTurboDef;
   }
   return nullptr;
 }
 
-void StartAim(Finger& f) {
-  f.aiming = true;
-  f.x0 = f.x;
-  f.y0 = f.y;
-  f.t0 = SDL_GetTicks();
-  sAimTaken = true;
-  PortDebug::SetTouchAimDown(true);
+// The GameCube layout's Z pill only opens the map, which a minimap tap does.
+bool PillHidden(const PillButton& pill) {
+  return sMapTap && pill.axis < 0 && pill.button == kBtnRightShoulder;
 }
 
-// A finger lands: claim it for a control, the stick, a wheel or aiming. Returns false when the
-// finger is left to the game (pointer menus, or a free area with the controls off).
-bool FingerDown(SDL_FingerID id, float x, float y) {
-  const Layout& L = sL;
-  Finger f;
-  f.x = f.x0 = x;
-  f.y = f.y0 = y;
-  f.t0 = SDL_GetTicks();
-  auto hold = [&](Ctl ctl) {
-    f.type = Finger::kControl;
-    f.ctl = ctl;
-    Press(ctl, true);
-    sFingers[id] = f;
+// With drag-to-aim, R's hold-still free look is redundant, so R only shows where it does something
+// else: morphed, in the pause menu, and on the map screen. Not part of PillHidden, so the pills'
+// layout doesn't jump as R comes and goes. Twin stick always shows it.
+bool RHidden() {
+  return sAim && !sTwin && (PortDebug::WheelState() & kWheelMorphedBit) == 0 &&
+         !PortDebug::PauseScreenOpen() && !PortDebug::MapScreenOpen();
+}
+
+// LayoutShows on either page.
+bool LayoutHas(int control) {
+  if (control >= kCCustom) {
+    return !sCustomAction[control - kCCustom].empty();
+  }
+  switch (control) {
+  case kCCStick:
+    return sCStick && !sTwin;
+  case kCA:
+  case kCB:
+  case kCX:
+  case kCY:
+  case kCL:
+  case kCR:
+    return !sTwin;
+  case kCRstick:
+  case kCJump:
+  case kCFire:
+  case kCMorph:
+  case kCMissile:
+  case kCLt:
+  case kCLb:
+  case kCRt:
+  case kCRb:
+    return sTwin;
+  case kCTr:
+    return false; // retired: twin's R pill, kept so saved ids don't shift
+  case kCTurbo:
+    return sTurbo && !sTwin;
+  case kCTurboTwin:
+    return sTurbo && sTwin;
+  case kCDpad:
+    return !sWheels;
+  case kCZ:
+    return !sTwin && !sMapTap;
+  case kCTz:
+    return sTwin && !sMapTap;
+  case kCMap:
+    return sMapTap;
+  case kCVisor:
+  case kCBeam:
+    return sWheels;
+  default:
     return true;
-  };
-  if (sMode == Mode::Pointer) {
-    if (L.start.Contains(x, y)) return hold(kBack);
-    if (L.menu.Contains(x, y)) return hold(kMenu);
-    return false;
   }
-  sTouchActive.store(true, std::memory_order_release);
-  PortPrompts::NoteTouchInput(false);
-  if (sMode == Mode::Minimal) {
-    if (L.start.Contains(x, y)) return hold(kStart);
-    if (L.menu.Contains(x, y)) return hold(kMenu);
-    return false;
+}
+
+// Whether the current layout, settings and page have this control at all, deleted or not (Add's
+// list restores only those).
+[[maybe_unused]] bool LayoutShows(int control) { return OnPage(control) && LayoutHas(control); }
+
+// Whether the current settings draw this control. (Stage B's editor draws these.)
+[[maybe_unused]] bool EditShown(int control) { return !Removed(control) && LayoutShows(control); }
+
+bool PillShown(const PillButton& pill) {
+  if (!sControlsOn && !sEditing) {
+    return IsMenuPill(pill);
   }
-  if (sHidden) {
-    sHidden = false; // this touch only brings the controls back
-    sFingers[id] = f;
-    return true;
+  return !PillHidden(pill) && !(pill.axis == kAxisTriggerR && sRHiddenNow) &&
+         !CtrlHidden(PillControl(pill));
+}
+
+// --- geometry ---------------------------------------------------------------
+
+// The square around bottom button `slot`, counted from the side edge: on the right, 0 is the eye and
+// 1 the map; on the left, 0 is START and 1 MENU.
+void BottomButtonRect(int slot, bool right, float width, float height, Rect& out);
+
+// Moves and scales a control's default rect by its override, round its centre.
+void ApplyOverride(int control, Rect& rect, float height) {
+  if (!sControlsOn && !sEditing) {
+    return; // MENU and START stay put and reachable
   }
-  if (L.pillL.Contains(x, y)) return hold(kL);
-  if (L.showR && L.pillR.Contains(x, y)) return hold(kR);
-  if (L.showZ && L.pillZ.Contains(x, y)) return hold(kZ);
-  if (const FaceDef* d = FaceAt(x, y)) return hold(d->ctl);
-  if (L.start.Contains(x, y)) return hold(kStart);
-  if (L.menu.Contains(x, y)) return hold(kMenu);
-  if (L.eye.Contains(x, y)) return hold(kEye);
-  if (L.showMap && L.map.Contains(x, y)) return hold(kMap);
-  if (L.showWheels) {
-    for (int which = 0; which < 2; ++which) {
-      const float cx = which == 0 ? L.visorX : L.beamX;
-      if (InCircle(x, y, cx, L.wheelY, L.wheelR * 1.1f)) {
-        // A hit swallows the finger even when the wheel is already open for another.
-        f.type = Finger::kWheel;
-        f.ctl = which == 0 ? kVisorWheel : kBeamWheel;
-        if (!sWheel.open) {
-          Press(f.ctl, true);
-          const float outer = 112.f * L.dp;
-          sWheel = {true, which, std::clamp(cx, outer, std::max(outer, L.w - outer)), L.wheelY, id};
-        } else {
-          f.type = Finger::kSwallow;
-        }
-        sFingers[id] = f;
-        return true;
-      }
+  if (sOvDx[control] == 0.f && sOvDy[control] == 0.f && sOvScale[control] == 1.f) {
+    return; // the default layout stays bit-for-bit what it was
+  }
+  const float u = LayoutU(height);
+  const float cx = rect.Cx() + sOvDx[control] * u;
+  const float cy = rect.Cy() + sOvDy[control] * u;
+  const float halfW = rect.Width() * 0.5f * sOvScale[control];
+  const float halfH = rect.Height() * 0.5f * sOvScale[control];
+  rect = {cx - halfW, cy - halfH, cx + halfW, cy + halfH};
+}
+
+void BottomButtonRect(int slot, bool right, float width, float height, Rect& out) {
+  const float d = 2.f * Dp(kBottomButtonRadiusDp);
+  const float fromSide = sSideMargin + Dp(kBottomButtonSideDp) +
+                         float(slot) * (d + Dp(kBottomButtonGapDp));
+  const float left = right ? width - fromSide - d : fromSide;
+  // The home indicator on iOS: the one departure from the Java's own insets, which Android gets
+  // from the display cutout instead.
+  const float bottom = height - Dp(kBottomButtonBottomDp) - sBottomInset;
+  out = {left, bottom - d, left + d, bottom};
+  ApplyOverride(right ? (slot == 0 ? kCEye : kCMap) : (slot == 0 ? kCStart : kCMenu), out, height);
+}
+
+int ControlOf(const ControlButton& button) {
+  if (&button == sTurboButton) {
+    return sTwin ? kCTurboTwin : kCTurbo;
+  }
+  for (int i = 0; i < kBallButtons; ++i) {
+    if (&button == &kBallFace[i] || &button == &kTwinBallFace[i]) {
+      return kCBall + i;
     }
   }
-  if (L.minimapValid && L.minimap.Contains(x, y)) {
-    f.type = Finger::kMinimap;
-    sFingers[id] = f;
-    return true;
+  const int first = sTwin ? kCJump : kCA;
+  for (int i = 0; i < 4; ++i) {
+    if (sFace[i] == &button) {
+      return first + i;
+    }
   }
-  if (!sStickHeld) {
-    const bool floating = L.floating && !L.mapOpen && x < L.w * 0.5f;
-    if (floating || InCircle(x, y, L.stickX, L.stickY, L.stickR * 1.5f)) {
-      sStickHeld = true;
-      sStickFinger = id;
-      sStickCx = floating ? std::clamp(x, L.stickR, std::max(L.stickR, L.w - L.stickR)) : L.stickX;
-      sStickCy = floating ? y : L.stickY;
-      f.type = Finger::kStick;
-      sFingers[id] = f;
+  return first;
+}
+
+float CentreX(const ControlButton& button, float width, float height) {
+  return button.anchored ? width - sSideMargin - sButtonInset -
+                               (kGcAFromRight - button.x) * LayoutU(height)
+                         : LayoutX(button.x, width, height);
+}
+
+float CentreY(const ControlButton& button, float height) {
+  return LayoutY(button.anchored ? kGcAY + button.y : button.y, height);
+}
+
+struct FaceGeo {
+  float x = 0.f, y = 0.f, radius = 0.f, half = 0.f;
+};
+
+// The button's centre, radius (a kidney's is its arc's) and band half width. `moved` applies the
+// override, which scales a kidney round its own middle rather than round its arc's centre; draw and
+// hit test both go through here.
+FaceGeo FaceGeometry(const ControlButton& button, float width, float height, bool moved) {
+  const float u = LayoutU(height);
+  FaceGeo out;
+  out.x = CentreX(button, width, height);
+  out.y = CentreY(button, height);
+  out.radius = button.radius * u;
+  out.half = button.halfWidth * u;
+  if (moved) {
+    const int control = ControlOf(button);
+    const float scale = sOvScale[control];
+    if (button.Kidney()) {
+      const float middle = (button.arcStart + button.arcSweep * 0.5f) * kPi / 180.f;
+      out.x += out.radius * (1.f - scale) * std::cos(middle);
+      out.y += out.radius * (1.f - scale) * std::sin(middle);
+    }
+    out.x += sOvDx[control] * u;
+    out.y += sOvDy[control] * u;
+    out.radius *= scale;
+    out.half *= scale;
+  }
+  return out;
+}
+
+// A band round (cx, cy) along the arc, with round ends: GameCube X and Y.
+void KidneyPath(ImDrawList* dl, float cx, float cy, float ring, float half, float start,
+                float sweep) {
+  const float a0 = start * kPi / 180.f;
+  const float a1 = (start + sweep) * kPi / 180.f;
+  dl->PathArcTo(ImVec2(cx, cy), ring + half, a0, a1, 24);
+  dl->PathArcTo(ImVec2(cx + ring * std::cos(a1), cy + ring * std::sin(a1)), half, a1, a1 + kPi, 12);
+  dl->PathArcTo(ImVec2(cx, cy), ring - half, a1, a0, 24);
+  dl->PathArcTo(ImVec2(cx + ring * std::cos(a0), cy + ring * std::sin(a0)), half, a0 + kPi,
+                a0 + 2.f * kPi, 12);
+}
+
+// Path.computeBounds for a kidney: the centre arc sampled, grown by the band's half width (the Java
+// asks the Path itself; the caps are what the sampling adds).
+Rect KidneyBounds(float cx, float cy, float ring, float half, float start, float sweep) {
+  Rect r;
+  bool any = false;
+  const float a0 = start * kPi / 180.f, a1 = (start + sweep) * kPi / 180.f;
+  for (int i = 0; i <= 16; ++i) {
+    const float a = a0 + (a1 - a0) * float(i) / 16.f;
+    const float px = cx + ring * std::cos(a), py = cy + ring * std::sin(a);
+    if (!any) {
+      r = {px - half, py - half, px + half, py + half};
+      any = true;
+      continue;
+    }
+    r.x0 = std::min(r.x0, px - half);
+    r.y0 = std::min(r.y0, py - half);
+    r.x1 = std::max(r.x1, px + half);
+    r.y1 = std::max(r.y1, py + half);
+  }
+  return r;
+}
+
+// The face buttons' real bounds, kidney arcs included.
+Rect FaceBounds(float width, float height) {
+  const float u = LayoutU(height);
+  Rect r;
+  bool first = true;
+  for (int i = 0; i < 4; ++i) {
+    const ControlButton& button = *sFace[i];
+    const float x = CentreX(button, width, height);
+    const float y = CentreY(button, height);
+    const float radius = button.radius * u;
+    const Rect b = button.Kidney()
+                       ? KidneyBounds(x, y, radius, button.halfWidth * u, button.arcStart,
+                                      button.arcSweep)
+                       : Rect{x - radius, y - radius, x + radius, y + radius};
+    if (first) {
+      r = b;
+      first = false;
+      continue;
+    }
+    r.x0 = std::min(r.x0, b.x0);
+    r.y0 = std::min(r.y0, b.y0);
+    r.x1 = std::max(r.x1, b.x1);
+    r.y1 = std::max(r.y1, b.y1);
+  }
+  return r;
+}
+
+// Mirrors the face cluster's gap to the right edge (side margin included, button inset not), plus
+// the stick inset, so the two thumbs' controls look balanced.
+float BaseLeftStickX(float width, float height) {
+  const Rect face = FaceBounds(width, height);
+  return (width - face.x1 - sButtonInset) + sStickInset + kStickRadius * LayoutU(height);
+}
+
+// Level with the face cluster's middle.
+float BaseLeftStickY(float width, float height) { return FaceBounds(width, height).Cy(); }
+
+float LeftStickX(float width, float height) {
+  return BaseLeftStickX(width, height) + sOvDx[kCLStick] * LayoutU(height);
+}
+
+float LeftStickY(float width, float height) {
+  return BaseLeftStickY(width, height) + sOvDy[kCLStick] * LayoutU(height);
+}
+
+float LeftStickRadius(float height) { return LayoutU(height) * kStickRadius * sOvScale[kCLStick]; }
+
+// The control id the right stick's override is stored under.
+int RightControl() { return sTwin ? kCRstick : kCCStick; }
+
+float BaseRightStickX(float width, float height) {
+  return width - sSideMargin - sButtonInset - LayoutU(height) * kGcCstickFromRight;
+}
+
+float RightStickX(float width, float height) {
+  return BaseRightStickX(width, height) + sOvDx[RightControl()] * LayoutU(height);
+}
+
+// Twin's stick is level with the left one, at the diamond's centre; the C-stick sits lower.
+float BaseRightStickY(float height) { return LayoutY(sTwin ? kGcAY : kGcCstickY, height); }
+
+float RightStickY(float height) {
+  return BaseRightStickY(height) + sOvDy[RightControl()] * LayoutU(height);
+}
+
+float RightStickBaseRadius() { return sTwin ? kStickRadius : kGcCstickRadius; }
+
+float RightStickRadius(float height) {
+  return LayoutU(height) * RightStickBaseRadius() * sOvScale[RightControl()];
+}
+
+// Whether (x, y) is in the area that grabs the right stick: the stick's reach on the right (face
+// buttons are hit-tested first, so it can pass them), a phone's 0.38 of the width on the left and
+// the top 0.43 of the height from the bottom. A moved stick takes the area along, scaled.
+bool InRightStickGrab(float x, float y, float width, float height) {
+  const float u = LayoutU(height);
+  const float scale = sOvScale[RightControl()];
+  const float baseCy = BaseRightStickY(height);
+  const float baseRight = BaseRightStickX(width, height) + u * RightStickBaseRadius() * 1.6f;
+  const float baseLeft = baseRight - (baseRight - width * 0.38f) * LayoutScale(height);
+  const float baseTop = LayoutYFromBottom(0.43f, height);
+  const float cy = RightStickY(height);
+  const float right = RightStickX(width, height) + RightStickRadius(height) * 1.6f;
+  return x >= right - (baseRight - baseLeft) * scale && x < right &&
+         y > cy - (baseCy - baseTop) * scale && y <= cy + (height - baseCy) * scale;
+}
+
+float DpadX(float width, float height) {
+  return LayoutX(kDpadX, width, height) + sOvDx[kCDpad] * LayoutU(height);
+}
+
+float DpadY(float height) { return LayoutY(kDpadY, height) + sOvDy[kCDpad] * LayoutU(height); }
+
+// The D-pad direction under (x, y), or -1. The whole square round the cross counts, by the dominant
+// axis, so a thumb that slips off an arm still presses something; only a small centre is dead.
+int DpadButtonAt(float x, float y, float width, float height);
+
+// Past the cap, with no D-pad under them, the top pills drop together until the lowest shown pill
+// is dp(12) above the stick ring or face cluster.
+float PillShift(float width, float height) {
+  if (LayoutU(height) >= height || !sWheels) {
+    return 0.f;
+  }
+  float bottom = 0.f;
+  for (int i = 0; i < sPillCount; ++i) {
+    const PillButton& pill = sPills[i];
+    if (!PillHidden(pill) && CornerSlot(pill) < 0) {
+      bottom = std::max(bottom, LayoutY(pill.bottom, height));
+    }
+  }
+  const Rect face = FaceBounds(width, height);
+  const float stickTop = BaseLeftStickY(width, height) - kStickRadius * LayoutU(height);
+  return std::max(0.f, std::min(stickTop, face.y0) - Dp(12) - bottom);
+}
+
+// A pill's rect, from its side edge and the top of the layout band, or its corner slot.
+void PillRect(const PillButton& pill, float width, float height, Rect& out) {
+  const int slot = CornerSlot(pill);
+  if (slot >= 0) {
+    BottomButtonRect(slot, false, width, height, out);
+    return;
+  }
+  const float shift = PillShift(width, height);
+  out = {LayoutX(pill.left, width, height), LayoutY(pill.top, height) + shift,
+         LayoutX(pill.right, width, height), LayoutY(pill.bottom, height) + shift};
+  ApplyOverride(PillControl(pill), out, height);
+}
+
+// The Visor (left) and Beam (right) buttons: each a wheel radius up from the edge so its wheel opens
+// on screen, just outside the left stick ring and the face cluster (or the C-stick ring).
+float WheelButtonX(int wheel, float width, float height) {
+  const float edge = Dp(kWheelButtonAnchorDp) + kWheelButtonRadius * LayoutU(height);
+  float x = 0.f;
+  if (wheel == 0) {
+    x = BaseLeftStickX(width, height) + kStickRadius * LayoutU(height) + edge;
+  } else if (sCStick) {
+    x = BaseRightStickX(width, height) - LayoutU(height) * RightStickBaseRadius() - edge;
+  } else {
+    x = FaceBounds(width, height).x0 - edge;
+  }
+  // The open wheel must stay on screen.
+  const float reach = Dp(kWheelRadiusDp);
+  return std::max(reach, std::min(width - reach, x)) + sOvDx[kCVisor + wheel] * LayoutU(height);
+}
+
+float WheelButtonY(int wheel, float height) {
+  return height - Dp(kWheelRadiusDp) - Dp(kWheelButtonGapDp) - sBottomInset +
+         sOvDy[kCVisor + wheel] * LayoutU(height);
+}
+
+float WheelButtonRadius(int wheel, float height) {
+  return kWheelButtonRadius * LayoutU(height) * sOvScale[kCVisor + wheel];
+}
+
+int WheelButtonAt(float x, float y, float width, float height) {
+  for (int wheel = 0; wheel < 2; ++wheel) {
+    if (CtrlHidden(kCVisor + wheel)) {
+      continue; // the touch falls through, wheel or no wheel
+    }
+    const float radius = WheelButtonRadius(wheel, height) * 1.1f;
+    const float dx = x - WheelButtonX(wheel, width, height);
+    const float dy = y - WheelButtonY(wheel, height);
+    if (dx * dx + dy * dy <= radius * radius) {
+      return wheel;
+    }
+  }
+  return -1;
+}
+
+int DpadButtonAt(float x, float y, float width, float height) {
+  const float dx = x - DpadX(width, height);
+  const float dy = y - DpadY(height);
+  const float arm = kDpadArm * LayoutU(height) * sOvScale[kCDpad];
+  const float dead = kDpadHalf * LayoutU(height) * sOvScale[kCDpad] * 0.4f;
+  if (std::abs(dx) > arm || std::abs(dy) > arm || dx * dx + dy * dy < dead * dead) {
+    return -1;
+  }
+  if (std::abs(dx) > std::abs(dy)) {
+    return dx < 0.f ? kBtnDpadLeft : kBtnDpadRight;
+  }
+  return dy < 0.f ? kBtnDpadUp : kBtnDpadDown;
+}
+
+bool HitButton(const ControlButton& button, float x, float y, float width, float height) {
+  const FaceGeo geo = FaceGeometry(button, width, height, true);
+  const float dx = x - geo.x, dy = y - geo.y;
+  if (!button.Kidney()) {
+    return dx * dx + dy * dy <= geo.radius * geo.radius;
+  }
+  // Distance to the nearest point of the kidney's centre arc.
+  float angle = std::atan2(dy, dx) * 180.f / kPi;
+  float along = std::fmod(angle - button.arcStart, 360.f);
+  if (along < 0.f) {
+    along += 360.f;
+  }
+  if (along > button.arcSweep) {
+    along = along - button.arcSweep < 360.f - along ? button.arcSweep : 0.f;
+  }
+  const float nearest = (button.arcStart + along) * kPi / 180.f;
+  const float px = dx - geo.radius * std::cos(nearest);
+  const float py = dy - geo.radius * std::sin(nearest);
+  return px * px + py * py <= geo.half * geo.half;
+}
+
+// An added button's centre and radius: round the screen's centre, moved and scaled by its override.
+FaceGeo CustomGeometry(int control, float width, float height) {
+  const float u = LayoutU(height);
+  FaceGeo out;
+  out.x = width * 0.5f + sOvDx[control] * u;
+  out.y = height * 0.5f + sOvDy[control] * u;
+  out.radius = kCustomRadius * u * sOvScale[control];
+  return out;
+}
+
+void FaceBoundsOf(const ControlButton& button, float width, float height, Rect& out) {
+  const FaceGeo geo = FaceGeometry(button, width, height, true);
+  out = button.Kidney()
+            ? KidneyBounds(geo.x, geo.y, geo.radius, geo.half, button.arcStart, button.arcSweep)
+            : Rect{geo.x - geo.radius, geo.y - geo.radius, geo.x + geo.radius, geo.y + geo.radius};
+}
+
+// A control's current bounds: the same geometry the draw and hit test use.
+void ControlBounds(int control, float width, float height, Rect& out) {
+  if (control >= kCCustom) {
+    const FaceGeo geo = CustomGeometry(control, width, height);
+    out = {geo.x - geo.radius, geo.y - geo.radius, geo.x + geo.radius, geo.y + geo.radius};
+    return;
+  }
+  const float u = LayoutU(height);
+  switch (control) {
+  case kCLStick: {
+    const float r = LeftStickRadius(height);
+    out = {LeftStickX(width, height) - r, LeftStickY(width, height) - r,
+           LeftStickX(width, height) + r, LeftStickY(width, height) + r};
+    return;
+  }
+  case kCCStick:
+  case kCRstick: {
+    const float r = RightStickRadius(height);
+    out = {RightStickX(width, height) - r, RightStickY(height) - r,
+           RightStickX(width, height) + r, RightStickY(height) + r};
+    return;
+  }
+  case kCDpad: {
+    const float arm = kDpadArm * u * sOvScale[kCDpad];
+    out = {DpadX(width, height) - arm, DpadY(height) - arm, DpadX(width, height) + arm,
+           DpadY(height) + arm};
+    return;
+  }
+  case kCA:
+  case kCB:
+  case kCX:
+  case kCY:
+  case kCJump:
+  case kCFire:
+  case kCMorph:
+  case kCMissile:
+  case kCTurbo:
+  case kCTurboTwin: {
+    if (control == kCTurbo || control == kCTurboTwin) {
+      if (sTurboButton == nullptr) {
+        out.SetEmpty();
+        return;
+      }
+      FaceBoundsOf(*sTurboButton, width, height, out);
+      return;
+    }
+    const int index = control >= kCJump ? control - kCJump : control - kCA;
+    FaceBoundsOf(*sFace[index], width, height, out);
+    return;
+  }
+  case kCBbomb:
+  case kCBboost:
+  case kCBpbomb:
+  case kCBspider:
+  case kCBunmorph:
+    FaceBoundsOf(sBallFace[control - kCBall], width, height, out);
+    return;
+  case kCL:
+  case kCR:
+  case kCZ:
+  case kCLt:
+  case kCLb:
+  case kCRt:
+  case kCRb:
+  case kCTz:
+  case kCTr: {
+    if (const PillButton* pill = PillOf(control)) {
+      PillRect(*pill, width, height, out);
+    } else {
+      out.SetEmpty();
+    }
+    return;
+  }
+  case kCVisor:
+  case kCBeam: {
+    const int wheel = control - kCVisor;
+    const float r = WheelButtonRadius(wheel, height);
+    out = {WheelButtonX(wheel, width, height) - r, WheelButtonY(wheel, height) - r,
+           WheelButtonX(wheel, width, height) + r, WheelButtonY(wheel, height) + r};
+    return;
+  }
+  case kCStart:
+    BottomButtonRect(0, false, width, height, out);
+    return;
+  case kCMenu:
+    BottomButtonRect(1, false, width, height, out);
+    return;
+  case kCMap:
+    BottomButtonRect(1, true, width, height, out);
+    return;
+  default:
+    BottomButtonRect(0, true, width, height, out);
+  }
+}
+
+// Keeps at least a control's centre on screen, and its offset sane.
+void ClampToScreen(int control, float width, float height) {
+  const float u = LayoutU(height);
+  if (!(u > 0.f) || !(width > 0.f)) {
+    return; // no size yet: dividing by u would put NaN in the layout
+  }
+  sOvDx[control] = std::clamp(sOvDx[control], -kMaxOffset, kMaxOffset);
+  sOvDy[control] = std::clamp(sOvDy[control], -kMaxOffset, kMaxOffset);
+  Rect bounds;
+  ControlBounds(control, width, height, bounds);
+  const float cx = bounds.Cx(), cy = bounds.Cy();
+  sOvDx[control] += (std::clamp(cx, 0.f, width) - cx) / u;
+  sOvDy[control] += (std::clamp(cy, 0.f, height) - cy) / u;
+}
+
+// --- pressing ---------------------------------------------------------------
+
+// A control's press and release, by the id it sends: a gamepad button, an axis id, or one of the
+// port's own actions. Refcounted, as the Java view's held map: two fingers on one button release it
+// once.
+void PressControl(int id) {
+  if (id == kToggleDebugOverlay) {
+    // Drive the overlay directly; polling a synthetic F1 key press is unreliable.
+    if (sHeld.find(id) == sHeld.end()) {
+      sHeld[id] = 1;
+      PortDebug::RequestToggle();
+    }
+    return;
+  }
+  const auto it = sHeld.find(id);
+  const int count = it == sHeld.end() ? 0 : it->second;
+  if (count == 0) {
+    if (id == kBeamShift) {
+      sTouchBeamShift.store(true, std::memory_order_release);
+    } else if (id == kTurboFire) {
+      sTouchTurboFire.store(true, std::memory_order_release);
+    } else if (id >= kAxisIdBase) {
+      SetAxis(id - kAxisIdBase, 1.f);
+    } else {
+      SetButton(id, true);
+    }
+  }
+  sHeld[id] = count + 1;
+}
+
+void ReleaseControl(int id) {
+  const auto it = sHeld.find(id);
+  if (it == sHeld.end()) {
+    return;
+  }
+  if (id == kToggleDebugOverlay) {
+    sHeld.erase(it);
+    return;
+  }
+  if (it->second <= 1) {
+    sHeld.erase(it);
+    if (id == kBeamShift) {
+      sTouchBeamShift.store(false, std::memory_order_release);
+    } else if (id == kTurboFire) {
+      sTouchTurboFire.store(false, std::memory_order_release);
+    } else if (id >= kAxisIdBase) {
+      // Triggers are axes with the minimum as rest: releasing with 0 left them half pressed.
+      SetAxis(id - kAxisIdBase, -1.f);
+    } else {
+      SetButton(id, false);
+    }
+    return;
+  }
+  --it->second;
+}
+
+void ReleaseTouchControl(TouchTarget& target) {
+  const int control = target.touchControl;
+  target.touchControl = -1;
+  if (control >= 0 && control < kAllControls && sTouchHeld[control] > 0 &&
+      --sTouchHeld[control] == 0) {
+    PortInputDevices::SetTouchControl(TouchCode(control), false);
+  }
+}
+
+// Presses a pill, face or added button: reports the control, and sends its own button unless a
+// touch: binding takes the control over (MENU always opens F1). An added button, and a ball one,
+// has no button of its own: its action is always a binding.
+void PressTarget(TouchTarget& target, int control, bool remappable) {
+  target.touchControl = control;
+  if (control >= 0 && control < kAllControls && sTouchHeld[control]++ == 0) {
+    PortInputDevices::SetTouchControl(TouchCode(control), true);
+  }
+  target.bound = control >= kCBall ||
+                 (remappable && control >= 0 && PortInputDevices::TouchControlBound(control));
+  if (!target.bound) {
+    PressControl(target.id);
+  }
+}
+
+void ReleaseTarget(TouchTarget& target) {
+  // Nothing to zero for a hide tap, an aim drag (a distance) or a map tap.
+  if (target.type == kAim) {
+    PortDebug::SetTouchAimDown(false);
+    return;
+  }
+  if (target.type == kWheel) {
+    sWheelOpen = false;
+    return;
+  }
+  if (target.type == kHide || target.type == kMapTap || target.type == kMapPan ||
+      target.type == kMapPan2) {
+    return;
+  }
+  if (target.type == kButton) {
+    ReleaseTouchControl(target);
+    if (!target.bound) {
+      ReleaseControl(target.id);
+    }
+    if (target.aiming) {
+      PortDebug::SetTouchAimDown(false);
+    }
+    return;
+  }
+  const bool left = target.type == kLeftStick;
+  SetAxis(left ? kAxisLeftX : kAxisRightX, 0.f);
+  SetAxis(left ? kAxisLeftY : kAxisRightY, 0.f);
+}
+
+void ReleaseAll() {
+  for (auto& [id, target] : sTargets) {
+    ReleaseTarget(target);
+  }
+  sTargets.clear();
+  sHeld.clear();
+  for (int control = 0; control < kAllControls; ++control) {
+    if (sTouchHeld[control] != 0) {
+      sTouchHeld[control] = 0;
+      PortInputDevices::SetTouchControl(TouchCode(control), false);
+    }
+  }
+  sAnyLeft = sAnyRight = sAnyAim = sAnyPan = sAnyPan2 = false;
+  sLeftPointer = sRightPointer = sAimPointer = sPanPointer = sPan2Pointer = 0;
+  sWheelOpen = false;
+}
+
+// Lets go of what a page switch hid (a face button held into the ball, a ball button held out of
+// it), keeping the shared ones, so the stick stays held.
+void ReleaseOffPage() {
+  for (auto it = sTargets.begin(); it != sTargets.end();) {
+    TouchTarget& target = it->second;
+    bool off = false;
+    if (target.type == kButton) {
+      off = target.touchControl >= 0 && !OnPage(target.touchControl);
+    } else if (target.type == kRightStick) {
+      off = !OnPage(sTwin ? kCRstick : kCCStick);
+    } else {
+      off = target.type == kWheel;
+    }
+    if (!off) {
+      ++it;
+      continue;
+    }
+    ReleaseTarget(target);
+    if (sAnyRight && it->first == sRightPointer) {
+      sAnyRight = false;
+    }
+    it = sTargets.erase(it);
+  }
+}
+
+bool TurboTouched() {
+  for (const auto& [id, target] : sTargets) {
+    if (target.id == kTurboFire) {
       return true;
     }
   }
-  if (L.mapOpen) {
-    f.type = Finger::kMapPan;
-  } else if (!sAimTaken && PortDebug::TouchAim()) {
-    f.type = Finger::kAim;
-    StartAim(f);
+  return false;
+}
+
+// Lets go of Turbo when its button is no longer drawn (F1 turned it off while a finger was on it).
+void ReleaseTurbo() {
+  if (sHeld.find(kTurboFire) == sHeld.end() && !TurboTouched()) {
+    return;
   }
-  sFingers[id] = f;
+  for (auto it = sTargets.begin(); it != sTargets.end();) {
+    TouchTarget& target = it->second;
+    if (target.id != kTurboFire) {
+      ++it;
+      continue;
+    }
+    ReleaseTouchControl(target);
+    // A finger sliding on Turbo was also aiming.
+    if (target.aiming) {
+      sAnyAim = false;
+      PortDebug::SetTouchAimDown(false);
+    }
+    it = sTargets.erase(it);
+  }
+  sHeld.erase(kTurboFire);
+  sTouchTurboFire.store(false, std::memory_order_release);
+}
+
+// Re-reads F1's "On-screen controls"; nothing held may outlive the controls it came from.
+bool SyncControlsOn() {
+  const bool on = PortDebug::TouchControlsEnabled();
+  if (on == sControlsOn) {
+    return false;
+  }
+  sControlsOn = on;
+  ReleaseAll();
   return true;
 }
 
-void FingerMove(Finger& f, SDL_FingerID id, float x, float y) {
-  const float dx = x - f.x, dy = y - f.y;
-  f.x = x;
-  f.y = y;
-  const float dp = sL.dp;
-  if (f.type == Finger::kStick && sStickHeld && sStickFinger == id) {
-    float vx = (x - sStickCx) / sL.stickR, vy = (y - sStickCy) / sL.stickR;
-    const float len = std::hypot(vx, vy);
-    if (len > 1.f) {
-      vx /= len;
-      vy /= len;
-    }
-    if (len < 0.12f) {
-      vx = vy = 0.f;
-    }
-    SetStick(vx, vy);
+// The eye: hidden, the view stays full screen but draws nothing, and the next touch brings the
+// controls back.
+void SetHidden(bool hide) {
+  ReleaseAll();
+  sHidden = hide;
+}
+
+// --- aiming, the map, the sticks --------------------------------------------
+
+void StartButtonAim(TouchTarget& target, SDL_FingerID id, float x, float y) {
+  if (std::hypot(x - target.startX, y - target.startY) < Dp(kMapTapSlopDp)) {
     return;
   }
-  if (f.type == Finger::kMapPan) {
-    PortDebug::AddMapPan(dx / dp, dy / dp, sL.h / dp);
+  target.aiming = true;
+  target.x = x;
+  target.y = y;
+  sAimPointer = id;
+  sAnyAim = true;
+  PortDebug::SetTouchAimDown(true);
+}
+
+// A quick swipe up while aiming springs the morph ball. A stroke starts where the finger last moved
+// down or stalled; it springs once it has gone kSwipeUpDp up, more up than sideways, within
+// kSwipeUpMs. Positions are in dp.
+void TrackSwipe(TouchTarget& target, float x, float y, int64_t timeMs) {
+  if (target.swipeMs < 0 || y >= target.swipeY || timeMs - target.swipeMs > int64_t(kSwipeUpMs)) {
+    target.swipeX = x;
+    target.swipeY = y;
+    target.swipeMs = timeMs;
+    target.swiped = false;
     return;
   }
-  if (f.type == Finger::kControl && !f.aiming && !sAimTaken && PortDebug::TouchAim() &&
-      (f.ctl == kA || f.ctl == kB || f.ctl == kTurbo) &&
-      std::hypot(x - f.x0, y - f.y0) > 12.f * dp) {
-    StartAim(f); // slide off Fire or Jump to aim while it stays held
+  const float up = target.swipeY - y;
+  if (!target.swiped && up >= kSwipeUpDp && std::abs(x - target.swipeX) < up) {
+    target.swiped = true;
+    PortDebug::TouchSpringSwipe();
+  }
+}
+
+float PanViewDp() { return sH / sDensity; }
+
+// The aiming finger's travel, in dp. SDL keeps no event history, so one delta per event.
+void UpdateAim(TouchTarget& target, float x, float y) {
+  PortDebug::AddTouchAim((x - target.x) / sDensity, (y - target.y) / sDensity);
+  TrackSwipe(target, x / sDensity, y / sDensity, int64_t(SDL_GetTicks()));
+  target.x = x;
+  target.y = y;
+}
+
+void UpdateMapPan(TouchTarget& target, float x, float y) {
+  PortDebug::AddMapPan((x - target.x) / sDensity, (y - target.y) / sDensity, PanViewDp());
+  target.x = x;
+  target.y = y;
+}
+
+// Two fingers on the map: the midpoint's travel pans, the change in their spread zooms, and their
+// turn rotates. Java's updatePinch reads both pointers from the event; SDL delivers one finger per
+// event, so the moving one is updated here and the other keeps its last position.
+void UpdatePinch(SDL_FingerID id, TouchTarget& moving, float x, float y) {
+  const auto other = sTargets.find(id == sPanPointer ? sPan2Pointer : sPanPointer);
+  if (other == sTargets.end()) {
     return;
   }
-  if (f.aiming) {
-    PortDebug::AddTouchAim(dx / dp, dy / dp);
-    const float up = f.y0 - y;
-    if (!f.swiped && SDL_GetTicks() - f.t0 <= 150 && up >= 40.f * dp && up > std::abs(x - f.x0)) {
-      f.swiped = true;
-      PortDebug::TouchSpringSwipe();
+  TouchTarget& rest = other->second;
+  const TouchTarget& a = id == sPanPointer ? moving : rest;
+  const TouchTarget& b = id == sPanPointer ? rest : moving;
+  const float ax = a.x, ay = a.y, bx = b.x, by = b.y;
+  const float oldMidX = (ax + bx) * 0.5f, oldMidY = (ay + by) * 0.5f;
+  const float beforeAngle = std::atan2(by - ay, bx - ax);
+  const float before = std::hypot(ax - bx, ay - by) / sDensity;
+  moving.x = x;
+  moving.y = y;
+  const bool first = id == sPanPointer;
+  const float newAx = first ? x : ax, newAy = first ? y : ay;
+  const float newBx = first ? bx : x, newBy = first ? by : y;
+  PortDebug::AddMapPan(((newAx + newBx) * 0.5f - oldMidX) / sDensity,
+                       ((newAy + newBy) * 0.5f - oldMidY) / sDensity, PanViewDp());
+  const float now = std::hypot(newAx - newBx, newAy - newBy) / sDensity;
+  if (before >= kMapPinchMinDp && now >= kMapPinchMinDp) {
+    PortDebug::AddMapZoom(now / before);
+    float turn = std::atan2(newBy - newAy, newBx - newAx) - beforeAngle;
+    if (turn > kPi) {
+      turn -= 2.f * kPi;
+    } else if (turn <= -kPi) {
+      turn += 2.f * kPi;
+    }
+    PortDebug::AddMapRotate(turn);
+  }
+}
+
+// A floating stick keeps the centre it was grabbed at, even if the map opens while it is held.
+void UpdateStick(TouchTarget& target, float x, float y, float width, float height) {
+  target.x = x;
+  target.y = y;
+  const bool left = target.type == kLeftStick;
+  const bool floated = left && sLeftFloated;
+  const float centreX = floated ? sFloatX : left ? LeftStickX(width, height)
+                                                 : RightStickX(width, height);
+  const float centreY =
+      floated ? sFloatY : left ? LeftStickY(width, height) : RightStickY(height);
+  const float radius = left ? LeftStickRadius(height) : RightStickRadius(height);
+  // SDL's gamepad axes are +X right and +Y down (Aurora inverts Y for the GameCube stick), so
+  // screen coordinates apply as-is.
+  float dx = (x - centreX) / radius;
+  float dy = (y - centreY) / radius;
+  float length = std::hypot(dx, dy);
+  if (length > 1.f) {
+    dx /= length;
+    dy /= length;
+    length = 1.f;
+  }
+  if (length < kStickDeadZone) {
+    dx = 0.f;
+    dy = 0.f;
+  }
+  SetAxis(left ? kAxisLeftX : kAxisRightX, dx);
+  SetAxis(left ? kAxisLeftY : kAxisRightY, dy);
+}
+
+// The floating left stick, except on the map screen (whose free area pans) and in the editor, which
+// place the fixed one.
+bool FloatingStick() { return sFloating && !sEditing && !PortDebug::MapScreenOpen(); }
+
+// A press within half a stick radius outside the left stick's ring grabs it.
+bool OnLeftStick(float x, float y, float width, float height) {
+  const float dx = x - LeftStickX(width, height);
+  const float dy = y - LeftStickY(width, height);
+  const float reach = LeftStickRadius(height) * kLeftStickReach;
+  return dx * dx + dy * dy <= reach * reach;
+}
+
+// Fire, Jump and Turbo face buttons aim when slid. Pills and the D-pad don't.
+bool AimsWhileHeld(const TouchTarget& target) {
+  return target.faceButton != nullptr &&
+         (target.id == kBtnSouth || target.id == kBtnEast || target.id == kTurboFire);
+}
+
+// The back button of a pointer menu, where START sits; hiding the controls hides it.
+bool OnBackButton(float x, float y) {
+  return sPointerMenuNow && (!sControlsOn || (!sHidden && !sAutoHidden)) &&
+         sBackButtonRect.Contains(x, y);
+}
+
+// The cog beside it, where MENU sits.
+bool OnCogButton(float x, float y) {
+  return sPointerMenuNow && (!sControlsOn || (!sHidden && !sAutoHidden)) &&
+         sCogButtonRect.Contains(x, y);
+}
+
+// nativeMinimapRect: the HUD's minimap rect into sMinimapRect, with 1 in [4] where it is drawn (0:
+// the map opens but the minimap isn't drawn there). False when there is none.
+bool MinimapRectNow() {
+  bool drawn = true;
+  if (!PortDebug::MinimapRect(sMinimapRect, &drawn)) {
+    return false;
+  }
+  sMinimapRect[4] = drawn ? 1.f : 0.f;
+  return true;
+}
+
+// Wherever the map can open or close, a map button sits left of the eye (the minimap is not always
+// drawn: the visors other than Combat hide it).
+bool MapButtonState(float width, float height) {
+  if (!sMapTap || width <= 0.f || height <= 0.f ||
+      (!sEditing && !MinimapRectNow() && !PortDebug::MapScreenOpen())) {
+    return false;
+  }
+  BottomButtonRect(1, true, width, height, sMapButtonRect);
+  return true;
+}
+
+// Touch-down routing, first match wins: pills, added buttons, face buttons, the wheel buttons (a
+// hit swallows the touch even when no wheel opens), the D-pad, the HUD minimap, the left stick,
+// then the open map's pan (nothing else applies while the map is open), the classic C-stick zone,
+// and the free area aims.
+void AssignPointer(SDL_FingerID id, float x, float y) {
+  const float width = sW, height = sH;
+  for (int i = 0; i < sPillCount; ++i) {
+    const PillButton& pill = sPills[i];
+    if (!PillShown(pill)) {
+      continue;
+    }
+    Rect hit;
+    PillRect(pill, width, height, hit);
+    if (!hit.Contains(x, y)) {
+      continue;
+    }
+    TouchTarget target;
+    target.type = kButton;
+    target.id = pill.Id();
+    target.pill = &pill;
+    target.x = target.startX = x;
+    target.y = target.startY = y;
+    target.startMs = SDL_GetTicks();
+    PressTarget(target, PillControl(pill), pill.Id() != kToggleDebugOverlay);
+    sTargets[id] = target;
+    return;
+  }
+  if (!sControlsOn) {
+    return; // only the two menu pills above; the rest of the screen does nothing
+  }
+  // The topmost (last drawn) added button under the finger.
+  for (int control = kAllControls - 1; control >= kCCustom; --control) {
+    if (sCustomAction[control - kCCustom].empty() || CtrlHidden(control)) {
+      continue;
+    }
+    const FaceGeo geo = CustomGeometry(control, width, height);
+    const float dx = x - geo.x, dy = y - geo.y;
+    if (dx * dx + dy * dy > geo.radius * geo.radius) {
+      continue;
+    }
+    TouchTarget target;
+    target.type = kButton;
+    target.id = kCustomButton;
+    target.x = target.startX = x;
+    target.y = target.startY = y;
+    target.startMs = SDL_GetTicks();
+    PressTarget(target, control, true);
+    sTargets[id] = target;
+    return;
+  }
+  for (int i = 0; i < 4; ++i) {
+    const ControlButton& button = *sFace[i];
+    if (CtrlHidden(ControlOf(button)) || !HitButton(button, x, y, width, height)) {
+      continue;
+    }
+    TouchTarget target;
+    target.type = kButton;
+    target.id = button.button;
+    target.faceButton = &button;
+    target.x = target.startX = x;
+    target.y = target.startY = y;
+    target.startMs = SDL_GetTicks();
+    PressTarget(target, ControlOf(button), true);
+    sTargets[id] = target;
+    return;
+  }
+  for (int i = 0; i < kBallButtons; ++i) {
+    const ControlButton& button = sBallFace[i];
+    if (CtrlHidden(ControlOf(button)) || !HitButton(button, x, y, width, height)) {
+      continue;
+    }
+    // Its action is always a binding, like an added button's.
+    TouchTarget target;
+    target.type = kButton;
+    target.id = kCustomButton;
+    target.faceButton = &button;
+    target.x = target.startX = x;
+    target.y = target.startY = y;
+    target.startMs = SDL_GetTicks();
+    PressTarget(target, ControlOf(button), true);
+    sTargets[id] = target;
+    return;
+  }
+  if (sTurboButton != nullptr && !CtrlHidden(ControlOf(*sTurboButton)) &&
+      HitButton(*sTurboButton, x, y, width, height)) {
+    TouchTarget target;
+    target.type = kButton;
+    target.id = kTurboFire;
+    target.faceButton = sTurboButton;
+    target.x = target.startX = x;
+    target.y = target.startY = y;
+    target.startMs = SDL_GetTicks();
+    PressTarget(target, ControlOf(*sTurboButton), true);
+    sTargets[id] = target;
+    return;
+  }
+  // Hidden wheel buttons (wheels unusable) let the touch through.
+  if (sWheels && (PortDebug::WheelState() & kWheelValidBit) != 0) {
+    const int wheel = WheelButtonAt(x, y, width, height);
+    if (wheel != -1) {
+      // Not while the map is open (the overlay is handled before this).
+      if (!sWheelOpen && !PortDebug::MapScreenOpen()) {
+        TouchTarget target;
+        target.type = kWheel;
+        target.id = wheel;
+        target.x = target.startX = x;
+        target.y = target.startY = y;
+        target.startMs = SDL_GetTicks();
+        // A moved button must still open its wheel on screen.
+        const float reach = Dp(kWheelRadiusDp);
+        sWheelCx = std::max(reach, std::min(width - reach, WheelButtonX(wheel, width, height)));
+        sWheelCy = std::max(reach, std::min(height - reach, WheelButtonY(wheel, height)));
+        sWheelPointer = id;
+        sWheelOpen = true;
+        sTargets[id] = target;
+      }
+      return;
     }
   }
+  const int dpadButton =
+      sWheels || CtrlHidden(kCDpad) ? -1 : DpadButtonAt(x, y, width, height);
+  if (dpadButton != -1) {
+    TouchTarget target;
+    target.type = kButton;
+    target.id = dpadButton;
+    PressControl(dpadButton);
+    sTargets[id] = target;
+    return;
+  }
+  if (sMapTap && width > 0.f && height > 0.f && MinimapRectNow() && sMinimapRect[4] != 0.f &&
+      x >= sMinimapRect[0] * width && x <= sMinimapRect[2] * width &&
+      y >= sMinimapRect[1] * height && y <= sMinimapRect[3] * height) {
+    TouchTarget target;
+    target.type = kMapTap;
+    target.x = target.startX = x;
+    target.y = target.startY = y;
+    sTargets[id] = target;
+    return;
+  }
+  const bool leftHidden = CtrlHidden(kCLStick);
+  const bool floatHere = !leftHidden && FloatingStick() && x < width * 0.5f;
+  if ((floatHere || (!leftHidden && !FloatingStick() && OnLeftStick(x, y, width, height))) &&
+      !sAnyLeft) {
+    if (floatHere) {
+      const float radius = LeftStickRadius(height);
+      sFloatX = std::max(radius, std::min(width - radius, x));
+      sFloatY = std::max(radius, std::min(height - radius, y));
+    }
+    TouchTarget target;
+    target.type = kLeftStick;
+    sAnyLeft = true;
+    sLeftPointer = id;
+    sLeftFloated = floatHere;
+    sTargets[id] = target;
+    UpdateStick(sTargets[id], x, y, width, height);
+  } else if (PortDebug::MapScreenOpen()) {
+    // Everything else that is free pans the open map, one finger at a time.
+    if (!sAnyPan) {
+      sAnyPan = true;
+      sPanPointer = id;
+      TouchTarget target;
+      target.type = kMapPan;
+      target.x = target.startX = x;
+      target.y = target.startY = y;
+      sTargets[id] = target;
+      PortDebug::AddMapPan(0.f, 0.f, PanViewDp());
+    } else if (!sAnyPan2) {
+      sAnyPan2 = true;
+      sPan2Pointer = id;
+      TouchTarget target;
+      target.type = kMapPan2;
+      target.x = target.startX = x;
+      target.y = target.startY = y;
+      sTargets[id] = target;
+    }
+  } else if (sCStick && !CtrlHidden(sTwin ? kCRstick : kCCStick) &&
+             InRightStickGrab(x, y, width, height)) {
+    if (!sAnyRight) {
+      TouchTarget target;
+      target.type = kRightStick;
+      sAnyRight = true;
+      sRightPointer = id;
+      sTargets[id] = target;
+      UpdateStick(sTargets[id], x, y, width, height);
+    }
+  } else if (sAim && !sAnyAim) {
+    // Everything else that is free: one finger at a time aims.
+    sAnyAim = true;
+    sAimPointer = id;
+    TouchTarget target;
+    target.type = kAim;
+    target.x = target.startX = x;
+    target.y = target.startY = y;
+    sTargets[id] = target;
+    PortDebug::SetTouchAimDown(true);
+  }
+}
+
+// The map's pinch and rotate run from the motion handler (SDL delivers one finger per event).
+
+// --- drawing ----------------------------------------------------------------
+
+// The Java view's ARGB literals, with F1's opacity and the control's own layer folded in.
+ImU32 Argb(uint32_t argb, float alpha = 1.f) {
+  const float a = float(argb >> 24) * alpha * sGlobal * sLocal;
+  return IM_COL32((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF,
+                  static_cast< int >(a + 0.5f));
+}
+
+// A GameCube colour as a fill: translucent at rest, lighter and more solid while held.
+ImU32 PadFill(uint32_t rgb, bool active) {
+  if (!active) {
+    return Argb(0x99000000u | rgb);
+  }
+  auto lift = [](uint32_t c) { return c + (255 - c) * 2 / 5; };
+  const uint32_t r = lift((rgb >> 16) & 0xFF), g = lift((rgb >> 8) & 0xFF), b = lift(rgb & 0xFF);
+  return Argb(0xDD000000u | (r << 16) | (g << 8) | b);
+}
+
+constexpr uint32_t kRestFill = 0x77081218, kPressedFill = 0xCC48C8E8, kRestStroke = 0xBBFFFFFF,
+                   kPressedStroke = 0xFFE1F8FF;
+
+// True when a finger is down on this control itself.
+bool PressedControl(const ControlButton& button) {
+  for (const auto& [id, target] : sTargets) {
+    if (target.faceButton == &button) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool PressedControl(const PillButton& pill) {
+  for (const auto& [id, target] : sTargets) {
+    if (target.pill == &pill) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// One control's own opacity, the Java's pushLayer/popLayer pair. At 100% nothing is paid for.
+struct ControlLayer {
+  explicit ControlLayer(int control) {
+    saved = sLocal;
+    const int alpha = ControlAlpha(control);
+    if (alpha < 0) {
+      return; // LAYER_SKIP: not drawn at all
+    }
+    skip = false;
+    if (alpha < 100) {
+      sLocal = saved * (float(alpha) / 100.f);
+    }
+  }
+  ~ControlLayer() { sLocal = saved; }
+  ControlLayer(const ControlLayer&) = delete;
+  ControlLayer& operator=(const ControlLayer&) = delete;
+  bool skip = true;
+  float saved = 1.f;
+};
+
+void Text(ImDrawList* dl, float cx, float cy, float size, ImU32 col, const char* text) {
+  ImFont* font = ImGui::GetFont();
+  const ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0.f, text);
+  dl->AddText(font, size, ImVec2(cx - ts.x * 0.5f, cy - ts.y * 0.5f), col, text);
+}
+
+// drawCenteredLabel under Canvas.rotate(slant, x, y): ImGui has no rotated text, so the glyphs'
+// vertices are turned about the centre after they are added.
+void TextRotated(ImDrawList* dl, float cx, float cy, float size, ImU32 col, const char* text,
+                 float degrees) {
+  if (degrees == 0.f) {
+    Text(dl, cx, cy, size, col, text);
+    return;
+  }
+  const int start = dl->VtxBuffer.Size;
+  Text(dl, cx, cy, size, col, text);
+  const float a = degrees * kPi / 180.f, c = std::cos(a), s = std::sin(a);
+  for (int i = start; i < dl->VtxBuffer.Size; ++i) {
+    const ImVec2 p = dl->VtxBuffer[i].pos;
+    const float dx = p.x - cx, dy = p.y - cy;
+    dl->VtxBuffer[i].pos = ImVec2(cx + dx * c - dy * s, cy + dx * s + dy * c);
+  }
+}
+
+// A label at `size`, or smaller when it is wider than maxWidth.
+void TextFitted(ImDrawList* dl, const char* label, float cx, float cy, float size,
+                float maxWidth, ImU32 col) {
+  ImFont* font = ImGui::GetFont();
+  const float w = font->CalcTextSizeA(size, FLT_MAX, 0.f, label).x;
+  Text(dl, cx, cy, w > maxWidth ? size * maxWidth / w : size, col, label);
+}
+
+// A polygon whose corners are rounded by `radius`: the D-pad's cross, as one outline.
+void RoundedPoly(ImDrawList* dl, const ImVec2* points, int count, float radius) {
+  for (int i = 0; i < count; ++i) {
+    const ImVec2 p = points[i];
+    const ImVec2 a = points[(i + count - 1) % count];
+    const ImVec2 b = points[(i + 1) % count];
+    const float la = std::hypot(a.x - p.x, a.y - p.y);
+    const float lb = std::hypot(b.x - p.x, b.y - p.y);
+    if (la <= 0.f || lb <= 0.f) {
+      dl->PathLineTo(p); // a repeated corner: nothing to round
+      continue;
+    }
+    const float t = std::min(radius, std::min(la, lb) * 0.5f);
+    const ImVec2 p1(p.x + (a.x - p.x) / la * t, p.y + (a.y - p.y) / la * t);
+    const ImVec2 p2(p.x + (b.x - p.x) / lb * t, p.y + (b.y - p.y) / lb * t);
+    dl->PathLineTo(p1);
+    dl->PathBezierQuadraticCurveTo(p, p2, 4);
+  }
+}
+
+// The arrow on a D-pad arm. The Java draws a triangle glyph; the port's ImGui font has no U+25B2,
+// so the triangle is drawn as one.
+void DpadArrow(ImDrawList* dl, float cx, float cy, int dx, int dy, float size, ImU32 col) {
+  const float h = size * 0.5f;
+  const ImVec2 tip(cx + dx * h, cy + dy * h);
+  const ImVec2 a(cx - dx * h - dy * h * 0.75f, cy - dy * h - dx * h * 0.75f);
+  const ImVec2 b(cx - dx * h + dy * h * 0.75f, cy - dy * h + dx * h * 0.75f);
+  dl->AddTriangleFilled(tip, a, b, col);
+}
+
+void DrawStick(ImDrawList* dl, float x, float y, float radius, SDL_FingerID pointer, bool any,
+               uint32_t rgb) {
+  const bool active = any;
+  const ImU32 fill = rgb != 0 ? Argb((active ? 0x88000000u : 0x55000000u) | rgb)
+                              : Argb(active ? 0x8848C8E8 : 0x66081218);
+  const ImU32 stroke = Argb(active ? 0xFFE1F8FF : 0xAAFFFFFF);
+  dl->AddCircleFilled(ImVec2(x, y), radius, fill, 48);
+  dl->AddCircle(ImVec2(x, y), radius, stroke, 48, Dp(2));
+  float knobX = x, knobY = y;
+  const auto it = any ? sTargets.find(pointer) : sTargets.end();
+  if (it != sTargets.end()) {
+    float dx = it->second.x - x, dy = it->second.y - y;
+    const float distance = std::hypot(dx, dy);
+    const float limit = radius * 0.58f;
+    if (distance > limit) {
+      dx *= limit / distance;
+      dy *= limit / distance;
+    }
+    knobX += dx;
+    knobY += dy;
+  }
+  dl->AddCircle(ImVec2(knobX, knobY), radius * 0.42f, stroke, 32, Dp(2));
+}
+
+// A face button's function for LabelContextNow (the ball hides them).
+const char* FaceFunction(const ControlButton& button) {
+  if (sTwin) {
+    const int i = ControlOf(button) - kCJump;
+    switch (sLabelContextNow) {
+    case kLabelsPause:
+      return kTwinPauseFunctions[i];
+    case kLabelsMap:
+      return kTwinMapFunctions[i];
+    case kLabelsDialog:
+      return kTwinDialogFunctions[i];
+    default:
+      return button.label;
+    }
+  }
+  const int i = ControlOf(button) - kCA;
+  switch (sLabelContextNow) {
+  case kLabelsPause:
+    return kGamecubePauseFunctions[i];
+  case kLabelsMap:
+    return kGamecubeMapFunctions[i];
+  case kLabelsDialog:
+    return kGamecubeDialogFunctions[i];
+  default:
+    return kGamecubeFunctions[i];
+  }
+}
+
+void DrawButton(ImDrawList* dl, const ControlButton& button, float width, float height) {
+  const FaceGeo geo = FaceGeometry(button, width, height, true);
+  float x = geo.x, y = geo.y;
+  const float radius = geo.radius;
+  const float scale = sOvScale[ControlOf(button)];
+  const bool active = PressedControl(button);
+  const ImU32 fill = sColored && button.rgb != 0 ? PadFill(button.rgb, active)
+                                                 : Argb(active ? kPressedFill : kRestFill);
+  const ImU32 stroke = Argb(active ? kPressedStroke : kRestStroke);
+  const ImU32 ink = Argb(0xFFFFFFFF);
+  if (button.Kidney()) {
+    KidneyPath(dl, x, y, radius, geo.half, button.arcStart, button.arcSweep);
+    dl->PathFillConcave(fill);
+    KidneyPath(dl, x, y, radius, geo.half, button.arcStart, button.arcSweep);
+    dl->PathStroke(stroke, ImDrawFlags_Closed, Dp(2));
+    const float middle = (button.arcStart + button.arcSweep * 0.5f) * kPi / 180.f;
+    x += radius * std::cos(middle);
+    y += radius * std::sin(middle);
+  } else {
+    dl->AddCircleFilled(ImVec2(x, y), radius, fill, 40);
+    dl->AddCircle(ImVec2(x, y), radius, stroke, 40, Dp(2));
+  }
+  const int control = ControlOf(button);
+  if (control >= kCBall && control < kCBall + kBallButtons) {
+    // A ball button wears its action's name: the row its touch binding does.
+    const std::optional< std::string > row = TouchBallLabel(TouchCode(control));
+    const std::string name = row && !row->empty() ? *row : button.label;
+    Text(dl, x, y, (name.size() > 5 ? Dp(10) : Dp(12)) * scale, ink, name.c_str());
+    return;
+  }
+  // The letter big (twin: the Xbox one), the function small under it.
+  const bool isTurbo = &button == sTurboButton;
+  const char* letter = isTurbo ? "T"
+                               : sTwin ? kTwinLetters[ControlOf(button) - kCJump]
+                                       : button.label;
+  const float letterSize = (sTwin ? Dp(17) : Dp(15)) * scale;
+  if (!sLabels) {
+    Text(dl, x, y, letterSize, ink, letter);
+    return;
+  }
+  const char* function = isTurbo ? button.label : FaceFunction(button);
+  // The function goes below the letter. A kidney is sized by its half width, and a mostly level one
+  // (Y) has its text slanted along the band: upright, "Missile" ran into the border of Y's band.
+  float size = radius;
+  float slant = 0.f;
+  if (button.Kidney()) {
+    size = geo.half * 1.4f;
+    float tangent = button.arcStart + button.arcSweep * 0.5f + 90.f;
+    tangent = std::fmod(std::fmod(tangent, 180.f) + 270.f, 180.f) - 90.f; // into [-90, 90)
+    if (std::abs(tangent) <= 45.f) {
+      slant = tangent;
+    }
+  }
+  TextRotated(dl, x, y - size * 0.2f, letterSize, ink, letter, slant);
+  TextRotated(dl, x, y + size * 0.52f, Dp(8) * scale, ink, function, slant);
+}
+
+// The shoulder pills' text for LabelContextNow. In a menu, a pill that does nothing there shows just
+// its button's name.
+std::string PillLabel(const PillButton& pill) {
+  const std::string full = pill.label;
+  const size_t space = full.find(' ');
+  const std::string name = space == std::string::npos ? full : full.substr(0, space);
+  if (sLabelContextNow == kLabelsPlay || IsMenuPill(pill)) {
+    return full;
+  }
+  const int sent = pill.axis >= 0 ? -1 : pill.button;
+  switch (sLabelContextNow) {
+  case kLabelsMorph:
+    // Only the map, START and MENU stay up in the ball.
+    return full;
+  case kLabelsPause:
+    // L and R page through the subscreens.
+    if (pill.axis == kAxisTriggerL) {
+      return name + " Prev";
+    }
+    if (pill.axis == kAxisTriggerR) {
+      return name + " Next";
+    }
+    if (sent == kBtnEast) {
+      return name + " Back";
+    }
+    if (sent == kBtnSouth) {
+      return name + " Select";
+    }
+    if (sent == kBtnNorth) {
+      return name + " View";
+    }
+    return name;
+  case kLabelsMap:
+    // L zooms out and R in; B and Z leave.
+    if (pill.axis == kAxisTriggerL) {
+      return name + " Out";
+    }
+    if (pill.axis == kAxisTriggerR) {
+      return name + " In";
+    }
+    if (sent == kBtnEast || sent == kBtnRightShoulder) {
+      return name + " Exit";
+    }
+    if (sent == kBtnSouth) {
+      return name + " World";
+    }
+    if (sent == kBtnNorth) {
+      return name + " Legend";
+    }
+    return name;
+  default:
+    return sent == kBtnSouth ? name + " OK" : name;
+  }
+}
+
+// START and MENU sit in the bottom-left corner, and their labels name no game function.
+void DrawCornerButton(ImDrawList* dl, int slot, const Rect& bounds, const ImU32& fill,
+                      const ImU32& stroke) {
+  const float cx = bounds.Cx(), cy = bounds.Cy();
+  const float radius = bounds.Width() * 0.5f;
+  dl->AddCircleFilled(ImVec2(cx, cy), radius, fill, 32);
+  dl->AddCircle(ImVec2(cx, cy), radius, stroke, 32, Dp(2));
+  const float s = radius * 0.36f;
+  if (slot == 0) {
+    // A pause glyph: two bars.
+    const float barW = s * 0.55f;
+    const float corner = barW * 0.3f;
+    dl->AddRectFilled(ImVec2(cx - s * 0.75f - barW / 2.f, cy - s),
+                      ImVec2(cx - s * 0.75f + barW / 2.f, cy + s), stroke, corner);
+    dl->AddRectFilled(ImVec2(cx + s * 0.75f - barW / 2.f, cy - s),
+                      ImVec2(cx + s * 0.75f + barW / 2.f, cy + s), stroke, corner);
+    return;
+  }
+  // A cog: eight square teeth around a ring, with a hole.
+  constexpr int kTeeth = 8;
+  const float outer = s * 1.3f, inner = s * 0.98f;
+  const double step = 2.0 * double(kPi) / double(kTeeth);
+  const double half = step * 0.22;
+  for (int i = 0; i < kTeeth; ++i) {
+    const double a = double(i) * step;
+    const double angles[6] = {a - step / 2 + half, a - half,      a - half * 0.8,
+                              a + half * 0.8,       a + half,      a + step / 2 - half};
+    const float radii[6] = {inner, inner, outer, outer, inner, inner};
+    for (int k = 0; k < 6; ++k) {
+      const ImVec2 p(cx + radii[k] * float(std::cos(angles[k])),
+                     cy + radii[k] * float(std::sin(angles[k])));
+      dl->PathLineTo(p);
+    }
+  }
+  dl->PathStroke(stroke, ImDrawFlags_Closed, Dp(2));
+  dl->AddCircle(ImVec2(cx, cy), s * 0.42f, stroke, 20, Dp(2));
+}
+
+void DrawPillButton(ImDrawList* dl, const PillButton& pill, float width, float height) {
+  Rect bounds;
+  PillRect(pill, width, height, bounds);
+  const bool active = PressedControl(pill);
+  const ImU32 fill = sColored && pill.rgb != 0 ? PadFill(pill.rgb, active)
+                                               : Argb(active ? kPressedFill : 0x99081218);
+  const ImU32 stroke = Argb(active ? kPressedStroke : 0xCCFFFFFF);
+  const int slot = CornerSlot(pill);
+  if (slot >= 0) {
+    DrawCornerButton(dl, slot, bounds, fill, stroke);
+    return;
+  }
+  const float radius = std::min(bounds.Width(), bounds.Height()) * 0.28f;
+  dl->AddRectFilled(ImVec2(bounds.x0, bounds.y0), ImVec2(bounds.x1, bounds.y1), fill, radius);
+  dl->AddRect(ImVec2(bounds.x0, bounds.y0), ImVec2(bounds.x1, bounds.y1), stroke, radius, 0,
+              Dp(2));
+  if (sTwin && pill.axis < 0 && pill.button == kBtnRightShoulder) {
+    // The Map pill wears Xbox's Menu glyph (three lines), as the hint does.
+    const float h = bounds.Height();
+    const float gx = sLabels ? bounds.x0 + bounds.Width() * 0.26f : bounds.Cx();
+    const float lineW = h * 0.34f;
+    const float lineH = std::max(1.5f, h * 0.06f);
+    for (int i = -1; i <= 1; ++i) {
+      const float ly = bounds.Cy() + float(i) * h * 0.16f;
+      dl->AddRectFilled(ImVec2(gx - lineW / 2.f, ly - lineH / 2.f),
+                        ImVec2(gx + lineW / 2.f, ly + lineH / 2.f), stroke);
+    }
+    if (sLabels) {
+      Text(dl, bounds.x0 + bounds.Width() * 0.62f, bounds.Cy(), Dp(11), Argb(0xFFFFFFFF),
+           pill.label);
+    }
+    return;
+  }
+  // "LB Jump": without descriptions, just the button's name.
+  std::string label;
+  if (sLabels) {
+    label = PillLabel(pill);
+  } else {
+    const std::string full = pill.label;
+    const size_t space = full.find(' ');
+    label = space == std::string::npos ? full : full.substr(0, space);
+  }
+  Text(dl, bounds.Cx(), bounds.Cy(), label.size() > 2 ? Dp(11) : Dp(13), Argb(0xFFFFFFFF),
+       label.c_str());
+}
+
+// The D-pad is one cross, as on the GameCube pad.
+void DrawDpad(ImDrawList* dl, float width, float height) {
+  const float cx = DpadX(width, height);
+  const float cy = DpadY(height);
+  const float arm = kDpadArm * LayoutU(height) * sOvScale[kCDpad];
+  const float half = kDpadHalf * LayoutU(height) * sOvScale[kCDpad];
+  const float corner = half * 0.35f;
+  // Clockwise round the cross: the 12 corners where its four arms meet.
+  const ImVec2 cross[12] = {
+      {cx - half, cy - arm}, {cx + half, cy - arm}, {cx + half, cy - half},
+      {cx + arm, cy - half}, {cx + arm, cy + half}, {cx + half, cy + half},
+      {cx + half, cy + arm}, {cx - half, cy + arm}, {cx - half, cy + half},
+      {cx - arm, cy + half}, {cx - arm, cy - half}, {cx - half, cy - half}};
+  RoundedPoly(dl, cross, 12, corner);
+  dl->PathFillConcave(sColored ? PadFill(kGcGrey, false) : Argb(0x77081218));
+  // A held arm lights from the centre out.
+  for (int i = 0; i < 4; ++i) {
+    if (sHeld.find(kDpadButtons[i]) == sHeld.end()) {
+      continue;
+    }
+    const float endX = cx + float(kDpadDx[i]) * arm;
+    const float endY = cy + float(kDpadDy[i]) * arm;
+    const ImVec2 a(std::min(cx, endX) - (kDpadDx[i] == 0 ? half : 0.f),
+                   std::min(cy, endY) - (kDpadDy[i] == 0 ? half : 0.f));
+    const ImVec2 b(std::max(cx, endX) + (kDpadDx[i] == 0 ? half : 0.f),
+                   std::max(cy, endY) + (kDpadDy[i] == 0 ? half : 0.f));
+    dl->AddRectFilled(a, b, sColored ? PadFill(kGcGrey, true) : Argb(0xCC48C8E8), corner);
+  }
+  RoundedPoly(dl, cross, 12, corner);
+  dl->PathStroke(Argb(0xBBFFFFFF), ImDrawFlags_Closed, Dp(2));
+  for (int i = 0; i < 4; ++i) {
+    DpadArrow(dl, cx + float(kDpadDx[i]) * arm * 0.62f, cy + float(kDpadDy[i]) * arm * 0.62f,
+              kDpadDx[i], kDpadDy[i], Dp(12) * sOvScale[kCDpad], Argb(0xFFFFFFFF));
+  }
+}
+
+// The hide button: an eye.
+void DrawEye(ImDrawList* dl, const Rect& bounds) {
+  const float cx = bounds.Cx(), cy = bounds.Cy();
+  const float r = bounds.Width() * 0.5f;
+  dl->AddCircleFilled(ImVec2(cx, cy), r, Argb(0x99081218), 32);
+  dl->AddCircle(ImVec2(cx, cy), r, Argb(0xCCFFFFFF), 32, Dp(2));
+  const float halfW = r * 0.62f, lid = r * 0.36f;
+  const ImU32 ink = Argb(0xCCFFFFFF);
+  dl->PathLineTo(ImVec2(cx - halfW, cy));
+  dl->PathBezierQuadraticCurveTo(ImVec2(cx, cy - lid * 2.f), ImVec2(cx + halfW, cy), 16);
+  dl->PathBezierQuadraticCurveTo(ImVec2(cx, cy + lid * 2.f), ImVec2(cx - halfW, cy), 16);
+  dl->PathStroke(ink, ImDrawFlags_Closed, Dp(2));
+  // The eye's pupil is filled, so it needs its own path.
+  dl->AddCircleFilled(ImVec2(cx, cy), lid * 0.55f, Argb(0xCCFFFFFF), 16);
+}
+
+// A round button with a left arrow: B in the game's menus and map.
+void DrawBackButton(ImDrawList* dl) {
+  const float cx = sBackButtonRect.Cx(), cy = sBackButtonRect.Cy();
+  const float radius = sBackButtonRect.Width() * 0.5f;
+  const ImU32 fill = Argb(sHeld.find(kBtnEast) != sHeld.end() ? 0xCC3A5A70 : 0x99081218);
+  const ImU32 stroke = Argb(0xBBFFFFFF);
+  dl->AddCircleFilled(ImVec2(cx, cy), radius, fill, 32);
+  dl->AddCircle(ImVec2(cx, cy), radius, stroke, 32, Dp(2));
+  const float w = radius * 0.5f;
+  dl->AddLine(ImVec2(cx + w, cy), ImVec2(cx - w, cy), stroke, Dp(2));
+  dl->AddLine(ImVec2(cx - w * 0.3f, cy - w * 0.7f), ImVec2(cx - w, cy), stroke, Dp(2));
+  dl->AddLine(ImVec2(cx - w, cy), ImVec2(cx - w * 0.3f, cy + w * 0.7f), stroke, Dp(2));
+}
+
+// A round button with a folded map: three panels, the middle one raised.
+void DrawMapButton(ImDrawList* dl) {
+  const float cx = sMapButtonRect.Cx(), cy = sMapButtonRect.Cy();
+  const float radius = sMapButtonRect.Width() * 0.5f;
+  dl->AddCircleFilled(ImVec2(cx, cy), radius, Argb(0x99081218), 32);
+  const ImU32 stroke = Argb(0xBBFFFFFF);
+  dl->AddCircle(ImVec2(cx, cy), radius, stroke, 32, Dp(2));
+  const float w = radius * 1.1f, h = radius * 0.8f;
+  const float l = cx - w / 2.f, t = cy - h / 2.f, tilt = h * 0.12f;
+  dl->PathLineTo(ImVec2(l, t + tilt));
+  dl->PathLineTo(ImVec2(l + w / 3.f, t));
+  dl->PathLineTo(ImVec2(l + 2.f * w / 3.f, t + tilt));
+  dl->PathLineTo(ImVec2(l + w, t));
+  dl->PathLineTo(ImVec2(l + w, t + h - tilt));
+  dl->PathLineTo(ImVec2(l + 2.f * w / 3.f, t + h));
+  dl->PathLineTo(ImVec2(l + w / 3.f, t + h - tilt));
+  dl->PathLineTo(ImVec2(l, t + h));
+  dl->PathStroke(stroke, ImDrawFlags_Closed, Dp(2));
+  dl->AddLine(ImVec2(l + w / 3.f, t), ImVec2(l + w / 3.f, t + h - tilt), stroke, Dp(2));
+  dl->AddLine(ImVec2(l + 2.f * w / 3.f, t + tilt), ImVec2(l + 2.f * w / 3.f, t + h), stroke, Dp(2));
+}
+
+// The Visor (left) and Beam (right) buttons.
+void DrawWheelButtons(ImDrawList* dl, float width, float height) {
+  const uint32_t mask = PortDebug::WheelState();
+  const bool shown = (mask & kWheelValidBit) != 0 || sEditing;
+  if (!shown) {
+    return;
+  }
+  for (int wheel = 0; wheel < 2; ++wheel) {
+    ControlLayer layer(kCVisor + wheel);
+    if (layer.skip) {
+      continue;
+    }
+    const float cx = WheelButtonX(wheel, width, height);
+    const float cy = WheelButtonY(wheel, height);
+    const float radius = WheelButtonRadius(wheel, height);
+    const bool active = sWheelOpen && sTargets.count(sWheelPointer) != 0 &&
+                        sTargets.at(sWheelPointer).id == wheel;
+    dl->AddCircleFilled(ImVec2(cx, cy), radius,
+                        Argb(active ? 0xCC48C8E8 : 0x77081218), 32);
+    dl->AddCircle(ImVec2(cx, cy), radius, Argb(active ? 0xFFE1F8FF : 0xBBFFFFFF), 32, Dp(2));
+    // The game's icon would go here; the text label stands in for it.
+    Text(dl, cx, cy, Dp(13) * sOvScale[kCVisor + wheel], Argb(0xFFFFFFFF),
+         kWheelButtonLabels[wheel]);
+  }
+}
+
+// The sector under (x, y) of the open wheel, or -1 inside the centre.
+int WheelSector(float x, float y) {
+  const float dx = x - sWheelCx, dy = y - sWheelCy;
+  const float dead = Dp(kWheelDeadDp);
+  if (dx * dx + dy * dy < dead * dead) {
+    return -1;
+  }
+  if (std::abs(dx) > std::abs(dy)) {
+    return dx > 0.f ? 1 : 3;
+  }
+  return dy < 0.f ? 0 : 2;
+}
+
+bool WheelOwned(uint32_t mask, int wheel, int item) {
+  return (mask & (1u << (wheel * 4 + item))) != 0;
+}
+
+// The wheel opens over everything: four sectors, the one under the finger lit.
+void DrawWheel(ImDrawList* dl) {
+  const auto it = sTargets.find(sWheelPointer);
+  if (!sWheelOpen || it == sTargets.end()) {
+    return;
+  }
+  const TouchTarget& target = it->second;
+  const uint32_t mask = PortDebug::WheelState();
+  const int sector = WheelSector(target.x, target.y);
+  const float outer = Dp(kWheelRadiusDp), inner = Dp(kWheelDeadDp);
+  const int currentIndex = target.id == 0 ? int((mask >> 8) & 3) : int((mask >> 10) & 3);
+  for (int i = 0; i < 4; ++i) {
+    const int item = kWheelItems[target.id][i];
+    const bool owned = WheelOwned(mask, target.id, item);
+    // Sector i is centred on up (-90), right (0), down (90), left (180).
+    const float start = -135.f + 90.f * float(i);
+    const float a0 = start * kPi / 180.f, a1 = (start + 90.f) * kPi / 180.f;
+    const ImVec2 c(sWheelCx, sWheelCy);
+    dl->PathArcTo(c, outer, a0, a1, 16);
+    dl->PathArcTo(c, inner, a1, a0, 8);
+    dl->PathFillConcave(Argb(i == sector && owned ? 0xDD48C8E8
+                                                  : owned ? 0xAA081218 : 0x66081218));
+    dl->PathArcTo(c, outer, a0, a1, 16);
+    dl->PathArcTo(c, inner, a1, a0, 8);
+    dl->PathStroke(Argb(item == currentIndex ? 0xFFE0C020 : kRestStroke), ImDrawFlags_Closed,
+                   Dp(2));
+    // An item not found yet leaves its sector empty.
+    if (!owned) {
+      continue;
+    }
+    const float mid = (start + 45.f) * kPi / 180.f;
+    const float labelR = (outer + inner) * 0.5f;
+    const float lx = sWheelCx + labelR * std::cos(mid);
+    const float ly = sWheelCy + labelR * std::sin(mid);
+    Text(dl, lx, ly, Dp(12), Argb(0xFFFFFFFF), kWheelLabels[target.id][i]);
+  }
+}
+
+// A finger lifted off a wheel: a slide to an owned sector picks it; a quick tap on Visor picks Scan
+// when the setting is on; the centre cancels.
+void FinishWheel(const TouchTarget& target) {
+  const uint32_t mask = PortDebug::WheelState();
+  if ((mask & kWheelValidBit) == 0) {
+    return;
+  }
+  const int sector = WheelSector(target.x, target.y);
+  if (sector >= 0) {
+    const int item = kWheelItems[target.id][sector];
+    if (WheelOwned(mask, target.id, item)) {
+      if (target.id == 0) {
+        PortDebug::RequestVisor(item);
+      } else {
+        PortDebug::RequestBeam(item);
+      }
+    }
+    return;
+  }
+  const bool quick = SDL_GetTicks() - target.startMs < kWheelTapMs;
+  const bool still = std::hypot(target.x - target.startX, target.y - target.startY) <
+                     Dp(kMapTapSlopDp);
+  if (target.id == 0 && sVisorTapScan && quick && still && WheelOwned(mask, 0, 2)) {
+    PortDebug::RequestVisor(2);
+  }
+}
+
+// What an added button says: its action's label, shortened to fit a button.
+std::string ShortLabel(const std::string& key) {
+  if (key == "dpad_up") return "D-pad up";
+  if (key == "dpad_down") return "D-pad down";
+  if (key == "dpad_left") return "D-pad left";
+  if (key == "dpad_right") return "D-pad right";
+  if (key == "beam_next") return "Beam +";
+  if (key == "beam_prev") return "Beam -";
+  if (key == "visor_next") return "Visor +";
+  if (key == "visor_prev") return "Visor -";
+  if (key == "spring_ball") return "Spring";
+  if (key == "port_menu") return "Menu";
+  if (key == "save_state") return "Save";
+  if (key == "load_state") return "Load";
+  if (key == "toggle_original") return "Original";
+  if (key == "photo_mode") return "Photo";
+  if (key == "gyro_aim") return "Gyro";
+  if (key == "ball_power_bomb") return "P.Bomb";
+  if (key == "ball_boost") return "Boost";
+  if (key == "ball_spider") return "Spider";
+  std::string label;
+  if (!ActionLabel(key, label)) {
+    return key;
+  }
+  const size_t paren = label.find(" (");
+  if (paren != std::string::npos && paren > 0) {
+    label = label.substr(0, paren); // "L (click)"
+  }
+  for (const char* suffix : {" Beam", " Visor"}) {
+    const size_t at = label.rfind(suffix);
+    if (at != std::string::npos && at + std::strlen(suffix) == label.size()) {
+      label = label.substr(0, at);
+      break;
+    }
+  }
+  return label;
+}
+
+// Round buttons with a short label (the Java's beam/visor icon needs the traced bitmap).
+void DrawCustomButtons(ImDrawList* dl, float width, float height) {
+  for (int control = kCCustom; control < kAllControls; ++control) {
+    const std::string& key = sCustomAction[control - kCCustom];
+    if (key.empty()) {
+      continue;
+    }
+    ControlLayer layer(control);
+    if (layer.skip) {
+      continue;
+    }
+    const FaceGeo geo = CustomGeometry(control, width, height);
+    const bool active = sTouchHeld[control] > 0;
+    dl->AddCircleFilled(ImVec2(geo.x, geo.y), geo.radius,
+                        Argb(active ? 0xCC48C8E8 : 0x77081218), 40);
+    dl->AddCircle(ImVec2(geo.x, geo.y), geo.radius,
+                  Argb(active ? 0xFFE1F8FF : 0xBBFFFFFF), 40, Dp(2));
+    const std::string label = ShortLabel(key);
+    TextFitted(dl, label.c_str(), geo.x, geo.y, Dp(14) * sOvScale[control], geo.radius * 1.7f,
+               Argb(0xFFFFFFFF));
+  }
+}
+
+void DrawControlButton(ImDrawList* dl, const ControlButton& button, float width, float height) {
+  ControlLayer layer(ControlOf(button));
+  if (layer.skip) {
+    return;
+  }
+  DrawButton(dl, button, width, height);
+}
+
+// The gameplay controls: everything but the pointer menu's own buttons, which are drawn before this
+// (outside the opacity).
+void DrawControls(ImDrawList* dl, float width, float height, bool classic) {
+  // Classic and twin stick are exclusive (the native side keeps them so).
+  sTwin = !classic && PortDebug::TouchTwinStick();
+  sFace = sTwin ? std::array< const ControlButton*, 4 >{&kTwinFace[0], &kTwinFace[1], &kTwinFace[2],
+                                                        &kTwinFace[3]}
+                : std::array< const ControlButton*, 4 >{&kGamecubeFace[0], &kGamecubeFace[1],
+                                                        &kGamecubeFace[2], &kGamecubeFace[3]};
+  sPills = sTwin ? kTwinPills : kGamecubePills;
+  sPillCount = sTwin ? int(std::size(kTwinPills)) : int(std::size(kGamecubePills));
+  sBallFace = sTwin ? kTwinBallFace : kBallFace;
+  // The editor keeps the page its toolbar picked; play follows the game.
+  const bool page = sEditing ? sBallPage : InBall();
+  if (page != sBallPage) {
+    sBallPage = page;
+    ReleaseOffPage();
+  }
+  sTurbo = PortDebug::TouchTurboFlag();
+  sTurboButton = sTurbo ? (sTwin ? &kTwinTurbo : &kGamecubeTurbo) : nullptr;
+  if (!sTurbo) {
+    ReleaseTurbo();
+  }
+  sCStick = classic || sTwin;
+  sAim = !classic || PortDebug::TouchAim();
+  // The wheels are the default layout's only beam and visor control; classic and twin stick have
+  // the D-pad (twin: Beam held + D-pad) and the setting.
+  sWheels = (!classic && !sTwin) || PortDebug::TouchWheels();
+  sVisorTapScan = PortDebug::TouchVisorTapScan();
+  sMapTap = PortDebug::TouchMapTap();
+  if (!sEditing) {
+    // A layout made on another screen, or before a rotation or resize, must not leave a control off
+    // screen where it can't be grabbed.
+    for (int i = 0; i < kAllControls; ++i) {
+      if (!Removed(i) && LayoutHas(i) &&
+          (sOvDx[i] != 0.f || sOvDy[i] != 0.f || sOvScale[i] != 1.f)) {
+        ClampToScreen(i, width, height);
+      }
+    }
+  }
+  // The eye's bounds, and the touch that hides the controls, come from here.
+  BottomButtonRect(0, true, width, height, sHideBounds);
+  if (sAnyLeft && sLeftFloated) {
+    const float r = LeftStickRadius(height);
+    ControlLayer layer(kCLStick);
+    if (!layer.skip) {
+      DrawStick(dl, sFloatX, sFloatY, r, sLeftPointer, sAnyLeft, 0);
+    }
+  } else if (!FloatingStick()) {
+    ControlLayer layer(kCLStick);
+    if (!layer.skip) {
+      DrawStick(dl, LeftStickX(width, height), LeftStickY(width, height), LeftStickRadius(height),
+                sLeftPointer, sAnyLeft, 0);
+    }
+  }
+  // The right stick is the C-stick, yellow on the GameCube pad, in the classic layout; in twin
+  // stick it aims, plain like the left.
+  if (sCStick) {
+    ControlLayer layer(sTwin ? kCRstick : kCCStick);
+    if (!layer.skip) {
+      DrawStick(dl, RightStickX(width, height), RightStickY(height), RightStickRadius(height),
+                sRightPointer, sAnyRight, sColored && !sTwin ? kGcYellow : 0);
+    }
+  }
+
+  sRHiddenNow = !sEditing && RHidden();
+  sLabelContextNow = sLabels ? LabelContext() : kLabelsPlay;
+  for (int i = 0; i < sPillCount; ++i) {
+    const PillButton& pill = sPills[i];
+    if (!PillShown(pill)) {
+      continue;
+    }
+    ControlLayer layer(PillControl(pill));
+    if (layer.skip) {
+      continue;
+    }
+    DrawPillButton(dl, pill, width, height);
+  }
+  for (int i = 0; i < 4; ++i) {
+    DrawControlButton(dl, *sFace[i], width, height);
+  }
+  for (int i = 0; i < kBallButtons; ++i) {
+    DrawControlButton(dl, sBallFace[i], width, height);
+  }
+  if (sTurboButton != nullptr) {
+    DrawControlButton(dl, *sTurboButton, width, height);
+  }
+  if (sWheels) {
+    DrawWheelButtons(dl, width, height);
+  } else {
+    ControlLayer layer(kCDpad);
+    if (!layer.skip) {
+      DrawDpad(dl, width, height);
+    }
+  }
+  {
+    ControlLayer layer(kCEye);
+    if (!layer.skip) {
+      DrawEye(dl, sHideBounds);
+    }
+  }
+  sMapButtonShown = MapButtonState(width, height);
+  if (sMapButtonShown) {
+    ControlLayer layer(kCMap);
+    if (!layer.skip) {
+      DrawMapButton(dl);
+    }
+  }
+  DrawCustomButtons(dl, width, height);
+  if (sWheels && sWheelOpen) {
+    DrawWheel(dl);
+  }
+}
+
+// The controls-off view: only START and MENU, fully opaque and at their default spots, so MENU is
+// always reachable.
+void DrawMenuPills(ImDrawList* dl, float width, float height) {
+  sColored = false;
+  sLabels = false;
+  sPills = kGamecubePills;
+  sPillCount = int(std::size(kGamecubePills));
+  sWheels = false;
+  sMapTap = false;
+  sMapButtonShown = false;
+  for (int i = 0; i < sPillCount; ++i) {
+    if (IsMenuPill(sPills[i])) {
+      DrawPillButton(dl, sPills[i], width, height);
+    }
+  }
+}
+
+// --- the view's own size and settings ---------------------------------------
+
+bool UpdateView() {
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  if (vp == nullptr) {
+    return false;
+  }
+  const float w = vp->Size.x, h = vp->Size.y;
+  SDL_Window* window = PortDebug::MainWindow();
+  int pointsW = 0, pointsH = 0;
+  if (window == nullptr || !SDL_GetWindowSize(window, &pointsW, &pointsH) || pointsW <= 0 ||
+      w <= 0.f || h <= 0.f) {
+    sW = sH = 0.f;
+    return false;
+  }
+  sW = w;
+  sH = h;
+  sDensity = w / float(pointsW); // one dp is one point
+  // The notch, rounded corners and the home indicator.
+  SDL_Rect safe{0, 0, pointsW, pointsH};
+  SDL_GetWindowSafeArea(window, &safe);
+  sInsetSide = float(std::max(safe.x, pointsW - safe.x - safe.w)) * sDensity;
+  sBottomInset = float(std::max(0, pointsH - safe.y - safe.h)) * sDensity;
+  return true;
+}
+
+// The settings the Java re-reads every draw.
+void ReadSettings() {
+  sColored = PortDebug::TouchColorsFlag();
+  sLabels = PortDebug::TouchLabelsFlag();
+  sFloating = PortDebug::TouchFloatingStickFlag();
+  sSideMargin = Dp(PortDebug::TouchSideMarginDp()) + sInsetSide;
+  sStickInset = Dp(PortDebug::TouchStickInsetDp());
+  sButtonInset = Dp(PortDebug::TouchButtonInsetDp());
+}
+
+// Whether the game is paused under the F1 overlay, photo mode or the resume prompt: the controls
+// get out of the way and the touches are for those.
+bool OverlayVisibleNow() {
+  PortSaveState::ResumeInfo info;
+  bool yes = true;
+  return PortDebug::OverlayVisible() || PortPhoto::Active() ||
+         PortSaveState::ResumePromptShown(info, yes);
+}
+
+// The Java's physicalInputPoll: a real pad or keys hide the controls until the next touch, and
+// Turbo is let go when F1 turns it off.
+void PollPhysicalInput() {
+  if (sPhysicalInput.exchange(false, std::memory_order_acq_rel) && !sHidden && !sAutoHidden &&
+      !sEditing && PortDebug::TouchControlsEnabled()) {
+    sAutoHidden = true;
+    ReleaseAll();
+  }
+  // F1 can switch Turbo off while the overlay hides this view's draws.
+  if (TurboTouched() && !PortDebug::TouchTurboFlag()) {
+    ReleaseTurbo();
+  }
+}
+
+// --- touch handling ---------------------------------------------------------
+
+// A finger lifts, `act` false dropping a wheel or minimap tap instead of acting on it.
+void ReleasePointer(SDL_FingerID id, bool act) {
+  const auto it = sTargets.find(id);
+  if (it == sTargets.end()) {
+    return;
+  }
+  TouchTarget target = it->second;
+  sTargets.erase(it);
+  if (target.type == kHide) {
+    SetHidden(true);
+    return;
+  }
+  if (target.type == kWheel) {
+    sWheelOpen = false;
+    if (act) {
+      FinishWheel(target);
+    }
+    return;
+  }
+  if (target.type == kMapTap) {
+    // A tap, not a drag that began on the minimap.
+    const float slop = Dp(kMapTapSlopDp);
+    if (act && std::hypot(target.x - target.startX, target.y - target.startY) < slop) {
+      if (PortDebug::TouchMapTap()) {
+        PortDebug::RequestMapTap();
+      }
+    }
+    return;
+  }
+  ReleaseTarget(target);
+  if (sAnyLeft && id == sLeftPointer) {
+    sAnyLeft = false;
+  }
+  if (sAnyRight && id == sRightPointer) {
+    sAnyRight = false;
+  }
+  if (sAnyAim && id == sAimPointer) {
+    sAnyAim = false;
+  }
+  if (sAnyPan2 && id == sPan2Pointer) {
+    sAnyPan2 = false;
+  } else if (sAnyPan && id == sPanPointer) {
+    if (sAnyPan2) {
+      // The other finger carries on panning from where it is.
+      const auto second = sTargets.find(sPan2Pointer);
+      if (second != sTargets.end()) {
+        const float x = second->second.x, y = second->second.y;
+        second->second = TouchTarget();
+        second->second.type = kMapPan;
+        second->second.x = second->second.startX = x;
+        second->second.y = second->second.startY = y;
+      }
+      sPanPointer = sPan2Pointer;
+      sAnyPan2 = false;
+    } else {
+      sAnyPan = false;
+    }
+  }
+}
+
+// A finger lands. Returns true when the overlay takes it; false hands it to the game.
+bool TouchDown(SDL_FingerID id, float x, float y) {
+  if (sEditing) {
+    return true; // stage B: the editor takes every touch
+  }
+  SyncControlsOn();
+  const bool overlayVisible = OverlayVisibleNow();
+  // Anything still held has to go first: once this view stops claiming touches the matching
+  // releases never arrive, which left whatever was down held for the rest of the session.
+  if (overlayVisible && (!sTargets.empty() || !sHeld.empty())) {
+    ReleaseAll();
+  }
+  // In a pointer menu every finger but one on the back or cog button is the game's.
+  const bool menu = !overlayVisible && PortPointer::ScreenActive();
+  const bool toGame =
+      overlayVisible || (menu && !OnBackButton(x, y) && !OnCogButton(x, y));
+  if (toGame) {
+    sForwarded.insert(id);
+    return false;
+  }
+  // A tap on the "newer release" toast opens its page and is not also a press.
+  if (PortDebug::TapUpdateToast(x / std::max(1.f, sW), y / std::max(1.f, sH))) {
+    return true;
+  }
+  // With the controls off nothing is hidden and no touch brings anything back.
+  if (sAutoHidden && sControlsOn) {
+    // The touch that brings them back is not also a press.
+    sAutoHidden = false;
+    sPhysicalInput.exchange(false, std::memory_order_acq_rel);
+    SetTouchDevice(sTwin);
+    return true;
+  }
+  if (sHidden && sControlsOn) {
+    // Any touch brings the controls back, and is not also a press.
+    SetHidden(false);
+    return true;
+  }
+  // The in-game prompts follow the input the player reached for.
+  SetTouchDevice(sTwin);
+  if (menu) {
+    // Only the back and cog buttons get here (toGame took the rest).
+    const int target = OnCogButton(x, y) ? kToggleDebugOverlay : kBtnEast;
+    TouchTarget t;
+    t.type = kButton;
+    t.id = target;
+    sTargets[id] = t;
+    PressControl(target);
+    return true;
+  }
+  if (sControlsOn && !CtrlHidden(kCEye) && sHideBounds.Contains(x, y)) {
+    TouchTarget t;
+    t.type = kHide;
+    sTargets[id] = t;
+    return true;
+  }
+  if (sControlsOn && sMapButtonShown && !CtrlHidden(kCMap) && sMapButtonRect.Contains(x, y)) {
+    TouchTarget t;
+    t.type = kMapTap;
+    t.x = t.startX = x;
+    t.y = t.startY = y;
+    sTargets[id] = t;
+    return true;
+  }
+  AssignPointer(id, x, y);
+  return true;
+}
+
+// A finger moves. Returns true when the overlay takes the event (a finger it does not own was
+// already declined to SDL, and stays so).
+bool TouchMove(SDL_FingerID id, float x, float y) {
+  if (sEditing) {
+    return true;
+  }
+  if (sForwarded.count(id) != 0) {
+    return false; // handed to SDL: it stays the game's
+  }
+  const auto it = sTargets.find(id);
+  if (it == sTargets.end()) {
+    return true; // a finger that only brought the controls back, or landed with them off
+  }
+  TouchTarget& target = it->second;
+  const float width = sW, height = sH;
+  if (target.type == kLeftStick || target.type == kRightStick) {
+    UpdateStick(target, x, y, width, height);
+  } else if (target.type == kAim || target.aiming) {
+    UpdateAim(target, x, y);
+  } else if (target.type == kButton && AimsWhileHeld(target) && sAim && !sAnyAim) {
+    StartButtonAim(target, id, x, y);
+  } else if (target.type == kMapPan || target.type == kMapPan2) {
+    if (sAnyPan && sAnyPan2) {
+      UpdatePinch(id, target, x, y);
+    } else {
+      UpdateMapPan(target, x, y);
+    }
+  } else if (target.type == kWheel || target.type == kMapTap) {
+    target.x = x;
+    target.y = y;
+  }
+  return false;
+}
+
+// A finger lifts. Returns true when the overlay takes the event (the Java consumes every finger it
+// did not hand to SDL).
+bool TouchUp(SDL_FingerID id) {
+  if (sForwarded.erase(id) != 0) {
+    return false;
+  }
+  if (sEditing) {
+    return true;
+  }
+  ReleasePointer(id, true);
+  return true;
+}
+
+// The gesture was cancelled: what it held is let go without acting on it.
+bool TouchCancel(SDL_FingerID id) {
+  if (sForwarded.erase(id) != 0) {
+    return false;
+  }
+  if (sEditing) {
+    return true;
+  }
+  ReleasePointer(id, false);
+  if (sTargets.empty()) {
+    ReleaseAll(); // nothing is still down: let go of whatever a cancelled gesture left held
+  }
+  return true;
 }
 
 bool SDLCALL TouchFilter(void*, SDL_Event* event) {
@@ -628,14 +2976,15 @@ bool SDLCALL TouchFilter(void*, SDL_Event* event) {
   case SDL_EVENT_MOUSE_MOTION:
   case SDL_EVENT_MOUSE_BUTTON_DOWN:
   case SDL_EVENT_MOUSE_BUTTON_UP: {
-    // Touches also arrive as a mouse; only the F1 overlay and the photo panel want those.
+    // Touches also arrive as a mouse; only the F1 overlay, photo mode and the resume prompt want
+    // those, and the pointer menu's own buttons.
     const SDL_MouseID which =
         event->type == SDL_EVENT_MOUSE_MOTION ? event->motion.which : event->button.which;
     if (which != SDL_TOUCH_MOUSEID) {
       return true;
     }
     std::lock_guard lock(sMutex);
-    return sMode == Mode::PassThrough;
+    return OverlayVisibleNow();
   }
   case SDL_EVENT_FINGER_DOWN:
   case SDL_EVENT_FINGER_MOTION:
@@ -646,239 +2995,27 @@ bool SDLCALL TouchFilter(void*, SDL_Event* event) {
     return true;
   }
   std::lock_guard lock(sMutex);
-  UpdateMode();
+  if (sW <= 0.f) {
+    return true; // no frame drawn yet: nothing to hit test against
+  }
   const SDL_FingerID id = event->tfinger.fingerID;
-  const float x = event->tfinger.x * sL.w, y = event->tfinger.y * sL.h;
-  const auto it = sFingers.find(id);
-  if (event->type == SDL_EVENT_FINGER_DOWN) {
-    if (sMode == Mode::PassThrough) {
-      return true;
-    }
-    if (it != sFingers.end()) {
-      EndFinger(id, it->second, false);
-      sFingers.erase(it);
-    }
-    return !FingerDown(id, x, y);
-  }
-  if (it == sFingers.end()) {
-    // Not ours: a pointer-menu or pass-through finger, or one released by a mode change.
-    return sMode != Mode::Full;
-  }
-  if (event->type == SDL_EVENT_FINGER_MOTION) {
-    FingerMove(it->second, id, x, y);
-  } else {
-    it->second.x = x;
-    it->second.y = y;
-    EndFinger(id, it->second, event->type == SDL_EVENT_FINGER_UP);
-    sFingers.erase(it);
-  }
-  return false;
-}
-
-// Drawing. Colours are the Java view's ARGB literals.
-ImU32 Argb(uint32_t argb, float alpha) {
-  const float a = static_cast< float >(argb >> 24) * alpha;
-  return IM_COL32((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, static_cast< int >(a + 0.5f));
-}
-
-ImU32 PadFill(uint32_t rgb, bool pressed, float alpha) {
-  if (!pressed) {
-    return Argb(0x99000000u | rgb, alpha);
-  }
-  auto lift = [](uint32_t c) { return c + (255 - c) * 2 / 5; };
-  const uint32_t r = lift((rgb >> 16) & 0xFF), g = lift((rgb >> 8) & 0xFF), b = lift(rgb & 0xFF);
-  return Argb(0xDD000000u | (r << 16) | (g << 8) | b, alpha);
-}
-
-constexpr uint32_t kRestFill = 0x77081218, kPressedFill = 0xCC48C8E8, kRestStroke = 0xBBFFFFFF,
-                   kPressedStroke = 0xFFE1F8FF;
-
-bool Pressed(Ctl ctl) {
-  for (const auto& [id, f] : sFingers) {
-    if (f.ctl == ctl && (f.type == Finger::kControl || f.type == Finger::kWheel)) return true;
-  }
-  return false;
-}
-
-void Text(ImDrawList* dl, float cx, float cy, float size, ImU32 col, const char* text) {
-  ImFont* font = ImGui::GetFont();
-  const ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0.f, text);
-  dl->AddText(font, size, ImVec2(cx - ts.x * 0.5f, cy - ts.y * 0.5f), col, text);
-}
-
-void KidneyPath(ImDrawList* dl, const FaceDef& d) {
-  float a0, a1;
-  KidneyAngles(d, a0, a1);
-  const float ring = sL.u * d.ring, half = sL.u * d.half;
-  const ImVec2 c(sL.ax, sL.ay);
-  dl->PathArcTo(c, ring + half, a0, a1, 24);
-  dl->PathArcTo(ImVec2(c.x + ring * std::cos(a1), c.y + ring * std::sin(a1)), half, a1, a1 + kPi, 12);
-  dl->PathArcTo(c, ring - half, a1, a0, 24);
-  dl->PathArcTo(ImVec2(c.x + ring * std::cos(a0), c.y + ring * std::sin(a0)), half, a0 + kPi,
-                a0 + 2.f * kPi, 12);
-}
-
-void DrawFace(ImDrawList* dl, const FaceDef& d, float alpha) {
-  const float u = sL.u, dp = sL.dp;
-  const bool pressed = Pressed(d.ctl);
-  const ImU32 fill = sL.colours ? PadFill(d.rgb, pressed, alpha)
-                                : Argb(pressed ? kPressedFill : kRestFill, alpha);
-  const ImU32 stroke = Argb(pressed ? kPressedStroke : kRestStroke, alpha);
-  const ImU32 text = Argb(0xFFFFFFFF, alpha);
-  float tx, ty, size;
-  if (d.kidney) {
-    KidneyPath(dl, d);
-    dl->PathFillConcave(fill);
-    KidneyPath(dl, d);
-    dl->PathStroke(stroke, ImDrawFlags_Closed, 2.f * dp);
-    float a0, a1;
-    KidneyAngles(d, a0, a1);
-    const float mid = (a0 + a1) * 0.5f;
-    tx = sL.ax + d.ring * u * std::cos(mid);
-    ty = sL.ay + d.ring * u * std::sin(mid);
-    size = d.half * u * 1.1f;
-  } else {
-    tx = sL.ax + d.x * u;
-    ty = sL.ay + d.y * u;
-    dl->AddCircleFilled(ImVec2(tx, ty), d.r * u, fill, 40);
-    dl->AddCircle(ImVec2(tx, ty), d.r * u, stroke, 40, 2.f * dp);
-    size = d.r * u * 0.8f;
-  }
-  if (sL.labels) {
-    Text(dl, tx, ty - size * 0.3f, size, text, d.letter);
-    Text(dl, tx, ty + size * 0.45f, std::max(10.f * dp, size * 0.42f), text, d.label);
-  } else {
-    Text(dl, tx, ty, size, text, d.letter);
-  }
-}
-
-void DrawPill(ImDrawList* dl, const Rect& r, Ctl ctl, const char* letter, const char* label,
-              uint32_t rgb, float alpha) {
-  const bool pressed = Pressed(ctl);
-  const ImU32 fill = rgb != 0 && sL.colours ? PadFill(rgb, pressed, alpha)
-                                            : Argb(pressed ? kPressedFill : kRestFill, alpha);
-  const float radius = std::min(r.x1 - r.x0, r.y1 - r.y0) * 0.28f;
-  dl->AddRectFilled(ImVec2(r.x0, r.y0), ImVec2(r.x1, r.y1), fill, radius);
-  dl->AddRect(ImVec2(r.x0, r.y0), ImVec2(r.x1, r.y1), Argb(pressed ? kPressedStroke : kRestStroke, alpha),
-              radius, 0, 2.f * sL.dp);
-  char text[32];
-  std::snprintf(text, sizeof(text), sL.labels ? "%s %s" : "%s", letter, label);
-  Text(dl, r.Cx(), r.Cy(), std::min(16.f * sL.dp, (r.y1 - r.y0) * 0.45f), Argb(0xFFFFFFFF, alpha), text);
-}
-
-enum class Glyph { Start, Menu, Eye, Map, Back };
-
-void DrawCorner(ImDrawList* dl, const Rect& r, Ctl ctl, Glyph glyph, float alpha) {
-  const bool pressed = Pressed(ctl);
-  const float dp = sL.dp, cx = r.Cx(), cy = r.Cy(), rad = (r.x1 - r.x0) * 0.5f;
-  dl->AddCircleFilled(ImVec2(cx, cy), rad, Argb(pressed ? kPressedFill : kRestFill, alpha), 32);
-  dl->AddCircle(ImVec2(cx, cy), rad, Argb(pressed ? kPressedStroke : kRestStroke, alpha), 32, 2.f * dp);
-  const ImU32 ink = Argb(0xFFFFFFFF, alpha);
-  const float g = rad * 0.45f, t = 2.f * dp;
-  switch (glyph) {
-  case Glyph::Start: // pause bars
-    dl->AddRectFilled(ImVec2(cx - g * 0.6f, cy - g), ImVec2(cx - g * 0.15f, cy + g), ink);
-    dl->AddRectFilled(ImVec2(cx + g * 0.15f, cy - g), ImVec2(cx + g * 0.6f, cy + g), ink);
+  const float x = event->tfinger.x * sW, y = event->tfinger.y * sH;
+  bool taken = false;
+  switch (event->type) {
+  case SDL_EVENT_FINGER_DOWN:
+    taken = TouchDown(id, x, y);
     break;
-  case Glyph::Menu: // cog
-    dl->AddCircle(ImVec2(cx, cy), g * 0.62f, ink, 20, t * 1.4f);
-    for (int i = 0; i < 8; ++i) {
-      const float a = static_cast< float >(i) * kPi / 4.f;
-      dl->AddLine(ImVec2(cx + std::cos(a) * g * 0.75f, cy + std::sin(a) * g * 0.75f),
-                  ImVec2(cx + std::cos(a) * g * 1.1f, cy + std::sin(a) * g * 1.1f), ink, t * 1.6f);
-    }
+  case SDL_EVENT_FINGER_MOTION:
+    taken = TouchMove(id, x, y);
     break;
-  case Glyph::Eye:
-    dl->PathArcTo(ImVec2(cx, cy + g * 0.9f), g * 1.35f, -kPi * 0.82f, -kPi * 0.18f, 16);
-    dl->PathArcTo(ImVec2(cx, cy - g * 0.9f), g * 1.35f, kPi * 0.18f, kPi * 0.82f, 16);
-    dl->PathStroke(ink, ImDrawFlags_Closed, t);
-    dl->AddCircleFilled(ImVec2(cx, cy), g * 0.32f, ink, 16);
+  case SDL_EVENT_FINGER_UP:
+    taken = TouchUp(id);
     break;
-  case Glyph::Map: {
-    const ImVec2 pts[] = {{cx - g, cy - g * 0.7f}, {cx - g * 0.33f, cy - g}, {cx + g * 0.33f, cy - g * 0.7f},
-                          {cx + g, cy - g},        {cx + g, cy + g * 0.7f},  {cx + g * 0.33f, cy + g},
-                          {cx - g * 0.33f, cy + g * 0.7f}, {cx - g, cy + g}};
-    dl->AddPolyline(pts, 8, ink, ImDrawFlags_Closed, t);
-    dl->AddLine(pts[1], pts[6], ink, t);
-    dl->AddLine(pts[2], pts[5], ink, t);
+  default:
+    taken = TouchCancel(id);
     break;
   }
-  case Glyph::Back: {
-    const ImVec2 pts[] = {{cx + g * 0.3f, cy - g}, {cx - g * 0.6f, cy}, {cx + g * 0.3f, cy + g}};
-    dl->AddPolyline(pts, 3, ink, ImDrawFlags_None, t * 1.4f);
-    break;
-  }
-  }
-}
-
-void DrawWheels(ImDrawList* dl, float alpha) {
-  const Layout& L = sL;
-  const uint32_t state = L.wheelState;
-  const ImU32 ink = Argb(0xFFFFFFFF, alpha);
-  for (int which = 0; which < 2; ++which) {
-    const float cx = which == 0 ? L.visorX : L.beamX;
-    const Ctl ctl = which == 0 ? kVisorWheel : kBeamWheel;
-    const bool pressed = Pressed(ctl);
-    dl->AddCircleFilled(ImVec2(cx, L.wheelY), L.wheelR, Argb(pressed ? kPressedFill : kRestFill, alpha), 32);
-    dl->AddCircle(ImVec2(cx, L.wheelY), L.wheelR, Argb(pressed ? kPressedStroke : kRestStroke, alpha), 32,
-                  2.f * L.dp);
-    const int current = static_cast< int >((state >> (which == 0 ? 8 : 10)) & 3);
-    const char* name = kWheelLabels[which][0];
-    for (int sector = 0; sector < 4; ++sector) {
-      if (kWheelItems[which][sector] == current) name = kWheelLabels[which][sector];
-    }
-    Text(dl, cx, L.wheelY - L.wheelR * 0.22f, L.wheelR * 0.42f, ink, which == 0 ? "Visor" : "Beam");
-    Text(dl, cx, L.wheelY + L.wheelR * 0.3f, L.wheelR * 0.34f, ink, name);
-  }
-  if (!sWheel.open) {
-    return;
-  }
-  // The open wheel: four sectors around the button, the hovered one lit.
-  const auto it = sFingers.find(sWheel.finger);
-  const float fx = it != sFingers.end() ? it->second.x : sWheel.cx;
-  const float fy = it != sFingers.end() ? it->second.y : sWheel.cy;
-  const float dx = fx - sWheel.cx, dy = fy - sWheel.cy;
-  const float outer = 112.f * L.dp, dead = 30.f * L.dp;
-  int hovered = -1;
-  if (std::hypot(dx, dy) > dead) {
-    hovered = std::abs(dx) > std::abs(dy) ? (dx > 0.f ? 1 : 3) : (dy < 0.f ? 0 : 2);
-  }
-  const int current = static_cast< int >((state >> (sWheel.which == 0 ? 8 : 10)) & 3);
-  const ImVec2 c(sWheel.cx, sWheel.cy);
-  for (int sector = 0; sector < 4; ++sector) {
-    const int item = kWheelItems[sWheel.which][sector];
-    const bool owned = (state & (1u << (sWheel.which * 4 + item))) != 0;
-    const float mid = (sector == 0 ? -0.5f : sector == 1 ? 0.f : sector == 2 ? 0.5f : 1.f) * kPi;
-    const float a0 = mid - kPi * 0.25f + 0.04f, a1 = mid + kPi * 0.25f - 0.04f;
-    auto path = [&] {
-      dl->PathArcTo(c, outer, a0, a1, 16);
-      dl->PathArcTo(c, dead, a1, a0, 8);
-    };
-    path();
-    dl->PathFillConcave(Argb(sector == hovered && owned ? 0xDD48C8E8 : owned ? 0xAA081218 : 0x66081218, 1.f));
-    path();
-    dl->PathStroke(item == current ? Argb(0xFFE0C020, 1.f) : Argb(kRestStroke, 1.f), ImDrawFlags_Closed,
-                   (item == current ? 3.f : 1.5f) * L.dp);
-    if (owned) {
-      const float r = (outer + dead) * 0.5f;
-      Text(dl, c.x + r * std::cos(mid), c.y + r * std::sin(mid), 14.f * L.dp, Argb(0xFFFFFFFF, 1.f),
-           kWheelLabels[sWheel.which][sector]);
-    }
-  }
-}
-
-void DrawStick(ImDrawList* dl, float alpha) {
-  const Layout& L = sL;
-  const bool held = sStickHeld;
-  if (!held && L.floating && !L.mapOpen) {
-    return; // the floating stick shows only under a thumb
-  }
-  const float cx = held ? sStickCx : L.stickX, cy = held ? sStickCy : L.stickY;
-  dl->AddCircleFilled(ImVec2(cx, cy), L.stickR, Argb(held ? 0x8848C8E8 : 0x66081218, alpha), 48);
-  dl->AddCircle(ImVec2(cx, cy), L.stickR, Argb(held ? kPressedStroke : 0xAAFFFFFF, alpha), 48, 2.f * L.dp);
-  const float kx = cx + sStickVx * L.stickR * 0.58f, ky = cy + sStickVy * L.stickR * 0.58f;
-  dl->AddCircleFilled(ImVec2(kx, ky), L.stickR * 0.42f, Argb(held ? 0xCC48C8E8 : 0x77081218, alpha), 32);
-  dl->AddCircle(ImVec2(kx, ky), L.stickR * 0.42f, Argb(kRestStroke, alpha), 32, 2.f * L.dp);
+  return !taken;
 }
 
 } // namespace
@@ -887,59 +3024,69 @@ namespace PortDebug {
 
 void InstallTouchOverlay() {
   std::lock_guard lock(sMutex);
-  if (!sInstalled) {
-    sInstalled = true;
-    SDL_SetEventFilter(TouchFilter, nullptr);
+  if (sInstalled) {
+    return;
   }
+  sInstalled = true;
+  InitDefaults();
+#if !defined(SDL_PLATFORM_IOS)
+  // The desktop test build: the mouse is the finger it lacks.
+  SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "1");
+#endif
+  SDL_SetEventFilter(TouchFilter, nullptr);
 }
 
 void DrawTouchOverlay() {
   std::lock_guard lock(sMutex);
-  BuildLayout();
-  UpdateMode();
-  if (sPhysicalInput.exchange(false, std::memory_order_acq_rel) && sMode == Mode::Full) {
-    ReleaseAll();
-    sHidden = true; // a real pad or keyboard: get out of the way until the next touch
-  }
-  if (sMode == Mode::PassThrough) {
+  if (!UpdateView()) {
     return;
   }
-  for (const auto& [id, f] : sFingers) {
-    if (f.type == Finger::kMapPan) {
-      PortDebug::AddMapPan(0.f, 0.f, sL.h / sL.dp); // keeps a held pan from timing out
-      break;
-    }
+  if (!sEditing) {
+    SyncLayout();
   }
+  PollPhysicalInput();
+  SyncControlsOn();
+  // The debug overlay is drawn into the surface below; stay out of its way.
+  if (OverlayVisibleNow()) {
+    return;
+  }
+  if ((sAutoHidden || sHidden) && sControlsOn) {
+    return;
+  }
+  ReadSettings();
+  // A finger held on the open map must keep telling the game it is still there, or the map drifts
+  // back (the Java view posts panKeepAlive for this).
+  if (sAnyPan) {
+    PortDebug::AddMapPan(0.f, 0.f, PanViewDp());
+  }
+  const float width = sW, height = sH;
+  // The classic setting can change mid-session, so re-check it every draw.
+  const bool classic = PortDebug::TouchClassic();
   ImDrawList* dl = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
-  if (sMode == Mode::Pointer) {
-    DrawCorner(dl, sL.start, kBack, Glyph::Back, 1.f);
-    DrawCorner(dl, sL.menu, kMenu, Glyph::Menu, 1.f);
+  sPointerMenuNow = !sEditing && PortPointer::ScreenActive();
+  if (sPointerMenuNow) {
+    // Then only the back button and the cog beside it show, fully opaque, so the overlay opens
+    // from any menu.
+    sGlobal = 1.f;
+    sLocal = 1.f;
+    BottomButtonRect(0, false, width, height, sBackButtonRect);
+    DrawBackButton(dl);
+    BottomButtonRect(1, false, width, height, sCogButtonRect);
+    const bool cogDown = sHeld.find(kToggleDebugOverlay) != sHeld.end();
+    DrawCornerButton(dl, 1, sCogButtonRect, Argb(cogDown ? 0xCC48C8E8 : 0x99081218),
+                     Argb(cogDown ? 0xFFE1F8FF : 0xCCFFFFFF));
     return;
   }
-  if (sMode == Mode::Minimal) {
-    DrawCorner(dl, sL.start, kStart, Glyph::Start, 1.f);
-    DrawCorner(dl, sL.menu, kMenu, Glyph::Menu, 1.f);
+  if (!sControlsOn && !sEditing) {
+    sGlobal = 1.f;
+    sLocal = 1.f;
+    DrawMenuPills(dl, width, height);
     return;
   }
-  if (sHidden) {
-    return;
-  }
-  const float alpha = std::clamp(PortDebug::TouchOpacity() / 100.f, 0.f, 1.f);
-  DrawPill(dl, sL.pillL, kL, "L", "Lock", 0, alpha);
-  if (sL.showR) DrawPill(dl, sL.pillR, kR, "R", "Look", 0, alpha);
-  if (sL.showZ) DrawPill(dl, sL.pillZ, kZ, "Z", "Map", kPurple, alpha);
-  DrawStick(dl, alpha);
-  if (sL.morphed) {
-    for (const FaceDef& d : kBallFace) DrawFace(dl, d, alpha);
-  } else {
-    for (const FaceDef& d : kFace) DrawFace(dl, d, alpha);
-    if (sL.turbo) DrawFace(dl, kTurboDef, alpha);
-  }
-  DrawCorner(dl, sL.start, kStart, Glyph::Start, alpha);
-  DrawCorner(dl, sL.menu, kMenu, Glyph::Menu, std::max(alpha, 0.25f));
-  DrawCorner(dl, sL.eye, kEye, Glyph::Eye, alpha);
-  if (sL.showMap) DrawCorner(dl, sL.map, kMap, Glyph::Map, alpha);
-  if (sL.showWheels) DrawWheels(dl, alpha);
+  // F1's opacity for the on-screen controls; the pointer menu's buttons were drawn above it.
+  sGlobal = sEditing ? 1.f : std::clamp(PortDebug::TouchOpacity() / 100.f, 0.f, 1.f);
+  sLocal = 1.f;
+  DrawControls(dl, width, height, classic);
 }
 
 } // namespace PortDebug

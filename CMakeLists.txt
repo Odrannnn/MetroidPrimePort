@@ -445,11 +445,18 @@ else()
 endif()
 # Touch settings and the virtual pad on phones and tablets. Android draws the
 # controls in Java (TouchControlsView); iOS draws them in C++ (touch_overlay.cpp).
+# The desktop switch builds the C++ overlay on a host build so its drawing and
+# event handling can be tried without a device; the mouse then acts as a finger
+# (InstallTouchOverlay sets SDL's mouse-to-touch hint there).
+option(MP_TOUCH_OVERLAY_DESKTOP "Draw the touch controls on a desktop build (testing)" OFF)
 if(ANDROID OR IOS)
     target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_CONTROLS)
 endif()
 if(IOS)
     target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_OVERLAY)
+endif()
+if(MP_TOUCH_OVERLAY_DESKTOP AND NOT ANDROID)
+    target_compile_definitions(metroid_prime_port PRIVATE PORT_TOUCH_CONTROLS PORT_TOUCH_OVERLAY)
 endif()
 # disc.cpp and port_pal_languages.cpp inflate compressed images and fonts. Aurora
 # provides ZLIB::ZLIB everywhere (its zlib-ng on Windows).

@@ -338,7 +338,7 @@ void DrawControlsTouchGyro() {
   }
   ItemHelp("The left stick appears wherever your thumb lands on the left half of the screen. "
            "The map keeps the fixed stick.");
-#if defined(__ANDROID__) // only the Java view draws the classic and twin-stick layouts
+#if defined(PORT_TOUCH_CONTROLS) // both views draw the classic and twin-stick layouts
   int touchLayout = sInput.touchClassic ? 1 : sInput.touchTwinStick ? 2 : 0;
   static const char* const kTouchLayouts[] = {"Default", "Classic GameCube", "Twin stick (Remastered)"};
   if (ImGui::Combo("Layout", &touchLayout, kTouchLayouts, 3)) {
