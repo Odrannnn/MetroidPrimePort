@@ -29,6 +29,10 @@
 #include "Kyoto/Particles/CGenDescription.hpp"
 #include "MetaRender/CCubeRenderer.hpp"
 
+#ifdef TARGET_PC
+#include <dolphin/gx/GXExtra.h>
+#endif
+
 const char* const CGunWeapon::skMuzzleNames[10] = {
     "PowerMuzzle", "PowerCharge",  "IceMuzzle",    "IceCharge",    "PowerMuzzle",
     "WaveCharge",  "PlasmaMuzzle", "PlasmaCharge", "PhazonMuzzle", "EmptyMuzzle",
@@ -440,6 +444,51 @@ void CGunWeapon::DrawHologram(const CStateManager& mgr, const CTransform4f& xf,
     CGraphics::DisableAllLights();
   }
 }
+
+#ifdef TARGET_PC
+// Keeps points with dot(normal, p) >= d (world space) on every draw until turned off. The
+// plane goes to the shaders in GX view space, against the current view matrix.
+static void PortSetWorldClipPlane(const CVector3f& normal, const float d) {
+  const CTransform4f& view = CGraphics::GetViewMatrix();
+  const float cx = CVector3f::Dot(view.GetColumn(kDX), normal);
+  const float cy = CVector3f::Dot(view.GetColumn(kDY), normal);
+  const float cz = CVector3f::Dot(view.GetColumn(kDZ), normal);
+  const f32 plane[4] = {cx, cz, -cy, CVector3f::Dot(normal, view.GetTranslation()) - d};
+  GXSetClipPlane(GX_TRUE, plane);
+}
+
+// Remastered CGunWeaponMP1::DrawHologramTransition 0xca2b40 + DrawUpperArmForTransition
+// 0xca2a3c: the solid gun below the plane through `point`, the hologram above it, a hard cut,
+// then the upper arm at the elbow locator (not gated on the suit arm being drawn).
+void CGunWeapon::PortDrawHologramTransition(const CStateManager& mgr, const CTransform4f& xf,
+                                            const CVector3f& normal, const CVector3f& point,
+                                            const CModelFlags& flags,
+                                            const CActorLights* lights) const {
+  if (!x218_26_loaded)
+    return;
+
+  const float d = CVector3f::Dot(point, normal);
+  PortSetWorldClipPlane(-normal, -d);
+  Draw(false, mgr, xf, flags, lights);
+  PortSetWorldClipPlane(normal, d);
+  DrawHologram(mgr, xf, CModelFlags::Normal());
+  GXSetClipPlane(GX_FALSE, NULL);
+
+  if (!xb0_suitArmModelData)
+    return;
+  const CTransform4f armXf =
+      xf * x10_solidModelData->GetScaledLocatorTransform(rstl::string_l(skElbowLocator));
+  if (mgr.GetThermalDrawFlag() == kTD_Hot && x200_beamId != CPlayerState::kBI_Ice) {
+    const float a = flags.GetColorRef().GetAlpha();
+    CModelFlags useFlags(CModelFlags::kT_Opaque, 1.0f);
+    xb0_suitArmModelData->RenderThermal(xf, CColor(a, a, a, a),
+                                        CColor(static_cast< uchar >(0x40), 0x40, 0x40, 0x40),
+                                        useFlags);
+  } else {
+    xb0_suitArmModelData->Render(mgr, armXf, lights, flags);
+  }
+}
+#endif
 
 const int CGunWeapon::skShootAnim[2] = {4, 3};
 

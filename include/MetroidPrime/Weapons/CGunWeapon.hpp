@@ -165,6 +165,11 @@ public:
   CElementGen* GetChargeMuzzleFx() const;
   void DrawHologram(const CStateManager& mgr, const CTransform4f& xf,
                     const CModelFlags& flags) const;
+#ifdef TARGET_PC
+  void PortDrawHologramTransition(const CStateManager& mgr, const CTransform4f& xf,
+                                  const CVector3f& normal, const CVector3f& point,
+                                  const CModelFlags& flags, const CActorLights* lights) const;
+#endif
   void ReturnToDefault(CStateManager& mgr);
   bool ComboFireOver() const;
   void EnterFidget(CStateManager& mgr, SamusGun::EFidgetType type, int parm2);

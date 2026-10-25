@@ -581,6 +581,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   } else {
     config.shaderConfig.lineMode = 0;
   }
+  config.shaderConfig.clipPlane = g_gxState.clipPlane && config.shaderConfig.lineMode == 0;
   config.shaderConfig.tevSwapTable = g_gxState.tevSwapTable;
   for (u8 i = 0; i < g_gxState.numTevStages; ++i) {
     config.shaderConfig.tevStages[i] = g_gxState.tevStages[i];

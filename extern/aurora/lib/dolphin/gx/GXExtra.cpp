@@ -475,6 +475,14 @@ void GXSetHudSample(u8 mode, f32 dyinX, f32 dyinY) {
   GX_WRITE_F32(dyinY);
 }
 
+void GXSetClipPlane(GXBool enable, const f32 plane[4]) {
+  GX_WRITE_AURORA(GX_AURORA_SET_CLIP_PLANE);
+  GX_WRITE_U8(enable ? 1 : 0);
+  for (int i = 0; i < 4; ++i) {
+    GX_WRITE_F32(enable ? plane[i] : 0.f);
+  }
+}
+
 void GXPortSetDepthPrepass(u8 pass) {
   GX_WRITE_AURORA(GX_AURORA_PORT_DEPTH_PREPASS);
   GX_WRITE_U8(pass);

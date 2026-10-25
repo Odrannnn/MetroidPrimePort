@@ -863,6 +863,33 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
 #ifdef TARGET_PC
     // Remastered (Render 0xc926d4) draws the hand in the hologram states only in X-ray.
     drawHoloHand = !sPortRemasteredGun || visor == CPlayerState::kPV_XRay;
+    if (sPortRemasteredGun) {
+      // Remastered has no screen copy or clip cube: the gun is split at a plane across its
+      // forward axis through the holo generator's point (ProcessGunMorph 0xc96708 keeps it
+      // from the last wipe frame through InWipeDone).
+      static CVector3f sHoloClipPoint(CVector3f::Zero());
+      if (gunState != CGunMorph::kGS_InWipeDone) {
+        sHoloClipPoint =
+            offsetWorldXf * CVector3f(0.f,
+                                      x678_morph.GetYLerp() -
+                                          0.4f * (1.f - x678_morph.GetTransitionFactor()),
+                                      0.f);
+      }
+      if (drawHoloHand) {
+        x6e0_rightHandModel.Render(mgr, handXf, &x0_lights,
+                                   thermalVisor ? kHandThermalFlag : kHandHoloFlag);
+      }
+      if (x0_lights.HasShadowLight()) {
+        x82c_shadow->EnableModelProjectedShadow(offsetWorldXf, x0_lights.GetShadowLightArrIndex(),
+                                                2.15f);
+      }
+      x72c_currentBeam->PortDrawHologramTransition(mgr, offsetWorldXf,
+                                                   offsetWorldXf.GetColumn(kDY), sHoloClipPoint,
+                                                   beamFlags, &x0_lights);
+      DrawArm(mgr, pos, flags);
+      x82c_shadow->DisableModelProjectedShadow();
+      break;
+    }
 #endif
     if (gunState != CGunMorph::kGS_InWipeDone) {
       CTransform4f morphXf(elbowOffsetXf *

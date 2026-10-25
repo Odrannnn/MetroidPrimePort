@@ -3525,6 +3525,12 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
     vtxXfrAttrsPre += "\n    out.dc_pos = mv_pos;"
                       "\n    out.pos = vec4f(mv_pos + vec3f(0.0, 0.0, 0.015), 1.0) * ubuf.proj;";
   }
+  if (config.clipPlane && config.lineMode == 0) {
+    // GX_AURORA_SET_CLIP_PLANE: the signed distance to the plane, interpolated; the fragment stage
+    // discards below zero (a hard cut, as a hardware clip distance).
+    vtxOutAttrs += fmt::format("\n    @location({}) clip_d: f32,", vtxOutIdx++);
+    vtxXfrAttrsPre += "\n    out.clip_d = dot(vec4f(mv_pos, 1.0), ubuf.clip_plane);";
+  }
   if constexpr (EnableNormalVisualization) {
     vtxOutAttrs += fmt::format("\n    @location({}) nrm: vec3f,", vtxOutIdx++);
     vtxXfrAttrsPre += "\n    out.nrm = mv_nrm;";
@@ -4321,6 +4327,9 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
   if (info.usesHudDyin) {
     uniBufAttrs += "\n    hud_dyin: vec4f,";
   }
+  if (info.usesClipPlane) {
+    uniBufAttrs += "\n    clip_plane: vec4f,";
+  }
   if (info.usesPTTexMtx.any()) {
     uniBufAttrs += fmt::format("\n    postmtx: array<mat3x4f, {}>,", MaxPTTexMtx);
   }
@@ -4467,6 +4476,9 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
   }
   if constexpr (EnableNormalVisualization) {
     fragmentFn += "\n    prev = vec4f(in.nrm, prev.a);";
+  }
+  if (config.clipPlane && config.lineMode == 0) {
+    fragmentFnPre.insert(0, "\n    // Clip plane\n    if (in.clip_d < 0.0) {\n        discard;\n    }");
   }
 
   auto shaderSource = fmt::format(R"""(

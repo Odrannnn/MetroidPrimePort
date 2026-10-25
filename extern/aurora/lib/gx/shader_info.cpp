@@ -380,6 +380,10 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
     info.usesHudDyin = true;
     info.uniformSize += sizeof(Vec4<float>);
   }
+  if (config.clipPlane) {
+    info.usesClipPlane = true;
+    info.uniformSize += sizeof(Vec4<float>);
+  }
   if (info.usesPTTexMtx.any()) {
     info.uniformSize += sizeof(Mat3x4<float>) * MaxPTTexMtx;
   }
@@ -575,6 +579,9 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
   }
   if (info.usesHudDyin) {
     buf.append(g_gxState.hudDyin);
+  }
+  if (info.usesClipPlane) {
+    buf.append(g_gxState.clipPlaneEq);
   }
   if (info.usesPTTexMtx.any()) {
     for (int i = 0; i < info.usesPTTexMtx.size(); ++i) {

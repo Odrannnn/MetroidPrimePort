@@ -411,6 +411,8 @@ struct GXState {
   u8 sdf = 0; // GX_AURORA_SET_SDF
   u8 hudSample = 0; // GX_AURORA_SET_HUD_SAMPLE
   Vec4<float> hudDyin{0.f, 0.f, 0.f, 0.f}; // its DYIN
+  bool clipPlane = false; // GX_AURORA_SET_CLIP_PLANE
+  Vec4<float> clipPlaneEq{0.f, 0.f, 0.f, 0.f}; // its view-space plane
   u8 depthPrepass = 0; // GX_AURORA_PORT_DEPTH_PREPASS
   std::array<u32, 3> drawTag{0, UINT32_MAX, 0}; // GX_AURORA_SET_DRAW_TAG: asset, model index, material
   u32 drawSerial = 0; // GX_AURORA_PORT_DRAW_SERIAL
@@ -629,7 +631,11 @@ struct ShaderConfig {
   // aurora_set_per_pixel_lighting, on a draw with a lit channel: the GX lights are summed per
   // fragment from the interpolated view-space position and normal instead of per vertex. The
   // old padding, so a config with it off keeps its bytes and cache keys.
-  u8 perPixelLight = 0;
+  u8 perPixelLight : 1 = 0;
+  // GX_AURORA_SET_CLIP_PLANE on a triangle draw: the clip_plane uniform and a discard. A bit of the
+  // perPixelLight byte, so a config with it off keeps its bytes and cache keys.
+  u8 clipPlane : 1 = 0;
+  u8 padding0 : 6 = 0;
   // GX_AURORA_PORT_ACTOR_SHADOW decal: the draw is a receiver redrawn as Remastered's actor shadow
   // decal (multiplies the frame by the shadow, shadowUniform holds its view-space planes). The old
   // padding byte, so other configs keep their bytes and cache keys.
@@ -684,6 +690,7 @@ struct ShaderInfo {
   bool shadowReceive : 1 = false; // shadow_receives: group 2 uses the shadow layout
   bool actorDecal : 1 = false;    // actor_decal: group 2 uses the shadow layout with the actor maps
   bool usesHdrTone : 1 = false;   // sceneHdr without pbr: hdr_tone (pbrTone) and hdr_tev_blend
+  bool usesClipPlane : 1 = false; // ShaderConfig::clipPlane: the clip_plane uniform
 };
 struct BindGroupRanges {
   std::array<gfx::Range, MaxIndexAttr> vaRanges{};

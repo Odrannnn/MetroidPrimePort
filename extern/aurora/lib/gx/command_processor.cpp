@@ -1137,6 +1137,21 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.hudDyin = dyin;
       g_gxState.dirty |= DirtyUniform;
     }
+  } else if (subCmd == GX_AURORA_SET_CLIP_PLANE) {
+    const bool on = reader.read<u8>() != 0;
+    Vec4<float> eq;
+    eq.x() = reader.read<f32>();
+    eq.y() = reader.read<f32>();
+    eq.z() = reader.read<f32>();
+    eq.w() = reader.read<f32>();
+    if (g_gxState.clipPlane != on) {
+      g_gxState.clipPlane = on;
+      g_gxState.dirty |= DirtyPipeline;
+    }
+    if (g_gxState.clipPlaneEq != eq) {
+      g_gxState.clipPlaneEq = eq;
+      g_gxState.dirty |= DirtyUniform;
+    }
   } else if (subCmd == GX_AURORA_PORT_DEPTH_PREPASS) {
     const u8 pass = reader.read<u8>();
     if (g_gxState.depthPrepass != pass) {

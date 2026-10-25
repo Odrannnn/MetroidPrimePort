@@ -342,6 +342,10 @@ extern "C" {
 // Port extension: Remastered's actor shadow (GXPortActorShadow*). Payload: u8 mode (0 end, 1 casters
 // begin, 2 decal begin, 3 render the actor maps), then for 1 and 2 u8 layer and 16 vec4 floats.
 #define GX_AURORA_PORT_ACTOR_SHADOW 0x0070
+// Port extension: a user clip plane for the following triangle draws (GXSetClipPlane): a fragment
+// is kept where dot(view-space position, plane.xyz) + plane.w >= 0. Stays in effect until changed.
+// Payload: u8 on, then 4 f32 (the plane in view space).
+#define GX_AURORA_SET_CLIP_PLANE 0x0071
 
 #define GX2_SET_POLYGON_OFFSET 0x1000
 
