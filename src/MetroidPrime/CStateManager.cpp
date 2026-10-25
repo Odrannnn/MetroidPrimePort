@@ -61,6 +61,7 @@
 #include "MetroidPrime/HUD/CSamusHud.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
+#include "MetroidPrime/Player/CGrappleArm.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/Weapons/CPowerBomb.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
@@ -3842,6 +3843,17 @@ void CStateManager::DrawWorld() const {
 #endif
       x84c_player->RenderGun(*this, x870_cameraManager->GetGlobalCameraTranslation(*this));
     }
+#ifdef TARGET_PC
+    // The third-person body has no cannon pass, but its grapple beam leaves its hand
+    // (CGrappleArm::UpdateGrappleBeam), drawn as CPlayer::RenderGun draws it.
+    else if (PortThirdPerson::Active() && !x870_cameraManager->IsInCinematicCamera()) {
+      const CGrappleArm& arm = x84c_player->GetPlayerGun()->GetGrappleArm();
+      if (arm.GetActive() && arm.GetAnimState() != CGrappleArm::kAS_Done) {
+        CPortPipelineContextScope globalPipelines(AURORA_PIPELINE_CONTEXT_GLOBAL);
+        arm.RenderGrappleBeam(*this, x870_cameraManager->GetGlobalCameraTranslation(*this));
+      }
+    }
+#endif
 #ifdef TARGET_PC
     if (gunFov) {
       CGraphics::SetProjectionState(gunProj);

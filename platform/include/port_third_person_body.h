@@ -36,6 +36,10 @@ inline constexpr float kBlendSeconds = 0.25f;
 inline constexpr float kAimMaxRadians = 1.4f;
 inline constexpr float kAimInSeconds = 0.08f;
 inline constexpr float kAimOutSeconds = 0.3f;
+// While the grapple beam is out the left arm reaches for the grapple point, easing in over
+// kReachInSeconds and out over kReachOutSeconds.
+inline constexpr float kReachInSeconds = 0.1f;
+inline constexpr float kReachOutSeconds = 0.3f;
 // Below this speed (game units per second) the body stands.
 inline constexpr float kStandSpeed = 0.5f;
 // The aim-pose grid's coordinates move at most this fast (grid units, 1 = one aim clip, per
@@ -182,6 +186,9 @@ bool Render(const CStateManager& mgr, const CTransform4f& xf, const CActorLights
 // The cannon's muzzle in the world (the body's Charge_LCTR) as the body is posed now; false when the
 // body is not ready, then the first-person muzzle stands in.
 bool CannonPosition(const CPlayer& player, CVector3f& out);
+// The grapple hand in the world (the body's L_middle_1) as the body is posed now; false when the
+// body is not ready or the third-person camera is off, then the first-person arm's nozzle stands in.
+bool GrappleHand(const CPlayer& player, CVector3f& out);
 // Drops the body (third person off, a new world).
 void Release();
 

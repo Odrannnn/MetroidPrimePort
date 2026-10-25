@@ -24,6 +24,7 @@
 #include "MetaRender/CCubeRenderer.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
+#include "MetroidPrime/Player/CGrappleArm.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/CActorLights.hpp"
 #include "MetroidPrime/CAnimData.hpp"
@@ -227,6 +228,15 @@ struct State {
   bool haveAim = false;
   CVector3f aimPoint = CVector3f::Zero();
   float aimWeight = 0.f;
+  // The grapple: the other arm reaches for the grapple point while the beam is out (no Samus
+  // ANCS has a grapple clip). Its shoulder and elbow turn; the hand is the beam's end.
+  CSegId reachShoulder = CSegId::Invalid();
+  CSegId reachElbow = CSegId::Invalid();
+  CSegId reachHand = CSegId::Invalid();
+  CQuaternion reachShoulderPose = CQuaternion::NoRotation();
+  CQuaternion reachElbowPose = CQuaternion::NoRotation();
+  CVector3f reachPoint = CVector3f::Zero();
+  float reachWeight = 0.f;
   // The Phazon suit's indirect-texture pass (as CScriptPlayerActor's).
   rstl::optional_object<TCachedToken<CTexture>> phazonTex;
   float phazonAngle = 0.f;
@@ -347,6 +357,30 @@ void FindAimBones(const CAnimData& data) {
   }
 }
 
+// The grapple arm: the left one, the hand's knuckles (L_middle_1) its end.
+void FindReachBones(const CAnimData& data) {
+  const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
+  s.reachShoulder = layout.GetSegIdFromString(rstl::string_l("L_shoulder"));
+  s.reachElbow = layout.GetSegIdFromString(rstl::string_l("L_elbow"));
+  s.reachHand = layout.GetSegIdFromString(rstl::string_l("L_middle_1"));
+  if (s.reachShoulder == CSegId::Invalid() || s.reachElbow == CSegId::Invalid() ||
+      s.reachHand == CSegId::Invalid() || s.reachShoulder == s.shoulder ||
+      !IsAncestor(layout, s.reachShoulder, s.reachElbow) || !IsAncestor(layout, s.reachElbow, s.reachHand)) {
+    s.reachShoulder = CSegId::Invalid();
+  }
+}
+
+// Turns seg by the model-space turn over its local pose (composed as BuildTransform composes
+// the parents' rotations, root first).
+void TurnSeg(CHierarchyPoseBuilder& pb, const CCharLayoutInfo& layout, CSegId seg, const CQuaternion& pose,
+             const CQuaternion& turn) {
+  CQuaternion parentRot = CQuaternion::NoRotation();
+  for (CSegId p = layout.GetOriginalParent(seg); p != CSegId::Character(); p = layout.GetOriginalParent(p)) {
+    parentRot = pb.GetSegRotation(p) * parentRot;
+  }
+  pb.Insert(seg, parentRot.BuildInverted() * turn * parentRot * pose);
+}
+
 // Turns the shoulder so the cannon's axis (GUN_LCTR to Charge_LCTR) runs through the aim point,
 // by s.aimWeight, over the clip's pose. All in the body's unscaled model space.
 void AimArm(const CStateManager& mgr, CAnimData& data) {
@@ -413,6 +447,50 @@ void AimArm(const CStateManager& mgr, CAnimData& data) {
   s.armMiss = line.CanBeNormalized() && rest.CanBeNormalized()
                   ? std::acos(std::clamp(CVector3f::Dot(line.AsNormalized(), rest.AsNormalized()), -1.f, 1.f))
                   : 0.f;
+}
+
+// Points the grapple arm at the grapple point by s.reachWeight: the shoulder puts the hand on the
+// line to it, then the elbow straightens the forearm along it. fresh: the clip pose was rebuilt
+// since the last call (the saved poses are stale).
+void ReachArm(const CStateManager& mgr, CAnimData& data, bool fresh) {
+  if (s.reachShoulder == CSegId::Invalid()) {
+    return;
+  }
+  CHierarchyPoseBuilder& pb = data.PoseBuilder();
+  if (fresh) {
+    s.reachShoulderPose = pb.GetSegRotation(s.reachShoulder);
+    s.reachElbowPose = pb.GetSegRotation(s.reachElbow);
+  }
+  pb.Insert(s.reachShoulder, s.reachShoulderPose);
+  pb.Insert(s.reachElbow, s.reachElbowPose);
+  data.SetPoseBuilderValid(false);
+  if (s.reachWeight <= 0.f) {
+    return;
+  }
+  const CPlayer& player = *mgr.GetPlayer();
+  CTransform4f bodyXf = player.GetTransform();
+  CVector3f origin = bodyXf.GetTranslation();
+  origin.SetZ(player.GetBoundingBox().GetMinPoint().GetZ());
+  bodyXf.SetTranslation(origin);
+  const CVector3f target = bodyXf.TransposeMultiply(s.reachPoint) * (1.f / kBodyScale);
+  const auto position = [&pb](CSegId seg) {
+    CTransform4f xf = CTransform4f::Identity();
+    pb.BuildTransform(seg, xf);
+    return xf.GetTranslation();
+  };
+  const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
+  const auto aim = [&](CSegId seg, const CQuaternion& pose) {
+    const CVector3f pivot = position(seg);
+    const CVector3f hand = position(s.reachHand) - pivot;
+    const CVector3f want = target - pivot;
+    if (!hand.CanBeNormalized() || !want.CanBeNormalized()) {
+      return;
+    }
+    const CQuaternion turn = CQuaternion::ShortestRotationArc(hand.AsNormalized(), want.AsNormalized());
+    TurnSeg(pb, layout, seg, pose, CQuaternion::Slerp(CQuaternion::NoRotation(), turn, s.reachWeight));
+  };
+  aim(s.reachShoulder, s.reachShoulderPose);
+  aim(s.reachElbow, s.reachElbowPose);
 }
 
 float Wrap(float phase) { return phase - std::floor(phase); }
@@ -906,6 +984,7 @@ void Build(CStateManager& mgr) {
     }
   }
   FindAimBones(*data);
+  FindReachBones(*data);
   BuildSets(false);
   // A missing walk clip stands in by its fallback, else the walk (the ready pose without one);
   // a missing walk back or sprint drops out of its tiers (Update).
@@ -1013,6 +1092,7 @@ void Update(CStateManager& mgr, float dt) {
   }
   if (s.pinned.Valid()) {
     s.aimWeight = 0.f;
+    s.reachWeight = 0.f;
     s.haveLast = false;
     return;
   }
@@ -1138,6 +1218,15 @@ void Update(CStateManager& mgr, float dt) {
   }
   s.aimWeight = s.haveAim ? std::min(s.aimWeight + dt / kAimInSeconds, 1.f)
                           : std::max(s.aimWeight - dt / kAimOutSeconds, 0.f);
+
+  // The grapple arm reaches while the beam is out, as the first-person arm fires it.
+  const CGrappleArm& arm = player.GetPlayerGun()->GetGrappleArm();
+  const bool reach = arm.GetActive() && arm.BeamActive();
+  if (reach) {
+    s.reachPoint = arm.PortGrapplePointPos();
+  }
+  s.reachWeight = reach ? std::min(s.reachWeight + dt / kReachInSeconds, 1.f)
+                        : std::max(s.reachWeight - dt / kReachOutSeconds, 0.f);
 }
 
 bool Ready() { return s.body && s.animating; }
@@ -1155,7 +1244,10 @@ void PreRender(const CStateManager& mgr) {
     } else {
       PoseBody(data);
     }
+    const bool fresh = s.advanced;
     AimArm(mgr, data);
+    ReachArm(mgr, data, fresh);
+    s.advanced = false;
     if (s.phazonTex) {
       gpRender->AllocatePhazonSuitMaskTexture();
     }
@@ -1224,6 +1316,18 @@ bool CannonPosition(const CPlayer& player, CVector3f& out) {
   // GUN_LCTR is where the cannon is held, at the wrist; Charge_LCTR, where the charge forms, is
   // its muzzle (0.56 m past the forearm at this scale, where the Dread cannon's tip is too).
   out = (bodyXf * s.body->GetScaledLocatorTransform("Charge_LCTR")).GetTranslation();
+  return true;
+}
+
+bool GrappleHand(const CPlayer& player, CVector3f& out) {
+  if (!PortThirdPerson::Active() || !Ready() || s.reachShoulder == CSegId::Invalid()) {
+    return false;
+  }
+  CTransform4f bodyXf = player.GetTransform();
+  CVector3f origin = bodyXf.GetTranslation();
+  origin.SetZ(player.GetBoundingBox().GetMinPoint().GetZ());
+  bodyXf.SetTranslation(origin);
+  out = (bodyXf * s.body->GetScaledLocatorTransform("L_middle_1")).GetTranslation();
   return true;
 }
 

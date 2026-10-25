@@ -86,6 +86,9 @@ public:
   const bool GetActive() const { return x3b2_24_active; }
   void SetActive(const bool active) { x3b2_24_active = active; }
   const bool BeamActive() const { return x3b2_25_beamActive; }
+#ifdef TARGET_PC
+  const CVector3f& PortGrapplePointPos() const { return x310_grapplePointPos; }
+#endif
   void SetBeamActive(const bool active) { x3b2_25_beamActive = active; }
   const bool IsArmMoving() const { return x3b2_27_armMoving; }
   void SetIsArmMoving(const bool active) { x3b2_27_armMoving = active; }
@@ -166,6 +169,9 @@ private:
   CVector3f xPortBeamAirPos;
   mutable PortTickPair< CVector3f > xPortBeamGunEnd;
   mutable PortTickPair< CVector3f > xPortBeamAirEnd;
+  // Port: the beam leaves the third-person body's hand (PortThirdPersonBody::GrappleHand), so
+  // the muzzle flash is placed in the world there, not on the first-person arm.
+  bool xPortHandBeam = false;
 #endif
 };
 CHECK_SIZEOF(CGrappleArm, 0x3b4)
