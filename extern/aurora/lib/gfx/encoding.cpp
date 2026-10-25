@@ -259,17 +259,25 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
                                       passInfo.colorAttachments[SceneColorAttachmentIndex].size, passInfo.msaaSamples);
   }
 
-  if (passInfo.resolveTarget) {
+  const bool isDepthCopy = passInfo.resolveTarget && gx::is_depth_format(passInfo.resolveFormat);
+  // A depth copy from a multisampled EFB converts sample 0 (Z8 and Z16 on Core devices); any other
+  // is skipped, leaving the destination as it was, rather than ending the game.
+  if (isDepthCopy && passInfo.msaaSamples > 1 &&
+      !tex_copy_conv::depth_conversion_supported(passInfo.resolveFormat, passInfo.msaaSamples)) {
+    static bool warned = false;
+    if (!warned) {
+      warned = true;
+      Log.warn("depth tex copy (format {}) from a {}x multisampled EFB is not supported; skipped",
+               static_cast<int>(passInfo.resolveFormat), passInfo.msaaSamples);
+    }
+  } else if (passInfo.resolveTarget) {
     const auto& dstSize = passInfo.resolveTarget->size;
     const bool needsConversion = tex_copy_conv::needs_conversion(passInfo.resolveFormat);
     // A probe face is a layer of a cube texture, which only the blit addresses.
     const bool needsScaling = passInfo.probeFace >= 0 ||
                               dstSize.width != static_cast<uint32_t>(passInfo.resolveRect.width) ||
                               dstSize.height != static_cast<uint32_t>(passInfo.resolveRect.height);
-    const bool isDepth = gx::is_depth_format(passInfo.resolveFormat);
-    if (isDepth && passInfo.msaaSamples > 1) {
-      Log.fatal("Depth tex copies from multisampled EFB targets are not supported");
-    }
+    const bool isDepth = isDepthCopy;
     // Depth copies read the depth buffer, which an HDR scene pass leaves as it is.
     const auto domain = isDepth ? tex_copy_conv::CopyDomain::Display : passInfo.resolveDomain;
     const tex_copy_conv::ConvRequest convReq{
@@ -280,6 +288,7 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
         .sampleFilter = needsScaling ? tex_copy_conv::SampleFilter::Linear : tex_copy_conv::SampleFilter::Nearest,
         .domain = domain,
         .toneRange = passInfo.resolveToneRange,
+        .srcSamples = isDepth ? passInfo.msaaSamples : 1u,
     };
     // A raw copy only between equal formats in the same domain: an HDR display copy always
     // post-tones, and RGBA16F never goes to an 8-bit texture as is.
