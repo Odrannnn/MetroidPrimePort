@@ -83,7 +83,8 @@ constexpr LocoSlot kForwardTiers[] = {kSlowWalk, kWalk, kSlowRun, kFastRun};
 constexpr LocoSlot kBackTiers[] = {kWalkBack};
 // The clips played once (or held) for a stance or over the upper body, as phases of the clip:
 // from, to (held there once reached). The jump is the run-and-jump's push-off into its tuck; the
-// fall the crater jump's drop; the landing the hangar landing's crouch and rise (after it she
+// fall holds the tuck's airborne pose, legs drawn up and the cannon forward (the crater jump's
+// drop is a dive, crouched with an arm flung up, and read as a stumble); the landing the hangar landing's crouch and rise (after it she
 // turns to the ship); the flinch the Omega intro's lean back from the blast; the scan the scan
 // cutscene's hand at the visor. Their root height is held at the skeleton's (Ground): the
 // player's own movement carries the body.
@@ -93,7 +94,7 @@ struct OneShot {
   float to;
 };
 constexpr OneShot kJump{"01_Intro_Hanger_runandjump_samus", 0.66f, 0.7f};
-constexpr OneShot kFall{"Crater_Sequence_Samus_jump_down", 0.f, 0.1f};
+constexpr OneShot kFall{"01_Intro_Hanger_runandjump_samus", 0.7f, 0.72f};
 constexpr OneShot kLand{"01_Intro_Hanger_landintoship_samus", 0.06f, 0.3f};
 constexpr OneShot kFlinch{"Omega_Intro_Samus_01_flinch", 0.2f, 0.45f};
 constexpr OneShot kScan{"Scan_Cine_forward", 0.03f, 0.03f};
