@@ -288,9 +288,8 @@ struct Capture {
 // no-compute mode, the attachments) it was recorded against.
 struct FroxelTargets {
   wgpu::TextureView volume; // the whole 3D texture, as the draws after the fog sample it
-  // The fallback's attachments: one 2D view per slice of `volume`, and the two RGBA32Float
-  // column-state textures it ping-pongs (rgb: the in-scatter, a: the optical depth).
-  std::array<wgpu::TextureView, Slices> slices{};
+  // The fallback's attachments besides `volume` (one depthSlice of it per pass): the two
+  // RGBA32Float column-state textures it ping-pongs (rgb: the in-scatter, a: the optical depth).
   std::array<wgpu::TextureView, 2> state{};
 };
 
@@ -767,17 +766,8 @@ void ensure_froxels(uint32_t width, uint32_t height) {
   if (!g_noCompute) {
     return;
   }
-  // The fallback writes one slice at a time, so it needs a 2D view of each, and a pair of 2D
+  // The fallback writes one slice at a time (a depthSlice of the 3D view), and needs a pair of 2D
   // textures to carry a column's in-scatter and optical depth from one slice's pass to the next.
-  for (uint32_t k = 0; k < Slices; ++k) {
-    const wgpu::TextureViewDescriptor sliceView{
-        .label = "Volumetric Fog Froxel Slice",
-        .dimension = wgpu::TextureViewDimension::e2D,
-        .baseArrayLayer = k,
-        .arrayLayerCount = 1,
-    };
-    g_state.targets.slices[k] = g_state.froxels.CreateView(&sliceView);
-  }
   const wgpu::TextureDescriptor stateDescriptor{
       .label = "Volumetric Fog Froxel State",
       .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding,
@@ -821,7 +811,7 @@ void encode_froxels(const wgpu::CommandEncoder& cmd, const FroxelTargets& froxel
     return;
   }
 
-  if (!froxels.slices[0] || !froxels.state[0]) {
+  if (!froxels.volume || !froxels.state[0]) {
     return;
   }
   // Two bind groups, one per state texture: slice k writes state[k & 1] and reads state[1 - k & 1].
@@ -848,7 +838,8 @@ void encode_froxels(const wgpu::CommandEncoder& cmd, const FroxelTargets& froxel
     // The pass covers the grid exactly, so the viewport is the attachment's size: one fragment per
     // column, as the compute pass had one thread per column.
     const wgpu::RenderPassColorAttachment attachments[2]{
-        {.view = froxels.slices[k],
+        {.view = froxels.volume,
+         .depthSlice = k,
          .loadOp = wgpu::LoadOp::Clear,
          .storeOp = wgpu::StoreOp::Store,
          .clearValue = {0.0, 0.0, 0.0, 0.0}},
