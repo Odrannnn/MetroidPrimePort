@@ -381,9 +381,6 @@ void CMFGame::Draw() const {
         }
         // The frame is measured at the opaque/sorted boundary (CStateManager::DrawWorld).
         GXPortPostProcessScene(bloom, threshold, tints, tone, gradeA, gradeB, gradeWeight, 0.f);
-        // Remastered RenderAfterPostFX (0xf9fa6c): priority-2 camera filters
-        // (0xc6273c), including the underwater multiply, follow tone/grade.
-        mStateManager->DrawCameraFilters();
       }
     };
     const auto drawWorld = [this]() {

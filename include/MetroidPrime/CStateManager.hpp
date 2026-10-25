@@ -340,7 +340,6 @@ public:
   static float PortZoomedFov(float fov);
 #endif
   void RenderCamerasAndAreaLights() const;
-  void DrawCameraFilters() const;
   void DrawE3DeathEffect() const;
   void DrawAdditionalFilters() const;
   void GetCharacterRenderMaskAndTarget(bool, int&, int&);
