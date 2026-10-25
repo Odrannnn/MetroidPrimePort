@@ -1030,9 +1030,11 @@ void after_submit() noexcept {
   const auto submitted = g_readbacks.submit();
   for (size_t i = 0; i < submitted.count; ++i) {
     const auto& mapping = submitted.mappings[i];
-    // The callback carries the key alone: a pending map must not hold the buffer it maps, or that
-    // buffer would outlive its slot. Mapped with no lock held, as the callback takes it again.
-    mapping.buffer.MapAsync(wgpu::MapMode::Read, 0, MeasureBytes, wgpu::CallbackMode::AllowSpontaneous,
+    // complete_readback calls Unmap, which can submit Dawn's pending Metal commands. Dispatch
+    // through the render worker's post-encode ProcessEvents points instead of a spontaneous
+    // notification callback. Carry only the key so the callback cannot keep a retired buffer
+    // alive. No slots' lock is held while requesting the map, since its callback takes it again.
+    mapping.buffer.MapAsync(wgpu::MapMode::Read, 0, MeasureBytes, wgpu::CallbackMode::AllowProcessEvents,
                             [key = mapping.key](wgpu::MapAsyncStatus status, wgpu::StringView message) {
                               complete_readback(key, status, message);
                             });
