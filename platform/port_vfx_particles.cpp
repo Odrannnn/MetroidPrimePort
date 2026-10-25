@@ -922,6 +922,8 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
   } else if (glow) {
     AddBarrierGlow(vfx, model, p, tm, color, world);
   }
+  // VMSH flag 4: the mesh's colour tints the draw, as the shader's COLOR perm does (2 x c^2.2, alpha c.a).
+  const bool tint = vfx.meshStride == 16 && (vfx.meshFlags & 4) != 0;
   for (u32 i = 0; !ice && !barrier && !glow && i < nv; ++i) {
     const float* m = &vfx.meshV[size_t(i) * vfx.meshStride];
     const CVector3f pos = model * CVector3f(m[0], m[1], m[2]);
@@ -941,6 +943,9 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
     }
     for (int k = 0; k < 4; ++k) {
       v.color[k] = color[k];
+      if (tint) {
+        v.color[k] *= k < 3 ? 2.f * std::pow(std::abs(m[12 + k]), 2.2f) : m[15];
+      }
       for (int j = 0; j < 4; ++j) {
         v.extra[k][j] = p.xPortVpmt[k][j];
       }

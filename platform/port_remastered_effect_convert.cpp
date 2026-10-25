@@ -14,6 +14,7 @@
 #include <string>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace PortRemastered {
 namespace {
@@ -3517,6 +3518,7 @@ public:
       m_approximated.push_back(std::string("VMAT: shader ") + shaderText + " has no recipe");
       return false;
     }
+    m_vmatShader = mati.shader;
 
     // The node's properties by fourcc.
     // Also takes the found property's lifetime context for the ILPTs written from it.
@@ -5231,7 +5233,18 @@ public:
     }
     if (vmat && pmdl != 0 && !pmdlVariants && m_io.modelMesh) {
       // VMSH: the converted PMDL as one mesh, so the model particle draws through the VMAT.
-      const std::vector<uint8_t> mesh = m_io.modelMesh(pmdl);
+      std::vector<uint8_t> mesh = m_io.modelMesh(pmdl);
+      // VMSH v2 flags (BE word at 12): bit 1 every vertex has a colour; bit 2 the colour tints the draw,
+      // where the material's shader has the instanced-model perm with COLOR (016), as Remastered draws a
+      // coloured mesh: vcol = 2 x COLOR^2.2 x the particle colour, alpha COLOR.a x the particle's. The
+      // Plasma charge starburst's rays fade out by that alpha (0 on the tips).
+      static const std::unordered_set<uint32_t> kColorPerm = {
+          0x0cbeb3de, 0x0cc45d52, 0x0fb73e1b, 0x1a9ef0d8, 0x207abf3f, 0x33b751f2, 0x3db95827, 0x3fd46bb7,
+          0x440fbd96, 0x49a43a10, 0x4e386476, 0x5f2a0715, 0x71dc2465, 0x7d52bd6b, 0x80a47126, 0x90ce7873,
+          0x96e205db, 0x9ea86831, 0xa327502c, 0xb8eed42e, 0xc5cd782b, 0xe4d4c263, 0xfa49ff3c};
+      if (mesh.size() >= 16 && mesh[3] == 2 && (mesh[15] & 2) != 0 && kColorPerm.count(m_vmatShader) != 0) {
+        mesh[15] |= 4;
+      }
       if (!mesh.empty()) {
         AppendBE32(out, F("VMSH"));
         AppendBE32(out, F("CNST"));
@@ -5526,6 +5539,7 @@ private:
   mutable std::vector<SystemItem>* m_spawnSysItems = nullptr;  // set while a KSSM is written
   mutable uint32_t m_sysNextHiddenInt = 10;                   // the next hidden init-only int
   mutable std::vector<std::string> m_approximated;  // for the generator being written
+  mutable uint32_t m_vmatShader = 0;                // the shader of the last VMAT written
   mutable bool m_keeps = false;                     // a KPIN may be a per-particle PKPR
   mutable uint32_t m_keepNext = 0;                  // the next PKPR slot
   mutable uint32_t m_varReads = 0;                  // the particle variables Element() has read

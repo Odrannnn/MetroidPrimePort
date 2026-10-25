@@ -162,7 +162,8 @@ inline constexpr int kModels = 20;
 // 102: visor rain splash (VFX_VisorRain 0ec41df0, BC978532 paired).
 // 103: the FlickerBat's 0B9E48EB paired with 3b29b0b3 (#visual-inferred: inferred from the
 // look, not proven by any CHPR or other serialized reference).
-inline constexpr int kEffects = 105;   // UnderWaterBubblesWeaponFire
+// 106: a VMSH whose material's shader reads COLOR (perm 016) is tinted by its vertex colour (VMSH flag 4).
+inline constexpr int kEffects = 106;   // port_remastered_effect_import and the particle converters
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
