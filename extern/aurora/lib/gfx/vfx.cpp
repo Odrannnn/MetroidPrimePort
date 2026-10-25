@@ -1974,6 +1974,13 @@ bool scene_copy_available() {
   return static_cast<bool>(scene_copy_view(scene_hdr_pass_active()));
 }
 
+void render_target_size(uint32_t& width, uint32_t& height) {
+  gx::fifo::drain();
+  const auto target = get_render_target_size();
+  width = target.x;
+  height = target.y;
+}
+
 void shutdown() {
   g_state.pipelines.clear();
   g_state.groups.clear();

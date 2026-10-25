@@ -158,6 +158,14 @@ Grid MakeGrid(uint32_t width, uint32_t height) {
   return grid;
 }
 
+uint32_t TilePixelsX(const Grid& grid) {
+  return grid.tilesX > 0 ? (grid.width + uint32_t(grid.tilesX) - 1) / uint32_t(grid.tilesX) : 0;
+}
+
+uint32_t TilePixelsY(const Grid& grid) {
+  return grid.tilesY > 0 ? (grid.height + uint32_t(grid.tilesY) - 1) / uint32_t(grid.tilesY) : 0;
+}
+
 int SliceForDepth(float depth, float depthOrigin) {
   const float clamped = std::clamp(depth - depthOrigin, 0.f, kMaxDepth);
   const int slice = int(clamped * kSliceScale);
@@ -167,8 +175,9 @@ int SliceForDepth(float depth, float depthOrigin) {
 int SliceForViewZ(float viewZ, float depthOrigin) { return SliceForDepth(-viewZ, depthOrigin); }
 
 void Header(const Grid& grid, float out[kHeaderFloats], uint32_t validity, float depthOrigin) {
-  out[0] = 1.f / float(kPixelsPerTile);
-  out[1] = 1.f / float(kPixelsPerTile);
+  // recip(ucvtf(CClusteredData+0xc)) and +0x10 (build_clustered_light_material_data 0x3b8750).
+  out[0] = grid.tilesX > 0 ? 1.f / float(TilePixelsX(grid)) : 1.f / float(kPixelsPerTile);
+  out[1] = grid.tilesY > 0 ? 1.f / float(TilePixelsY(grid)) : 1.f / float(kPixelsPerTile);
   out[2] = float(grid.tilesX);
   out[3] = float(grid.tilesY);
   out[4] = 1.f; // 1 / CClusteredData+0x14, the depth-mapping exponent (a power of two here, so 1)
@@ -255,6 +264,8 @@ void Build(const Camera& camera, uint32_t width, uint32_t height, const RawLight
   // angular sector between two slice planes; the sphere misses it when it is wholly outside
   // any of the six faces.
   const size_t tilesWide = size_t(out.grid.tilesX) * size_t(out.grid.tilesY);
+  const uint32_t tileW = TilePixelsX(out.grid);
+  const uint32_t tileH = TilePixelsY(out.grid);
   for (int i = 0; i < out.lightCount; ++i) {
     const RawLight& light = lights[i];
     const float* pos = light.record + 4;
@@ -294,26 +305,36 @@ void Build(const Camera& camera, uint32_t width, uint32_t height, const RawLight
           ndcYHi = std::max(ndcYHi, q);
         }
       }
-      const auto toTile = [](float ndc, int tiles) {
-        return int(std::floor((ndc * 0.5f + 0.5f) * float(tiles)));
+      // NDC to the shader's tile: x from the left, y from the top (a fragment's position is in
+      // target pixels, y down), tiles of TilePixels pixels.
+      const auto toTile = [](float ndc, uint32_t pixels, uint32_t tilePixels) {
+        const float t = std::clamp(ndc * 0.5f + 0.5f, 0.f, 1.f);
+        return int(std::floor(t * float(pixels) / float(tilePixels)));
       };
       // One tile of slack either side keeps the range conservative; the per-cluster test is
       // what decides.
-      tileXLo = std::max(0, toTile(ndcXLo, out.grid.tilesX) - 1);
-      tileXHi = std::min(out.grid.tilesX - 1, toTile(ndcXHi, out.grid.tilesX) + 1);
-      tileYLo = std::max(0, toTile(ndcYLo, out.grid.tilesY) - 1);
-      tileYHi = std::min(out.grid.tilesY - 1, toTile(ndcYHi, out.grid.tilesY) + 1);
+      tileXLo = std::max(0, toTile(ndcXLo, out.grid.width, tileW) - 1);
+      tileXHi = std::min(out.grid.tilesX - 1, toTile(ndcXHi, out.grid.width, tileW) + 1);
+      tileYLo = std::max(0, toTile(-ndcYHi, out.grid.height, tileH) - 1);
+      tileYHi = std::min(out.grid.tilesY - 1, toTile(-ndcYLo, out.grid.height, tileH) + 1);
     }
     for (int tileY = tileYLo; tileY <= tileYHi; ++tileY) {
-      const float ndcY0 = -1.f + 2.f * float(tileY) / float(out.grid.tilesY);
-      const float ndcY1 = -1.f + 2.f * float(tileY + 1) / float(out.grid.tilesY);
+      // Each face is 0 on its own edge (view -z forward: an edge at ndc n is y = -tanHalf * n * z) and
+      // positive outside the tile.
+      // Row tileY spans pixels tileY*tileH .. (tileY+1)*tileH from the top, the last cut at the edge.
+      const float ndcY0 = 1.f - 2.f * float(std::min(uint32_t(tileY + 1) * tileH, out.grid.height)) /
+                                    float(out.grid.height);
+      const float ndcY1 = 1.f - 2.f * float(std::min(uint32_t(tileY) * tileH, out.grid.height)) /
+                                    float(out.grid.height);
       const Plane planeY0 = Unit({0.f, 1.f, camera.tanHalfY * ndcY1, 0.f});
-      const Plane planeY1 = Unit({0.f, -1.f, camera.tanHalfY * ndcY0, 0.f});
+      const Plane planeY1 = Unit({0.f, -1.f, -camera.tanHalfY * ndcY0, 0.f});
       for (int tileX = tileXLo; tileX <= tileXHi; ++tileX) {
-        const float ndcX0 = -1.f + 2.f * float(tileX) / float(out.grid.tilesX);
-        const float ndcX1 = -1.f + 2.f * float(tileX + 1) / float(out.grid.tilesX);
+        const float ndcX0 = -1.f + 2.f * float(std::min(uint32_t(tileX) * tileW, out.grid.width)) /
+                                     float(out.grid.width);
+        const float ndcX1 = -1.f + 2.f * float(std::min(uint32_t(tileX + 1) * tileW, out.grid.width)) /
+                                     float(out.grid.width);
         const Plane planeX0 = Unit({1.f, 0.f, camera.tanHalfX * ndcX1, 0.f});
-        const Plane planeX1 = Unit({-1.f, 0.f, camera.tanHalfX * ndcX0, 0.f});
+        const Plane planeX1 = Unit({-1.f, 0.f, -camera.tanHalfX * ndcX0, 0.f});
         if (Outside(planeX0, pos, r) || Outside(planeX1, pos, r) || Outside(planeY0, pos, r) ||
             Outside(planeY1, pos, r)) {
           continue;

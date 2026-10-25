@@ -308,5 +308,8 @@ void capture_scene(bool again = false);
 // Whether draws recorded now would read this frame's copy (capture_scene ran this frame, into the
 // current target, in the same HDR state). Game thread.
 bool scene_copy_available();
+// The pixel size of the target draws recorded now land in (the pass's colour attachment, else the
+// window's framebuffer): the space a fragment's position is in. Waits for the FIFO first. Game thread.
+void render_target_size(uint32_t& width, uint32_t& height);
 void shutdown();
 } // namespace aurora::gfx::vfx
