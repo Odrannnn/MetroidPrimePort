@@ -4,10 +4,12 @@
 #include "../gx/gx.hpp"
 #include "../gfx/render_worker.hpp"
 #include "../webgpu/gpu.hpp"
+#include "resources.hpp"
 #include "../webgpu/gpu_prof.hpp"
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <chrono>
 #include <mutex>
 #include <string>
@@ -55,11 +57,15 @@ enum class SlotState : uint8_t {
   MapPending,
 };
 
+  // The compute path's u32 output, or the fallback's R32Uint snapshot it copies from (never both).
 struct Slot {
+  wgpu::Texture targetTexture;
+  wgpu::TextureView targetView;
   wgpu::Buffer storageBuffer;
   wgpu::Buffer readbackBuffer;
   wgpu::Buffer paramsBuffer;
   uint32_t width = 0;
+  uint32_t rowStride = 0; // bytesPerRow in the readback buffer (rows padded to 256 without compute)
   uint32_t height = 0;
   uint64_t byteSize = 0;
   SlotState state = SlotState::Available;
@@ -75,6 +81,7 @@ bool g_enabled = false;
 std::array<Slot, SlotCount> g_slots;
 size_t g_nextSlot = 0;
 wgpu::BindGroupLayout g_bindGroupLayout;
+wgpu::RenderPipeline g_fallbackPipeline;
 wgpu::ComputePipeline g_pipeline;
 bool g_snapshotRequested = false;
 Clock::time_point g_nextSnapshotTime;
@@ -89,7 +96,8 @@ struct Params {
     scale: vec2f,
 };
 
-@group(0) @binding(1) var<storage, read_write> out_z: array<u32>;
+@group(0) @binding(0) var src: texture_depth_2d;
+
 @group(0) @binding(2) var<uniform> params: Params;
 )"sv;
 
@@ -105,38 +113,61 @@ fn gx_z24(depth: f32) -> u32 {
 }
 )"sv;
 
-constexpr std::string_view ShaderMain = R"(
-@group(0) @binding(0) var src: texture_depth_2d;
-
+// The snapshot texel's z, one copy for both paths: the compute pass runs it per invocation, the
+// no-compute fallback per fragment of the R32Uint texture it renders.
+constexpr std::string_view ShaderShared = R"(
 fn load_depth(coord: vec2i) -> f32 {
     return textureLoad(src, coord, 0);
 }
+fn peek_z(id: vec2u) -> u32 {
+    let dstCenter = vec2f(id) + vec2f(0.5, 0.5);
+    let srcPixel = clamp(vec2i(floor(params.offset + dstCenter * params.scale)), vec2i(0, 0),
+                         vec2i(params.srcSize) - vec2i(1, 1));
+    let depth = load_depth(srcPixel);
+    return gx_z24(depth);
+}
+)"sv;
+
+constexpr std::string_view ComputeMain = R"(
+@group(0) @binding(1) var<storage, read_write> out_z: array<u32>;
 
 @compute @workgroup_size(8, 8, 1)
 fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     if (id.x >= params.dstSize.x || id.y >= params.dstSize.y) {
         return;
     }
-
-    let dstCenter = vec2f(vec2u(id.xy)) + vec2f(0.5, 0.5);
-    let srcPixel = clamp(vec2i(floor(params.offset + dstCenter * params.scale)), vec2i(0, 0),
-                         vec2i(params.srcSize) - vec2i(1, 1));
-    let depth = load_depth(srcPixel);
-    out_z[id.y * params.dstSize.x + id.x] = gx_z24(depth);
+    out_z[id.y * params.dstSize.x + id.x] = peek_z(id.xy);
 }
 )"sv;
 
-std::string build_shader_source() {
+// g_noCompute: the same value per snapshot texel, written by a fragment instead. The pass covers
+// the R32Uint texture exactly, so a fragment's pixel is its texel, as id.xy is the invocation's.
+constexpr std::string_view RenderMain = R"(
+@vertex
+fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+    var corners = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+    let c = corners[i];
+    return vec4f(c, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) u32 {
+    return peek_z(vec2u(vec2i(floor(pos.xy))));
+}
+)"sv;
+
+std::string build_shader_source(bool render) {
   std::string source;
-  source.reserve(ShaderPreamble.size() + ReversedZBody.size() + ShaderMain.size());
+  source.reserve(ShaderPreamble.size() + ShaderShared.size() + ComputeMain.size());
   source += ShaderPreamble;
   source += gx::UseReversedZ ? ReversedZBody : ForwardZBody;
-  source += ShaderMain;
+  source += ShaderShared;
+  source += render ? RenderMain : ComputeMain;
   return source;
 }
 
-wgpu::ComputePipeline create_pipeline(const wgpu::BindGroupLayout& bindGroupLayout, const char* label) {
-  const auto shaderSource = build_shader_source();
+wgpu::ShaderModule create_module(bool render, const char* label) {
+  const auto shaderSource = build_shader_source(render);
   const wgpu::ShaderSourceWGSL wgslSource{wgpu::ShaderSourceWGSL::Init{
       .code = shaderSource.c_str(),
   }};
@@ -144,7 +175,10 @@ wgpu::ComputePipeline create_pipeline(const wgpu::BindGroupLayout& bindGroupLayo
       .nextInChain = &wgslSource,
       .label = label,
   };
-  const auto module = g_device.CreateShaderModule(&moduleDescriptor);
+  return g_device.CreateShaderModule(&moduleDescriptor);
+}
+wgpu::ComputePipeline create_pipeline(const wgpu::BindGroupLayout& bindGroupLayout, const char* label) {
+  const auto module = create_module(false, label);
 
   const wgpu::PipelineLayoutDescriptor layoutDescriptor{
       .bindGroupLayoutCount = 1,
@@ -162,8 +196,62 @@ wgpu::ComputePipeline create_pipeline(const wgpu::BindGroupLayout& bindGroupLayo
   };
   return g_device.CreateComputePipeline(&pipelineDescriptor);
 }
+wgpu::RenderPipeline create_fallback_pipeline(const wgpu::BindGroupLayout& bindGroupLayout, const char* label) {
+  const auto module = create_module(true, label);
+  const wgpu::PipelineLayoutDescriptor layoutDescriptor{
+      .bindGroupLayoutCount = 1,
+      .bindGroupLayouts = &bindGroupLayout,
+  };
+  const auto pipelineLayout = g_device.CreatePipelineLayout(&layoutDescriptor);
+  const wgpu::ColorTargetState target{
+      .format = wgpu::TextureFormat::R32Uint,
+      .writeMask = wgpu::ColorWriteMask::All,
+  };
+  const wgpu::FragmentState fragment{
+      .module = module,
+      .entryPoint = "fs_main",
+      .targetCount = 1,
+      .targets = &target,
+  };
+  const wgpu::RenderPipelineDescriptor pipelineDescriptor{
+      .label = label,
+      .layout = pipelineLayout,
+      .vertex = {.module = module, .entryPoint = "vs_main"},
+      .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
+      .fragment = &fragment,
+  };
+  return g_device.CreateRenderPipeline(&pipelineDescriptor);
+}
 
 wgpu::BindGroupLayout create_bind_group_layout(const char* label) {
+  if (g_noCompute) {
+    // No storage buffer: the snapshot is the pass's colour attachment.
+    constexpr std::array entries{
+        wgpu::BindGroupLayoutEntry{
+            .binding = 0,
+            .visibility = wgpu::ShaderStage::Fragment,
+            .texture =
+                wgpu::TextureBindingLayout{
+                    .sampleType = wgpu::TextureSampleType::Depth,
+                    .viewDimension = wgpu::TextureViewDimension::e2D,
+                },
+        },
+        wgpu::BindGroupLayoutEntry{
+            .binding = 2,
+            .visibility = wgpu::ShaderStage::Fragment,
+            .buffer =
+                wgpu::BufferBindingLayout{
+                    .type = wgpu::BufferBindingType::Uniform,
+                },
+        },
+    };
+    const wgpu::BindGroupLayoutDescriptor descriptor{
+        .label = label,
+        .entryCount = entries.size(),
+        .entries = entries.data(),
+    };
+    return g_device.CreateBindGroupLayout(&descriptor);
+  }
   constexpr std::array entries{
       wgpu::BindGroupLayoutEntry{
           .binding = 0,
@@ -228,30 +316,62 @@ Params make_params(wgpu::Extent3D sourceSize, Vec2<uint32_t> dstSize) noexcept {
       stretch ? 0.f : (static_cast<float>(sourceSize.height) - static_cast<float>(logicalSize.y) * scale) * 0.5f;
   return params;
 }
+// Copies need rows padded to 256 bytes; the fallback's texture copy pads them and complete_slot
+// de-pads. Without compute the storage buffer's rows are the pixels' own.
+constexpr uint32_t CopyRowAlignment = 256;
+
+uint32_t row_stride(uint32_t width) noexcept {
+  const uint32_t rowBytes = width * uint32_t{sizeof(uint32_t)};
+  if (!g_noCompute) {
+    return rowBytes;
+  }
+  return (rowBytes + CopyRowAlignment - 1u) / CopyRowAlignment * CopyRowAlignment;
+}
+
+bool slot_ready(const Slot& slot, uint32_t width, uint32_t height, uint64_t byteSize) noexcept {
+  const bool output = g_noCompute ? static_cast<bool>(slot.targetView) : static_cast<bool>(slot.storageBuffer);
+  return output && slot.readbackBuffer && slot.paramsBuffer && slot.width == width && slot.height == height &&
+         slot.byteSize == byteSize;
+}
 
 bool ensure_slot(Slot& slot, uint32_t width, uint32_t height) {
-  const uint64_t byteSize = static_cast<uint64_t>(width) * static_cast<uint64_t>(height) * sizeof(uint32_t);
-  if (slot.storageBuffer && slot.width == width && slot.height == height && slot.byteSize == byteSize) {
+  const uint32_t stride = row_stride(width);
+  const uint64_t byteSize = static_cast<uint64_t>(stride) * static_cast<uint64_t>(height);
+  if (slot_ready(slot, width, height, byteSize)) {
     return true;
   }
 
+  slot.targetTexture = {};
+  slot.targetView = {};
   slot.storageBuffer = {};
   slot.readbackBuffer = {};
   slot.paramsBuffer = {};
   slot.width = width;
   slot.height = height;
+  slot.rowStride = stride;
   slot.byteSize = byteSize;
 
   if (byteSize == 0 || byteSize > UINT32_MAX) {
     return false;
   }
 
-  const wgpu::BufferDescriptor storageDescriptor{
-      .label = "Depth Peek Storage Buffer",
-      .usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc,
-      .size = byteSize,
-  };
-  slot.storageBuffer = g_device.CreateBuffer(&storageDescriptor);
+  if (g_noCompute) {
+    const wgpu::TextureDescriptor targetDescriptor{
+        .label = "Depth Peek Target",
+        .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc,
+        .size = {width, height, 1},
+        .format = wgpu::TextureFormat::R32Uint,
+    };
+    slot.targetTexture = g_device.CreateTexture(&targetDescriptor);
+    slot.targetView = slot.targetTexture.CreateView();
+  } else {
+    const wgpu::BufferDescriptor storageDescriptor{
+        .label = "Depth Peek Storage Buffer",
+        .usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc,
+        .size = byteSize,
+    };
+    slot.storageBuffer = g_device.CreateBuffer(&storageDescriptor);
+  }
 
   const wgpu::BufferDescriptor readbackDescriptor{
       .label = "Depth Peek Readback Buffer",
@@ -266,7 +386,8 @@ bool ensure_slot(Slot& slot, uint32_t width, uint32_t height) {
       .size = sizeof(Params),
   };
   slot.paramsBuffer = g_device.CreateBuffer(&paramsDescriptor);
-  return slot.storageBuffer && slot.readbackBuffer && slot.paramsBuffer;
+  return slot.readbackBuffer && slot.paramsBuffer &&
+         (g_noCompute ? static_cast<bool>(slot.targetTexture) : static_cast<bool>(slot.storageBuffer));
 }
 
 Slot* find_available_slot(uint32_t width, uint32_t height) {
@@ -290,12 +411,22 @@ void complete_slot(size_t slotIdx, wgpu::MapAsyncStatus status, wgpu::StringView
   auto& slot = g_slots[slotIdx];
   if (status == wgpu::MapAsyncStatus::Success) {
     const auto valueCount = static_cast<size_t>(slot.width) * static_cast<size_t>(slot.height);
-    const auto* mapped =
-        static_cast<const uint32_t*>(slot.readbackBuffer.GetConstMappedRange(0, valueCount * sizeof(uint32_t)));
+    const auto* mapped = static_cast<const uint32_t*>(slot.readbackBuffer.GetConstMappedRange(0, slot.byteSize));
     if (mapped != nullptr) {
       g_latest.width = slot.width;
       g_latest.height = slot.height;
-      g_latest.data.assign(mapped, mapped + valueCount);
+      g_latest.data.resize(valueCount);
+      const size_t rowValues = slot.width;
+      const size_t stride = slot.rowStride / sizeof(uint32_t);
+      if (stride == rowValues) {
+        std::memcpy(g_latest.data.data(), mapped, valueCount * sizeof(uint32_t));
+      } else {
+        // The texture copy padded every row to 256 bytes: take each row's values and drop the rest.
+        for (uint32_t y = 0; y < slot.height; ++y) {
+          std::memcpy(g_latest.data.data() + static_cast<size_t>(y) * rowValues,
+                      mapped + static_cast<size_t>(y) * stride, rowValues * sizeof(uint32_t));
+        }
+      }
     }
     slot.readbackBuffer.Unmap();
   } else if (status != wgpu::MapAsyncStatus::CallbackCancelled && status != wgpu::MapAsyncStatus::Aborted) {
@@ -310,12 +441,17 @@ void initialize() {
     return;
   }
   g_bindGroupLayout = create_bind_group_layout("Depth Peek Bind Group Layout");
-  g_pipeline = create_pipeline(g_bindGroupLayout, "Depth Peek Pipeline");
+  if (g_noCompute) {
+    g_fallbackPipeline = create_fallback_pipeline(g_bindGroupLayout, "Depth Peek Fallback Pipeline");
+  } else {
+    g_pipeline = create_pipeline(g_bindGroupLayout, "Depth Peek Pipeline");
+  }
   g_enabled = true;
 }
 
 void shutdown() {
   testing::reset();
+  g_fallbackPipeline = {};
   g_pipeline = {};
   g_bindGroupLayout = {};
   for (auto& slot : g_slots) {
@@ -382,8 +518,11 @@ void encode_frame_snapshot(const wgpu::CommandEncoder& cmd, const wgpu::TextureV
   }
 
   const Params params = make_params(sourceSize, dstSize);
+  wgpu::Texture targetTexture;
+  wgpu::TextureView targetView;
   wgpu::Buffer storageBuffer;
   wgpu::Buffer readbackBuffer;
+  uint32_t rowStride = 0;
   wgpu::Buffer paramsBuffer;
   uint64_t byteSize = 0;
   {
@@ -393,8 +532,11 @@ void encode_frame_snapshot(const wgpu::CommandEncoder& cmd, const wgpu::TextureV
       return;
     }
     slot->state = SlotState::CopySubmitted;
+    targetTexture = slot->targetTexture;
+    targetView = slot->targetView;
     storageBuffer = slot->storageBuffer;
     readbackBuffer = slot->readbackBuffer;
+    rowStride = slot->rowStride;
     paramsBuffer = slot->paramsBuffer;
     byteSize = slot->byteSize;
   }
@@ -421,10 +563,41 @@ void encode_frame_snapshot(const wgpu::CommandEncoder& cmd, const wgpu::TextureV
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .label = "Depth Peek Bind Group",
       .layout = g_bindGroupLayout,
-      .entryCount = bindGroupEntries.size(),
+      .entryCount = g_noCompute ? 2u : bindGroupEntries.size(),
       .entries = bindGroupEntries.data(),
   };
   const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
+  if (g_noCompute) {
+    // A fragment per snapshot texel into the R32Uint texture, then a texture copy to the readback
+    // buffer (whose rows the 256-byte alignment pads; complete_slot drops the padding).
+    const wgpu::RenderPassColorAttachment attachment{
+        .view = targetView,
+        .loadOp = wgpu::LoadOp::Clear,
+        .storeOp = wgpu::StoreOp::Store,
+        .clearValue = {0.0, 0.0, 0.0, 0.0},
+    };
+    const wgpu::RenderPassDescriptor passDescriptor{
+        .label = "Depth Peek Pass",
+        .colorAttachmentCount = 1,
+        .colorAttachments = &attachment,
+        .timestampWrites = webgpu::gpu_prof::pass_writes("Depth peek"),
+    };
+    const auto pass = cmd.BeginRenderPass(&passDescriptor);
+    pass.SetPipeline(g_fallbackPipeline);
+    pass.SetBindGroup(0, bindGroup);
+    pass.Draw(3);
+    pass.End();
+
+    const wgpu::TexelCopyTextureInfo source{.texture = targetTexture};
+    const wgpu::TexelCopyBufferInfo target{
+        .layout = {.offset = 0, .bytesPerRow = rowStride, .rowsPerImage = dstSize.y},
+        .buffer = readbackBuffer,
+    };
+    const wgpu::Extent3D copySize{dstSize.x, dstSize.y, 1};
+    cmd.CopyTextureToBuffer(&source, &target, &copySize);
+    return;
+  }
+
 
   const wgpu::ComputePassDescriptor passDescriptor{
       .label = "Depth Peek Compute Pass",

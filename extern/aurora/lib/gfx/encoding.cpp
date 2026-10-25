@@ -378,13 +378,30 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
 
 constexpr uint32_t align_down_copy_offset(uint32_t value) noexcept { return value & ~3u; }
 
+// The bytes one copy path wrote into a shared device buffer this call, which texture vertex fetch
+// uploads to that buffer's fetch texture afterwards.
+struct WrittenRange {
+  uint64_t lo = 0;
+  uint64_t hi = 0;
+
+  bool empty() const noexcept { return hi <= lo; }
+  void add(uint64_t offset, uint64_t size) noexcept {
+    if (size == 0) {
+      return;
+    }
+    lo = empty() ? offset : std::min(lo, offset);
+    hi = std::max(hi, offset + size);
+  }
+};
+
 // Copies what the frame wrote since `copied`: from the staging buffer up to stagingSize, and
 // the rest (the frame's spill, which the staging buffer was too small for) through a transient
 // buffer. Only bytes below highWater are read, so the recording thread may still be appending.
 // The frame's data starts at dstBase in dst, after the resident region.
 void copy_staging_buffer_range(wgpu::CommandEncoder& cmd, const FramePacket& frame, uint32_t& copied,
                                uint32_t highWater, uint64_t stagingOffset, uint64_t stagingSize,
-                               const SpillBuffer& spill, const wgpu::Buffer& dst, uint64_t dstBase) {
+                               const SpillBuffer& spill, const wgpu::Buffer& dst, uint64_t dstBase,
+                               WrittenRange& written) {
   if (highWater <= copied) {
     return;
   }
@@ -394,6 +411,7 @@ void copy_staging_buffer_range(wgpu::CommandEncoder& cmd, const FramePacket& fra
     const uint64_t end = std::min<uint64_t>(copyEnd, stagingSize);
     cmd.CopyBufferToBuffer(staging_buffer(frame.stagingBuffer), stagingOffset + copyStart, dst,
                            dstBase + copyStart, end - copyStart);
+    written.add(dstBase + copyStart, end - copyStart);
   }
   if (copyEnd > stagingSize) {
     const uint64_t start = std::max<uint64_t>(copyStart, stagingSize);
@@ -414,6 +432,7 @@ void copy_staging_buffer_range(wgpu::CommandEncoder& cmd, const FramePacket& fra
     buffer.Unmap();
     // The command buffer keeps the buffer alive until the GPU is done with the copy.
     cmd.CopyBufferToBuffer(buffer, 0, dst, dstBase + start, size);
+    written.add(dstBase + start, size);
   }
   copied = highWater;
 }
@@ -438,6 +457,11 @@ void copy_staging_to_high_water(wgpu::CommandEncoder& cmd, FramePacket& frame, c
   const webgpu::gpu_prof::Zone zone{cmd, "Staging copies"};
   const auto& highWater = op.highWater;
   auto& res = resources();
+  // What the copies below write into the vertex and storage buffers, for texture vertex fetch
+  // (the uniform and index buffers have no fetch texture, so theirs goes nowhere).
+  WrittenRange vertexWritten;
+  WrittenRange storageWritten;
+  WrittenRange unusedWritten;
   const auto& sizes = frame_buffer_sizes();
   const uint64_t VertexStagingOffset = 0;
   const uint64_t UniformStagingOffset = VertexStagingOffset + sizes.vertex;
@@ -445,21 +469,35 @@ void copy_staging_to_high_water(wgpu::CommandEncoder& cmd, FramePacket& frame, c
   const uint64_t StorageStagingOffset = IndexStagingOffset + sizes.index;
   const uint64_t TextureUploadStagingOffset = StorageStagingOffset + sizes.storage;
   copy_staging_buffer_range(cmd, frame, frame.copied.verts, highWater.verts, VertexStagingOffset, sizes.vertex,
-                            frame.spillVerts, res.vertexBuffer, sizes.base(StagingKind::Vertex));
+                            frame.spillVerts, res.vertexBuffer, sizes.base(StagingKind::Vertex), vertexWritten);
   copy_staging_buffer_range(cmd, frame, frame.copied.uniforms, highWater.uniforms, UniformStagingOffset,
-                            sizes.uniform, frame.spillUniforms, res.uniformBuffer, sizes.base(StagingKind::Uniform));
+                            sizes.uniform, frame.spillUniforms, res.uniformBuffer, sizes.base(StagingKind::Uniform),
+                            unusedWritten);
   copy_staging_buffer_range(cmd, frame, frame.copied.indices, highWater.indices, IndexStagingOffset, sizes.index,
-                            frame.spillIndices, res.indexBuffer, sizes.base(StagingKind::Index));
+                            frame.spillIndices, res.indexBuffer, sizes.base(StagingKind::Index), unusedWritten);
   copy_staging_buffer_range(cmd, frame, frame.copied.storage, highWater.storage, StorageStagingOffset,
-                            sizes.storage, frame.spillStorage, res.storageBuffer, sizes.base(StagingKind::Storage));
+                            sizes.storage, frame.spillStorage, res.storageBuffer, sizes.base(StagingKind::Storage),
+                            storageWritten);
   for (size_t i = frame.copied.bufferUploadCount; i < op.bufferUploads.size(); ++i) {
     const auto& item = *op.bufferUploads[i];
     const wgpu::Buffer& dst = item.dst == ResidentBuffer::Vertex  ? res.vertexBuffer
                               : item.dst == ResidentBuffer::Index ? res.indexBuffer
                                                                   : res.storageBuffer;
     cmd.CopyBufferToBuffer(item.src, 0, dst, item.dstOffset, item.size);
+    if (item.dst == ResidentBuffer::Vertex) {
+      vertexWritten.add(item.dstOffset, item.size);
+    } else if (item.dst == ResidentBuffer::Storage) {
+      storageWritten.add(item.dstOffset, item.size);
+    }
   }
   frame.copied.bufferUploadCount = op.bufferUploads.size();
+
+  if (g_vertexFetchTexture) {
+    // Texture vertex fetch: the rows of the two buffers that the copies above wrote, after them
+    // so the texture copies read what the buffer holds.
+    detail::upload_fetch_texture_rows(cmd, StagingKind::Vertex, vertexWritten.lo, vertexWritten.hi);
+    detail::upload_fetch_texture_rows(cmd, StagingKind::Storage, storageWritten.lo, storageWritten.hi);
+  }
 
   if constexpr (UseTextureBuffer) {
     for (size_t i = frame.copied.textureUploadCount; i < op.textureUploads.size(); ++i) {

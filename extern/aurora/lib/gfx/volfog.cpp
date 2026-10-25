@@ -38,6 +38,9 @@ using webgpu::g_device;
 
 constexpr uint32_t Slices = 64;
 constexpr uint32_t NoiseSize = 32;
+// The no-compute fallback's column state (rgb: the in-scatter, a: the optical depth), as 32-bit
+// floats so carrying it from slice to slice changes nothing.
+constexpr auto StateFormat = wgpu::TextureFormat::RGBA32Float;
 constexpr auto FroxelFormat = wgpu::TextureFormat::RGBA16Float;
 
 constexpr const char* CommonSource = R"(
@@ -59,13 +62,14 @@ struct Params {
 };
 )";
 
-constexpr const char* ComputeSource = R"(
-@group(0) @binding(0) var<uniform> p: Params;
-@group(0) @binding(1) var repeatSamp: sampler;
-@group(0) @binding(2) var noiseTex: texture_3d<f32>;
-@group(0) @binding(3) var clampSamp: sampler;
-@group(0) @binding(4) var volMean: texture_3d<f32>;
-@group(0) @binding(5) var froxels: texture_storage_3d<rgba16float, write>;
+// The per-slice math, one copy for both paths: the compute pass loops it over the 64 slices of a
+// column carrying the state in registers, the no-compute fallback runs it once per slice with the
+// state in the previous slice's texture. Same operations in the same order, so the froxels match.
+constexpr const char* SliceSource = R"(
+struct SliceState {
+  inscatter: vec3f,
+  optical: f32,
+};
 
 // The profile as Remastered samples its 64-texel LUT: linearly, at t (texel centres at (i + 0.5) / 64).
 fn lut_at(t: f32) -> f32 {
@@ -75,70 +79,144 @@ fn lut_at(t: f32) -> f32 {
   return mix(p.lut[i / 4u][i % 4u], p.lut[j / 4u][j % 4u], x - f32(i));
 }
 
-@compute @workgroup_size(8, 8)
-fn cs_main(@builtin(global_invocation_id) id: vec3u) {
+// The column (x, y)'s ray. Row 0 is the top. Remastered's grid spans the frame edge to edge
+// (ndc = 2 x / (W - 1) - 1).
+fn column_ray(x: u32, y: u32) -> vec2f {
   let w = p.misc.z;
   let h = p.misc.w;
-  if (id.x >= w || id.y >= h) {
-    return;
-  }
-  // Row 0 is the top. Remastered's grid spans the frame edge to edge (ndc = 2 x / (W - 1) - 1).
-  let s = vec2f(f32(id.x) / f32(w - 1u), 1.0 - f32(id.y) / f32(h - 1u));
-  let ray = vec2f(mix(p.frustum.x, p.frustum.y, s.x), mix(p.frustum.z, p.frustum.w, s.y));
+  let s = vec2f(f32(x) / f32(w - 1u), 1.0 - f32(y) / f32(h - 1u));
+  return vec2f(mix(p.frustum.x, p.frustum.y, s.x), mix(p.frustum.z, p.frustum.w, s.y));
+}
+
+// Slice k of a column, from the state the slices before it left.
+fn slice_step(k: u32, ray: vec2f, state: SliceState) -> SliceState {
+  var inscatter = state.inscatter;
+  var optical = state.optical;
   let near = p.depth.x;
   let range = p.fog.x;
-  var inscatter = vec3f(0.0);
-  var optical = 0.0;
-  for (var k = 0u; k < 64u; k++) {
-    let t0 = f32(k) / 63.0;
-    let t1 = f32(k + 1u) / 63.0;
-    let thickness = (t1 * t1 - t0 * t0) * range;
-    let z = near + t0 * t0 * (range - near);
-    let v = vec4f(ray * z, -z, 1.0);
-    let world = vec3f(dot(p.viewToWorld[0], v), dot(p.viewToWorld[1], v), dot(p.viewToWorld[2], v));
-    var height = clamp(world.z * p.shape.x + p.shape.y, 0.0, 1.0) * p.fog.w;
-    // The regions, chained in order (their density map is the default one-texel white volume).
-    var added = p.colorA.rgb;
-    var cap = p.noise.w;
+  let t0 = f32(k) / 63.0;
+  let t1 = f32(k + 1u) / 63.0;
+  let thickness = (t1 * t1 - t0 * t0) * range;
+  let z = near + t0 * t0 * (range - near);
+  let v = vec4f(ray * z, -z, 1.0);
+  let world = vec3f(dot(p.viewToWorld[0], v), dot(p.viewToWorld[1], v), dot(p.viewToWorld[2], v));
+  var height = clamp(world.z * p.shape.x + p.shape.y, 0.0, 1.0) * p.fog.w;
+  // The regions, chained in order (their density map is the default one-texel white volume).
+  var added = p.colorA.rgb;
+  var cap = p.noise.w;
+  let wv = vec4f(world, 1.0);
+  for (var r = 0u; r < min(p.regionInfo.x, 8u); r++) {
+    let b = r * 7u;
+    let uvw = vec3f(dot(p.regions[b], wv), dot(p.regions[b + 1u], wv), dot(p.regions[b + 2u], wv));
+    let e = abs(uvw * 2.0 - 1.0) * p.regions[b + 3u].xyz + p.regions[b + 4u].xyz;
+    let mask = clamp(min(min(e.x, e.y), e.z), 0.0, 1.0);
+    let k = 1.0 + mask * (p.regions[b + 3u].w - 1.0);
+    added = max(vec3f(0.0), mask * p.regions[b + 5u].rgb + added * k);
+    height = max(0.0, height * k + mask * p.regions[b + 6u].x);
+    cap = max(0.0, cap * k + mask * p.regions[b + 4u].w);
+  }
+  // The noise in Remastered's world: retail's turned to (-x, z, y); noise.xyz holds its origin.
+  let n = textureSampleLevel(noiseTex, repeatSamp, (vec3f(-world.x, world.z, world.y) + p.noise.xyz) * p.shape.z, 0.0).r;
+  let density = (1.0 - p.shape.w + p.shape.w * n) * height * lut_at(min(t0, 1.0));
+  var light = added;
+  if (p.misc.x != 0u) {
     let wv = vec4f(world, 1.0);
-    for (var r = 0u; r < min(p.regionInfo.x, 8u); r++) {
-      let b = r * 7u;
-      let uvw = vec3f(dot(p.regions[b], wv), dot(p.regions[b + 1u], wv), dot(p.regions[b + 2u], wv));
-      let e = abs(uvw * 2.0 - 1.0) * p.regions[b + 3u].xyz + p.regions[b + 4u].xyz;
-      let mask = clamp(min(min(e.x, e.y), e.z), 0.0, 1.0);
-      let k = 1.0 + mask * (p.regions[b + 3u].w - 1.0);
-      added = max(vec3f(0.0), mask * p.regions[b + 5u].rgb + added * k);
-      height = max(0.0, height * k + mask * p.regions[b + 6u].x);
-      cap = max(0.0, cap * k + mask * p.regions[b + 4u].w);
-    }
-    // The noise in Remastered's world: retail's turned to (-x, z, y); noise.xyz holds its origin.
-    let n = textureSampleLevel(noiseTex, repeatSamp, (vec3f(-world.x, world.z, world.y) + p.noise.xyz) * p.shape.z, 0.0).r;
-    let density = (1.0 - p.shape.w + p.shape.w * n) * height * lut_at(min(t0, 1.0));
-    var light = added;
-    if (p.misc.x != 0u) {
-      let wv = vec4f(world, 1.0);
-      let uvw = vec3f(dot(p.worldToVolume[0], wv), dot(p.worldToVolume[1], wv), dot(p.worldToVolume[2], wv));
-      // Remastered's sampler has a black border (CLAMP_TO_BORDER) and unmapped tiles read 0,
-      // so froxels outside the baked grid get no light from it; the weight turns the
-      // clamp-to-edge sample into that.
-      let vsize = vec3f(textureDimensions(volMean));
-      let vt = uvw * vsize;
-      let vw = clamp(min(vt + 0.5, vsize + 0.5 - vt), vec3f(0.0), vec3f(1.0));
-      light += textureSampleLevel(volMean, clampSamp, uvw, 0.0).rgb * (vw.x * vw.y * vw.z) * p.colorB.w;
-    } else {
-      light += vec3f(p.colorB.w); // Remastered's default volume: one white texel
-    }
-    let top = max(max(light.r, light.g), light.b);
-    if (top > cap) {
-      light *= cap / top;
-    }
-    light *= p.colorB.rgb;
-    inscatter += exp(-optical) * thickness * density * p.fog.y * light;
-    optical += thickness * density * (p.fog.y + p.fog.z);
-    textureStore(froxels, vec3u(id.x, id.y, k), vec4f(inscatter, min(exp(-optical), 1.0)));
+    let uvw = vec3f(dot(p.worldToVolume[0], wv), dot(p.worldToVolume[1], wv), dot(p.worldToVolume[2], wv));
+    // Remastered's sampler has a black border (CLAMP_TO_BORDER) and unmapped tiles read 0,
+    // so froxels outside the baked grid get no light from it; the weight turns the
+    // clamp-to-edge sample into that.
+    let vsize = vec3f(textureDimensions(volMean));
+    let vt = uvw * vsize;
+    let vw = clamp(min(vt + 0.5, vsize + 0.5 - vt), vec3f(0.0), vec3f(1.0));
+    light += textureSampleLevel(volMean, clampSamp, uvw, 0.0).rgb * (vw.x * vw.y * vw.z) * p.colorB.w;
+  } else {
+    light += vec3f(p.colorB.w); // Remastered's default volume: one white texel
+  }
+  let top = max(max(light.r, light.g), light.b);
+  if (top > cap) {
+    light *= cap / top;
+  }
+  light *= p.colorB.rgb;
+  inscatter += exp(-optical) * thickness * density * p.fog.y * light;
+  optical += thickness * density * (p.fog.y + p.fog.z);
+  return SliceState(inscatter, optical);
+}
+)";
+
+constexpr const char* ComputeSource = R"(
+@group(0) @binding(0) var<uniform> p: Params;
+@group(0) @binding(1) var repeatSamp: sampler;
+@group(0) @binding(2) var noiseTex: texture_3d<f32>;
+@group(0) @binding(3) var clampSamp: sampler;
+@group(0) @binding(4) var volMean: texture_3d<f32>;
+@group(0) @binding(5) var froxels: texture_storage_3d<rgba16float, write>;
+
+@compute @workgroup_size(8, 8)
+fn cs_main(@builtin(global_invocation_id) id: vec3u) {
+  if (id.x >= p.misc.z || id.y >= p.misc.w) {
+    return;
+  }
+  let ray = column_ray(id.x, id.y);
+  var state = SliceState(vec3f(0.0), 0.0);
+  for (var k = 0u; k < 64u; k++) {
+    state = slice_step(k, ray, state);
+    textureStore(froxels, vec3u(id.x, id.y, k), vec4f(state.inscatter, min(exp(-state.optical), 1.0)));
   }
 }
 )";
+// The same fallback without compute: one render pass per slice, the attachment being that slice of
+// the 3D texture, plus a column-state texture (rgb: the in-scatter, a: the optical depth) that the
+// next slice's pass reads. The slice index comes in as immediate data (0 starts the column).
+constexpr const char* FallbackSource = R"(
+@group(0) @binding(0) var<uniform> p: Params;
+@group(0) @binding(1) var repeatSamp: sampler;
+@group(0) @binding(2) var noiseTex: texture_3d<f32>;
+@group(0) @binding(3) var clampSamp: sampler;
+@group(0) @binding(4) var volMean: texture_3d<f32>;
+@group(0) @binding(5) var prevState: texture_2d<f32>;
+
+struct SliceIndex {
+  index: u32,
+  pad0: u32,
+  pad1: u32,
+  pad2: u32,
+};
+var<immediate> sliceIndex: SliceIndex;
+
+struct FroxelOut {
+  @location(0) froxel: vec4f,
+  @location(1) state: vec4f,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  var corners = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  let c = corners[i];
+  return vec4f(c, 0.0, 1.0);
+}
+
+@fragment
+fn fs_froxels(@builtin(position) pos: vec4f) -> FroxelOut {
+  // The pass covers the grid exactly, so a fragment's pixel is its column, as id.xy is the
+  // compute thread's.
+  let col = vec2u(vec2i(floor(pos.xy)));
+  if (col.x >= p.misc.z || col.y >= p.misc.w) {
+    discard;
+  }
+  let k = sliceIndex.index;
+  var state = SliceState(vec3f(0.0), 0.0);
+  if (k != 0u) {
+    let prev = textureLoad(prevState, vec2i(col), 0);
+    state = SliceState(prev.rgb, prev.a);
+  }
+  state = slice_step(k, column_ray(col.x, col.y), state);
+  var out: FroxelOut;
+  out.froxel = vec4f(state.inscatter, min(exp(-state.optical), 1.0));
+  out.state = vec4f(state.inscatter, state.optical);
+  return out;
+}
+)";
+
 
 constexpr const char* ApplySource = R"(
 @group(0) @binding(0) var<uniform> p: Params;
@@ -206,10 +284,32 @@ struct Capture {
   webgpu::TextureWithSampler resolved; // its resolve target
   webgpu::TextureWithSampler depth;
 };
+// What the fog renders into, recorded as one whole so a recorded fog keeps the views (and, in
+// no-compute mode, the attachments) it was recorded against.
+struct FroxelTargets {
+  wgpu::TextureView volume; // the whole 3D texture, as the draws after the fog sample it
+  // The fallback's attachments besides `volume` (one depthSlice of it per pass): the two
+  // RGBA32Float column-state textures it ping-pongs (rgb: the in-scatter, a: the optical depth).
+  std::array<wgpu::TextureView, 2> state{};
+};
+
+// The fallback's immediate data: which slice the pass fills (see FallbackSource's SliceIndex).
+struct SliceIndex {
+  uint32_t index = 0;
+  uint32_t pad[3]{};
+};
+static_assert(sizeof(SliceIndex) == 16);
 
 struct State {
   EncoderTaskId task = InvalidEncoderTask;
   wgpu::ComputePipeline compute;
+  // The no-compute fallback (g_noCompute): the froxels are filled by a render pass per slice, so
+  // there is no compute pipeline and no storage binding.
+  struct Fallback {
+    wgpu::BindGroupLayout layout;
+    wgpu::RenderPipeline pipeline;
+  };
+  Fallback fallback;
   wgpu::BindGroupLayout computeLayout;
   // One uniform buffer per recorded slot: every fog of a frame shares one encoder and one submit, and a
   // queue write lands before the submit, so a shared buffer would give each fog the last one's params.
@@ -229,7 +329,7 @@ struct State {
   // The froxels, made when the fog is recorded so that the draws after it can bind them (see
   // froxel_view); remade when the frame's size changes. The placeholder is bound until then.
   wgpu::Texture froxels;
-  wgpu::TextureView froxelView;
+  FroxelTargets targets;
   wgpu::TextureView placeholder;
   uint32_t gridWidth = 0;
   uint32_t gridHeight = 0;
@@ -249,7 +349,7 @@ State g_state;
 // carries a slot in this ring; frames are encoded well within its length of being recorded.
 std::array<Params, RecordedSlots> g_recorded;
 // The froxels each slot fills, as they were when it was recorded.
-std::array<wgpu::TextureView, RecordedSlots> g_recordedFroxels;
+std::array<FroxelTargets, RecordedSlots> g_recordedFroxels;
 // The targets each slot fogs, as they were when it was recorded.
 std::array<Capture, RecordedSlots> g_recordedCapture;
 uint32_t g_nextSlot = 0;
@@ -367,11 +467,38 @@ void ensure_clamp_sampler() {
   g_state.nearestSampler = g_device.CreateSampler(&nearestDescriptor);
 }
 
+// The uniform buffers, the samplers and the noise volume: what both paths bind.
+void ensure_shared(const wgpu::Queue& queue) {
+  if (g_state.uniforms[0]) {
+    return;
+  }
+  const wgpu::BufferDescriptor bufferDescriptor{
+      .label = "Volumetric Fog Uniforms",
+      .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+      .size = sizeof(Params),
+  };
+  for (auto& uniforms : g_state.uniforms) {
+    uniforms = g_device.CreateBuffer(&bufferDescriptor);
+  }
+  ensure_clamp_sampler();
+  const wgpu::SamplerDescriptor repeatDescriptor{
+      .label = "Volumetric Fog Noise Sampler",
+      .addressModeU = wgpu::AddressMode::Repeat,
+      .addressModeV = wgpu::AddressMode::Repeat,
+      .addressModeW = wgpu::AddressMode::Repeat,
+      .magFilter = wgpu::FilterMode::Linear,
+      .minFilter = wgpu::FilterMode::Linear,
+  };
+  g_state.repeatSampler = g_device.CreateSampler(&repeatDescriptor);
+  g_state.noise = make_noise(queue);
+}
+
 void ensure_compute(const wgpu::Queue& queue) {
+  ensure_shared(queue);
   if (g_state.compute) {
     return;
   }
-  const auto module = make_module("Volumetric Fog Froxels", std::string(CommonSource) + ComputeSource);
+  const auto module = make_module("Volumetric Fog Froxels", std::string(CommonSource) + SliceSource + ComputeSource);
   const std::array entries{
       wgpu::BindGroupLayoutEntry{
           .binding = 0,
@@ -424,25 +551,81 @@ void ensure_compute(const wgpu::Queue& queue) {
       .compute = {.module = module, .entryPoint = "cs_main"},
   };
   g_state.compute = g_device.CreateComputePipeline(&descriptor);
-  const wgpu::BufferDescriptor bufferDescriptor{
-      .label = "Volumetric Fog Uniforms",
-      .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
-      .size = sizeof(Params),
-  };
-  for (auto& uniforms : g_state.uniforms) {
-    uniforms = g_device.CreateBuffer(&bufferDescriptor);
+}
+
+// g_noCompute: the same froxels, a render pass per slice (see FallbackSource). No compute pipeline
+// and no storage texture binding: the froxels are the pass's colour attachment and the previous
+// slice's column state is a texture it reads.
+void ensure_fallback(const wgpu::Queue& queue) {
+  ensure_shared(queue);
+  if (g_state.fallback.pipeline) {
+    return;
   }
-  ensure_clamp_sampler();
-  const wgpu::SamplerDescriptor repeatDescriptor{
-      .label = "Volumetric Fog Noise Sampler",
-      .addressModeU = wgpu::AddressMode::Repeat,
-      .addressModeV = wgpu::AddressMode::Repeat,
-      .addressModeW = wgpu::AddressMode::Repeat,
-      .magFilter = wgpu::FilterMode::Linear,
-      .minFilter = wgpu::FilterMode::Linear,
+  const auto module =
+      make_module("Volumetric Fog Froxels Fallback", std::string(CommonSource) + SliceSource + FallbackSource);
+  const std::array entries{
+      wgpu::BindGroupLayoutEntry{
+          .binding = 0,
+          .visibility = wgpu::ShaderStage::Fragment,
+          .buffer = {.type = wgpu::BufferBindingType::Uniform, .minBindingSize = sizeof(Params)},
+      },
+      wgpu::BindGroupLayoutEntry{
+          .binding = 1,
+          .visibility = wgpu::ShaderStage::Fragment,
+          .sampler = {.type = wgpu::SamplerBindingType::Filtering},
+      },
+      wgpu::BindGroupLayoutEntry{
+          .binding = 2,
+          .visibility = wgpu::ShaderStage::Fragment,
+          .texture = {.sampleType = wgpu::TextureSampleType::Float, .viewDimension = wgpu::TextureViewDimension::e3D},
+      },
+      wgpu::BindGroupLayoutEntry{
+          .binding = 3,
+          .visibility = wgpu::ShaderStage::Fragment,
+          .sampler = {.type = wgpu::SamplerBindingType::Filtering},
+      },
+      wgpu::BindGroupLayoutEntry{
+          .binding = 4,
+          .visibility = wgpu::ShaderStage::Fragment,
+          .texture = {.sampleType = wgpu::TextureSampleType::Float, .viewDimension = wgpu::TextureViewDimension::e3D},
+      },
+      wgpu::BindGroupLayoutEntry{
+          .binding = 5,
+          .visibility = wgpu::ShaderStage::Fragment,
+          .texture = {.sampleType = wgpu::TextureSampleType::Float, .viewDimension = wgpu::TextureViewDimension::e2D},
+      },
   };
-  g_state.repeatSampler = g_device.CreateSampler(&repeatDescriptor);
-  g_state.noise = make_noise(queue);
+  const wgpu::BindGroupLayoutDescriptor layoutDescriptor{
+      .label = "Volumetric Fog Froxels Fallback Layout",
+      .entryCount = entries.size(),
+      .entries = entries.data(),
+  };
+  g_state.fallback.layout = g_device.CreateBindGroupLayout(&layoutDescriptor);
+  const wgpu::PipelineLayoutDescriptor pipelineLayoutDescriptor{
+      .label = "Volumetric Fog Froxels Fallback Pipeline Layout",
+      .bindGroupLayoutCount = 1,
+      .bindGroupLayouts = &g_state.fallback.layout,
+      .immediateSize = sizeof(SliceIndex),
+  };
+  const auto pipelineLayout = g_device.CreatePipelineLayout(&pipelineLayoutDescriptor);
+  const wgpu::ColorTargetState targets[2]{
+      {.format = FroxelFormat, .writeMask = wgpu::ColorWriteMask::All},
+      {.format = StateFormat, .writeMask = wgpu::ColorWriteMask::All},
+  };
+  const wgpu::FragmentState fragment{
+      .module = module,
+      .entryPoint = "fs_froxels",
+      .targetCount = 2,
+      .targets = targets,
+  };
+  const wgpu::RenderPipelineDescriptor descriptor{
+      .label = "Volumetric Fog Froxels Fallback",
+      .layout = pipelineLayout,
+      .vertex = {.module = module, .entryPoint = "vs_main"},
+      .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
+      .fragment = &fragment,
+  };
+  g_state.fallback.pipeline = g_device.CreateRenderPipeline(&descriptor);
 }
 
 void ensure_apply(wgpu::TextureFormat format, uint32_t samples) {
@@ -568,16 +751,116 @@ void ensure_froxels(uint32_t width, uint32_t height) {
   }
   g_state.gridWidth = gridWidth;
   g_state.gridHeight = gridHeight;
+  // The fallback fills the froxels as attachments, so its usage and views follow g_noCompute.
   const wgpu::TextureDescriptor froxelDescriptor{
       .label = "Volumetric Fog Froxels",
-      .usage = wgpu::TextureUsage::StorageBinding | wgpu::TextureUsage::TextureBinding,
+      .usage = g_noCompute ? wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding
+                           : wgpu::TextureUsage::StorageBinding | wgpu::TextureUsage::TextureBinding,
       .dimension = wgpu::TextureDimension::e3D,
       .size = {gridWidth, gridHeight, Slices},
       .format = FroxelFormat,
   };
   AURORA_NOTE_TEXTURE(&froxelDescriptor);
   g_state.froxels = g_device.CreateTexture(&froxelDescriptor);
-  g_state.froxelView = g_state.froxels.CreateView();
+  g_state.targets = FroxelTargets{.volume = g_state.froxels.CreateView()};
+  if (!g_noCompute) {
+    return;
+  }
+  // The fallback writes one slice at a time (a depthSlice of the 3D view), and needs a pair of 2D
+  // textures to carry a column's in-scatter and optical depth from one slice's pass to the next.
+  const wgpu::TextureDescriptor stateDescriptor{
+      .label = "Volumetric Fog Froxel State",
+      .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding,
+      .size = {gridWidth, gridHeight, 1},
+      .format = StateFormat,
+  };
+  for (auto& view : g_state.targets.state) {
+    AURORA_NOTE_TEXTURE(&stateDescriptor);
+    view = g_device.CreateTexture(&stateDescriptor).CreateView();
+  }
+}
+
+// Fills one fog's froxels: the compute pass, or (g_noCompute) a render pass per slice, each pass
+// writing that slice of the 3D texture and the column state the next slice's pass reads. The
+// bind groups are per record here because the uniform buffer is the recorded slot's.
+void encode_froxels(const wgpu::CommandEncoder& cmd, const FroxelTargets& froxels, const wgpu::Buffer uniforms,
+                    const Params& params, uint32_t volume) {
+  const wgpu::TextureView volumeView = probe::volume_view(volume, 0);
+  if (!g_noCompute) {
+    const std::array computeEntries{
+        wgpu::BindGroupEntry{.binding = 0, .buffer = uniforms, .size = sizeof(Params)},
+        wgpu::BindGroupEntry{.binding = 1, .sampler = g_state.repeatSampler},
+        wgpu::BindGroupEntry{.binding = 2, .textureView = g_state.noise},
+        wgpu::BindGroupEntry{.binding = 3, .sampler = g_state.clampSampler},
+        wgpu::BindGroupEntry{.binding = 4, .textureView = volumeView},
+        wgpu::BindGroupEntry{.binding = 5, .textureView = froxels.volume},
+    };
+    const wgpu::BindGroupDescriptor computeGroupDescriptor{
+        .label = "Volumetric Fog Froxels",
+        .layout = g_state.computeLayout,
+        .entryCount = computeEntries.size(),
+        .entries = computeEntries.data(),
+    };
+    const auto computeGroup = g_device.CreateBindGroup(&computeGroupDescriptor);
+    const wgpu::ComputePassDescriptor passDescriptor{.label = "Volumetric Fog Froxels"};
+    const auto pass = cmd.BeginComputePass(&passDescriptor);
+    pass.SetPipeline(g_state.compute);
+    pass.SetBindGroup(0, computeGroup);
+    pass.DispatchWorkgroups((params.grid[0] + 7) / 8, (params.grid[1] + 7) / 8, 1);
+    pass.End();
+    return;
+  }
+
+  if (!froxels.volume || !froxels.state[0]) {
+    return;
+  }
+  // Two bind groups, one per state texture: slice k writes state[k & 1] and reads state[1 - k & 1].
+  std::array<wgpu::BindGroup, 2> groups;
+  for (uint32_t parity = 0; parity < groups.size(); ++parity) {
+    const std::array entries{
+        wgpu::BindGroupEntry{.binding = 0, .buffer = uniforms, .size = sizeof(Params)},
+        wgpu::BindGroupEntry{.binding = 1, .sampler = g_state.repeatSampler},
+        wgpu::BindGroupEntry{.binding = 2, .textureView = g_state.noise},
+        wgpu::BindGroupEntry{.binding = 3, .sampler = g_state.clampSampler},
+        wgpu::BindGroupEntry{.binding = 4, .textureView = volumeView},
+        wgpu::BindGroupEntry{.binding = 5, .textureView = froxels.state[1 - parity]},
+    };
+    const wgpu::BindGroupDescriptor groupDescriptor{
+        .label = "Volumetric Fog Froxels Fallback",
+        .layout = g_state.fallback.layout,
+        .entryCount = entries.size(),
+        .entries = entries.data(),
+    };
+    groups[parity] = g_device.CreateBindGroup(&groupDescriptor);
+  }
+  for (uint32_t k = 0; k < Slices; ++k) {
+    const uint32_t parity = k & 1u;
+    // The pass covers the grid exactly, so the viewport is the attachment's size: one fragment per
+    // column, as the compute pass had one thread per column.
+    const wgpu::RenderPassColorAttachment attachments[2]{
+        {.view = froxels.volume,
+         .depthSlice = k,
+         .loadOp = wgpu::LoadOp::Clear,
+         .storeOp = wgpu::StoreOp::Store,
+         .clearValue = {0.0, 0.0, 0.0, 0.0}},
+        {.view = froxels.state[parity],
+         .loadOp = wgpu::LoadOp::Clear,
+         .storeOp = wgpu::StoreOp::Store,
+         .clearValue = {0.0, 0.0, 0.0, 0.0}},
+    };
+    const wgpu::RenderPassDescriptor passDescriptor{
+        .label = "Volumetric Fog Froxels Fallback",
+        .colorAttachmentCount = 2,
+        .colorAttachments = attachments,
+    };
+    const auto pass = cmd.BeginRenderPass(&passDescriptor);
+    pass.SetPipeline(g_state.fallback.pipeline);
+    pass.SetBindGroup(0, groups[parity]);
+    const SliceIndex immediate{.index = k};
+    pass.SetImmediates(0, &immediate, sizeof(immediate));
+    pass.Draw(3);
+    pass.End();
+  }
 }
 
 void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, const void* payload, size_t payloadSize,
@@ -588,7 +871,7 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
   }
   std::memcpy(&slot, payload, sizeof(slot));
   Params params = g_recorded[slot % g_recorded.size()];
-  const wgpu::TextureView froxelView = g_recordedFroxels[slot % g_recordedFroxels.size()];
+  const FroxelTargets& froxels = g_recordedFroxels[slot % g_recordedFroxels.size()];
   const Capture& capture = g_recordedCapture[slot % g_recordedCapture.size()];
   uint32_t samples = 1;
   if (!hdr_capture_valid(capture, samples)) {
@@ -601,10 +884,14 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
   const auto format = webgpu::SceneHdrFormat;
   const uint32_t width = source.size.width;
   const uint32_t height = source.size.height;
-  if (width == 0 || height == 0 || !source.texture || !target.view || !depth.view || !froxelView) {
+  if (width == 0 || height == 0 || !source.texture || !target.view || !depth.view || !froxels.volume) {
     return;
   }
-  ensure_compute(ctx.queue);
+  if (g_noCompute) {
+    ensure_fallback(ctx.queue);
+  } else {
+    ensure_compute(ctx.queue);
+  }
   const wgpu::Buffer uniforms = g_state.uniforms[slot % g_state.uniforms.size()];
   ensure_apply(format, samples);
   ensure_targets(width, height, format);
@@ -616,29 +903,7 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
   params.volume = volume ? 1 : 0;
   ctx.queue.WriteBuffer(uniforms, 0, &params, sizeof(params));
 
-  const std::array computeEntries{
-      wgpu::BindGroupEntry{.binding = 0, .buffer = uniforms, .size = sizeof(Params)},
-      wgpu::BindGroupEntry{.binding = 1, .sampler = g_state.repeatSampler},
-      wgpu::BindGroupEntry{.binding = 2, .textureView = g_state.noise},
-      wgpu::BindGroupEntry{.binding = 3, .sampler = g_state.clampSampler},
-      wgpu::BindGroupEntry{.binding = 4, .textureView = probe::volume_view(volume ? volumeId : 0, 0)},
-      wgpu::BindGroupEntry{.binding = 5, .textureView = froxelView},
-  };
-  const wgpu::BindGroupDescriptor computeGroupDescriptor{
-      .label = "Volumetric Fog Froxels",
-      .layout = g_state.computeLayout,
-      .entryCount = computeEntries.size(),
-      .entries = computeEntries.data(),
-  };
-  const auto computeGroup = g_device.CreateBindGroup(&computeGroupDescriptor);
-  {
-    const wgpu::ComputePassDescriptor passDescriptor{.label = "Volumetric Fog Froxels"};
-    const auto pass = cmd.BeginComputePass(&passDescriptor);
-    pass.SetPipeline(g_state.compute);
-    pass.SetBindGroup(0, computeGroup);
-    pass.DispatchWorkgroups((params.grid[0] + 7) / 8, (params.grid[1] + 7) / 8, 1);
-    pass.End();
-  }
+  encode_froxels(cmd, froxels, uniforms, params, volume ? volumeId : 0);
 
   const wgpu::TexelCopyTextureInfo copySource{.texture = source.texture};
   const wgpu::TexelCopyTextureInfo copyTarget{.texture = frame.texture};
@@ -649,7 +914,7 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
       wgpu::BindGroupEntry{.binding = 0, .buffer = uniforms, .size = sizeof(Params)},
       wgpu::BindGroupEntry{.binding = 1, .textureView = frame.view},
       wgpu::BindGroupEntry{.binding = 2, .textureView = depth.view},
-      wgpu::BindGroupEntry{.binding = 3, .textureView = froxelView},
+      wgpu::BindGroupEntry{.binding = 3, .textureView = froxels.volume},
       wgpu::BindGroupEntry{.binding = 4, .sampler = g_state.clampSampler},
       wgpu::BindGroupEntry{.binding = 5, .sampler = g_state.nearestSampler},
   };
@@ -717,9 +982,9 @@ bool record(const Params& params) {
   g_recorded[slot] = params;
   g_recorded[slot].grid[0] = g_state.gridWidth;
   g_recorded[slot].grid[1] = g_state.gridHeight;
-  g_recordedFroxels[slot] = g_state.froxelView;
-  g_recordedCapture[slot] = Capture{
-      .color = webgpu::g_sceneHdr, .resolved = webgpu::g_sceneHdrResolved, .depth = webgpu::g_depthBuffer};
+  g_recordedFroxels[slot] = g_state.targets;
+  g_recordedCapture[slot] =
+      Capture{.color = webgpu::g_sceneHdr, .resolved = webgpu::g_sceneHdrResolved, .depth = webgpu::g_depthBuffer};
   record_encoder_task(g_state.task, &slot, sizeof(slot));
   return true;
 }
@@ -741,8 +1006,8 @@ std::string apply_source(uint32_t samples) {
 }
 
 const wgpu::TextureView& froxel_view() {
-  if (g_state.froxelView) {
-    return g_state.froxelView;
+  if (g_state.targets.volume) {
+    return g_state.targets.volume;
   }
   if (!g_state.placeholder) {
     const wgpu::TextureDescriptor descriptor{
