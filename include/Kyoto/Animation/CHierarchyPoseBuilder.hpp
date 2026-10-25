@@ -60,6 +60,9 @@ public:
   void Insert(const CSegId& id, const CVector3f& off) { x38_treeMap[id].SetOffset(off); }
 #endif
   CQuaternion GetSegRotation(const CSegId& id) const { return x38_treeMap[id].GetRotation(); }
+#ifdef TARGET_PC
+  CVector3f GetSegOffset(const CSegId& id) const { return x38_treeMap[id].GetOffset(); }
+#endif
   const TLockedToken< CCharLayoutInfo >& CharLayoutInfo() const {
     return x0_layoutDesc.ScaledLayout();
   }

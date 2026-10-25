@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 class CStateManager;
 class CActorLights;
@@ -12,17 +13,21 @@ class CVector3f;
 // The third-person gameplay camera's animated Samus (port_third_person_body.cpp). In gameplay the
 // player's body is BallTransitionsANCS, which only has morph clips, so it stands frozen. Prime
 // keeps the walking clips in the cutscene Samus ANCS (CINF 19C53902); this draws that body
-// instead and picks its clip from the player's movement, cross-fading clip changes the ANCS
-// leaves as snaps. The Phazon Suit gets CScriptPlayerActor's indirect-texture pass.
+// instead and poses it from the player's movement: the walk clips blended by speed with their
+// feet in step, the aim clips over them when the cannon is raised, every change cross-faded.
+// The Phazon Suit gets CScriptPlayerActor's indirect-texture pass.
 namespace PortThirdPersonBody {
 
-// WalkGun: walking with the cannon raised (firing or charging). Stop: the walk's settle into the
-// ready pose, played once when the body stops.
-enum class Clip { Idle, SlowWalk, Walk, Run, Backward, Hold, WalkGun, Stop, Count };
+// The body is posed by blending the clips itself (port_third_person_body.cpp): each clip is
+// sampled at its own phase and the samples are slerped together, as CAnimTreeBlend blends two.
+// Stance: what the legs do. Idle and Hold stand in the ready pose (Hold: airborne or strafing,
+// there being no jump or strafe clip); Stop plays the walk's settle into it once; Loco walks or
+// runs, the walk clips blended by speed.
+enum class Stance { Idle, Stop, Loco, Count };
 
 // How long the cannon stays raised after a shot, in seconds.
 inline constexpr float kGunUpSeconds = 1.f;
-// The cross-fade between clips whose ANCS transition is a snap, in seconds.
+// Every change of stance cross-fades over this, in seconds.
 inline constexpr float kBlendSeconds = 0.25f;
 // While the cannon is raised the arm turns at the shoulder to point it at the shot's aim point:
 // at most kAimMaxRadians off the clip's pose, easing in over kAimInSeconds and out over
@@ -30,65 +35,103 @@ inline constexpr float kBlendSeconds = 0.25f;
 inline constexpr float kAimMaxRadians = 1.4f;
 inline constexpr float kAimInSeconds = 0.08f;
 inline constexpr float kAimOutSeconds = 0.3f;
-
-struct Choice {
-  Clip clip = Clip::Idle;
-  float rate = 1.f; // playback rate scale, 1 = the clip's own speed
-};
-
-// Speeds in game units per second, along the facing (fwd, + is forward) and across it.
+// Below this speed (game units per second) the body stands.
 inline constexpr float kStandSpeed = 0.5f;
-inline constexpr float kWalkSpeed = 4.f;
-inline constexpr float kRunSpeed = 7.f;
+// The aim-pose grid's coordinates move at most this fast (grid units, 1 = one aim clip, per
+// second) and accelerate at most this hard: CABSAim's limits.
+inline constexpr float kAimGridSpeed = 3.f;
+inline constexpr float kAimGridAccel = 10.f;
 
-// Which clip fits the movement. An airborne body, or one moving more sideways than along its
-// facing (strafing: there is no strafe clip), holds the ready pose. Walking backward plays the
-// walk clip run in reverse (the animation tree only advances, so the .cpp steps its phase backward).
-// With the cannon raised (gunUp) moving forward plays the walkgun clip at every speed.
-inline Choice ChooseClip(float fwd, float side, bool grounded, bool gunUp = false) {
-  Choice c;
+// The stance the movement asks for. fwd and side are the speeds along the facing (+ forward)
+// and across it. Stopping from a walk plays Stop until stopDone, unless the body moves again.
+inline Stance ChooseStance(float fwd, float side, bool grounded, Stance current, bool stopDone) {
   const float speed = std::sqrt(fwd * fwd + side * side);
-  if (!grounded) {
-    c.clip = Clip::Hold;
-    return c;
-  }
   if (speed < kStandSpeed) {
-    c.clip = Clip::Idle;
-    return c;
+    if (current == Stance::Loco || (current == Stance::Stop && !stopDone)) {
+      return Stance::Stop;
+    }
+    return Stance::Idle;
   }
-  if (std::fabs(side) > std::fabs(fwd)) {
-    c.clip = Clip::Hold;
-    return c;
+  if (!grounded || std::fabs(side) > std::fabs(fwd) || std::fabs(fwd) < kStandSpeed) {
+    return Stance::Idle;
   }
-  if (fwd < 0.f) {
-    c.clip = Clip::Backward;
-    c.rate = std::clamp(speed / kWalkSpeed, 0.5f, 1.5f);
-  } else if (gunUp) {
-    c.clip = Clip::WalkGun;
-    c.rate = std::clamp(speed / 5.5f, 0.5f, 1.6f);
-  } else if (speed < kWalkSpeed) {
-    c.clip = Clip::SlowWalk;
-    c.rate = std::clamp(speed / 2.5f, 0.5f, 1.5f);
-  } else if (speed < kRunSpeed) {
-    c.clip = Clip::Walk;
-    c.rate = std::clamp(speed / 5.5f, 0.6f, 1.5f);
-  } else {
-    c.clip = Clip::Run;
-    c.rate = std::clamp(speed / 9.f, 0.7f, 1.6f);
-  }
-  return c;
+  return Stance::Loco;
 }
 
-// The clip to play given the one chosen and the one playing: stopping from a forward walk or run
-// plays the stop clip, which then runs to its end (stopDone) unless the body moves again.
-inline Choice Settle(Choice chosen, Clip current, bool stopDone) {
-  const bool moving = current == Clip::SlowWalk || current == Clip::Walk ||
-                      current == Clip::Run || current == Clip::WalkGun;
-  if (chosen.clip == Clip::Idle && (moving || (current == Clip::Stop && !stopDone))) {
-    chosen.clip = Clip::Stop;
-    chosen.rate = 1.f;
+// The walk clips' weights at a ground speed: the two whose own speeds (speeds[], ascending)
+// bracket it, linearly; below the slowest or above the fastest that one alone.
+inline constexpr int kLocoClips = 3; // slowwalk, walk, run
+inline void LocoWeights(float speed, const float (&speeds)[kLocoClips], float (&w)[kLocoClips]) {
+  for (float& x : w) {
+    x = 0.f;
   }
-  return chosen;
+  if (speed <= speeds[0]) {
+    w[0] = 1.f;
+    return;
+  }
+  for (int i = 0; i + 1 < kLocoClips; ++i) {
+    if (speed <= speeds[i + 1]) {
+      const float span = speeds[i + 1] - speeds[i];
+      const float t = span > 1e-4f ? (speed - speeds[i]) / span : 1.f;
+      w[i] = 1.f - t;
+      w[i + 1] = t;
+      return;
+    }
+  }
+  w[kLocoClips - 1] = 1.f;
+}
+
+// Where in a loop a foot curve (n samples over one loop, e.g. left minus right ankle forward)
+// peaks, 0..1, from its first harmonic: what the walk clips are shifted by so their feet agree.
+inline float CurvePeak(const float* d, int n) {
+  constexpr float kTwoPi = 6.2831853f;
+  float c = 0.f;
+  float sn = 0.f;
+  for (int k = 0; k < n; ++k) {
+    c += d[k] * std::cos(kTwoPi * k / n);
+    sn += d[k] * std::sin(kTwoPi * k / n);
+  }
+  const float p = std::atan2(sn, c) / kTwoPi;
+  return p - std::floor(p);
+}
+
+// Moves value toward target by at most step.
+inline float Approach(float value, float target, float step) {
+  return value < target ? std::min(value + step, target) : std::max(value - step, target);
+}
+
+// Moves x toward target with its speed v limited to kAimGridSpeed and its change to
+// kAimGridAccel, braking in time to stop on the target rather than past it.
+inline void SmoothToward(float& x, float& v, float target, float dt) {
+  const float d = target - x;
+  const float brake = std::sqrt(2.f * kAimGridAccel * std::fabs(d));
+  const float want = std::copysign(std::min(brake, kAimGridSpeed), d);
+  v = Approach(v, want, kAimGridAccel * dt);
+  const float next = x + v * dt;
+  if ((next - target) * (x - target) <= 0.f) {
+    x = target;
+    v = 0.f;
+  } else {
+    x = next;
+  }
+}
+
+// Bilinear weights over the 3x3 aim grid (row-major from down-left: index row*3+col, row 0 down,
+// 1 level, 2 up; col 0 left, 1 centre, 2 right) at u (left -1 .. right 1), v (down -1 .. up 1).
+inline void AimGridWeights(float u, float v, float (&w)[9]) {
+  for (float& x : w) {
+    x = 0.f;
+  }
+  u = std::clamp(u, -1.f, 1.f) + 1.f;
+  v = std::clamp(v, -1.f, 1.f) + 1.f;
+  const int c = std::min(int(u), 1);
+  const int r = std::min(int(v), 1);
+  const float fu = u - c;
+  const float fv = v - r;
+  w[r * 3 + c] += (1.f - fu) * (1.f - fv);
+  w[r * 3 + c + 1] += fu * (1.f - fv);
+  w[(r + 1) * 3 + c] += (1.f - fu) * fv;
+  w[(r + 1) * 3 + c + 1] += fu * fv;
 }
 
 // A shot left the cannon (CPlayerGun): the body raises it for kGunUpSeconds.
@@ -106,5 +149,15 @@ bool Render(const CStateManager& mgr, const CTransform4f& xf, const CActorLights
 bool CannonPosition(const CPlayer& player, CVector3f& out);
 // Drops the body (third person off, a new world).
 void Release();
+
+// Debug (console `thirdperson clips`): the body's Samus clips, one line each: index, name,
+// duration, mean root speed.
+std::string DescribeClips();
+// Debug (console `thirdperson feet`): what Build measured: each walk clip's speed, stride and
+// foot phase, each aim clip's cannon yaw and pitch.
+std::string DescribeFeet();
+// Holds the named clip at phase 0..1 instead of the movement's clip, the body turned by yaw degrees;
+// nullptr lets go. False if the body has no such clip (or is not built).
+bool PinClip(const char* name, float phase, float yaw = 0.f);
 
 } // namespace PortThirdPersonBody

@@ -18,6 +18,7 @@
 #include "port_discord.h"
 #include "port_freecam.h"
 #include "port_third_person.h"
+#include "port_third_person_body.h"
 #include "port_gci.h"
 #include "port_photo.h"
 #include "port_pointer.h"
@@ -1964,12 +1965,32 @@ void CmdCollDump() {
 
 // thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>]
 void CmdThirdPerson() {
-  static const char* const usage = "usage: thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>]";
+  static const char* const usage =
+      "usage: thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>] [clips] [feet] "
+      "[clip <name>|off [phase [yaw]]]";
   for (size_t i = 1; i < sCmd.args.size(); ++i) {
     const std::string arg = Lower(sCmd.args[i]);
     float number = 0.f;
     if (arg == "on" || arg == "off") {
       PortThirdPerson::SetEnabled(arg == "on");
+    } else if (arg == "feet") {
+      sCmd.out += PortThirdPersonBody::DescribeFeet();
+      return Finish();
+    } else if (arg == "clips") {
+      sCmd.out += PortThirdPersonBody::DescribeClips();
+      return Finish();
+    } else if (arg == "clip" && i + 1 < sCmd.args.size()) {
+      const std::string name = sCmd.args[++i];
+      float yaw = 0.f;
+      if (i + 1 < sCmd.args.size() && ParseFloat(sCmd.args[i + 1], number)) {
+        ++i;
+        if (i + 1 < sCmd.args.size() && ParseFloat(sCmd.args[i + 1], yaw)) {
+          ++i;
+        }
+      }
+      if (!PortThirdPersonBody::PinClip(Lower(name) == "off" ? nullptr : name.c_str(), number, yaw)) {
+        return Finish("no such clip (or the body is not built)");
+      }
     } else if ((arg == "distance" || arg == "shoulder" || arg == "height") && i + 1 < sCmd.args.size() &&
                ParseFloat(sCmd.args[i + 1], number)) {
       ++i;
@@ -3900,7 +3921,7 @@ const CommandSpec kCommands[] = {
      "freecam [on|off|freeze on|off|player on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]\n"
      "                           fly the view away from the player (HUD hidden; freeze holds the game still)"},
     {"thirdperson", CmdThirdPerson, nullptr,
-     "thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>]\n"
+     "thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>] [clips] [feet] [clip <name>|off [phase [yaw]]]\n"
      "                           third-person gameplay camera (also third_person* settings)"},
     {"photo", nullptr, CmdPhoto,
      "photo [on|off|capture [1|2|4]|fov <n>|roll <n>|samus on|off|panel on|off|super 1|2|4|speed <n>]\n"
