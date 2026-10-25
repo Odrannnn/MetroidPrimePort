@@ -12,7 +12,7 @@ namespace PortRoomGeo {
 namespace {
 
 constexpr uint32_t kMagic = 0x4752504D; // 'MPRG'
-constexpr uint32_t kVersion = 13;
+constexpr uint32_t kVersion = 14;
 constexpr size_t kHeaderBytes = 12;
 constexpr size_t kInstanceBytes = 4 + 12 * 4; // version 1; version 2 adds 4 + links
 constexpr size_t kPlatformBytes = 4 + 3 * 4;   // version 3's, after version 2's 4
@@ -419,6 +419,11 @@ bool Parse(const std::vector<uint8_t>& data, std::vector<Instance>& out, std::st
       link.sender = ReadLE32(data.data() + at);
       link.state = data[at + 4];
       link.action = data[at + 5];
+      if (link.action == kActorTransform && (version < 14 || link.sender == 0)) {
+        error = "bad actor transform binding";
+        out.clear();
+        return false;
+      }
       link.delay = float(size_t(data[at + 6]) | size_t(data[at + 7]) << 8) / 100.f;
       at += kLinkBytes;
     }

@@ -128,6 +128,8 @@ struct Placed {
   // A platform's slave (0: none): the platform's editor id, where it stood when its area
   // was made, and how far from there it was when `xf` was last moved with it.
   uint32_t platform = 0;
+  bool actorTransform = false;
+  CTransform4f actorLocal = CTransform4f::Identity();
   CVector3f platformStart = CVector3f::Zero();
   CVector3f dragged = CVector3f::Zero();
   // A DamageableTrigger's linked actor (kFollow; 0: none): the trigger's editor id, whether
@@ -1071,6 +1073,12 @@ void Load(uint32_t mrea, Area& area) {
       }
     }
     for (const Link& link : instance.links) {
+      if (link.action == kActorTransform) {
+        item.platform = link.sender;
+        item.actorTransform = true;
+        item.actorLocal = item.xf;
+        continue;
+      }
       if (link.action == kFollow) {
         // GetIdForScript wants the layer bits too.
         item.follow = link.sender;
@@ -1375,6 +1383,14 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     }
     const CActor* const platform =
         TCastToConstPtr< CActor >(mgr.GetObjectById(mgr.GetIdForScript(TEditorId(item.platform))));
+    if (item.actorTransform) {
+      item.shown = platform != nullptr && platform->GetActive();
+      if (platform != nullptr) {
+        item.xf = item.base = platform->GetTransform() * item.actorLocal;
+        item.bounded = false;
+      }
+      continue;
+    }
     if (platform == nullptr) {
       continue;
     }

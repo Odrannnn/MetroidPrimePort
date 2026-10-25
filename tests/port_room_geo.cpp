@@ -71,6 +71,22 @@ void TestRoundTrip() {
   }
 }
 
+void TestActorTransform() {
+  auto instance = MakeInstance(0x12345678, 2.f);
+  instance.links.push_back({0x000600B9, 0, PortRoomGeo::kActorTransform});
+  std::vector<PortRoomGeo::Instance> out;
+  std::string error;
+  auto file = PortRoomGeo::Write({instance});
+  CHECK_MSG(PortRoomGeo::Parse(file, out, error) && out.size() == 1 && out[0].links.size() == 1 &&
+                out[0].links[0].action == PortRoomGeo::kActorTransform &&
+                out[0].links[0].sender == 0x000600B9 && out[0].transform[3] == 2.f,
+            "actor-local attachment and full-transform binding survive the file");
+  file[4] = 13;
+  CHECK_MSG(!PortRoomGeo::Parse(file, out, error), "legacy files cannot reinterpret an actor-local transform");
+  instance.links[0].sender = 0;
+  CHECK_MSG(!PortRoomGeo::Parse(PortRoomGeo::Write({instance}), out, error), "attachment requires a source actor");
+}
+
 void TestVersion1() {
   std::vector<uint8_t> file;
   Put32(file, 0x4752504D);
@@ -187,7 +203,7 @@ void TestClips() {
   std::vector<PortRoomGeo::Instance> out;
   std::string error;
   const std::vector<uint8_t> file = PortRoomGeo::Write(in);
-  CHECK_MSG(file.size() > 8 && file[4] == 13, "version 13 written");
+  CHECK_MSG(file.size() > 8 && file[4] == 14, "version 14 written");
   CHECK_MSG(PortRoomGeo::Parse(file, out, error), "clips file parses");
   CHECK_MSG(out.size() == 2 && out[0].anim.empty() && !out[0].animOnShow && out[1].animOnShow &&
                 out[1].anim.size() == 2 && out[1].anim[0].fps == 24.f && !out[1].anim[0].loop &&
@@ -660,6 +676,7 @@ void TestDrivers() {
 
 int main() {
   TestRoundTrip();
+  TestActorTransform();
   TestVersion1();
   TestVersion2();
   TestScript();

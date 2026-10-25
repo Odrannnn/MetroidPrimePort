@@ -20,7 +20,7 @@ class CVector3f;
 // them in place of the area's own world geometry.
 //
 // The file is little endian:
-//   'MPRG', u32 version (1 to 13), u32 instances
+//   'MPRG', u32 version (1 to 14), u32 instances
 //   instance: u32 CMDL id, f32 transform[12] (rows of model -> area)
 //     version 2 adds: u8 layer, u8 active, u16 links,
 //     version 3 (and 4) then: u32 platform, f32 platformStart[3],
@@ -114,7 +114,9 @@ enum : uint32_t { kNoGroup = 0xffffffff };
 // kFollow (with state MaxReached): `sender` is a DamageableTrigger, and the instance is one
 // of the actors retail's trigger shows and fades with itself (SetLinkedObjectAlpha): drawn
 // at the trigger's puddle alpha while it is active, hidden once it goes inactive.
-enum LinkAction : uint8_t { kShow = 1, kHide = 2, kToggle = 3, kFollow = 4 };
+// Version 14: kActorTransform binds model-local `transform` to the complete transform
+// of sender (not a translation-only slave). State and delay are unused.
+enum LinkAction : uint8_t { kShow = 1, kHide = 2, kToggle = 3, kFollow = 4, kActorTransform = 5 };
 
 struct Link {
   uint32_t sender; // retail editor id, layer bits included

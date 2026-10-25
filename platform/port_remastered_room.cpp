@@ -2546,6 +2546,44 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     }
     ++actors;
   }
+  // Ore Processing's extra PlatformMP1s are separate render models, not slaves.
+  // ROOM entities 29/31/33 share their transforms and ActorRotateMP1 Play/Next
+  // inputs with 28/30/32. CPlatformMP1GOC::Create (0xecaca4) uses the entity
+  // transform; ActorRotateMP1::Think (0xf549cc) applies the same rotation to
+  // both targets. The corresponding retail platforms therefore supply their
+  // complete transform, including turns (DragSlaves alone would not).
+  if (r.name == "04_Mines_pillar" && area.mrea == 0x97D2B2F6) {
+    struct PillarModel { Id16 model; uint32_t object; };
+    static const PillarModel pillars[] = {
+        {{0x5f,0x35,0x63,0x6a,0x9c,0x34,0x42,0xcd,0xaf,0x00,0x32,0x0d,0xc0,0x0c,0xa8,0x12}, 0x000600B9},
+        {{0x78,0x51,0x8c,0x23,0x29,0xfb,0x41,0xa7,0xbf,0x35,0xf0,0x19,0x7a,0x12,0x2e,0xb1}, 0x000600BA},
+        {{0x25,0xcc,0xb4,0x5c,0x3d,0x36,0x46,0xbb,0x8a,0x0b,0x32,0xe0,0xb1,0xe1,0x19,0xda}, 0x000600C0},
+    };
+    for (const Component* c : r.room.Of(0xa12967fb)) { // PlatformMP1
+      const auto f = r.room.Flat(*c);
+      const auto p = f.find(0xf8b4c8da); // model
+      if (p == f.end() || p->second.size != 16) {
+        continue;
+      }
+      const Id16 model = SwapUuid(r.room.Bytes(p->second));
+      for (const PillarModel& pillar : pillars) {
+        if (model != pillar.model || std::none_of(area.objects.begin(), area.objects.end(), [&](const ScriptObject& o) {
+              return o.id == pillar.object && o.type == kRetailPlatform;
+            })) {
+          continue;
+        }
+        uint32_t id = 0;
+        if (m_io.model(model, id)) {
+          PortRoomGeo::Instance& inst = instances.emplace_back();
+          inst.model = id;
+          inst.transform[0] = inst.transform[5] = inst.transform[10] = 1.f;
+          inst.links.push_back({pillar.object, 0, PortRoomGeo::kActorTransform});
+          ++actors;
+          ++riding;
+        }
+      }
+    }
+  }
   // The retail Actors the synthetic-model actors stand in for, hidden while those are drawn:
   // one standing where such an actor does, and one Remastered dropped whose origin its model
   // covers (Central Dynamo's three grates under the wider centre one). Neither may draw a model
