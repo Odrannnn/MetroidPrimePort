@@ -114,6 +114,33 @@ void AndroidLogCallback(AuroraLogLevel level, const char* module, const char* me
     __android_log_write(priority, "aurora", line);
     PortLogFile::Write("aurora", line);
 }
+#else
+// Aurora's default logger is fmt::println, which throws when stderr's write
+// fails (the log copier gone, EPIPE) from inside a noexcept function: the game
+// aborted at shutdown. Same format; a failed write just drops the line.
+void StderrLogCallback(AuroraLogLevel level, const char* module, const char* message, unsigned int len) {
+    const char* name = "unknown";
+    switch (level) {
+    case LOG_DEBUG:
+        name = "debug";
+        break;
+    case LOG_INFO:
+        name = "info";
+        break;
+    case LOG_WARNING:
+        name = "warning";
+        break;
+    case LOG_ERROR:
+        name = "error";
+        break;
+    case LOG_FATAL:
+        name = "fatal";
+        break;
+    default:
+        break;
+    }
+    std::fprintf(stderr, "[%s] [%s] %.*s\n", name, module != nullptr ? module : "", static_cast< int >(len), message);
+}
 #endif
 
 std::string LowerExtension(const std::filesystem::path& path) {
@@ -1101,8 +1128,12 @@ int main(int argc, char** argv) {
         .iconWidth = 0,
         .iconHeight = 0,
 #endif
+#if defined(__ANDROID__)
         // Android sets its log callback below.
         .logCallback = nullptr,
+#else
+        .logCallback = StderrLogCallback,
+#endif
         .logLevel = LOG_DEBUG,
         .imGuiInitCallback = nullptr,
         .mem1Size = mem1Size,

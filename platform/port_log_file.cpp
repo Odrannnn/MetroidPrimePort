@@ -45,6 +45,9 @@
 #include <pwd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#if defined(__linux__)
+#include <sys/prctl.h>
+#endif
 #endif
 
 namespace PortLogFile {
@@ -216,9 +219,18 @@ void ToFile(void* context, const char* data, size_t size) {
     }
   }
   // Ctrl+C in the terminal reaches this process too; it must keep draining until
-  // the game has printed its last line.
+  // the game has printed its last line. Aurora renames the game's main thread
+  // "Main thread", which left this process the only one named after the
+  // executable: a kill by name (pkill metroid_prime_port) hit it instead of the
+  // game, which then died of SIGPIPE on its next line. It has its own name and
+  // shrugs off SIGTERM/SIGHUP; it still exits when the game closes the pipe.
+#if defined(__linux__)
+  prctl(PR_SET_NAME, "mp-log-copier", 0, 0, 0);
+#endif
   signal(SIGINT, SIG_IGN);
   signal(SIGQUIT, SIG_IGN);
+  signal(SIGTERM, SIG_IGN);
+  signal(SIGHUP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
   sFileLines.rules = &sRules;
   sFileLines.sink = ToFile;
@@ -679,6 +691,8 @@ bool Start() {
   dup2(fds[1], STDOUT_FILENO);
   dup2(fds[1], STDERR_FILENO);
   close(fds[1]);
+  // Should the copier die anyway, a print must fail with EPIPE, not kill the game.
+  signal(SIGPIPE, SIG_IGN);
   // stdout to a pipe is fully buffered, and abort() flushes nothing: one line at a
   // time keeps the last messages before a crash.
   std::setvbuf(stdout, nullptr, _IOLBF, 0);
