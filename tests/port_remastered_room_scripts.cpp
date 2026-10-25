@@ -1412,6 +1412,39 @@ void TestDynamoModulateGraph() {
   CHECK(oldPath.script.edges[0].action == PortRoomGeo::kGroupShow);
 }
 
+void TestPlatformTransformBindings() {
+  Fixture f;
+  f.comps = {RingPlatform(0x11111111, 0x33333333, {}),
+             RingPlatform(0x22222222, 0x33333333, {}),
+             Plain(kRelay, {{0, 0xf51372f2, 0x511ddd00}, {1, 0xf51372f2, 0x511ddd00}})};
+  Area area;
+  area.xf[0][0] = area.xf[1][1] = area.xf[2][2] = 1.;
+  auto object = RetailRingPlatform(0x1234, 0x11111111, {});
+  object.pos = {0, 0, 0};
+  object.hasXf = true;
+  object.scale = {1, 1, 1};
+  area.objects.push_back(object);
+  {
+    const Parsed p(f);
+    const auto scripts = MatchScripts(p.room, area);
+    REQUIRE(scripts.platformTransform.size() == 2);
+    CHECK(scripts.platformTransform.at(int(f.Entity(0)))->id == 0x1234);
+    CHECK(scripts.platformTransform.at(int(f.Entity(1)))->id == 0x1234);
+  }
+  // Co-location alone, a different controller, collision or initial pose must
+  // never bind an independent platform to a neighbour's movement.
+  for (int mutation = 0; mutation < 4; ++mutation) {
+    Fixture changed = f;
+    if (mutation == 0) changed.comps[2].links.clear();
+    if (mutation == 1) changed.comps[2].links[1].action = kActionActivate;
+    if (mutation == 2) changed.comps[1] = RingPlatform(0x22222222, 0x44444444, {});
+    if (mutation == 3) changed.comps[1].scale[0] = 2.f;
+    const Parsed p(changed);
+    const auto scripts = MatchScripts(p.room, area);
+    CHECK(scripts.platformTransform.count(int(changed.Entity(1))) == 0);
+  }
+}
+
 // Optional read-only shipped-data audit; no import output or game execution.
 void AuditModulateRooms() {
   const char* root = std::getenv("PORT_MODULATE_AUDIT_ROOT");
@@ -1445,6 +1478,43 @@ void AuditModulateRooms() {
               rooms, all, autoStart, affected, nodes);
 }
 
+void AuditPlatformRoom() {
+  const char* roomPath = std::getenv("PORT_PLATFORM_AUDIT_ROOM");
+  const char* retailPath = std::getenv("PORT_PLATFORM_AUDIT_MREA");
+  if (!roomPath || !retailPath) return;
+  const auto read = [](const char* path) {
+    std::ifstream in(path, std::ios::binary);
+    return Bytes(std::istreambuf_iterator<char>(in), {});
+  };
+  auto bytes = read(roomPath);
+  Room room;
+  std::string error;
+  REQUIRE_MSG(room.Parse(bytes, error), error.c_str());
+  Area area;
+  area.xf[0][0] = area.xf[1][1] = area.xf[2][2] = 1.;
+  REQUIRE(ReadScly(read(retailPath), area.objects));
+  if (const char* mlvl = std::getenv("PORT_PLATFORM_AUDIT_MLVL")) {
+    const char* id = std::getenv("PORT_PLATFORM_AUDIT_MREA_ID");
+    REQUIRE(id != nullptr);
+    area.mrea = uint32_t(std::strtoul(id, nullptr, 16));
+    std::vector<std::pair<uint32_t, Mat34>> areas;
+    REQUIRE(ReadMlvl(read(mlvl), areas));
+    for (const auto& entry : areas) if (entry.first == area.mrea) area.xf = entry.second;
+  }
+  const auto scripts = MatchScripts(room, area);
+  size_t own = 0, siblings = 0;
+  for (const auto* c : room.Of(kPlatformComponent)) {
+    const auto binding = scripts.platformTransform.find(c->entity);
+    if (binding == scripts.platformTransform.end()) continue;
+    if (scripts.retail.count(c->entity)) ++own;
+    else {
+      ++siblings;
+      std::printf("platform-audit sibling entity=%d carrier=%08X\n", c->entity, binding->second->id);
+    }
+  }
+  std::printf("platform-audit matched=%zu co-driven=%zu\n", own, siblings);
+}
+
 }  // namespace
 
 int main() {
@@ -1456,7 +1526,9 @@ int main() {
   TestRealBarrierRoom();
   TestEnvFxIntensity();
   TestDynamoModulateGraph();
+  TestPlatformTransformBindings();
   AuditModulateRooms();
+  AuditPlatformRoom();
   if (port_test::Failures() == 0) {
     std::printf("port_remastered_room_scripts_tests: ok\n");
   }

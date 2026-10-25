@@ -129,6 +129,7 @@ struct Placed {
   // was made, and how far from there it was when `xf` was last moved with it.
   uint32_t platform = 0;
   bool actorTransform = false;
+  bool actorVisible = true;
   CTransform4f actorLocal = CTransform4f::Identity();
   CVector3f platformStart = CVector3f::Zero();
   CVector3f dragged = CVector3f::Zero();
@@ -1439,7 +1440,8 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     const CActor* const platform =
         TCastToConstPtr< CActor >(mgr.GetObjectById(mgr.GetIdForScript(TEditorId(item.platform))));
     if (item.actorTransform) {
-      item.shown = platform != nullptr && platform->GetActive();
+      // A shared transform does not replace this entity's script activation.
+      item.actorVisible = platform != nullptr && platform->GetActive();
       if (platform != nullptr) {
         item.xf = item.base = platform->GetTransform() * item.actorLocal;
         item.bounded = false;
@@ -1697,7 +1699,7 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
   for (const size_t index : area.drawOrder) {
     Placed& item = area.items[index];
     Model& model = area.models[item.model];
-    if (item.sky || !model.loaded || model.hidden || !item.shown || item.alpha <= 0.f ||
+    if (item.sky || !model.loaded || model.hidden || !item.shown || !item.actorVisible || item.alpha <= 0.f ||
         (item.cluster != SIZE_MAX && !area.clusters[item.cluster].split)) {
       continue;
     }
@@ -1908,7 +1910,7 @@ bool Hides(const CGameArea& gameArea, uint32_t editorId) {
       gpGameState != nullptr ? gpGameState->CurrentWorldState().GetLayerState().GetPtr() : nullptr;
   for (const auto& [id, at] : found->second.hides) {
     const Placed& item = found->second.items[at];
-    if (id == editorId && item.shown &&
+    if (id == editorId && item.shown && item.actorVisible &&
         (item.layer == kEveryLayer || layers == nullptr ||
          layers->IsLayerActive(gameArea.GetAreaId(), item.layer))) {
       return true;

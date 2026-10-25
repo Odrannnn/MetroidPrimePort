@@ -202,6 +202,9 @@ constexpr uint32_t kPropHintSigma = 0x3dace129;
 constexpr uint32_t kPropHintStaticLerp = 0xb9f6606a;
 constexpr uint32_t kPropModConMcon = 0xa8e2ba93;
 constexpr uint32_t kPropActorModel = 0xcb1c52f6;
+constexpr uint32_t kPlatformComponent = 0xa12967fb;
+constexpr uint32_t kPropPlatformModel = 0xf8b4c8da;
+constexpr uint32_t kPropPlatformAnim = 0xcee67c05;
 // Unnamed in retrotool's templates; what they mean is read off which actors carry them.
 constexpr uint32_t kPropActorAdded = 0x9a25df3b;
 // The actor's animation: a character (CHPR) and the name of the animation it plays, as an
@@ -728,6 +731,7 @@ struct SceneryScripts {
   std::map<int, std::string> unresolvedHow;              // a grade hint's: sender type/event/action
   std::map<std::string, std::pair<size_t, std::set<int>>> missStats;  // MP_REMASTERED_MISS: class -> connections, entities
   std::map<int, const ScriptObject*> platform;           // by entity: the platform carrying it
+  std::map<int, const ScriptObject*> platformTransform;  // own/co-driven retail platform, full transform
   std::map<int, size_t> retail;                           // by entity: the retail object it matched
   size_t entities = 0, matched = 0;
   // Remastered's own objects in between (camera volumes, counters, relays) and the

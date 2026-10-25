@@ -860,6 +860,54 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     }
   }
   auto isScriptObject = [&](size_t comp) { return comps[comp].entity >= 0 && scriptObject.count(comps[comp].entity) != 0; };
+  // CPlatformMP1GOC::Create0xecaca4 gives each model the entity transform.
+  // ActorRotateMP1::Think0xf549cc applies the same rotation to each target.
+  // Reuse a matched platform only for an identical co-driven platform: same
+  // initial transform, movement properties and full incoming/outgoing graph.
+  // This replaces the old room/model-id table with a data-derived relation.
+  const auto platformSignature = [&](const Component& c) {
+    std::vector<std::tuple<int, uint32_t, uint32_t, int>> sig;
+    for (const auto& link : conns) {
+      const int target = targetEntity(link);
+      if (target == c.entity) sig.emplace_back(int(link.sender), link.event, link.action, -1);
+      if (comps[link.sender].entity == c.entity) sig.emplace_back(-1, link.event, link.action, target);
+    }
+    std::sort(sig.begin(), sig.end());
+    return sig;
+  };
+  const auto movementProperties = [&](const Component& c) {
+    std::map<uint32_t, std::vector<uint8_t>> out;
+    for (const auto& [key, span] : room.Flat(c)) {
+      // Model and ActorInformation affect rendering, not the platform's motion.
+      if (key == kPropPlatformModel || key == 0x11d0467f) continue;
+      out[key] = std::vector<uint8_t>(room.Bytes(span), room.Bytes(span) + span.size);
+    }
+    return out;
+  };
+  const auto platforms = room.Of(kPlatformComponent);
+  for (const Component* c : platforms) {
+    const auto own = result.retail.find(c->entity);
+    if (own != result.retail.end() && objects[own->second].type == kRetailPlatform) {
+      result.platformTransform[c->entity] = &objects[own->second];
+      continue;
+    }
+    Vec3 pos, rot, scale;
+    if (!room.Xform(*c, pos, rot, scale)) continue;
+    const auto signature = platformSignature(*c);
+    if (signature.empty()) continue; // proximity alone is not a movement binding
+    const ScriptObject* carrier = nullptr;
+    bool ambiguous = false;
+    for (const Component* other : platforms) {
+      const auto matched = result.retail.find(other->entity);
+      Vec3 p, r, s;
+      if (matched == result.retail.end() || objects[matched->second].type != kRetailPlatform ||
+          !room.Xform(*other, p, r, s) || p != pos || r != rot || s != scale ||
+          platformSignature(*other) != signature || movementProperties(*other) != movementProperties(*c)) continue;
+      if (carrier && carrier != &objects[matched->second]) ambiguous = true;
+      carrier = &objects[matched->second];
+    }
+    if (carrier && !ambiguous) result.platformTransform[c->entity] = carrier;
+  }
   // A grade hint's senders that are no retail object: the sender (PortRoomEnv's
   // kSenderPlayerFluid/kSenderCameraWater) and state (0: in, 1: out), or sender 0.
   std::set<int> hintEntities;
@@ -1123,7 +1171,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     }
   }
   for (const Component& c : comps) {
-    if (c.entity >= 0 && (c.type == kModCon || (c.type == kActorMP1 &&
+    if (c.entity >= 0 && (c.type == kModCon || c.type == kPlatformComponent || (c.type == kActorMP1 &&
         (room.Flat(c).count(kPropActorAdded) != 0 || alphaTargets.count(c.entity) != 0)))) {
       geometry.insert(c.entity);
     } else if (c.entity >= 0 && c.type == kLightDynamic) {

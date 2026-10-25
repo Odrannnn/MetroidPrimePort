@@ -1736,6 +1736,8 @@ bool ReadMcon(const std::vector<uint8_t>& d, Mcon& out) {
   return false;
 }
 
+static void EditorBasis(const Vec3& rot, const Vec3& scale, double out[3][3]);
+
 void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
   if (!m_io.model || (m_io.wantsGeometry && !m_io.wantsGeometry(r.name))) {
     return;
@@ -2369,17 +2371,22 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     Vec3 pos, lo, hi;
   };
   std::vector<Standin> standins;
-  for (const Component* c : r.room.Of(kActorMP1)) {
+  std::vector<const Component*> renderActors = r.room.Of(kActorMP1);
+  const auto renderPlatforms = r.room.Of(kPlatformComponent);
+  renderActors.insert(renderActors.end(), renderPlatforms.begin(), renderPlatforms.end());
+  for (const Component* c : renderActors) {
+    const bool isPlatform = c->type == kPlatformComponent;
     const auto f = r.room.Flat(*c);
-    const auto prop = f.find(kPropActorModel);
+    const auto prop = f.find(isPlatform ? kPropPlatformModel : kPropActorModel);
     const bool hasModel = prop != f.end() && prop->second.size == 16;
     Span chprProp, nameProp;
-    const bool hasAnim = !hasModel && r.room.Nested(*c, {kPropActorAnim, kPropAnimCharacter}, chprProp) &&
-                         chprProp.size == 16 && r.room.Nested(*c, {kPropActorAnim, kPropAnimName}, nameProp) &&
+    const uint32_t animProperty = isPlatform ? kPropPlatformAnim : kPropActorAnim;
+    const bool hasAnim = !hasModel && r.room.Nested(*c, {animProperty, kPropAnimCharacter}, chprProp) &&
+                         chprProp.size == 16 && r.room.Nested(*c, {animProperty, kPropAnimName}, nameProp) &&
                          nameProp.size == 8;
     Vec3 pos, rot, scale;
     const bool synthetic = hasModel && m_syntheticEntities.count(c->entity) != 0;
-    if ((f.find(kPropActorAdded) == f.end() && !synthetic) || (!hasModel && !hasAnim) ||
+    if ((!isPlatform && f.find(kPropActorAdded) == f.end() && !synthetic) || (!hasModel && !hasAnim) ||
         !r.room.Xform(*c, pos, rot, scale)) {
       continue;
     }
@@ -2447,7 +2454,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     // Frigate hangar's landing cutscene, shown by retail's links, would stand whole on the
     // dock. One whose model lies off its origin is room geometry placed at the origin (the
     // Frigate reactor's fallen pieces), and stays.
-    if (hasModel && !active && MaxAbs(pos, Vec3{}) < 0.01 && aroundOrigin(r.room.Bytes(prop->second))) {
+    if (!isPlatform && hasModel && !active && MaxAbs(pos, Vec3{}) < 0.01 && aroundOrigin(r.room.Bytes(prop->second))) {
       ++posed;
       continue;
     }
@@ -2459,7 +2466,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
         id != nullptr && std::memcmp(id, kRetailIdPrefix, 12) == 0) {
       const Vec3 w = Apply(area.xf, MulR2G(pos));
       const bool standing = std::any_of(area.objects.begin(), area.objects.end(), [&](const ScriptObject& o) {
-        return o.type == kRetailActor && o.hasPos && MaxAbs(o.pos, w) < kRetailActorNear &&
+        return o.type == (isPlatform ? kRetailPlatform : kRetailActor) && o.hasPos && MaxAbs(o.pos, w) < kRetailActorNear &&
                std::search(o.props.begin(), o.props.end(), id + 12, id + 16) != o.props.end();
       });
       if (standing || m_retailEntities.count(c->entity) != 0) {
@@ -2520,6 +2527,37 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
       ++animated;
     }
     script(inst, c->entity, active);
+    if (isPlatform) {
+      const auto bound = scripts.platformTransform.find(c->entity);
+      if (bound != scripts.platformTransform.end() && bound->second->hasXf) {
+        const ScriptObject& carrier = *bound->second;
+        // Model scale is separate from the retail actor's rigid transform.
+        // local = inverse(retail initial rigid) * area * placed model.
+        double rotation[3][3];
+        EditorBasis(carrier.rot, Vec3{1, 1, 1}, rotation);
+        float local[12]{};
+        for (int row = 0; row < 3; ++row) {
+          for (int col = 0; col < 4; ++col) {
+            double v = 0;
+            for (int k = 0; k < 3; ++k) {
+              double world = col == 3 ? area.xf[k][3] - carrier.pos[k] : 0.;
+              for (int j = 0; j < 3; ++j) world += area.xf[k][j] * inst.transform[j * 4 + col];
+              v += rotation[k][row] * world;
+            }
+            local[row * 4 + col] = float(v);
+          }
+        }
+        std::copy(local, local + 12, inst.transform);
+        inst.links.push_back({carrier.id, 0, PortRoomGeo::kActorTransform});
+        // A directly matched model replaces the retail platform's visual;
+        // a co-driven sibling supplements it and must not hide the carrier.
+        const auto own = scripts.retail.find(c->entity);
+        if (own != scripts.retail.end() && &area.objects[own->second] == &carrier) {
+          scripts.script.hidden.push_back({carrier.id & 0x3ffffffu, uint32_t(instances.size() - 1)});
+        }
+        ++riding;
+      }
+    }
     if (driven) {
       inst.drivers.push_back(driver);
       ++drivenActors;
@@ -2545,44 +2583,6 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
       ++riding;
     }
     ++actors;
-  }
-  // Ore Processing's extra PlatformMP1s are separate render models, not slaves.
-  // ROOM entities 29/31/33 share their transforms and ActorRotateMP1 Play/Next
-  // inputs with 28/30/32. CPlatformMP1GOC::Create (0xecaca4) uses the entity
-  // transform; ActorRotateMP1::Think (0xf549cc) applies the same rotation to
-  // both targets. The corresponding retail platforms therefore supply their
-  // complete transform, including turns (DragSlaves alone would not).
-  if (r.name == "04_Mines_pillar" && area.mrea == 0x97D2B2F6) {
-    struct PillarModel { Id16 model; uint32_t object; };
-    static const PillarModel pillars[] = {
-        {{0x5f,0x35,0x63,0x6a,0x9c,0x34,0x42,0xcd,0xaf,0x00,0x32,0x0d,0xc0,0x0c,0xa8,0x12}, 0x000600B9},
-        {{0x78,0x51,0x8c,0x23,0x29,0xfb,0x41,0xa7,0xbf,0x35,0xf0,0x19,0x7a,0x12,0x2e,0xb1}, 0x000600BA},
-        {{0x25,0xcc,0xb4,0x5c,0x3d,0x36,0x46,0xbb,0x8a,0x0b,0x32,0xe0,0xb1,0xe1,0x19,0xda}, 0x000600C0},
-    };
-    for (const Component* c : r.room.Of(0xa12967fb)) { // PlatformMP1
-      const auto f = r.room.Flat(*c);
-      const auto p = f.find(0xf8b4c8da); // model
-      if (p == f.end() || p->second.size != 16) {
-        continue;
-      }
-      const Id16 model = SwapUuid(r.room.Bytes(p->second));
-      for (const PillarModel& pillar : pillars) {
-        if (model != pillar.model || std::none_of(area.objects.begin(), area.objects.end(), [&](const ScriptObject& o) {
-              return o.id == pillar.object && o.type == kRetailPlatform;
-            })) {
-          continue;
-        }
-        uint32_t id = 0;
-        if (m_io.model(model, id)) {
-          PortRoomGeo::Instance& inst = instances.emplace_back();
-          inst.model = id;
-          inst.transform[0] = inst.transform[5] = inst.transform[10] = 1.f;
-          inst.links.push_back({pillar.object, 0, PortRoomGeo::kActorTransform});
-          ++actors;
-          ++riding;
-        }
-      }
-    }
   }
   // The retail Actors the synthetic-model actors stand in for, hidden while those are drawn:
   // one standing where such an actor does, and one Remastered dropped whose origin its model
