@@ -37,6 +37,9 @@ public:
   static void PortAddVisorGooSplat(CStateManager& mgr);
   // CVisorEffectManagerMP1::Update over the billboards whose PART has visor effect data.
   static void PortUpdateVisorOverrides(CStateManager& mgr, float dt);
+  // CHUDBillboardEffectMP1::EScaleType, the CreateHUDBillboardEffect argument (0xd7e67c): 1 at
+  // every caller but SetMorphBallState's unmorph runoff (0), whose effect stays in HUD units.
+  void PortSetScaleType(int type) { xPortScaleType = type; }
 #endif
 
 private:
@@ -55,6 +58,13 @@ private:
   bool xPortVisorOverride = false;
   // The spread last given to the generator, which passes it down to its children.
   CVector3f xPortSpawnSpread{1.f, 1.f, 1.f};
+  int xPortScaleType = 1;
+  // The HUD camera's visor plane depth (FRME_BaseHud basewidget_visorFX), aspect and
+  // tan(fov / 2) (camera_default, fov 65).
+  static constexpr float kPortHUDDepth = 2.2311f;
+  static constexpr float kPortHUDAspect = 16.f / 9.f;
+  static constexpr float kPortHUDTanHalfFov = 0.637070f;
+  bool PortIsRemasteredHUD() const;
   void PortUpdateSpawnSpread(const CStateManager& mgr);
   void PortApplySpawnSpread(const CVector3f& spread);
 #endif

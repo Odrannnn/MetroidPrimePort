@@ -1450,13 +1450,18 @@ void CPlayer::SetMorphBallState(EPlayerMorphBallState state, CStateManager& mgr)
     if (x9c5_26_ && mgr.GetCameraManager()->GetInsideFluid()) {
       if (const CScriptWater* water = GetVisorRunoffEffect(mgr)) {
         if (water->GetUnmorphVisorRunoffEffect()) {
-          mgr.AddObject(rs_new CHUDBillboardEffect(
+          CHUDBillboardEffect* effect = rs_new CHUDBillboardEffect(
               rstl::optional_object< TToken< CGenDescription > >(
                   *water->GetUnmorphVisorRunoffEffect()),
               rstl::optional_object_null(), mgr.AllocateUniqueId(), true,
               rstl::string_l("WaterSheets"), CHUDBillboardEffect::GetNearClipDistance(mgr),
               CHUDBillboardEffect::GetScaleForPOV(mgr), CColor(1.f, 1.f, 1.f, 1.f),
-              CVector3f(1.f, 1.f, 1.f), CVector3f(0.f, 0.f, 0.f)));
+              CVector3f(1.f, 1.f, 1.f), CVector3f(0.f, 0.f, 0.f));
+#ifdef TARGET_PC
+          // CPlayerMP1::SetMorphBallState 0xc6b988: scale type 0.
+          effect->PortSetScaleType(0);
+#endif
+          mgr.AddObject(effect);
         }
         DoSfxEffects(CSfxManager::SfxStart(water->GetUnmorphVisorRunoffSfx()));
       }

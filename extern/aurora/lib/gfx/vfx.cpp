@@ -300,8 +300,8 @@ fn vs_main(in: VIn) -> VOut {
   if ((FEAT & 268435456u) != 0u) {
     // VisorRain: o6.x = game near / HUD view depth. Remastered draws HUD billboards in the HUD
     // camera at basewidget_visorFX (FRME_BaseHud z -2.2311, eye at the origin: the scale
-    // 0xcb0ef8 fills the frustum there); the port's sits at near + 0.01 (GetNearClipDistance),
-    // so map its depth onto that plane (kb topic/hud-billboard-visor-draw).
+    // 0xcb0ef8 fills the frustum there); the port scales that scene by (near + 0.01) / 2.2311
+    // onto GetNearClipDistance, so map its depth back (kb topic/hud-billboard-visor-draw).
     out.sw = u.scene.z * (u.scene.z + 0.01) / (2.2311 * -mv.z);
   }
   if ((FEAT & 2097152u) != 0u || (FEAT & 33554432u) != 0u) {
