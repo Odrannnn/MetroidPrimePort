@@ -1352,7 +1352,17 @@ void CElementGen::CreateNewParticles(int count) {
           (x13c_globalScaleTransformInverse * x1a8_localScaleTransformInverse) * xdc_translation;
 #endif
       particle.x4_pos = compPos + xf4_POFS;
+#ifdef TARGET_PC
+      // CreateNewParticles 0x24a9ec: only a missing EMTR uses the DVVN default;
+      // IVSE applies to this velocity too, before inherited emitter motion is added.
+      particle.x1c_vel = PortParticleMath::DefaultParticleVelocity(x28_loadedGenDesc->xPortDefaultValuesVersion);
+      if (!x28_loadedGenDesc->xPortNoIvse) {
+        particle.x1c_vel = PortFollowsEmitter() ? PortEmitterFrame().Rotate(particle.x1c_vel)
+                                              : x1d8_orientation.Rotate(particle.x1c_vel);
+      }
+#else
       particle.x1c_vel = CVector3f::Zero();
+#endif
     }
 
 #ifdef TARGET_PC

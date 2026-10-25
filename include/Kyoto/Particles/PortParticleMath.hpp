@@ -15,6 +15,18 @@
 
 namespace PortParticleMath {
 
+// GetDefaultParticleVelocity 0x2917a8, expressed in port space (-x, z, y).
+// The AArch64 vector return uses s0/s1/s2; the decompiler's scalar return loses y/z.
+inline CVector3f DefaultParticleVelocity(uint8_t version) {
+  switch (version) {
+  case 1: return CVector3f(0.f, 1.1f, 0.f);
+  case 2:
+  case 3: return CVector3f(0.f, 0.f, 1.1f);
+  case 4: return CVector3f(0.f, 0.f, 0.25f);
+  default: return CVector3f::Zero();
+  }
+}
+
 // Remastered's particle depth bias (DBIS): CParticleSceneNode::ConstructDepthBias 0x2b1004 ->
 // CScopedGraphicsDepthBias::CalculateProjMatrixDepthBias 0x22a604 + ctor 0x22a0ac. `bias` world
 // units (negative = toward the camera) along the view depth `depth` of the bounds centre become a

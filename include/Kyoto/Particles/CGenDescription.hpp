@@ -221,6 +221,8 @@ public:
   bool xPortNoIvse = false;
   // VMPC: run the complete velocity program once at birth (CreateNewParticles 0x24abd0).
   bool xPortVelocityAtCreation = false;
+  // DVVN: defaults version for the missing-EMTR velocity; zero preserves retail behavior.
+  u8 xPortDefaultValuesVersion = 0;
   // port-only PISV: Remastered's ISVF, the factor of the system's per-tick translation change
   // (PEMV's delta, no time step) added to a new particle's velocity. Owned here; null = none.
   CRealElement* xPortInheritVel = nullptr;

@@ -484,6 +484,7 @@ void TestConvert() {
 
   Retail root;
   root.f("GPSM");
+  root.f("DVVN").f("CNST").w(4);
   root.f("MAXP").f("CNST").w(20);
   root.f("LTME").f("CNST").w(29);  // LTM2 is one frame longer
   root.f("SIZE").f("MULT").f("CNST").w(Bits(2.0f)).f("CNST").w(Bits(3.0f));
@@ -516,8 +517,8 @@ void TestConvert() {
     CHECK_MSG(SplitRetailPart(part.part.data(), part.part.size(), properties, error), "converted PART reads as retail");
   }
   std::vector<RetailPartProperty> properties;
-  CHECK_MSG(SplitRetailPart(root.bytes.data(), root.bytes.size(), properties, error) && properties.size() == 11 &&
-            properties[5].fourcc == EffectFourCC("COLR") && properties[5].value.size() == 4 + 22 + 32,
+  CHECK_MSG(SplitRetailPart(root.bytes.data(), root.bytes.size(), properties, error) && properties.size() == 12 &&
+            properties[6].fourcc == EffectFourCC("COLR") && properties[6].value.size() == 4 + 22 + 32,
         "retail PART splits into its properties");
 }
 
@@ -2388,12 +2389,26 @@ void TestDvvnDefaultSize() {
   };
   auto parts = one(4, false);
   Retail want;
-  want.f("GPSM").f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).f("SIZE").f("CNST").w(Bits(1.0f)).end();
+  want.f("GPSM").f("DVVN").f("CNST").w(4).f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).f("SIZE").f("CNST").w(Bits(1.0f)).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "DVVN 4 without SIZE writes SIZE 1.0");
   parts = one(0, false);
   CHECK_MSG(parts.size() == 1 && sizes(parts[0]) == 0, "DVVN 0 writes no SIZE");
   parts = one(1, true);
   CHECK_MSG(parts.size() == 1 && sizes(parts[0]) == 1, "an authored SIZE is kept alone");
+  for (uint8_t version : {0, 1, 2, 3, 4, 5, 255}) {
+    parts = one(version, true);
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(parts.size() == 1 && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "DVVN default velocity carrier parses independently of authored SIZE");
+    const auto found = std::find_if(properties.begin(), properties.end(), [](const auto& p) {
+      return p.fourcc == EffectFourCC("DVVN");
+    });
+    CHECK_MSG(found != properties.end(), "all version bytes survive, including versions that reset velocity to zero");
+    if (found != properties.end()) {
+      CHECK_MSG(found->value == Retail().f("CNST").w(version).bytes, "DVVN version is preserved exactly");
+    }
+  }
 }
 
 void TestDepthBias() {

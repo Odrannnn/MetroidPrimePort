@@ -25,6 +25,14 @@ bool Color(const float* out, float r, float g, float b, float a) {
 int main() {
   using namespace PortParticleMath;
 
+  CHECK_MSG(NearVector(DefaultParticleVelocity(0), CVector3f::Zero()), "DVVN 0 has no default motion");
+  CHECK_MSG(NearVector(DefaultParticleVelocity(1), CVector3f(0.f, 1.1f, 0.f)), "DVVN 1 default forward velocity");
+  CHECK_MSG(NearVector(DefaultParticleVelocity(2), CVector3f(0.f, 0.f, 1.1f)), "DVVN 2 default up velocity");
+  CHECK_MSG(NearVector(DefaultParticleVelocity(3), CVector3f(0.f, 0.f, 1.1f)), "DVVN 3 default up velocity");
+  CHECK_MSG(NearVector(DefaultParticleVelocity(4), CVector3f(0.f, 0.f, 0.25f)), "DVVN 4 default up velocity");
+  CHECK_MSG(NearVector(DefaultParticleVelocity(5), CVector3f::Zero()) &&
+                NearVector(DefaultParticleVelocity(255), CVector3f::Zero()), "unknown DVVN versions have no motion");
+
   // DFCS/DFCP, CalculateBlendValue 0x298f44: (d - B) / (A - B), clamped; 1 at A, 0 at B.
   CHECK_MSG(Near(DistanceBlend(10.f, 10.f, 2.f), 1.f), "blend 1 at A");
   CHECK_MSG(Near(DistanceBlend(2.f, 10.f, 2.f), 0.f), "blend 0 at B");

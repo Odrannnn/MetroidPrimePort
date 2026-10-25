@@ -5101,6 +5101,16 @@ public:
         continue;  // consumed as PIR0/POR0/PLIX below
       }
       const auto found = retail.find(fourcc);
+      // DVVN's missing-emitter velocity is independent of SIZE/material support.
+      // Preserve the drop diagnostic for its still-unhandled general exposure default.
+      if (part && fourcc == F("DVVN")) {
+        uint32_t version = 0;
+        if (SmallInteger(property, version) && version <= 255) {
+          AppendBE32(out, F("DVVN"));
+          AppendBE32(out, F("CNST"));
+          AppendBE32(out, version);
+        }
+      }
       if (found == retail.end()) {
         result.dropped.push_back(EffectFourCCString(property.fourcc) + ": Remastered only");
         continue;
@@ -6164,7 +6174,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") ||
-                         fourcc == F("VMPC") ||
+                         fourcc == F("VMPC") || fourcc == F("DVVN") ||
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
                (vfx && fourcc == F("PIRN"))) {
