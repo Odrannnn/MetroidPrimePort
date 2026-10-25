@@ -1,5 +1,9 @@
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
 #include "MetroidPrime/CSamusDoll.hpp"
+#ifdef TARGET_PC
+#include "port_pause_lighting.h"
+#include <dolphin/gx/GXExtra.h>
+#endif
 
 #include "MetroidPrime/CActorLights.hpp"
 #include "MetroidPrime/CEulerAngles.hpp"
@@ -378,6 +382,11 @@ void CSamusDoll::Update(float dt, CRandom16& rand) {
 }
 
 void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
+#ifdef TARGET_PC
+  const PortPauseLighting::Scope dollScope(PortPauseLighting::doll, PortPauseLighting::active);
+  const PortPauseLighting::Scope phazonScope(PortPauseLighting::phazon,
+      mgr.GetPlayerState()->HasPowerUp(CPlayerState::kIT_PhazonSuit));
+#endif
   if (!IsLoaded()) {
     return;
   }
@@ -411,6 +420,32 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
                            static_cast< float >(CGraphics::GetViewportHeight()), 0.2f, 4096.f);
   CGraphics::SetViewPointMatrix(xb0_userRot.BuildTransform4f(xa4_offset) *
                                 CTransform4f::Translate(0.f, xc0_userZoom, 0.f));
+#ifdef TARGET_PC
+  struct UILights {
+    bool on;
+    float previous[64 * 16];
+    u32 count = 0;
+    u8 shadow = 0;
+    UILights() : on(PortPauseLighting::doll) {
+      if (!on) return;
+      count = GXPortGetRoomLights(previous);
+      shadow = GXPortGetShadowCasterMode();
+      GXPortSetShadowCaster(GX_FALSE);
+      const CTransform4f& v = CGraphics::GetViewMatrix();
+      const float worldToView[3][4] = {{v.Get00(), v.Get10(), v.Get20(), 0.f},
+          {v.Get02(), v.Get12(), v.Get22(), 0.f}, {-v.Get01(), -v.Get11(), -v.Get21(), 0.f}};
+      float lights[48];
+      PortPauseLighting::Lights(worldToView, PortPauseLighting::phazon, lights);
+      GXPortSetRoomLights(lights, 3);
+    }
+    ~UILights() {
+      if (!on) return;
+      GXPortSetRoomLights(previous, count);
+      GXPortSetShadowCaster(shadow != 0);
+      if (shadow == 2) GXPortSetShadowCasterOnly(GX_TRUE);
+    }
+  } uiLights;
+#endif
   const CTransform4f scale = CTransform4f::Scale(skDefaultScale);
   const CTransform4f gunXf =
       xc8_suitModel0->GetScaledLocatorTransform(rstl::string_l(kGunLocator)) * scale;

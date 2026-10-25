@@ -283,6 +283,14 @@ GXBool GXPortSceneHdr(GXBool on) {
 // The mode last written, for the game thread (the FIFO state is read on the render thread).
 static u8 sShadowCasterMode = 0;
 
+GXBool GXPortPauseSceneHdr(void) {
+  __GXPortInvalidateCopySerial();
+  if (sDrawIdMode || !aurora::webgpu::scene_hdr_supported()) return false;
+  GX_WRITE_AURORA(GX_AURORA_PORT_SCENE_HDR);
+  GX_WRITE_U8(2);
+  return true;
+}
+
 void GXPortSetShadowCaster(GXBool on) {
   sShadowCasterMode = on ? 1 : 0;
   GX_WRITE_AURORA(GX_AURORA_PORT_SHADOW_CASTER);
@@ -324,7 +332,18 @@ void GXPortGetShadowInfo(f32 sunDir[3], f32 color[3], f32* distance, f32 center[
   *casters = aurora::gfx::shadow::last_caster_count();
 }
 
+static f32 sRoomLights[64 * 16] = {};
+static u32 sRoomLightCount = 0;
+
+u32 GXPortGetRoomLights(f32 records[64 * 16]) {
+  std::memcpy(records, sRoomLights, sRoomLightCount * 16 * sizeof(f32));
+  return sRoomLightCount;
+}
+
 void GXPortSetRoomLights(const f32* records, u32 count) {
+  count = records == nullptr ? 0 : std::min(count, u32(64));
+  sRoomLightCount = count;
+  if (count) std::memcpy(sRoomLights, records, count * 16 * sizeof(f32));
   GX_WRITE_AURORA(GX_AURORA_PORT_ROOM_LIGHTS);
   GX_WRITE_U32(count);
   for (u32 i = 0; i < count * 16; ++i) {

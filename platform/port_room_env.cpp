@@ -2,6 +2,8 @@
 // cube and ambient for a model. See port_room_env.h.
 #include "port_room_env_internal.h"
 
+#include "port_pause_lighting.h"
+
 namespace PortRoomEnv {
 namespace EnvDetail {
 
@@ -510,6 +512,10 @@ void BuildTone(float mid, float contrast, float toe, float shoulder, float rows[
 }
 
 bool Tone(float rows[3][4]) {
+  if (PortPauseLighting::active) {
+    BuildTone(0.18f, 0.f, 0.6f, 0.15f, rows);
+    return true;
+  }
   if (!Enabled()) {
     return false;
   }
@@ -694,9 +700,10 @@ void UpdateFrame() {
 
 float MeasureExposure() { return sFrame.measuring ? sFrame.exposure : 0.f; }
 
-float FrameExposure() { return sFrame.exposure; }
+float FrameExposure() { return PortPauseLighting::active ? 1.f : sFrame.exposure; }
 
 float ParticleInverseExposure(bool blended) {
+  if (PortPauseLighting::active) return 1.f;
   if (!sFrame.hasTone || !Enabled() || (blended && sFrame.exposure <= 0.f)) {
     return 1.f;
   }
@@ -706,6 +713,7 @@ float ParticleInverseExposure(bool blended) {
 }
 
 float GlowScale() {
+  if (PortPauseLighting::active) return 1.f;
   if (sStatic < 0) {
     sStatic = port::EnvFlag("MP_ROOM_ENV_STATIC_EXPOSURE", true) ? 1 : 0;
   }
@@ -799,6 +807,7 @@ bool XRayPass(bool distortion) {
 }
 
 float SkyGain() {
+  if (PortPauseLighting::active) return 1.f;
   if (GlowScale() <= 0.f || sStatic == 0 || !sFrame.hasTone || !Enabled()) {
     return 0.f;
   }
@@ -809,6 +818,7 @@ float SkyGain() {
 }
 
 float GlowGain(bool frameExposed) {
+  if (PortPauseLighting::active) return 1.f;
   // Without tone data Remastered draws through STonemapParams::BuildLinear(3.0) (0x211ab0):
   // exposure 1, so the glow is left as authored (kb topic/post-output.md "No tonemap data").
   constexpr float kFallback = 1.f;
@@ -835,6 +845,7 @@ float ParticleLightGain(bool inverseExposed) {
 }
 
 float UnlitGain(bool frameExposed) {
+  if (PortPauseLighting::active) return 1.f;
   // Outside an exposed room Remastered's static default (exposure 1) applies: nothing to add.
   if (!sFrame.hasTone || !Enabled()) {
     return 1.f;

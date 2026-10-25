@@ -207,7 +207,7 @@ bool g_testSceneHdr = false;
 uint32_t g_testSceneHdrSwitches = 0;
 // Tests set it to see a refused switch.
 bool g_testSceneHdrRefuse = false;
-bool set_scene_hdr(bool on) {
+bool set_scene_hdr(bool on, bool pause) {
   if (g_testSceneHdrRefuse) {
     return false;
   }

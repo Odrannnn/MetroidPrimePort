@@ -1110,6 +1110,9 @@ if(MP_BUILD_TESTS)
     mp_port_test(port_envfx_file_tests
         SOURCES tests/port_envfx_file.cpp platform/port_envfx_file.cpp
         INCLUDES platform/include)
+    mp_port_test(port_pause_lighting_tests
+        SOURCES tests/port_pause_lighting.cpp
+        INCLUDES platform/include)
     mp_port_test(port_shell_file_tests
         SOURCES tests/port_shell_file.cpp platform/port_shell_file.cpp
         INCLUDES platform/include)

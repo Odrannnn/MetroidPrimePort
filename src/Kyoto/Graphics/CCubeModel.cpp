@@ -1,4 +1,7 @@
 #include "Kyoto/Graphics/CCubeModel.hpp"
+#ifdef TARGET_PC
+#include "port_pause_lighting.h"
+#endif
 #include "port_env.h"
 #include "Kyoto/Basics/CBasics.hpp"
 #include <cstring>
@@ -844,7 +847,7 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
     PortRoomEnv::Selection env;
     const int mode = CCubeMaterial::sPortPBRProbeMode;
     const bool found = PortRoomEnv::Select(pos, env);
-    if (mode != 0 && found && env.cube != 0) {
+    if (!PortPauseLighting::doll && mode != 0 && found && env.cube != 0) {
       f32 viewToCube[3][3];
       for (int row = 0; row < 3; ++row) {
         for (int col = 0; col < 3; ++col) {
@@ -863,7 +866,7 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
           {viewToWorld[1][0], viewToWorld[1][1], viewToWorld[1][2]},
       };
       static const f32 kNoCube[4] = {0.f, 0.f, 0.f, 0.f};
-      GXSetPBRProbe(viewToProbe, CCubeMaterial::sPortPBRProbeWeight);
+      GXSetPBRProbe(viewToProbe, PortPauseLighting::doll ? 0.f : CCubeMaterial::sPortPBRProbeWeight);
       GXSetPBRCube(0, kNoCube);
       if (!CCubeMaterial::sPortCapturingProbe) {
         ++CCubeMaterial::sPortPBRProbeDraws;
@@ -925,7 +928,8 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
     // Lit by the bake, which holds the area's light, a model keeps only the runtime lights.
     const bool baked =
         found && ((env.hasAmbient && env.ambientAbsolute) || env.volume != 0 || lightmapSlot >= 0);
-    GXSetPBRLightSkip(baked && !PortRoomEnv::AreaLights() ? CCubeMaterial::sPortAreaLights : 0u);
+    GXSetPBRLightSkip(PortPauseLighting::doll ? 0xffu :
+                     baked && !PortRoomEnv::AreaLights() ? CCubeMaterial::sPortAreaLights : 0u);
     // The frame's tone curve, when rooms are exposed as Remastered exposes them. Remastered
     // draws the opaque pass's emitted light at the room's static exposure and the sorted
     // pass's at the frame's (CGameRenderJob::RenderPrimaryPass).

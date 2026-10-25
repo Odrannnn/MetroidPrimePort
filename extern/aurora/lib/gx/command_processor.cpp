@@ -1664,12 +1664,12 @@ void handle_aurora(ByteReader& reader) noexcept {
     gfx::thermal::record(params);
   } else if (subCmd == GX_AURORA_PORT_SCENE_HDR) {
     const u8 value = reader.read<u8>();
-    if (value > 1) {
+    if (value > 2) {
       Log.warn("GX_AURORA_PORT_SCENE_HDR: invalid value {}", value);
     } else if (value != 0 && g_gxState.drawIdMode) {
       Log.warn("GX_AURORA_PORT_SCENE_HDR: refused in draw-id mode");
-    } else if (gfx::scene_hdr_active() != (value != 0)) {
-      if (gfx::set_scene_hdr(value != 0)) {
+    } else if (value == 2 || gfx::scene_hdr_active() != (value != 0)) {
+      if (gfx::set_scene_hdr(value != 0, value == 2)) {
         g_gxState.dirty |= DirtyPipeline;
       } else {
         Log.warn("GX_AURORA_PORT_SCENE_HDR: switch to {} refused", value);

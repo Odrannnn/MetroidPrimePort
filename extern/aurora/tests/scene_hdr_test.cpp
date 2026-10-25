@@ -375,6 +375,19 @@ TEST_F(SceneHdrTest, SwitchSealsThePassAndRetargetsIt) {
   EXPECT_EQ(current_pass().target_layout().key, hdrLayout.key);
 }
 
+TEST_F(SceneHdrTest, PauseReusesColourAndClearsOnlyDepth) {
+  ASSERT_TRUE(set_scene_hdr(true));
+  const auto* texture = webgpu::g_sceneHdr.texture.Get();
+  ASSERT_TRUE(set_scene_hdr(false));
+  ASSERT_TRUE(set_scene_hdr(true, true));
+  EXPECT_EQ(webgpu::g_sceneHdr.texture.Get(), texture);
+  EXPECT_FALSE(current_pass().colorAttachments[SceneColorAttachmentIndex].clear);
+  EXPECT_EQ(current_pass().colorAttachments[SceneColorAttachmentIndex].loadOp, wgpu::LoadOp::Load);
+  EXPECT_TRUE(current_pass().clearDepth);
+  EXPECT_EQ(current_pass().depthLoadOp, wgpu::LoadOp::Clear);
+  EXPECT_EQ(current_pass().clearDepthValue, gx::UseReversedZ ? 0.f : 1.f);
+}
+
 TEST_F(SceneHdrTest, MsaaModesProduceDistinctKeys) {
   next_frame(4);
   const auto ldr4 = current_pass().target_layout();

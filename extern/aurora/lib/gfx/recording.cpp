@@ -1254,8 +1254,8 @@ bool scene_hdr_pass_active() noexcept {
   return pass.colorAttachments[SceneColorAttachmentIndex].view.Get() == webgpu::g_sceneHdr.view.Get();
 }
 
-bool set_scene_hdr(bool on) {
-  if (g_recorder.hdrScene == on) {
+bool set_scene_hdr(bool on, bool pause) {
+  if (g_recorder.hdrScene == on && !pause) {
     return true;
   }
   // Only between EFB draws: not outside a frame, offscreen, or in a begin_color_pass pass.
@@ -1292,7 +1292,16 @@ bool set_scene_hdr(bool on) {
   g_recorder.hdrScene = on;
   auto& pass = current_render_passes()[g_recorder.currentRenderPass];
   set_efb_targets(pass);
-  if (on && !g_recorder.hdrSceneCleared) {
+  if (pause) {
+    // RenderPauseScreenElements clears depth (flags 2), not the reused colour.
+    auto& color = pass.colorAttachments[SceneColorAttachmentIndex];
+    color.clear = false;
+    color.loadOp = wgpu::LoadOp::Load;
+    pass.clearDepth = true;
+    pass.depthLoadOp = wgpu::LoadOp::Clear;
+    pass.clearDepthValue = gx::UseReversedZ ? 0.f : 1.f;
+    g_recorder.hdrSceneCleared = true;
+  } else if (on && !g_recorder.hdrSceneCleared) {
     auto& color = pass.colorAttachments[SceneColorAttachmentIndex];
     color.clear = true;
     color.loadOp = wgpu::LoadOp::Clear;

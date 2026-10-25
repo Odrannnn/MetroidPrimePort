@@ -70,7 +70,7 @@ RenderTargetLayout get_render_target_layout() noexcept;
 // allocated (webgpu::ensure_scene_hdr_target).
 // Debug/test plumbing only: GX pipelines, EFB copies, pass snapshots, post passes and present still
 // assume the display format, so no game draw, copy or snapshot may run while it is on (stage 2).
-bool set_scene_hdr(bool on);
+bool set_scene_hdr(bool on, bool pause = false);
 bool scene_hdr_active() noexcept;
 // Whether the pass being recorded is the HDR scene's own (scene_hdr_active, and not offscreen or a
 // begin_color_pass pass on another target): what GX and VFX pipelines take their colour format from.

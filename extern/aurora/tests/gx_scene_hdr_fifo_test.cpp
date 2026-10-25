@@ -115,12 +115,12 @@ TEST_F(GXSceneHdrFifoTest, RepeatedRequestIsDeduplicated) {
 
 TEST_F(GXSceneHdrFifoTest, InvalidValueIsIgnored) {
   g_gxState.dirty = 0;
-  decode_fifo(command(2));
+  decode_fifo(command(3));
   EXPECT_FALSE(aurora::gfx::g_testSceneHdr);
   EXPECT_EQ(aurora::gfx::g_testSceneHdrSwitches, 0u);
   EXPECT_EQ(g_gxState.dirty & aurora::gx::DirtyPipeline, 0u);
   // The stream stays in sync: the next command still decodes.
-  auto bytes = command(2);
+  auto bytes = command(3);
   const auto next = command(1);
   bytes.insert(bytes.end(), next.begin(), next.end());
   decode_fifo(bytes);
@@ -134,6 +134,16 @@ TEST_F(GXSceneHdrFifoTest, UnsupportedDeviceWritesNothing) {
   // Turning it off is always encoded.
   EXPECT_TRUE(GXPortSceneHdr(GX_FALSE));
   EXPECT_EQ(capture_fifo(), command(0));
+}
+
+TEST_F(GXSceneHdrFifoTest, PauseRequestEncodesAndIsNeverDeduplicated) {
+  EXPECT_TRUE(GXPortPauseSceneHdr());
+  EXPECT_EQ(capture_fifo(), command(2));
+  decode_fifo(command(2));
+  EXPECT_TRUE(aurora::gfx::g_testSceneHdr);
+  const auto switches = aurora::gfx::g_testSceneHdrSwitches;
+  decode_fifo(command(2));
+  EXPECT_EQ(aurora::gfx::g_testSceneHdrSwitches, switches + 1);
 }
 
 TEST_F(GXSceneHdrFifoTest, DrawIdModeRefusesIt) {
