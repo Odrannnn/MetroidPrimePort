@@ -52,6 +52,9 @@ public:
     bool normalClosePending = false;   // !mIsOpen && mWasOpen
     bool refusedClosePending = false;  // mClosing
     bool doClose = false;              // mDoClose
+    // An open door's side of its door pair, PortSaveState::DoorSaveState::Partner:
+    // 0 unknown (an older save), 1 none, 2 leads (mPartner2), 3 follows (mPartner1).
+    int partner = 0;
   };
   void PortRestoreDoorState(const PortDoorFlags& state);
   // Open or closed with no close in flight: the original single-flag restore.
@@ -64,6 +67,10 @@ public:
   bool PortRefusedClosePending() const { return mClosing; }
   // True while another door's close blocks this one from opening again.
   bool PortDoClosePending() const { return mDoClose; }
+  // An open door's side of its door pair, as PortDoorFlags::partner (never 0).
+  int PortPartnerSide() const {
+    return mPartner1 != kInvalidUniqueId ? 3 : mPartner2 != kInvalidUniqueId ? 2 : 1;
+  }
   // Think's tail for a door restored open (issue #131 follow-up): see the .cpp.
   void PortFinishRestoredOpen(CStateManager& mgr);
 #endif
@@ -95,9 +102,11 @@ private:
 #ifdef TARGET_PC
   // Set by PortRestoreDoorState for a door restored open; PortFinishRestoredOpen
   // clears it. mPortDockNotified: the dock has had the Increment the Open
-  // connection would have sent. mPortRestoreTicks bounds the partner search.
+  // connection would have sent. mPortPartnerSide: the saved PortDoorFlags::partner.
+  // mPortRestoreTicks bounds the partner search.
   bool mPortRestoredOpen : 1;
   bool mPortDockNotified : 1;
+  unsigned mPortPartnerSide : 2;
   int mPortRestoreTicks;
 #endif
 };

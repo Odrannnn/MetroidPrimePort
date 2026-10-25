@@ -45,6 +45,9 @@ class Wiring(WiringCase):
         # The pending bits are only read while the door reports closed: a payload
         # with a close in flight and open set is one the decoder refuses.
         self.assertIn("if (!state.open) {", block)
+        # An open door records which side of its pair it is (issue #201): the
+        # restore relinks only from the saved leader.
+        self.assertIn("door->PortPartnerSide()", block)
 
     def test_restore_applies_every_flag(self):
         room = ROOM.read_text()
@@ -52,7 +55,7 @@ class Wiring(WiringCase):
                         "if (CScriptPlatform", str(ROOM))
         # Invalid payloads are not applied at all: the apply is inside the decode.
         self.assertIn("if (DecodeDoorSaveState(b->data, want)) {", block)
-        for flag in ("open", "normalClosePending", "refusedClosePending", "doClose"):
+        for flag in ("open", "normalClosePending", "refusedClosePending", "doClose", "partner"):
             self.assertIn(f"flags.{flag} = want.", block)
         self.assertIn("door->PortRestoreDoorState(flags)", block)
         # A pending close or a blocked re-open is applied even when the door

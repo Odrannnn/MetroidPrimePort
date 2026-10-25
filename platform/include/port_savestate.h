@@ -128,17 +128,33 @@ struct DoorSaveState {
   // bit 2: mDoClose - the close was asked for by another door, which also blocks
   // this door from opening until the close finishes.
   bool doClose = false;
+  // bits 3-4, an open door only: which side of its door pair it is (issue #201).
+  // OpenDoor makes the door that was opened the leader (mPartner2: it sends Open,
+  // which starts its close timer, and closes its partner) and the door it opens
+  // the follower (mPartner1: it sends only MaxReached and accepts Close from its
+  // leader alone). A restore that linked them the other way round leaves the
+  // follower's idle timer as the only thing that could close the pair and the
+  // leader's timer refused: both doors stay open and hold the room's other doors
+  // shut. Unknown is a save written before these bits, linked the old way.
+  enum Partner : uint8_t {
+    kPartnerUnknown = 0,
+    kPartnerNone = 1,
+    kPartnerLeads = 2,
+    kPartnerFollows = 3,
+  };
+  Partner partner = kPartnerUnknown;
 };
 // The flag bits of byte 1: anything else is a payload this build never wrote and
 // is refused.
-constexpr uint8_t kDoorSaveFlagsKnown = 0x7;
+constexpr uint8_t kDoorSaveFlagsKnown = 0x1F;
+constexpr int kDoorSavePartnerShift = 3;
 // The two wire bytes, in the order above (for the save writer and the unit test).
 std::string EncodeDoorSaveState(const DoorSaveState& state);
 // False for a payload this build never writes - empty, longer than two bytes, an
-// open flag above 1, an unknown flag bit, open with a close in flight, or both
-// close paths at once, none of which the door's state machine can produce. `out`
-// is modified only for a payload that passes every check: a caller that keeps its
-// previous value keeps it exactly.
+// open flag above 1, an unknown flag bit, open with a close in flight, both
+// close paths at once, or a pair side on a closed door, none of which the door's
+// state machine can produce. `out` is modified only for a payload that passes
+// every check: a caller that keeps its previous value keeps it exactly.
 bool DecodeDoorSaveState(const std::string& data, DoorSaveState& out);
 
 // Room script fingerprints (pure, port_savestate_format.cpp, so the unit test

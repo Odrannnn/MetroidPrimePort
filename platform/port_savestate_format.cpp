@@ -387,6 +387,7 @@ std::string EncodeDoorSaveState(const DoorSaveState& state) {
     flags |= 0x2;
   if (state.doClose)
     flags |= 0x4;
+  flags |= static_cast< uint8_t >(state.partner << kDoorSavePartnerShift);
   std::string out;
   out.push_back(static_cast< char >(state.open ? 1 : 0));
   out.push_back(static_cast< char >(flags));
@@ -411,10 +412,13 @@ bool DecodeDoorSaveState(const std::string& data, DoorSaveState& out) {
     parsed.pendingClose = (flags & 0x1) != 0;
     parsed.refusedClosePending = (flags & 0x2) != 0;
     parsed.doClose = (flags & 0x4) != 0;
-    // A door that is open has no close in flight, and the two close paths are
-    // different branches of Think that cannot both be owed.
+    parsed.partner = static_cast< DoorSaveState::Partner >((flags >> kDoorSavePartnerShift) & 0x3);
+    // A door that is open has no close in flight, the two close paths are
+    // different branches of Think that cannot both be owed, and only an open door
+    // has a side of a door pair.
     if ((parsed.open && (parsed.pendingClose || parsed.refusedClosePending)) ||
-        (parsed.pendingClose && parsed.refusedClosePending))
+        (parsed.pendingClose && parsed.refusedClosePending) ||
+        (!parsed.open && parsed.partner != DoorSaveState::kPartnerUnknown))
       return false;
   }
   out = parsed;

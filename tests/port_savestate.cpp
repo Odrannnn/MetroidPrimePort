@@ -613,6 +613,11 @@ int main() {
         {{false, true, false, true}, "\0\5"},    // ... asked for by another door
         {{false, false, true, false}, "\0\2"},   // a refused opening
         {{false, false, false, true}, "\0\4"},   // only the block on opening again
+        // open, with its side of the door pair (issue #201)
+        {{true, false, false, false, DoorSaveState::kPartnerNone}, "\1\x08"},
+        {{true, false, false, false, DoorSaveState::kPartnerLeads}, "\1\x10"},
+        {{true, false, false, false, DoorSaveState::kPartnerFollows}, "\1\x18"},
+        {{true, false, false, true, DoorSaveState::kPartnerLeads}, "\1\x14"},
     };
     for (const Case& c : cases)
       REQUIRE(EncodeDoorSaveState(c.state) == std::string(c.bytes, 2));
@@ -622,7 +627,7 @@ int main() {
       REQUIRE(DecodeDoorSaveState(EncodeDoorSaveState(c.state), got));
       REQUIRE(got.open == c.state.open && got.pendingClose == c.state.pendingClose &&
               got.refusedClosePending == c.state.refusedClosePending &&
-              got.doClose == c.state.doClose);
+              got.doClose == c.state.doClose && got.partner == c.state.partner);
     }
     DoorSaveState out;
     // The mid-close payload an earlier build of this lane wrote (normal close, no
@@ -644,8 +649,10 @@ int main() {
         std::string(),                 // empty
         std::string("\2", 1),          // open flag not 0/1
         std::string("\3", 1),          // ... and above the flag range
-        std::string("\0\x08", 2),      // unknown flag bit
+        std::string("\0\x08", 2),      // a pair side on a closed door
+        std::string("\0\x18", 2),      // ... any side
         std::string("\0\x80", 2),      // unknown flag bit
+        std::string("\1\x20", 2),      // unknown flag bit
         std::string("\1\1", 2),        // open with a normal close in flight
         std::string("\1\2", 2),        // open with a refused close in flight
         std::string("\0\3", 2),        // both close paths owed at once

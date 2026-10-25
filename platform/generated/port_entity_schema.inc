@@ -3162,9 +3162,10 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CScriptDoor >() {
       {"mDoClose", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CScriptDoor, mDoClose), PES_SETI(CScriptDoor, mDoClose)},
       {"mPortRestoredOpen", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CScriptDoor, mPortRestoredOpen), PES_SETI(CScriptDoor, mPortRestoredOpen)},
       {"mPortDockNotified", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CScriptDoor, mPortDockNotified), PES_SETI(CScriptDoor, mPortDockNotified)},
+      {"mPortPartnerSide", "unsigned int", PortSchemaKind::bitfield, 2, kPortSchemaPrivate, 0, nullptr, PES_GETI(CScriptDoor, mPortPartnerSide), PES_SETI(CScriptDoor, mPortPartnerSide)},
       {"mPortRestoreTicks", "int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CScriptDoor::mPortRestoreTicks), PES_ADDR(CScriptDoor, mPortRestoreTicks), PES_GETI(CScriptDoor, mPortRestoreTicks), PES_SETI(CScriptDoor, mPortRestoreTicks)},
   };
-  static const PortSchemaClass desc = {"CScriptDoor", "CPhysicsActor", fields, 20, 0x44440A3E1A01632Aull};
+  static const PortSchemaClass desc = {"CScriptDoor", "CPhysicsActor", fields, 21, 0xD7E5769F2510E624ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CScriptEMPulse >() {
@@ -4664,4 +4665,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3390;
+const int PortEntitySchema::kFieldCount = 3391;

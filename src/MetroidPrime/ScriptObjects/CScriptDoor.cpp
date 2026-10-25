@@ -149,6 +149,7 @@ CScriptDoor::CScriptDoor(TUniqueId uid, const rstl::string& name, const CEntityI
 #ifdef TARGET_PC
 , mPortRestoredOpen(false)
 , mPortDockNotified(false)
+, mPortPartnerSide(0)
 , mPortRestoreTicks(0)
 #endif
 {
@@ -365,6 +366,7 @@ void CScriptDoor::PortRestoreDoorState(const PortDoorFlags& state) {
   mPartner1 = kInvalidUniqueId;
   mPartner2 = kInvalidUniqueId;
   mPortRestoredOpen = state.open;
+  mPortPartnerSide = state.open ? state.partner & 0x3 : 0;
   mPortDockNotified = false;
   mPortRestoreTicks = 0;
   SetDoorAnimation(state.open ? kDAT_Open : kDAT_Close);
@@ -375,9 +377,10 @@ void CScriptDoor::PortRestoreDoorState(const PortDoorFlags& state) {
 // (a void behind the open door); without the partner link, closing this door never
 // closes the door on the other side, which stays open and holds this one shut
 // ("otherDoor" in GetDoorOpenCondition). The partner is found as OpenDoor finds
-// it, and only by the door of the player's room, so the link has the direction a
-// live open from that side gives it. The search is bounded: the other room's door
-// only exists once its area has loaded.
+// it, by the door that led the open at the save (issue #201: the follower's close
+// timer never started, so a pair linked the other way round never closes). A save
+// older than the saved side has only the guess the door of the player's room makes.
+// The search is bounded: the other room's door only exists once its area has loaded.
 void CScriptDoor::PortFinishRestoredOpen(CStateManager& mgr) {
   if (!mIsOpen) {
     mPortRestoredOpen = false;
@@ -392,8 +395,12 @@ void CScriptDoor::PortFinishRestoredOpen(CStateManager& mgr) {
     mPortDockNotified = true;
     mgr.DeliverScriptMsg(dock, GetUniqueId(), kSM_Increment);
   }
-  if (mPartner1 != kInvalidUniqueId || mPartner2 != kInvalidUniqueId ||
-      GetCurrentAreaId() != mgr.GetNextAreaId() || ++mPortRestoreTicks > 600) {
+  // Unknown (0) searches from the player's room; leads (2) wherever it is; none (1)
+  // and follows (3) never: a follower is linked by its leader.
+  const bool searches = mPortPartnerSide == 2 ||
+                        (mPortPartnerSide == 0 && GetCurrentAreaId() == mgr.GetNextAreaId());
+  if (mPartner1 != kInvalidUniqueId || mPartner2 != kInvalidUniqueId || !searches ||
+      ++mPortRestoreTicks > 600) {
     mPortRestoredOpen = false;
     return;
   }
@@ -401,7 +408,8 @@ void CScriptDoor::PortFinishRestoredOpen(CStateManager& mgr) {
   for (int idx = list.GetFirstObjectIndex(); idx != -1; idx = list.GetNextObjectIndex(idx)) {
     CScriptDoor* const door = TCastToPtr< CScriptDoor >(list[idx]);
     if (!door || door == this || !door->mIsOpen || door->mPartner1 != kInvalidUniqueId ||
-        door->mPartner2 != kInvalidUniqueId) {
+        door->mPartner2 != kInvalidUniqueId || door->mPortPartnerSide == 1 ||
+        door->mPortPartnerSide == 2) {
       continue;
     }
     if (const CScriptDock* const dock2 =

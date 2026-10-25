@@ -482,6 +482,8 @@ void CaptureObject(CStateManager& mgr, CEntity& ent, RoomObject& obj) {
     if (!state.open) {
       state.pendingClose = door->PortClosingPending();
       state.refusedClosePending = door->PortRefusedClosePending();
+    } else {
+      state.partner = static_cast< DoorSaveState::Partner >(door->PortPartnerSide());
     }
     state.doClose = door->PortDoClosePending();
     obj.blocks.push_back({kTagDoor, EncodeDoorSaveState(state)});
@@ -715,6 +717,7 @@ void ApplyObject(CStateManager& mgr, CEntity& ent, const RoomObject& obj, RoomAp
         flags.normalClosePending = want.pendingClose;
         flags.refusedClosePending = want.refusedClosePending;
         flags.doClose = want.doClose;
+        flags.partner = want.partner;
         // Applied even when the door already reads closed: that is what restores
         // the message an interrupted close still owes, and the block on opening
         // again a close in flight carries.
