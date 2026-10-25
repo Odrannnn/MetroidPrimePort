@@ -12,10 +12,18 @@ class CVector3f;
 // The third-person gameplay camera's animated Samus (port_third_person_body.cpp). In gameplay the
 // player's body is BallTransitionsANCS, which only has morph clips, so it stands frozen. Prime
 // keeps the walking clips in the cutscene Samus ANCS (CINF 19C53902); this draws that body
-// instead and picks its clip from the player's movement.
+// instead and picks its clip from the player's movement, cross-fading clip changes the ANCS
+// leaves as snaps. The Phazon Suit gets CScriptPlayerActor's indirect-texture pass.
 namespace PortThirdPersonBody {
 
-enum class Clip { Idle, SlowWalk, Walk, Run, Backward, Hold };
+// WalkGun: walking with the cannon raised (firing or charging). Stop: the walk's settle into the
+// ready pose, played once when the body stops.
+enum class Clip { Idle, SlowWalk, Walk, Run, Backward, Hold, WalkGun, Stop, Count };
+
+// How long the cannon stays raised after a shot, in seconds.
+inline constexpr float kGunUpSeconds = 1.f;
+// The cross-fade between clips whose ANCS transition is a snap, in seconds.
+inline constexpr float kBlendSeconds = 0.25f;
 
 struct Choice {
   Clip clip = Clip::Idle;
@@ -30,7 +38,8 @@ inline constexpr float kRunSpeed = 7.f;
 // Which clip fits the movement. An airborne body, or one moving more sideways than along its
 // facing (strafing: there is no strafe clip), holds the ready pose. Walking backward plays the
 // walk clip run in reverse (the animation tree only advances, so the .cpp steps its phase backward).
-inline Choice ChooseClip(float fwd, float side, bool grounded) {
+// With the cannon raised (gunUp) moving forward plays the walkgun clip at every speed.
+inline Choice ChooseClip(float fwd, float side, bool grounded, bool gunUp = false) {
   Choice c;
   const float speed = std::sqrt(fwd * fwd + side * side);
   if (!grounded) {
@@ -48,6 +57,9 @@ inline Choice ChooseClip(float fwd, float side, bool grounded) {
   if (fwd < 0.f) {
     c.clip = Clip::Backward;
     c.rate = std::clamp(speed / kWalkSpeed, 0.5f, 1.5f);
+  } else if (gunUp) {
+    c.clip = Clip::WalkGun;
+    c.rate = std::clamp(speed / 5.5f, 0.5f, 1.6f);
   } else if (speed < kWalkSpeed) {
     c.clip = Clip::SlowWalk;
     c.rate = std::clamp(speed / 2.5f, 0.5f, 1.5f);
@@ -61,6 +73,20 @@ inline Choice ChooseClip(float fwd, float side, bool grounded) {
   return c;
 }
 
+// The clip to play given the one chosen and the one playing: stopping from a forward walk or run
+// plays the stop clip, which then runs to its end (stopDone) unless the body moves again.
+inline Choice Settle(Choice chosen, Clip current, bool stopDone) {
+  const bool moving = current == Clip::SlowWalk || current == Clip::Walk ||
+                      current == Clip::Run || current == Clip::WalkGun;
+  if (chosen.clip == Clip::Idle && (moving || (current == Clip::Stop && !stopDone))) {
+    chosen.clip = Clip::Stop;
+    chosen.rate = 1.f;
+  }
+  return chosen;
+}
+
+// A shot left the cannon (CPlayerGun): the body raises it for kGunUpSeconds.
+void NoteShot();
 // Once per game tick while the third-person camera is active (PortThirdPerson::Update).
 void Update(CStateManager& mgr, float dt);
 // The body is built and animated, and stands in for the frozen one.

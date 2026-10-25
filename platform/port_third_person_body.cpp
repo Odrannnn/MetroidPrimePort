@@ -10,7 +10,13 @@
 #include "Kyoto/CSimplePool.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
 #include "Kyoto/Math/CTransform4f.hpp"
+#include "Kyoto/Math/CMath.hpp"
 #include "Kyoto/Math/CVector3f.hpp"
+#include "Kyoto/Graphics/CGraphics.hpp"
+#include "MetaRender/CCubeRenderer.hpp"
+#include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "MetroidPrime/Cameras/CGameCamera.hpp"
+#include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/CActorLights.hpp"
 #include "MetroidPrime/CAnimData.hpp"
 #include "MetroidPrime/CAnimPlaybackParms.hpp"
@@ -23,6 +29,8 @@
 #include "MetroidPrime/Player/CPlayerState.hpp"
 #include "MetroidPrime/Tweaks/CTweakPlayerRes.hpp"
 
+#include <dolphin/gx.h>
+
 #include <memory>
 
 namespace PortThirdPersonBody {
@@ -32,7 +40,8 @@ namespace {
 // (it is in the Metroid1-6 paks); the rest only the ready pose, so the body stands in them.
 constexpr uint32_t kAncsCandidates[] = {0xC2E1F513, 0x1413466E, 0x27550808,
                                         0x0C6B791C, 0x58673D8D, 0xC2BF3133};
-constexpr int kPhazonChars[] = {3, 8};
+// The suit CScriptPlayerActor draws with the Phazon indirect-texture pass.
+constexpr int kPhazonChar = 3;
 // The scale the game's own CScriptPlayerActor cutscene Samus uses in its SCLY (1.799, measured; the
 // clip is 1.756 m tall at scale 1). The suit and cannon are scaled alike, so the locators follow.
 constexpr float kBodyScale = 1.799f;
@@ -45,6 +54,8 @@ constexpr ClipNames kIdle{"B_ready_samus", "B_rready_samus"};
 constexpr ClipNames kSlowWalk{"B_slowwalk_samus", "B_walk_samus"};
 constexpr ClipNames kWalk{"B_walk_samus", "B_slowwalk_samus"};
 constexpr ClipNames kRun{"B_slowrunloop_samus", "B_walk_samus"};
+constexpr ClipNames kWalkGun{"B_walkgun_samus", "B_walk_samus"};
+constexpr ClipNames kStop{"B_intorreadyfromwalk_samus", "B_rready_samus"};
 
 struct State {
   // Loading (as CScriptPlayerActor::LoadSuit).
@@ -55,10 +66,15 @@ struct State {
   std::unique_ptr<TToken<CSkinRules>> suitSkin;
   // Built.
   std::unique_ptr<CModelData> body;
-  int idx[6] = {-1, -1, -1, -1, -1, -1}; // by Clip
+  int idx[int(Clip::Count)] = {}; // by Clip
   Clip current = Clip::Hold;
   float phase = 0.f; // Backward: where the walk clip is, 0..1, run in reverse by hand
+  float stopLeft = 0.f; // Stop: seconds of the stop clip still to play
+  float gunUp = 0.f;    // seconds the cannon stays raised (NoteShot)
   bool animating = false;
+  // The Phazon suit's indirect-texture pass (as CScriptPlayerActor's).
+  rstl::optional_object<TCachedToken<CTexture>> phazonTex;
+  float phazonAngle = 0.f;
   // The cannon.
   int beam = -1;
   std::unique_ptr<TToken<CModel>> beamModel;
@@ -96,6 +112,7 @@ void Drop() {
   s.body.reset();
   s.beamData.reset();
   s.beamModel.reset();
+  s.phazonTex = rstl::optional_object_null();
   s.wantChar = s.loadedChar = s.beam = -1;
   s.ancs = 0;
   s.animating = false;
@@ -113,11 +130,6 @@ uint32_t PickAncs() {
 void StartLoad(int charIdx) {
   Drop();
   s.wantChar = charIdx;
-  for (int p : kPhazonChars) {
-    if (charIdx == p) {
-      return; // Phazon needs the indirect-texture pass of CScriptPlayerActor: frozen body
-    }
-  }
   s.ancs = PickAncs();
   if (s.ancs == 0) {
     return;
@@ -131,6 +143,10 @@ void StartLoad(int charIdx) {
   s.suitSkin.reset(
       new TToken<CSkinRules>(gpSimplePool->GetObj(SObjectTag('CSKR', info.GetSkinRulesId()))));
   s.suitSkin->Lock();
+  if (charIdx == kPhazonChar) {
+    s.phazonTex = TCachedToken<CTexture>(gpSimplePool->GetObj("PhazonIndirectTexture"));
+    s.phazonTex->Lock();
+  }
   s.loadedChar = charIdx;
 }
 
@@ -150,6 +166,8 @@ void Build(CStateManager& mgr) {
   s.idx[int(Clip::SlowWalk)] = Find(*data, kSlowWalk);
   s.idx[int(Clip::Walk)] = s.idx[int(Clip::Backward)] = Find(*data, kWalk);
   s.idx[int(Clip::Run)] = Find(*data, kRun);
+  s.idx[int(Clip::WalkGun)] = Find(*data, kWalkGun);
+  s.idx[int(Clip::Stop)] = Find(*data, kStop);
   for (int& i : s.idx) {
     if (i < 0) {
       i = s.idx[int(Clip::Idle)];
@@ -207,11 +225,26 @@ void Update(CStateManager& mgr, float dt) {
   const CVector3f fwd = xf.GetForward();
   const CVector3f right = xf.GetRight();
   const bool grounded = player.GetPlayerMovementState() == NPlayer::kMS_OnGround;
-  const Choice c = ChooseClip(CVector3f::Dot(vel, fwd), CVector3f::Dot(vel, right), grounded);
+  s.gunUp = std::max(s.gunUp - dt, 0.f);
+  const bool gunUp = s.gunUp > 0.f || player.GetPlayerGun()->IsCharging();
+  const Choice c =
+      Settle(ChooseClip(CVector3f::Dot(vel, fwd), CVector3f::Dot(vel, right), grounded, gunUp),
+             s.current, s.stopLeft <= 0.f);
   CAnimData* data = s.body->AnimationData();
   if (c.clip != s.current) {
-    data->SetAnimation(CAnimPlaybackParms(s.idx[int(c.clip)], -1, 1.f, true), false);
+    // Backward is posed by phase at rate 0, which would never advance a cross-fade: it snaps.
+    const bool blend = c.clip != Clip::Backward && s.current != Clip::Backward;
+    data->PortSetAnimationBlended(CAnimPlaybackParms(s.idx[int(c.clip)], -1, 1.f, true),
+                                  blend ? kBlendSeconds : 0.f);
+    if (c.clip == Clip::Stop) {
+      s.stopLeft = data->GetAnimationDuration(s.idx[int(Clip::Stop)]);
+    }
     s.current = c.clip;
+  }
+  s.stopLeft -= dt;
+  if (s.phazonTex) {
+    s.phazonTex->TryCache();
+    s.phazonAngle = CMath::ClampRadians(s.phazonAngle + 0.03f);
   }
   if (c.clip == Clip::Backward) {
     // The animation tree only advances (a negative rate would stall it), so step the clip's phase
@@ -229,15 +262,24 @@ void Update(CStateManager& mgr, float dt) {
 
 bool Ready() { return s.body && s.animating; }
 
+void NoteShot() { s.gunUp = kGunUpSeconds; }
+
 void PreRender() {
   if (Ready()) {
     s.body->AnimationData()->PreRender();
+    if (s.phazonTex) {
+      gpRender->AllocatePhazonSuitMaskTexture();
+    }
   }
 }
 
 bool Render(const CStateManager& mgr, const CTransform4f& xf, const CActorLights* lights) {
   if (!Ready()) {
     return false;
+  }
+  const bool phazon = s.phazonTex && s.phazonTex->IsLoaded();
+  if (phazon) {
+    GXSetDstAlpha(GX_TRUE, 255);
   }
   s.body->Touch(mgr, 0);
   s.body->Render(mgr, xf, lights, CModelFlags::Normal());
@@ -246,6 +288,16 @@ bool Render(const CStateManager& mgr, const CTransform4f& xf, const CActorLights
     const CTransform4f gun = xf * s.body->GetScaledLocatorTransform("GUN_LCTR");
     s.beamData->Touch(mgr, 0);
     s.beamData->Render(mgr, gun, lights, CModelFlags::Normal());
+  }
+  if (phazon) {
+    // As CScriptPlayerActor::Render.
+    gpRender->CopyTex(1, true, CGraphics::GetDolphinSpareBuffer(), GX_TF_RGB565, false);
+    const CVector3f delta = s.body->GetBounds(xf).GetCenterPoint() -
+                            mgr.GetCameraManager()->GetCurrentCamera(mgr).GetTranslation();
+    const float radius = CMath::Clamp(0.25f, (6.f - delta.Magnitude()) / 6.f, 2.f);
+    gpRender->DrawPhazonSuitIndirectEffect(CColor(0.1f, 0.1f, 0.1f, 1.f), s.phazonTex, radius, 0.05f,
+                                           CMath::FastSinR(s.phazonAngle),
+                                           0.5f * CMath::FastSinR(s.phazonAngle));
   }
   return true;
 }
