@@ -23,6 +23,16 @@ int main() {
   }
   CHECK(ordinary[20] > 3.f); // HDR orange red must not clamp to 1.
   CHECK(ordinary[21] < ordinary[20] && ordinary[22] < ordinary[21]);
+  // Native UI camera rotation is diag(-1,+1,-1); native view rows cancel
+  // those signs. Converting the port-world directions back gives -local +Z.
+  float uiView[3][4], uiLights[48];
+  LightView(uiView);
+  Lights(uiView, false, uiLights);
+  for (int i = 0; i < 3; ++i) {
+    CHECK(std::fabs(uiLights[i*16+8] + ordinary[i*16+8]) < 1e-6f);
+    CHECK(std::fabs(uiLights[i*16+9] - ordinary[i*16+10]) < 1e-6f);
+    CHECK(std::fabs(uiLights[i*16+10] - ordinary[i*16+9]) < 1e-6f);
+  }
   float tints[5][3];
   Bloom(tints);
   CHECK_EQ(tints[0][0], FloatBits(0x3ed0d0d1));

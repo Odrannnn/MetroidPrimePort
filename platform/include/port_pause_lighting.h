@@ -58,6 +58,31 @@ inline void Bloom(float tints[5][3]) {
       tints[i][c] = FloatBits(bits[i]);
 }
 
+// LightGather uses the UI perspective camera, not GetViewToWorldPauseScreenModel
+// (0xfa1428 -> 0x3ad3cc). Its only CameraHint behavior copies entity rotation
+// (0x4ec828); UI_HUDMPR1 #111 is Rz(180) * Ry(7.016477463194512e-15) * Rx(180).
+// CreateNativeWorldToView (0x12df54) takes -column0, +column1, -column2.
+// Express those rows in the port's (-x,z,y) world basis. Keep the authored
+// angles rather than substituting an idealized identity in native space.
+inline void LightView(float out[3][4]) {
+  constexpr double pi = 3.14159265358979323846;
+  const double x = 180. * pi / 180., y = 7.016477463194512e-15 * pi / 180.,
+               z = 180. * pi / 180.;
+  const double sx = std::sin(x), cx = std::cos(x), sy = std::sin(y), cy = std::cos(y),
+               sz = std::sin(z), cz = std::cos(z);
+  const double columns[3][3] = {
+      {cz * cy, sz * cy, -sy},
+      {cz * sy * sx - sz * cx, sz * sy * sx + cz * cx, cy * sx},
+      {cz * sy * cx + sz * sx, sz * sy * cx - cz * sx, cy * cx}};
+  for (int row = 0; row < 3; ++row) {
+    const double sign = row == 1 ? 1. : -1.;
+    out[row][0] = float(-sign * columns[row][0]);
+    out[row][1] = float(sign * columns[row][2]);
+    out[row][2] = float(sign * columns[row][1]);
+    out[row][3] = 0.f;
+  }
+}
+
 // Three 16-float GX room-light records. The quaternion/entity convention is
 // Rz * Ry * Rx; convert Remastered axes to retail (-x,z,y), then to view.
 inline void Lights(const float view[3][4], bool phazonSuit, float out[48]) {

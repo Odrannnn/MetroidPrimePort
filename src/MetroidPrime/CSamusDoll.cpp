@@ -431,9 +431,8 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
       count = GXPortGetRoomLights(previous);
       shadow = GXPortGetShadowCasterMode();
       GXPortSetShadowCaster(GX_FALSE);
-      const CTransform4f& v = CGraphics::GetViewMatrix();
-      const float worldToView[3][4] = {{v.Get00(), v.Get10(), v.Get20(), 0.f},
-          {v.Get02(), v.Get12(), v.Get22(), 0.f}, {-v.Get01(), -v.Get11(), -v.Get21(), 0.f}};
+      float worldToView[3][4];
+      PortPauseLighting::LightView(worldToView);
       float lights[48];
       PortPauseLighting::Lights(worldToView, PortPauseLighting::phazon, lights);
       GXPortSetRoomLights(lights, 3);
