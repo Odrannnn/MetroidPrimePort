@@ -107,11 +107,9 @@ EffectImportResult ImportEffects(const EffectImportIO& io);
 // (in a pak's byte order) as it prints, 8-4-4-4-12 in lower case.
 uint32_t RoomEffectId(const EffectGuid& id);
 
-// The retail PARTs kMatchedEffects pairs with `id` (in a pak's byte order) by its `shared-genp`
-// entries: the ones one GENP shares with several retail PARTs, so that a reference cannot say
-// which PART it is. The rooms step lets the retail object drawing one of them take the effect
-// actor's particle variables.
+// All retail PARTs kMatchedEffects pairs with `id` (in a pak's byte order), regardless of
+// pairing method. The rooms step verifies their presence before assigning the source
+// actor's placement and particle variables to a matched retail Effect.
 std::vector<uint32_t> MatchedRetailEffects(const EffectGuid& id);
 
 }  // namespace PortRemastered
-

@@ -1707,11 +1707,13 @@ uint32_t RoomEffectId(const EffectGuid& id) { return SyntheticEffectId(EffectGui
 std::vector<uint32_t> MatchedRetailEffects(const EffectGuid& id) {
   const std::string text = EffectGuidString(Swap(id));
   std::vector<uint32_t> out;
-  std::string method;
   for (const MatchedEffect& matched : kMatchedEffects) {
-    if (matched.id[0] == '#') {
-      method = matched.id + 1;
-    } else if (method == "shared-genp" && text == matched.id) {
+    // Room placement/variables belong to every converted GENP, not just the
+    // shared-genp section. In particular, the flamejet is a room-placement
+    // pairing and Landing Site also uses script-slot pairings. The caller
+    // verifies that the effects stage actually wrote each replacement PART.
+    if (matched.id[0] != '#' && text == matched.id &&
+        std::find(out.begin(), out.end(), matched.retail) == out.end()) {
       out.push_back(matched.retail);
     }
   }
