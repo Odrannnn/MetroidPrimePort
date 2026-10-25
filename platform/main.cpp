@@ -859,7 +859,7 @@ int main(int argc, char** argv) {
     // with one installed the arena starts at kRoomGeoMem1MB and a frame's buffers at
     // kRoomGeoFrameBuffers times their size. MP_FRAME_BUFFERS=<n> sets that scale itself.
     const unsigned long kRoomGeoMem1MB = 256;
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(SDL_PLATFORM_IOS)
     // Every scale step costs about 13 MB in each of the six copies of a frame's
     // buffers; at 12x a tablet's game ran at 1.3 GB and Android killed it for
     // memory. 6x still holds the heaviest room measured (20 MiB of vertices) 1.5x.
@@ -972,6 +972,9 @@ int main(int argc, char** argv) {
     // The shader caches stay in app storage when the data moves to shared
     // storage: they are disposable, and SQLite is slow on the shared mount.
     const std::string defaultCache = PortPaths::detail::PrivateFolder();
+#elif defined(SDL_PLATFORM_IOS)
+    // Kept out of Documents: the Files app needn't list disposable caches.
+    const std::string defaultCache = PortPaths::detail::WithSeparator(PortPaths::detail::PrefFolder());
 #else
     const std::string& defaultCache = userFolder;
 #endif

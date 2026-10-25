@@ -20,6 +20,8 @@
 //      Never inside a macOS app bundle.
 //   4. The per-user folder (SDL_GetPrefPath), for a read-only install such as
 //      a Flatpak or a system package.
+// iOS skips 2-4: the data is in the app's Documents folder, which the Files app
+// shows (UIFileSharingEnabled), so saves, mods and the log can be reached.
 //
 // Header-only so the tests that build a single platform source need no more.
 
@@ -31,6 +33,7 @@
 #include <vector>
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_platform_defines.h>
 #include <SDL3/SDL_stdinc.h>
 
 #include "port_env.h"
@@ -244,7 +247,18 @@ inline std::string Resolve() {
   if (const char* env = port::EnvString("MP_USER_PATH"); env != nullptr && env[0] != '\0') {
     return WithSeparator(env);
   }
-#if defined(__ANDROID__)
+#if defined(SDL_PLATFORM_IOS)
+  // HOME is the app's sandbox; its bundle is signed and read-only on a device.
+  if (const char* home = port::HomeFolder(); home != nullptr) {
+    const std::string documents = WithSeparator(home) + "Documents/";
+    std::error_code ec;
+    std::filesystem::create_directories(FromUtf8(documents), ec);
+    if (Writable(documents)) {
+      return documents;
+    }
+  }
+  return WithSeparator(PrefFolder());
+#elif defined(__ANDROID__)
   // A folder in shared storage the player moved the data to, as long as it
   // can still be written: without the storage permission (revoked, or a
   // reinstall) the private folder is used, and UnavailableFolder says so.
@@ -304,7 +318,7 @@ inline const std::vector<std::string>& MigrationLog() {
 // a macOS app bundle, where SDL_GetBasePath is Contents/Resources/: a card there
 // breaks the bundle's signature and is lost with the app when it is replaced.
 inline std::string CardFolder() {
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(SDL_PLATFORM_IOS)
   if (const char* base = SDL_GetBasePath();
       base != nullptr && !detail::InAppBundle(base) && detail::Writable(base)) {
     detail::MigrateLooseData(detail::WithSeparator(base));
