@@ -2709,6 +2709,35 @@ void CCubeRenderer::DoPhazonSuitIndirectAlphaBlur(float blurRadius, float blurRa
     CGX::End();
   }
 
+#ifdef TARGET_PC
+  // Port: the GC EFB saturates each ONE/ONE blend at 1, so the eight 0.3 taps leave the body's
+  // inside at 1 and the subtract below clears it to the halo. The HDR scene's float target keeps
+  // the sum (up to 2.4), and the whole body stays in the mask. All the taps add, so one clamp of
+  // the sum equals the per-blend saturation: an A8 copy (unorm) drawn back over the alpha. In the
+  // 8-bit display EFB the round trip changes nothing.
+  CopyTex(4, false, GetRenderToTexBuffer(12), GX_TF_A8, false);
+  GXSetColorUpdate(GX_FALSE);
+  CGraphics::LoadDolphinSpareTexture(width >> 2, height >> 2, GX_TF_I8, GetRenderToTexBuffer(12),
+                                     CGraphics::kSpareBufferTexMapID);
+  CGX::SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+  CGX::Begin(GX_TRIANGLESTRIP, GX_VTXFMT0, 4);
+  GXPosition3f32(0.f, 0.f, 0.f);
+  GXColor1u32(white);
+  GXTexCoord2f32(0.f, 1.f);
+  GXPosition3f32(0.25f, 0.f, 0.f);
+  GXColor1u32(white);
+  GXTexCoord2f32(1.f, 1.f);
+  GXPosition3f32(0.f, 0.f, 0.25f);
+  GXColor1u32(white);
+  GXTexCoord2f32(0.f, 0.f);
+  GXPosition3f32(0.25f, 0.f, 0.25f);
+  GXColor1u32(white);
+  GXTexCoord2f32(1.f, 0.f);
+  CGX::End();
+  CGraphics::LoadDolphinSpareTexture(width >> 2, height >> 2, GX_TF_I8, GetRenderToTexBuffer(8),
+                                     CGraphics::kSpareBufferTexMapID);
+#endif
+
   GXSetDstAlpha(GX_FALSE, 0);
   CGX::SetBlendMode(GX_BM_SUBTRACT, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
   CGX::SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
