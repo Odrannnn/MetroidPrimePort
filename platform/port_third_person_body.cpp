@@ -7,7 +7,10 @@
 #include "port_dread_samus_mod.h"
 #include "port_third_person.h"
 
+#include "Kyoto/Animation/CCharLayoutInfo.hpp"
 #include "Kyoto/CSimplePool.hpp"
+#include "Kyoto/Math/CQuaternion.hpp"
+#include "MetroidPrime/TCastTo.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
 #include "Kyoto/Math/CTransform4f.hpp"
 #include "Kyoto/Math/CMath.hpp"
@@ -72,6 +75,15 @@ struct State {
   float stopLeft = 0.f; // Stop: seconds of the stop clip still to play
   float gunUp = 0.f;    // seconds the cannon stays raised (NoteShot)
   bool animating = false;
+  // Aiming the cannon: the shoulder that turns, the locators that give the cannon's axis.
+  CSegId shoulder = CSegId::Invalid();
+  CSegId gunSeg = CSegId::Invalid();
+  CSegId muzzleSeg = CSegId::Invalid();
+  CQuaternion shoulderPose = CQuaternion::NoRotation(); // the clip's, before the aim
+  bool advanced = false; // the clip advanced since the last PreRender (shoulderPose is stale)
+  bool haveAim = false;
+  CVector3f aimPoint = CVector3f::Zero();
+  float aimWeight = 0.f;
   // The Phazon suit's indirect-texture pass (as CScriptPlayerActor's).
   rstl::optional_object<TCachedToken<CTexture>> phazonTex;
   float phazonAngle = 0.f;
@@ -158,6 +170,97 @@ int Find(const CAnimData& data, const ClipNames& n) {
   return i;
 }
 
+bool IsAncestor(const CCharLayoutInfo& layout, CSegId ancestor, CSegId seg) {
+  for (int depth = 0; depth < 64 && layout.ContainsSegment(seg); ++depth) {
+    seg = layout.GetOriginalParent(seg);
+    if (seg == ancestor) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The cannon arm: the shoulder above GUN_LCTR (the cannon's mount), Charge_LCTR its muzzle.
+void FindAimBones(const CAnimData& data) {
+  const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
+  s.shoulder = CSegId::Invalid();
+  s.gunSeg = layout.GetSegIdFromString(rstl::string_l("GUN_LCTR"));
+  s.muzzleSeg = layout.GetSegIdFromString(rstl::string_l("Charge_LCTR"));
+  if (s.gunSeg == CSegId::Invalid() || s.muzzleSeg == CSegId::Invalid()) {
+    return;
+  }
+  for (const char* name : {"R_shoulder", "L_shoulder"}) {
+    const CSegId seg = layout.GetSegIdFromString(rstl::string_l(name));
+    if (seg != CSegId::Invalid() && IsAncestor(layout, seg, s.gunSeg) &&
+        IsAncestor(layout, seg, s.muzzleSeg)) {
+      s.shoulder = seg;
+      return;
+    }
+  }
+}
+
+// Turns the shoulder so the cannon's axis (GUN_LCTR to Charge_LCTR) runs through the aim point,
+// by s.aimWeight, over the clip's pose. All in the body's unscaled model space.
+void AimArm(const CStateManager& mgr, CAnimData& data) {
+  if (s.shoulder == CSegId::Invalid()) {
+    return;
+  }
+  CHierarchyPoseBuilder& pb = data.PoseBuilder();
+  if (s.advanced) {
+    s.shoulderPose = pb.GetSegRotation(s.shoulder);
+    s.advanced = false;
+  }
+  pb.Insert(s.shoulder, s.shoulderPose);
+  data.SetPoseBuilderValid(false);
+  if (s.aimWeight <= 0.f) {
+    return;
+  }
+  // The body's transform, as CPlayer::Render places it.
+  const CPlayer& player = *mgr.GetPlayer();
+  CTransform4f bodyXf = player.GetTransform();
+  CVector3f origin = bodyXf.GetTranslation();
+  origin.SetZ(player.GetBoundingBox().GetMinPoint().GetZ());
+  bodyXf.SetTranslation(origin);
+  const CVector3f target = bodyXf.TransposeMultiply(s.aimPoint) * (1.f / kBodyScale);
+
+  const auto position = [&pb](CSegId seg) {
+    CTransform4f xf = CTransform4f::Identity();
+    pb.BuildTransform(seg, xf);
+    return xf.GetTranslation();
+  };
+  const CVector3f pivot = position(s.shoulder);
+  const CVector3f gun = position(s.gunSeg) - pivot;
+  const CVector3f muzzle = position(s.muzzleSeg) - pivot;
+  if (!(muzzle - gun).CanBeNormalized() || (target - pivot).Magnitude() < 1.f) {
+    return;
+  }
+  // Turning about the shoulder moves the muzzle too: a few passes settle on the line.
+  CQuaternion turn = CQuaternion::NoRotation();
+  for (int i = 0; i < 3; ++i) {
+    const CVector3f axis = turn.Transform(muzzle - gun).AsNormalized();
+    const CVector3f want = target - (pivot + turn.Transform(muzzle));
+    if (!want.CanBeNormalized()) {
+      return;
+    }
+    turn = CQuaternion::ShortestRotationArc(axis, want.AsNormalized()) * turn;
+  }
+  const float angle = 2.f * std::acos(std::min(std::fabs(turn.GetScalar()), 1.f));
+  float weight = s.aimWeight;
+  if (angle > kAimMaxRadians) {
+    weight *= kAimMaxRadians / angle;
+  }
+  turn = CQuaternion::Slerp(CQuaternion::NoRotation(), turn, weight);
+  // The turn is in model space; the shoulder's rotation is local to its parent's.
+  // (Composed as BuildTransform composes them, root first.)
+  const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
+  CQuaternion parentRot = CQuaternion::NoRotation();
+  for (CSegId seg = layout.GetOriginalParent(s.shoulder); seg != CSegId::Character();
+       seg = layout.GetOriginalParent(seg)) {
+    parentRot = pb.GetSegRotation(seg) * parentRot;
+  }
+  pb.Insert(s.shoulder, parentRot.BuildInverted() * turn * parentRot * s.shoulderPose);
+}
+
 void Build(CStateManager& mgr) {
   const CAnimRes res(s.ancs, s.loadedChar, CVector3f(kBodyScale, kBodyScale, kBodyScale), 0, true);
   s.body.reset(new CModelData(res));
@@ -173,6 +276,7 @@ void Build(CStateManager& mgr) {
       i = s.idx[int(Clip::Idle)];
     }
   }
+  FindAimBones(*data);
   s.animating = s.idx[int(Clip::Idle)] >= 0;
   if (s.animating) {
     data->SetAnimation(CAnimPlaybackParms(s.idx[int(Clip::Idle)], -1, 1.f, true), false);
@@ -258,15 +362,31 @@ void Update(CStateManager& mgr, float dt) {
     data->SetPlaybackRate(c.rate);
   }
   s.body->AdvanceAnimation(dt, mgr, player.GetCurrentAreaId(), true);
+  s.advanced = true;
+
+  // The aim point is the one the shots head for (CPlayerGun::PortShotFromThirdPersonCannon).
+  s.haveAim = false;
+  if (gunUp) {
+    if (player.GetOrbitTargetId() != kInvalidUniqueId &&
+        TCastToConstPtr< CActor >(mgr.GetObjectById(player.GetOrbitTargetId())) != nullptr) {
+      s.aimPoint = player.GetAssistedTargetAim();
+      s.haveAim = true;
+    } else {
+      s.haveAim = PortThirdPerson::AimPoint(s.aimPoint);
+    }
+  }
+  s.aimWeight = s.haveAim ? std::min(s.aimWeight + dt / kAimInSeconds, 1.f)
+                          : std::max(s.aimWeight - dt / kAimOutSeconds, 0.f);
 }
 
 bool Ready() { return s.body && s.animating; }
 
 void NoteShot() { s.gunUp = kGunUpSeconds; }
 
-void PreRender() {
+void PreRender(const CStateManager& mgr) {
   if (Ready()) {
     s.body->AnimationData()->PreRender();
+    AimArm(mgr, *s.body->AnimationData());
     if (s.phazonTex) {
       gpRender->AllocatePhazonSuitMaskTexture();
     }

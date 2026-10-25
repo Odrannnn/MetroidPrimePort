@@ -24,6 +24,12 @@ enum class Clip { Idle, SlowWalk, Walk, Run, Backward, Hold, WalkGun, Stop, Coun
 inline constexpr float kGunUpSeconds = 1.f;
 // The cross-fade between clips whose ANCS transition is a snap, in seconds.
 inline constexpr float kBlendSeconds = 0.25f;
+// While the cannon is raised the arm turns at the shoulder to point it at the shot's aim point:
+// at most kAimMaxRadians off the clip's pose, easing in over kAimInSeconds and out over
+// kAimOutSeconds.
+inline constexpr float kAimMaxRadians = 1.4f;
+inline constexpr float kAimInSeconds = 0.08f;
+inline constexpr float kAimOutSeconds = 0.3f;
 
 struct Choice {
   Clip clip = Clip::Idle;
@@ -92,7 +98,7 @@ void Update(CStateManager& mgr, float dt);
 // The body is built and animated, and stands in for the frozen one.
 bool Ready();
 // Before drawing the frame (CPlayer::PreRender).
-void PreRender();
+void PreRender(const CStateManager& mgr);
 // Draws the body (and its cannon) at the player's transform; false if it is not ready.
 bool Render(const CStateManager& mgr, const CTransform4f& xf, const CActorLights* lights);
 // The cannon's muzzle in the world (the body's Charge_LCTR) as the body is posed now; false when the
