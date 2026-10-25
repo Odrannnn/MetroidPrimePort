@@ -373,9 +373,14 @@ bool PortDreadSamus::ReplacesBall(int suit, bool spider) {
 bool PortDreadSamus::ReplacesLowBall(int suit, bool spider) {
   return PortMods::sDreadLowBalls.count(BallModel(suit, spider)) != 0;
 }
+namespace {
+bool sDreadCannonShown = true;
+}
+void PortDreadSamus::SetFirstPersonCannonShown(bool shown) { sDreadCannonShown = shown; }
+bool PortDreadSamus::FirstPersonCannonShown() { return sDreadCannonShown; }
 bool PortDreadSamus::ReplacesFirstPersonCannon(int suit) {
   const uint32_t id = FirstPersonCannon(suit);
-  return id != 0 && PortMods::sDreadCannons.count(id) != 0;
+  return sDreadCannonShown && id != 0 && PortMods::sDreadCannons.count(id) != 0;
 }
 
 uint32_t PortDreadSamus::Skeleton(uint32_t bodyCmdl) {

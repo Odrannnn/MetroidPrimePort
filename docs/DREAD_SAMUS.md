@@ -102,7 +102,9 @@ light material per beam, Prime's beam tints at a peak of 1.5 (the material's own
 strength of 11 overexposes every colour to white). The cannon is rolled 30
 degrees and moved slightly right and down so its side light faces the camera;
 seen straight from behind, its wide back end hides it. The left hand stays
-retail.
+retail. Mods > Metroid Dread's "Dread arm cannon in first person"
+(`dread_first_person_cannon`, on by default; console `dreadcannon 0|1`) turns
+it off for Prime's own arm cannon, at once, keeping the Dread bodies.
 
 Version 7 also dresses the pause screen's Samus (`ANCS_ItemScreenSamus`, CINF
 `F76E70A6`): each suit's first part is the Dread body, and the doll then leaves

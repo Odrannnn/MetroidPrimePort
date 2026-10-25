@@ -19,6 +19,7 @@
 #include "port_freecam.h"
 #include "port_third_person.h"
 #include "port_third_person_body.h"
+#include "port_dread_samus_mod.h"
 #include "port_gci.h"
 #include "port_photo.h"
 #include "port_pointer.h"
@@ -2510,6 +2511,17 @@ void CmdHelmetVisorFx() {
   Finish();
 }
 
+void CmdDreadCannon() {
+  const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
+  if (value == "0" || value == "1") {
+    PortDreadSamus::SetFirstPersonCannonShown(value == "1");
+  } else if (!value.empty()) {
+    return Finish("usage: dreadcannon [0|1]");
+  }
+  Out(PortDreadSamus::FirstPersonCannonShown() ? "dreadcannon 1" : "dreadcannon 0");
+  Finish();
+}
+
 void CmdReveal() {
   const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
   if (value != "0" && value != "1") {
@@ -3964,6 +3976,8 @@ const CommandSpec kCommands[] = {
     {"helmet", CmdHelmetVisorFx, nullptr,
      "helmet <0|1>, visorfx <0|1> show (1) or hide (0) the helmet and visor effects"},
     {"visorfx", CmdHelmetVisorFx, nullptr, ""},
+    {"dreadcannon", CmdDreadCannon, nullptr,
+     "dreadcannon [0|1]   the Dread arm cannon in first person (dread_first_person_cannon); prints it"},
     {"interp", CmdInterp, nullptr,
      "interp [actor|pose|particle|all <0|1>]   frame interpolation settings (F1 Video > Frame rate)"},
     {"present", CmdPresent, nullptr,

@@ -305,6 +305,12 @@ void DrawBuiltinMods() {
   if (ImGui::CollapsingHeader("Metroid Dread")) {
     ImGui::Indent();
     DrawBuiltinModToggle(PortDreadSamus::kModName, "Use the Dread Suit models", DreadImportStale(status));
+    bool cannon = PortDreadSamus::FirstPersonCannonShown();
+    if (ImGui::Checkbox("Dread arm cannon in first person", &cannon)) {
+      PortDreadSamus::SetFirstPersonCannonShown(cannon);
+      MarkDirty();
+    }
+    ItemHelp("Off keeps Prime's own arm cannon in first person; the Dread Suit bodies stay. Applies at once.");
     ImGui::SeparatorText("Import");
     DrawDreadSamusImport();
     ImGui::Unindent();

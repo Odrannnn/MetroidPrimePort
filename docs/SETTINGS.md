@@ -892,7 +892,9 @@
 - Settings other pages keep, described with them: F1 > Mods' "Load mods"
   (`mods`, on by default) and every mod's box, the built-in ones included
   (`mods_disabled`, the names left out, `/`-separated), read at startup
-  (`MODS.md`); the Remastered import's "What to import" (`remastered_skip`: the
+  (`MODS.md`); the Metroid Dread section's "Dread arm cannon in first person"
+  (`dread_first_person_cannon`, on by default; off keeps Prime's arm cannon,
+  `DREAD_SAMUS.md`); the Remastered import's "What to import" (`remastered_skip`: the
   parts left out, comma-separated from `geometry`, `effects`, `hud`, `text`,
   `movies` and `gallery`; `MODS.md`); the
   Randomizer page's options (`rando_settings`, one line of JSON;

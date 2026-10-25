@@ -214,6 +214,7 @@
 {"Mods", "", "Built-in mods > Prime Remastered > Import > What to import", "Movies", "remastered import parts movies fmv skip ffmpeg"},
 {"Mods", "", "Built-in mods > Prime Remastered > Import > What to import", "Gallery", "remastered import parts gallery extras skip"},
 {"Mods", "", "Built-in mods > Metroid Dread", "Use the Dread Suit models", "dread samus metroid suit models mod enable disable toggle on off"},
+{"Mods", "", "Built-in mods > Metroid Dread", "Dread arm cannon in first person", "dread samus arm cannon gun first person viewmodel weapon show hide toggle"},
 {"Mods", "", "Built-in mods > Metroid Dread > Import", "Import##dread", "dread start import run samus suit models nsp xci"},
 #if !defined(__ANDROID__)
 {"Mods", "", "Importers", "Argument", "importer argument parameter file"},

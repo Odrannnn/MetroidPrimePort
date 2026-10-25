@@ -233,6 +233,14 @@ void CGunWeapon::Update(float dt, CStateManager& mgr) {
     if (x218_28_suitArmLocked) {
       LoadSuitArm(mgr);
     }
+#ifdef TARGET_PC
+    // The Dread cannon switched on or off (setting, mods reload): load the arm again.
+    else if (xb0_suitArmModelData &&
+             mPortDreadCannon !=
+                 PortDreadSamus::ReplacesFirstPersonCannon(NWeaponTypes::get_current_suit(mgr))) {
+      AsyncLoadSuitArm(mgr);
+    }
+#endif
   } else {
     if (x104_gunCharacter.IsLocked()) {
       if (x104_gunCharacter.IsLoaded()) {

@@ -17,6 +17,7 @@
 #include "port_gci.h"
 #include "port_discord.h"
 #include "port_suit_colours.h"
+#include "port_dread_samus_mod.h"
 
 #include <algorithm>
 #include <atomic>
@@ -402,6 +403,9 @@ const SettingKey kSettingKeys[] = {
     BoolKey< &sOriginalExperience >("original_experience"),
     {"mods_disabled", [](const std::string& value) { sModsDisabled = value; },
      [](std::ostream& out) { out << sModsDisabled; }, false, "a,b", ""},
+    {"dread_first_person_cannon",
+     [](const std::string& value) { PortDreadSamus::SetFirstPersonCannonShown(ParseBool(value)); },
+     [](std::ostream& out) { WriteBool(out, PortDreadSamus::FirstPersonCannonShown()); }, false, "0", "1"},
     BoolKey< &sVsyncEnabled >("vsync"),
     BoolKey< &sFullscreen >("fullscreen"),
     BoolKey< &sOverlayWindowed >("overlay_windowed"),

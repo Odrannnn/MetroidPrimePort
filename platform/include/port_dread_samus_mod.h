@@ -31,8 +31,11 @@ inline uint32_t FirstPersonCannon(int suit) {
   return suit >= 0 && suit < 4 ? PortModelVariant::Id(kSuitArms[suit], suit) : 0;
 }
 // Whether the mod serves FirstPersonCannon(suit) now: the gun then draws it at the elbow locator in
-// place of both Prime's gun model and its suit arm.
+// place of both Prime's gun model and its suit arm. Never while the setting
+// dread_first_person_cannon (SetFirstPersonCannonShown, Mods > Metroid Dread) is off.
 bool ReplacesFirstPersonCannon(int suit);
+void SetFirstPersonCannonShown(bool shown);
+bool FirstPersonCannonShown();
 
 struct BallTarget {
   int suit;
