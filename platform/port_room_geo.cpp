@@ -4,6 +4,7 @@
 #include "port_strings.h"
 #include "port_bytes.h"
 #include "port_room_geo.h"
+#include "port_room_geometry_handedness.h"
 #include "port_maya_spline.h"
 #include "port_room_sky.h"
 
@@ -507,28 +508,23 @@ std::vector< uint8_t > MergeCmdl(const std::vector< uint8_t >& source, const CCu
     const Surface& surface = surfaces[s];
     std::vector< uint8_t >& out = lists[s];
     for (size_t copy = 0; copy < copies; ++copy) {
+      const bool mirrored = PortRoomGeometryHandedness::Mirrored(*places[copy]);
+      const PortRoomGeometryHandedness::PrimitiveLayout layout{
+          surface.stride, surface.normalAt,
+          size_t(surface.bases[0]) + copy * positionCount,
+          size_t(surface.bases[1]) + copy * normalCount};
       for (size_t i = 0; i < listSize;) {
         if (list[i] == 0) {
           ++i;
           continue;
         }
         const size_t count = size_t(list[i + 1] << 8 | list[i + 2]);
-        out.insert(out.end(), list + i, list + i + 3);
-        i += 3;
-        for (size_t v = 0; v < count; ++v, i += surface.stride) {
-          const size_t start = out.size();
-          out.insert(out.end(), list + i, list + i + surface.stride);
-          const auto move = [&](size_t at, uint32_t base, size_t perCopy) {
-            const uint32_t index = base + (uint32_t(out[start + at]) << 8 | out[start + at + 1]) + uint32_t(copy * perCopy);
-            out[start + at] = uint8_t(index >> 8);
-            out[start + at + 1] = uint8_t(index);
-            return index < 0x10000;
-          };
-          if (!move(0, surface.bases[0], positionCount) ||
-              (surface.normalAt != SIZE_MAX && !move(surface.normalAt, surface.bases[1], normalCount))) {
-            return {};
-          }
+        const uint8_t opcode = list[i];
+        const std::span<const uint8_t> vertices(list + i + 3, count * surface.stride);
+        if (!PortRoomGeometryHandedness::AppendPrimitive(opcode, count, vertices, layout, mirrored, out)) {
+          return {}; // unsupported primitive or layout: retain the individual draw path
         }
+        i += 3 + count * surface.stride;
       }
     }
     out.resize(aligned(out.size()), 0);
@@ -1423,6 +1419,7 @@ void DrawShadowReceivers(const float lo[3], const float hi[3]) {
         b.GetZ() < lo[2] || a.GetZ() > hi[2]) {
       continue;
     }
+    const PortRoomGeometryHandedness::CullScope cull(PortRoomGeometryHandedness::Mirrored(*r.xf));
     gpRender->SetModelMatrix(*r.xf);
     r.model->DrawUnsortedParts(CModelFlags::Normal());
   }
@@ -1777,6 +1774,7 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     });
   }
   const auto drawOne = [&](const Visible& draw) {
+    const PortRoomGeometryHandedness::CullScope cull(PortRoomGeometryHandedness::Mirrored(*draw.xf));
     if (bakes(draw.lightmap)) {
       const CVector3f centre = draw.bounds->GetCenterPoint();
       const float at[3] = {centre.GetX(), centre.GetY(), centre.GetZ()};
@@ -1870,6 +1868,7 @@ void DrawSorted(const void* drawable) {
     PortRoomEnv::SetVolumeHint(item.volume, at);
     PortRoomEnv::SetLightmapHint(item.lightmap);
   }
+  const PortRoomGeometryHandedness::CullScope cull(PortRoomGeometryHandedness::Mirrored(item.xf));
   gpRender->SetModelMatrix(item.xf);
   item.lights->ActivateLights();
   const CModelData& data =

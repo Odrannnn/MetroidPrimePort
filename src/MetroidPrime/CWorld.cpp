@@ -1,5 +1,8 @@
 #include "MetroidPrime/CWorld.hpp"
 #include "port_env.h"
+#ifdef TARGET_PC
+#include "port_room_geometry_handedness.h"
+#endif
 
 #include "MetroidPrime/CScriptLayerManager.hpp"
 
@@ -827,7 +830,9 @@ void CWorld::DrawSky(const CTransform4f& xf) const {
       const f32* radiance = layers[i].radiance;
       const bool lit = gain > 0.f && (radiance[0] > 0.f || radiance[1] > 0.f || radiance[2] > 0.f);
       const f32 skyGain[3] = {radiance[0] * gain, radiance[1] * gain, radiance[2] * gain};
-      gpRender->SetModelMatrix(xf * layers[i].orient);
+      const CTransform4f modelXf = xf * layers[i].orient;
+      const PortRoomGeometryHandedness::CullScope cull(PortRoomGeometryHandedness::Mirrored(modelXf));
+      gpRender->SetModelMatrix(modelXf);
       CCubeModel::PortSetSky(lit ? skyGain : nullptr);
       layers[i].model->Draw(CModelFlags::Normal().DepthCompareUpdate(true, false));
     }
