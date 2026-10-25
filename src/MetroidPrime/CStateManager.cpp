@@ -3879,7 +3879,16 @@ void CStateManager::DrawWorld() const {
 #ifdef TARGET_PC
   CPortPipelineContextScope globalPipelines(AURORA_PIPELINE_CONTEXT_GLOBAL);
 #endif
-  RenderCamerasAndAreaLights();
+#ifdef TARGET_PC
+  // Remastered 0xc6273c submits camera filters at priority 2; 0xf9fa6c draws
+  // priorities 0..4 after UberPost. Keep the cameras here, defer the filters.
+  if (portSceneHdrRequested) {
+    x870_cameraManager->Render(*this);
+  } else
+#endif
+  {
+    RenderCamerasAndAreaLights();
+  }
   ResetViewAfterDraw(backupViewport, backupViewMatrix);
   DrawE3DeathEffect();
   DrawAdditionalFilters();
@@ -3938,6 +3947,10 @@ void CStateManager::DrawE3DeathEffect() const {
 
 void CStateManager::RenderCamerasAndAreaLights() const {
   x870_cameraManager->Render(*this);
+  DrawCameraFilters();
+}
+
+void CStateManager::DrawCameraFilters() const {
   for (int i = 0; i < kCFS_Max; ++i) {
     xb84_camFilterPasses[i].Draw();
   }
