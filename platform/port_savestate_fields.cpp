@@ -285,7 +285,13 @@ struct PortStateCodec {
         info.SetAdditiveState(additive);
         if (info.GetCurrentAdditiveState() != now) {
           now->Shutdown(bc);
+          // As above: CABSReaction::Start dereferences its command (an enemy saved mid hit
+          // reaction crashed every load of the state).
+          CBodyStateCmdMgr& cmds = bc.x4_cmdMgr;
+          const uint delivered = cmds.xb4_deliveredCmdMask;
+          cmds.xb4_deliveredCmdMask = ~0u;
           info.GetCurrentAdditiveState()->Start(bc, mgr);
+          cmds.xb4_deliveredCmdMask = delivered;
         }
       }
     }
