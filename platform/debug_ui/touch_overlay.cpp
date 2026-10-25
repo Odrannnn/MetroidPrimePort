@@ -10,17 +10,17 @@
 // control's (sLocal).
 //
 // Android-only parts left out: the mouse (fromMouse, onHoverEvent — a mouse is not a finger on the
-// overlay), performClick, and attach and detach (a view lifecycle with no C++ equivalent; the poll
-// these scheduled runs from the draw).
+// overlay, though the layout editor takes a left-button mouse as one finger), performClick, and
+// attach and detach (a view lifecycle with no C++ equivalent; the poll these scheduled runs from
+// the draw).
 //
 // The layout editor is here too: its toolbar, the drag/pinch, the per-control opacity, hide, delete
 // and reset, the Morph Ball page switch and the added buttons. The Java's pickAction AlertDialog is
 // an ImGui window (the port has no dialogs), and Done saves through SerializeLayout into the same
 // string Android writes.
 //
-// Wheel icons: the Java traces nativeWheelIcon's ARGB bitmaps into outlines (IconTracer) and fills
-// them. That needs the bitmap as an ImGui texture or a tracer here, so a wheel item and the wheel
-// buttons wear their text labels instead, as the previous C++ overlay did.
+// Wheel icons: IconTracer.java is ported below and traces the same outlines; as ImDrawList has no
+// even-odd path fill, each outline is filled once into a texture rather than per draw.
 #include "debug_ui_internal.h"
 
 #if defined(PORT_TOUCH_OVERLAY)
@@ -39,6 +39,7 @@
 #include <SDL3/SDL_joystick.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
+#include <aurora/imgui.h>
 #include <imgui.h>
 
 #include <algorithm>
@@ -2406,6 +2407,336 @@ ImU32 Argb(uint32_t argb, float alpha = 1.f) {
                   static_cast< int >(a + 0.5f));
 }
 
+// --- wheel icons ---------------------------------------------------------------
+// IconTracer.java's port: one of the game's small HUD icons (alpha = coverage) becomes a vector
+// outline, so the wheels draw it sharp without shipping any art of the game's. The icon is
+// upsampled with a bicubic filter, its half-coverage contour is traced with marching squares and
+// each loop is simplified with Douglas-Peucker. Canvas fills that outline even-odd at draw time;
+// ImDrawList has no even-odd fill, so the outline is filled once into an alpha texture at
+// kIconTexSize instead, sharp at any size the overlay draws it.
+namespace IconTracer {
+constexpr int kPad = 2; // empty border, so contours touching the edge close
+constexpr int kUp = 8;  // field samples per icon pixel
+constexpr float kThreshold = 0.5f;
+constexpr float kTolerance = 0.08f; // simplification error, in icon pixels
+
+using Loop = std::vector< ImVec2 >;
+
+float Cubic(float t) {
+  t = std::abs(t);
+  if (t < 1.f) {
+    return (1.5f * t - 2.5f) * t * t + 1.f;
+  }
+  if (t < 2.f) {
+    return ((-0.5f * t + 2.5f) * t - 4.f) * t + 2.f;
+  }
+  return 0.f;
+}
+
+// Catmull-Rom upsampling; field sample (i, j) sits at icon coordinate (i, j) / kUp, with pixel k's
+// centre at k + 0.5.
+std::vector< float > Upsample(const std::vector< float >& src, int sw, int sh, int nx, int ny) {
+  std::vector< float > rows(size_t(sh) * nx);
+  for (int s = 0; s < nx; ++s) {
+    const float pos = float(s) / kUp - 0.5f;
+    const int k0 = int(std::floor(pos)) - 1;
+    for (int k = k0; k < k0 + 4; ++k) {
+      if (k < 0 || k >= sw) {
+        continue;
+      }
+      const float wgt = Cubic(pos - float(k));
+      for (int r = 0; r < sh; ++r) {
+        rows[size_t(r) * nx + s] += wgt * src[size_t(r) * sw + k];
+      }
+    }
+  }
+  std::vector< float > field(size_t(ny) * nx);
+  for (int t = 0; t < ny; ++t) {
+    const float pos = float(t) / kUp - 0.5f;
+    const int k0 = int(std::floor(pos)) - 1;
+    for (int k = k0; k < k0 + 4; ++k) {
+      if (k < 0 || k >= sh) {
+        continue;
+      }
+      const float wgt = Cubic(pos - float(k));
+      for (int s = 0; s < nx; ++s) {
+        field[size_t(t) * nx + s] += wgt * rows[size_t(k) * nx + s];
+      }
+    }
+  }
+  return field;
+}
+
+void Connect(std::vector< int >& link, int e0, int e1) {
+  link[size_t(e0) * 2 + (link[size_t(e0) * 2] < 0 ? 0 : 1)] = e1;
+  link[size_t(e1) * 2 + (link[size_t(e1) * 2] < 0 ? 0 : 1)] = e0;
+}
+
+// Where the contour crosses an edge, in icon pixels.
+ImVec2 Crossing(const std::vector< float >& field, int nx, int edge) {
+  const int cell = edge >> 1;
+  const int x = cell % nx;
+  const int y = cell / nx;
+  const bool vertical = (edge & 1) != 0;
+  const float f0 = field[cell];
+  const float f1 = field[vertical ? cell + nx : cell + 1];
+  const float t = (f0 - kThreshold) / (f0 - f1);
+  const float px = vertical ? float(x) : float(x) + t;
+  const float py = vertical ? float(y) + t : float(y);
+  return ImVec2(px / kUp - kPad, py / kUp - kPad);
+}
+
+// Douglas-Peucker over points a..b (b may equal the count, meaning point 0 again).
+void Mark(const Loop& pts, int a, int b, std::vector< char >& keep) {
+  if (b - a < 2) {
+    return;
+  }
+  const int count = int(pts.size());
+  const ImVec2 p0 = pts[a];
+  const float dx = pts[b % count].x - p0.x;
+  const float dy = pts[b % count].y - p0.y;
+  const float len = std::max(std::hypot(dx, dy), 1e-6f);
+  int worst = -1;
+  float dist = kTolerance;
+  for (int i = a + 1; i < b; ++i) {
+    const float d = std::abs(dy * (pts[i].x - p0.x) - dx * (pts[i].y - p0.y)) / len;
+    if (d > dist) {
+      dist = d;
+      worst = i;
+    }
+  }
+  if (worst < 0) {
+    return;
+  }
+  keep[worst] = 1;
+  Mark(pts, a, worst, keep);
+  Mark(pts, worst, b, keep);
+}
+
+// Keeps only the points of the closed loop that matter: it is split at the point farthest from
+// the first, and each half is simplified on its own.
+Loop Simplified(const Loop& pts) {
+  const int count = int(pts.size());
+  int far = 0;
+  float best = -1.f;
+  for (int i = 1; i < count; ++i) {
+    const float dx = pts[i].x - pts[0].x;
+    const float dy = pts[i].y - pts[0].y;
+    if (dx * dx + dy * dy > best) {
+      best = dx * dx + dy * dy;
+      far = i;
+    }
+  }
+  std::vector< char > keep(count, 0);
+  keep[0] = 1;
+  keep[far] = 1;
+  Mark(pts, 0, far, keep);
+  Mark(pts, far, count, keep);
+  Loop out;
+  for (int i = 0; i < count; ++i) {
+    if (keep[i]) {
+      out.push_back(pts[i]);
+    }
+  }
+  return out;
+}
+
+// The outline's loops in icon pixel units (0..w, 0..h), filled even-odd; empty when it is empty.
+std::vector< Loop > Trace(const uint32_t* argb, int w, int h) {
+  const int sw = w + 2 * kPad;
+  const int sh = h + 2 * kPad;
+  std::vector< float > src(size_t(sw) * sh);
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      src[size_t(y + kPad) * sw + x + kPad] = float(argb[size_t(y) * w + x] >> 24) / 255.f;
+    }
+  }
+  const int nx = sw * kUp + 1;
+  const int ny = sh * kUp + 1;
+  const std::vector< float > field = Upsample(src, sw, sh, nx, ny);
+
+  // Each crossed grid edge links to the two edges it shares a cell segment with.
+  // Edge ids: 2 * (y * nx + x) for (x,y)-(x+1,y), + 1 for (x,y)-(x,y+1).
+  std::vector< int > link(size_t(nx) * ny * 4, -1);
+  for (int y = 0; y + 1 < ny; ++y) {
+    for (int x = 0; x + 1 < nx; ++x) {
+      const float a = field[size_t(y) * nx + x];
+      const float b = field[size_t(y) * nx + x + 1];
+      const float c = field[size_t(y + 1) * nx + x + 1];
+      const float d = field[size_t(y + 1) * nx + x];
+      const int code = (a > kThreshold ? 1 : 0) | (b > kThreshold ? 2 : 0) |
+                       (c > kThreshold ? 4 : 0) | (d > kThreshold ? 8 : 0);
+      if (code == 0 || code == 15) {
+        continue;
+      }
+      const int top = 2 * (y * nx + x);
+      const int bottom = 2 * ((y + 1) * nx + x);
+      const int left = top + 1;
+      const int right = 2 * (y * nx + x + 1) + 1;
+      const bool centre = (a + b + c + d) / 4.f > kThreshold;
+      switch (code) {
+      case 1: case 14: Connect(link, left, top); break;
+      case 2: case 13: Connect(link, top, right); break;
+      case 3: case 12: Connect(link, left, right); break;
+      case 4: case 11: Connect(link, right, bottom); break;
+      case 6: case 9: Connect(link, top, bottom); break;
+      case 7: case 8: Connect(link, left, bottom); break;
+      case 5:
+        if (centre) {
+          Connect(link, left, bottom);
+          Connect(link, top, right);
+        } else {
+          Connect(link, left, top);
+          Connect(link, right, bottom);
+        }
+        break;
+      case 10:
+        if (centre) {
+          Connect(link, left, top);
+          Connect(link, right, bottom);
+        } else {
+          Connect(link, left, bottom);
+          Connect(link, top, right);
+        }
+        break;
+      default:
+        break;
+      }
+    }
+  }
+
+  std::vector< Loop > loops;
+  std::vector< char > seen(size_t(nx) * ny * 2, 0);
+  Loop loop;
+  for (int start = 0; start < int(seen.size()); ++start) {
+    if (seen[start] || link[size_t(start) * 2] < 0) {
+      continue;
+    }
+    loop.clear();
+    int prev = -1;
+    int edge = start;
+    while (edge >= 0 && !seen[edge]) {
+      seen[edge] = 1;
+      loop.push_back(Crossing(field, nx, edge));
+      const int l0 = link[size_t(edge) * 2];
+      const int next = l0 != prev ? l0 : link[size_t(edge) * 2 + 1];
+      prev = edge;
+      edge = next;
+    }
+    if (loop.size() >= 3) {
+      loops.push_back(Simplified(loop));
+    }
+  }
+  return loops;
+}
+
+// Fills the loops even-odd into a white texture's alpha, scale texels per icon pixel: 4 sample
+// rows per texel, each span's horizontal coverage exact.
+std::vector< uint8_t > Fill(const std::vector< Loop >& loops, int tw, int th, float scale) {
+  constexpr int kRows = 4;
+  std::vector< float > cover(size_t(tw) * th);
+  std::vector< float > xs;
+  for (int ty = 0; ty < th; ++ty) {
+    float* row = &cover[size_t(ty) * tw];
+    for (int sub = 0; sub < kRows; ++sub) {
+      const float sy = (float(ty) + (float(sub) + 0.5f) / kRows) / scale;
+      xs.clear();
+      for (const Loop& l : loops) {
+        for (size_t i = 0, n = l.size(); i < n; ++i) {
+          const ImVec2 p = l[i], q = l[(i + 1) % n];
+          if ((p.y <= sy) != (q.y <= sy)) {
+            xs.push_back((p.x + (sy - p.y) / (q.y - p.y) * (q.x - p.x)) * scale);
+          }
+        }
+      }
+      std::sort(xs.begin(), xs.end());
+      for (size_t i = 0; i + 1 < xs.size(); i += 2) {
+        const float x0 = std::clamp(xs[i], 0.f, float(tw));
+        const float x1 = std::clamp(xs[i + 1], 0.f, float(tw));
+        for (int x = int(x0); x < tw && float(x) < x1; ++x) {
+          row[x] += (std::min(x1, float(x + 1)) - std::max(x0, float(x))) / kRows;
+        }
+      }
+    }
+  }
+  std::vector< uint8_t > rgba(size_t(tw) * th * 4, 255);
+  for (size_t i = 0; i < cover.size(); ++i) {
+    rgba[i * 4 + 3] = uint8_t(std::clamp(cover[i], 0.f, 1.f) * 255.f + 0.5f);
+  }
+  return rgba;
+}
+} // namespace IconTracer
+
+// Texels along an icon's longer side: past the largest the overlay draws one (the wheel button's
+// radius * 1.4 on a tablet).
+constexpr int kIconTexSize = 256;
+// TouchControlsView.BEAM_ICON_COLORS: Power, Ice, Wave, Plasma.
+constexpr uint32_t kBeamIconColors[4] = {0xFFFFFF00, 0xFFFFFFFF, 0xFF8033FF, 0xFFCC1A1A};
+
+struct TracedIcon {
+  ImTextureID texture{};
+  int w = 0, h = 0; // the icon's own size, in pixels
+  bool done = false; // traced (texture is null when the outline was empty)
+};
+TracedIcon sTracedIcons[2][4];
+
+// refreshWheelIcons: traces each icon once the HUD has captured it. The captures never change, so
+// the textures stay for the run.
+void RefreshWheelIcons() {
+  for (int wheel = 0; wheel < 2; ++wheel) {
+    for (int item = 0; item < 4; ++item) {
+      TracedIcon& traced = sTracedIcons[wheel][item];
+      if (traced.done) {
+        continue;
+      }
+      DebugUi::WheelIcon icon;
+      {
+        std::lock_guard< std::mutex > lock(DebugUi::sWheelIconMutex);
+        icon = DebugUi::sWheelIcons[wheel][item];
+      }
+      if (icon.w <= 0 || icon.h <= 0 || icon.argb.size() != size_t(icon.w) * icon.h) {
+        continue;
+      }
+      traced.done = true;
+      traced.w = icon.w;
+      traced.h = icon.h;
+      const std::vector< IconTracer::Loop > loops = IconTracer::Trace(icon.argb.data(), icon.w, icon.h);
+      if (loops.empty()) {
+        continue;
+      }
+      const float scale = float(kIconTexSize) / float(std::max(icon.w, icon.h));
+      const int tw = std::max(1, int(std::lround(icon.w * scale)));
+      const int th = std::max(1, int(std::lround(icon.h * scale)));
+      const std::vector< uint8_t > rgba = IconTracer::Fill(loops, tw, th, scale);
+      traced.texture = aurora_imgui_add_texture(uint32_t(tw), uint32_t(th), rgba.data());
+    }
+  }
+}
+
+// drawWheelIcon: the icon fitted into a size x size box at (cx, cy), beams in their colour;
+// false when it has none yet.
+bool DrawWheelIcon(ImDrawList* dl, int wheel, int item, float cx, float cy, float size) {
+  const TracedIcon& traced = sTracedIcons[wheel][item];
+  if (!traced.done || !traced.texture) {
+    return false;
+  }
+  const float scale = size / float(std::max(traced.w, traced.h));
+  const float hw = traced.w * scale / 2.f, hh = traced.h * scale / 2.f;
+  dl->AddImage(traced.texture, ImVec2(cx - hw, cy - hh), ImVec2(cx + hw, cy + hh), ImVec2(0, 0),
+               ImVec2(1, 1), Argb(wheel == 1 ? kBeamIconColors[item] : 0xFFFFFFFF));
+  return true;
+}
+
+// actionIcon: a beam or visor action's wheel icon as wheel * 4 + item, or -1.
+int ActionIcon(const std::string& key) {
+  static const std::map< std::string, int > kIcons = {
+      {"visor_combat", 0}, {"visor_xray", 1}, {"visor_scan", 2},  {"visor_thermal", 3},
+      {"beam_power", 4},   {"beam_ice", 5},   {"beam_wave", 6},   {"beam_plasma", 7},
+  };
+  const auto it = kIcons.find(key);
+  return it == kIcons.end() ? -1 : it->second;
+}
+
 // A GameCube colour as a fill: translucent at rest, lighter and more solid while held.
 ImU32 PadFill(uint32_t rgb, bool active) {
   if (!active) {
@@ -2863,6 +3194,7 @@ void DrawWheelButtons(ImDrawList* dl, float width, float height) {
   if (!shown) {
     return;
   }
+  RefreshWheelIcons();
   for (int wheel = 0; wheel < 2; ++wheel) {
     ControlLayer layer(kCVisor + wheel);
     if (layer.skip) {
@@ -2876,9 +3208,12 @@ void DrawWheelButtons(ImDrawList* dl, float width, float height) {
     dl->AddCircleFilled(ImVec2(cx, cy), radius,
                         Argb(active ? 0xCC48C8E8 : 0x77081218), 32);
     dl->AddCircle(ImVec2(cx, cy), radius, Argb(active ? 0xFFE1F8FF : 0xBBFFFFFF), 32, Dp(2));
-    // The game's icon would go here; the text label stands in for it.
-    Text(dl, cx, cy, Dp(13) * sOvScale[kCVisor + wheel], Argb(0xFFFFFFFF),
-         kWheelButtonLabels[wheel]);
+    // The current item's icon, or the label until the HUD has loaded it.
+    const int current = wheel == 0 ? int((mask >> 8) & 3) : int((mask >> 10) & 3);
+    if (!DrawWheelIcon(dl, wheel, current, cx, cy, radius * 1.4f)) {
+      Text(dl, cx, cy, Dp(13) * sOvScale[kCVisor + wheel], Argb(0xFFFFFFFF),
+           kWheelButtonLabels[wheel]);
+    }
   }
 }
 
@@ -2933,7 +3268,9 @@ void DrawWheel(ImDrawList* dl) {
     const float labelR = (outer + inner) * 0.5f;
     const float lx = sWheelCx + labelR * std::cos(mid);
     const float ly = sWheelCy + labelR * std::sin(mid);
-    Text(dl, lx, ly, Dp(12), Argb(0xFFFFFFFF), kWheelLabels[target.id][i]);
+    if (!DrawWheelIcon(dl, target.id, item, lx, ly, Dp(kWheelIconDp))) {
+      Text(dl, lx, ly, Dp(12), Argb(0xFFFFFFFF), kWheelLabels[target.id][i]);
+    }
   }
 }
 
@@ -3002,7 +3339,7 @@ std::string ShortLabel(const std::string& key) {
   return label;
 }
 
-// Round buttons with a short label (the Java's beam/visor icon needs the traced bitmap).
+// Round buttons with the game's icon for a beam or visor, else a short label.
 void DrawCustomButtons(ImDrawList* dl, float width, float height) {
   for (int control = kCCustom; control < kAllControls; ++control) {
     const std::string& key = sCustomAction[control - kCCustom];
@@ -3019,9 +3356,15 @@ void DrawCustomButtons(ImDrawList* dl, float width, float height) {
                         Argb(active ? 0xCC48C8E8 : 0x77081218), 40);
     dl->AddCircle(ImVec2(geo.x, geo.y), geo.radius,
                   Argb(active ? 0xFFE1F8FF : 0xBBFFFFFF), 40, Dp(2));
-    const std::string label = ShortLabel(key);
-    TextFitted(dl, label.c_str(), geo.x, geo.y, Dp(14) * sOvScale[control], geo.radius * 1.7f,
-               Argb(0xFFFFFFFF));
+    const int icon = ActionIcon(key);
+    if (icon >= 0) {
+      RefreshWheelIcons();
+    }
+    if (icon < 0 || !DrawWheelIcon(dl, icon / 4, icon % 4, geo.x, geo.y, geo.radius * 1.3f)) {
+      const std::string label = ShortLabel(key);
+      TextFitted(dl, label.c_str(), geo.x, geo.y, Dp(14) * sOvScale[control], geo.radius * 1.7f,
+                 Argb(0xFFFFFFFF));
+    }
   }
 }
 
