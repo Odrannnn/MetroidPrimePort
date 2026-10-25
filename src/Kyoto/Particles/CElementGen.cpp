@@ -1392,6 +1392,28 @@ void CElementGen::CreateNewParticles(int count) {
     if (x28_loadedGenDesc->xPortVfx) {
       PortVfxEvalParticle(*x28_loadedGenDesc, particle, 0);
     }
+    // CreateNewParticles 0x24abd0 invokes the complete velocity program after initial values.
+    // Compile 0x291b90 prepends pos += vel unless a source finalizes position itself;
+    // the killing op 0x292b88 terminates the program immediately. Keep prevPos/launchDir
+    // from before this step, and remove a killed newborn before it can be rendered.
+    if (x28_loadedGenDesc->xPortVelocityAtCreation) {
+      if (!xPortVelFinalizes) {
+        particle.x4_pos += particle.x1c_vel;
+      }
+      bool killed = false;
+      for (int v = 0; v < 4 && x280_VELSources[v] != nullptr; ++v) {
+        if (UpdateVelocitySource(v, 0, particle)) {
+          killed = true;
+          break;
+        }
+      }
+      if (killed) {
+        x30_particles.pop_back();
+        --mParticleAliveCount;
+        --x25c_activeParticleCount;
+        continue;
+      }
+    }
 #endif
     AccumulateBounds(particle.x4_pos, particle.x2c_lineLengthOrSize);
   }

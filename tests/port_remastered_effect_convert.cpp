@@ -2867,6 +2867,30 @@ void TestShutdownAndPivot() {
       o.push_back(value);
     });
   };
+  const auto vmpc = [&](uint8_t value) {
+    return convert([&](auto& o) {
+      PutProperty(o, "VMPC", 0);
+      o.push_back(value);
+    });
+  };
+  parts = vmpc(1);
+  Retail birthVelocity;
+  birthVelocity.f("GPSM").f("VMPC").f("CNST").w(1).f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+  CHECK_MSG(parts.size() == 1 && parts[0].part == birthVelocity.bytes && parts[0].dropped.empty(),
+            "VMPC 1 survives conversion independently of material support");
+  if (!parts.empty()) {
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "VMPC passes the PART element reader");
+  }
+  parts = vmpc(0);
+  CHECK_MSG(parts.size() == 1 && parts[0].part == none.bytes && parts[0].dropped.empty(),
+            "VMPC 0 leaves retail birth behavior unchanged");
+  parts = vmpc(2);
+  CHECK_MSG(parts.size() == 1 && parts[0].part == none.bytes && parts[0].dropped.size() == 1 &&
+                parts[0].dropped[0] == "VMPC: not a constant 0 or 1",
+            "invalid VMPC remains diagnosed");
   parts = blit(1);
   Retail pblt;
   pblt.f("GPSM").f("PBLT").f("CNST").w(1).f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
