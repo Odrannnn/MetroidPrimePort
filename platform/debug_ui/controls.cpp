@@ -285,29 +285,22 @@ void DrawControlsController() {
 void DrawControlsTouchGyro() {
 #if defined(PORT_TOUCH_CONTROLS)
   ImGui::SeparatorText("Touch controls");
-#if defined(__ANDROID__)
   // First on the page: the layout is what touch players come here to change.
   if (ImGui::Button("Edit layout")) {
-    // The touch view takes the request and opens its editor over the game.
+    // The touch overlay takes the request and opens its editor once this closes.
     sTouchEditRequested.store(true, std::memory_order_release);
     RequestToggle();
   }
   ImGui::SameLine();
-#endif
   if (ImGui::Button("Reset margins")) {
     sInput.touchSideMargin.store(kTouchSideMarginDefault);
     sInput.touchStickInset.store(kTouchStickInsetDefault);
     sInput.touchButtonInset.store(kTouchButtonInsetDefault);
     MarkDirty();
   }
-#if defined(__ANDROID__)
   // One help line for the pair: inline help under the first would break the row.
   ItemHelp("Edit layout: move, resize, fade, hide, delete or add on-screen buttons. "
            "Reset margins: sets the three margins below back to 0.");
-#else
-  // The C++ overlay (touch_overlay.cpp) has no layout editor yet.
-  ItemHelp("Sets the three margins below back to 0.");
-#endif
   bool touchControls = sInput.touchControls.load();
   if (ImGui::Checkbox("On-screen controls", &touchControls)) {
     sInput.touchControls.store(touchControls);

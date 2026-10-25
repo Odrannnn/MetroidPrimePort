@@ -10,10 +10,13 @@
 // control's (sLocal).
 //
 // Android-only parts left out: the mouse (fromMouse, onHoverEvent — a mouse is not a finger on the
-// overlay), performClick, attach and detach (a view lifecycle with no C++ equivalent; the poll
-// these scheduled runs from the draw), and the layout editor (stage B: its touch handling and
-// drawing are not translated yet, but the data model, controlBounds, clampToScreen, layoutHas,
-// layoutShows, editShown and the editing flag are, so it plugs in).
+// overlay), performClick, and attach and detach (a view lifecycle with no C++ equivalent; the poll
+// these scheduled runs from the draw).
+//
+// The layout editor is here too: its toolbar, the drag/pinch, the per-control opacity, hide, delete
+// and reset, the Morph Ball page switch and the added buttons. The Java's pickAction AlertDialog is
+// an ImGui window (the port has no dialogs), and Done saves through SerializeLayout into the same
+// string Android writes.
 //
 // Wheel icons: the Java traces nativeWheelIcon's ARGB bitmaps into outlines (IconTracer) and fills
 // them. That needs the bitmap as an ImGui texture or a tracer here, so a wheel item and the wheel
@@ -170,6 +173,27 @@ constexpr int kAlphaSteps[] = {100, 75, 50, 25, 0};
 constexpr int kMenuMinAlpha = 25;
 // The editor draws a control at its own opacity, but hidden and 0% ones at this.
 constexpr int kEditMinAlpha = 15;
+
+// The editor's toolbar: the tools (indexed by kEdit*), their labels and widths, and which ones show
+// depends on the selection (EditTools).
+constexpr int kEditMinus = 0, kEditPlus = 1, kEditOpacity = 2, kEditHide = 3, kEditReset = 4,
+              kEditResetAll = 5, kEditDone = 6, kEditAdd = 7, kEditAction = 8, kEditDelete = 9,
+              kEditPage = 10, kEditCustomPage = 11, kEditToolCount = 12;
+// The Java's "−" is U+2212, which the port's ImGui font has no glyph for: a plain "-" it is.
+constexpr const char* kEditLabels[kEditToolCount] = {
+    "-", "+", "Opacity", "Hide", "Reset", "Reset all", "Done", "Add", "Action", "Delete",
+    "Ball page", "Page"};
+constexpr float kEditWidthsDp[kEditToolCount] = {44.f, 44.f, 112.f, 60.f, 64.f, 88.f,
+                                                 64.f, 64.f, 72.f,  72.f, 100.f, 100.f};
+constexpr float kEditBarHeightDp = 44.f, kEditBarGapDp = 6.f;
+constexpr float kEditGrabDp = 8.f; // slack round a control's bounds
+constexpr float kEditScaleStep = 0.1f;
+// Nothing selected, a stock control, an added button.
+constexpr int kEditToolsNone[] = {kEditAdd, kEditPage, kEditResetAll, kEditDone};
+constexpr int kEditToolsStock[] = {kEditMinus, kEditPlus, kEditOpacity, kEditHide,
+                                   kEditReset, kEditDelete, kEditDone};
+constexpr int kEditToolsCustom[] = {kEditMinus,    kEditPlus, kEditOpacity,  kEditHide,
+                                    kEditAction,   kEditCustomPage, kEditDelete, kEditDone};
 // The ids the saved layout uses; never rename one.
 constexpr const char* kControlIdsStock[kControls] = {
     "lstick", "cstick", "dpad", "a", "b", "x", "y", "l", "r", "z", "visor", "beam", "start",
@@ -387,9 +411,33 @@ int sLabelContextNow = kLabelsPlay;
 bool sHidden = false;      // the eye button; the next touch brings the controls back
 bool sAutoHidden = false;  // a real pad, keyboard or mouse was used
 bool sBallPage = false;
-// Stage B's flag: the layout editor takes every touch and shows every control. Off until its touch
-// handling and drawing are translated.
+// The layout editor: it takes every touch and shows every control.
 bool sEditing = false;
+// F1's "Edit layout" was pressed; the editor opens once the overlay is gone.
+bool sEditPending = false;
+// The editor's selection (a kC* control), and why the last tool did nothing (Add with every slot
+// used), shown in the hint line until the next touch.
+int sSelected = -1;
+std::string sEditNotice;
+// Fingers on the editor's toolbar and on the dragged control, and the pinch that resizes it.
+SDL_FingerID sDragPointer = 0, sPinchPointer = 0, sEditToolPointer = 0;
+bool sAnyDrag = false, sAnyPinch = false, sAnyEditTool = false;
+std::map< SDL_FingerID, ImVec2 > sEditFingers;
+float sDragLastX = 0.f, sDragLastY = 0.f, sPinchStartDist = 1.f, sPinchStartScale = 1.f;
+// The toolbar's tool rects, laid out for the current width.
+Rect sEditBar[kEditToolCount];
+
+// The Java's pickAction AlertDialog, as an ImGui window: the deleted stock controls this layout can
+// bring back (Add lists them first), then the actions an added button can take.
+struct ActionPicker {
+  bool open = false;
+  int control = -1; // the added button whose action changes, or -1 for Add
+  std::vector< int > restore;
+  std::vector< std::string > keys; // action keys, parallel to labels
+  std::vector< std::string > labels;
+  int checked = -1;
+};
+ActionPicker sPicker;
 
 // The layout (`syncLayout`): the per-control overrides, then the player's added buttons.
 std::array< float, kAllControls > sOvDx{}, sOvDy{};
@@ -678,9 +726,9 @@ void LoadLayout(const std::string& text) {
   }
 }
 
-// Only the controls that were changed, so a default layout is the empty string. (Stage B saves
-// through this.)
-[[maybe_unused]] std::string SerializeLayout() {
+// Only the controls that were changed, so a default layout is the empty string. The editor's Done
+// saves through this, and Android reads what it writes.
+std::string SerializeLayout() {
   std::string out;
   const std::array< std::string, kAllControls >& ids = ControlIds();
   char field[64];
@@ -734,7 +782,7 @@ void SyncLayout() {
   }
 }
 
-[[maybe_unused]] void ResetControl(int control) {
+void ResetControl(int control) {
   sOvDx[control] = 0.f;
   sOvDy[control] = 0.f;
   sOvScale[control] = 1.f;
@@ -919,10 +967,10 @@ bool LayoutHas(int control) {
 
 // Whether the current layout, settings and page have this control at all, deleted or not (Add's
 // list restores only those).
-[[maybe_unused]] bool LayoutShows(int control) { return OnPage(control) && LayoutHas(control); }
+bool LayoutShows(int control) { return OnPage(control) && LayoutHas(control); }
 
-// Whether the current settings draw this control. (Stage B's editor draws these.)
-[[maybe_unused]] bool EditShown(int control) { return !Removed(control) && LayoutShows(control); }
+// Whether the current settings draw this control.
+bool EditShown(int control) { return !Removed(control) && LayoutShows(control); }
 
 bool PillShown(const PillButton& pill) {
   if (!sControlsOn && !sEditing) {
@@ -1588,6 +1636,399 @@ bool SyncControlsOn() {
 void SetHidden(bool hide) {
   ReleaseAll();
   sHidden = hide;
+}
+
+// --- the layout editor ------------------------------------------------------
+// The Java's: every touch is consumed, so nothing reaches the game (F1 does not pause it, so it
+// keeps running underneath). Held inputs are released on the way in, so nothing is left pressed.
+
+void BeginEdit() {
+  ReleaseAll();
+  // Fingers handed to SDL over the closing overlay keep their mouse side (the filter passes the
+  // synthetic touch-mouse while editing, so ImGui sees them lift); their finger events become the
+  // editor's from here. The Java injects a cancel instead, which a filter cannot do.
+  sForwarded.clear();
+  sEditFingers.clear();
+  sAnyDrag = sAnyPinch = sAnyEditTool = false;
+  sHidden = false;
+  sAutoHidden = false;
+  sEditing = true;
+  sBallPage = false;
+  sSelected = -1;
+  sEditNotice.clear();
+  sPicker.open = false;
+}
+
+// The layout is saved through the same string Android writes, so either device can read the other's.
+void EndEdit(bool save) {
+  if (save) {
+    sLayoutText = SerializeLayout();
+    PortDebug::SetTouchLayout(sLayoutText);
+  }
+  sEditing = false;
+  sEditPending = false;
+  sSelected = -1;
+  sAnyDrag = sAnyPinch = sAnyEditTool = false;
+  sEditFingers.clear();
+  sPicker.open = false;
+}
+
+int FreeSlot() {
+  for (int slot = 0; slot < kCustomSlots; ++slot) {
+    if (sCustomAction[slot].empty()) {
+      return slot;
+    }
+  }
+  return -1;
+}
+
+// The deleted stock controls the current layout has.
+std::vector< int > Restorable() {
+  std::vector< int > out;
+  for (int c = 0; c < kControls; ++c) {
+    if (sOvRemoved[c] && LayoutShows(c)) {
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
+// The selected control's name: an added button goes by its action.
+std::string ControlName(int control) {
+  if (control < kCCustom) {
+    return kControlNames[control];
+  }
+  std::string label;
+  if (ActionLabel(sCustomAction[control - kCCustom], label)) {
+    return label;
+  }
+  return "Button";
+}
+
+// The next opacity in the 100, 75, 50, 25, 0 cycle; MENU wraps after 25.
+int NextAlpha(int control) {
+  const int floor = control == kCMenu ? kMenuMinAlpha : 0;
+  for (const int step : kAlphaSteps) {
+    if (step < sOvAlpha[control] && step >= floor) {
+      return step;
+    }
+  }
+  return 100;
+}
+
+void RestoreControl(int control) {
+  if (!sEditing) {
+    return; // the editor closed under the list
+  }
+  sOvRemoved[control] = false;
+  sOvHidden[control] = false;
+  sSelected = control;
+}
+
+void ApplyAction(int control, const std::string& key) {
+  if (!sEditing) {
+    return; // the editor closed under the list
+  }
+  if (control < 0) {
+    const int slot = FreeSlot();
+    if (slot < 0) {
+      return;
+    }
+    sCustomAction[slot] = key;
+    sCustomPage[slot] = sBallPage ? kPageBall : kPagePlay; // the page it was added on
+    ResetControl(kCCustom + slot);
+    sSelected = kCCustom + slot;
+    return;
+  }
+  if (control >= kCCustom && !sCustomAction[control - kCCustom].empty()) {
+    sCustomAction[control - kCCustom] = key;
+  }
+}
+
+// pickAction: lists the deleted stock controls this layout has (Add only), then the actions a
+// button can take, with the current one ticked.
+void OpenActionPicker(int control) {
+  const std::vector< int > restore = control < 0 ? Restorable() : std::vector< int >();
+  const std::vector< std::string >& list = ButtonActions();
+  const bool listActions = control >= 0 || FreeSlot() >= 0;
+  sPicker = ActionPicker();
+  sPicker.control = control;
+  sPicker.restore = restore;
+  for (const int c : restore) {
+    sPicker.labels.push_back(std::string("Restore ") + kControlNames[c]);
+  }
+  if (listActions) {
+    const std::string current =
+        control >= kCCustom ? sCustomAction[control - kCCustom] : std::string();
+    for (size_t i = 0; i + 1 < list.size(); i += 2) {
+      sPicker.keys.push_back(list[i]);
+      sPicker.labels.push_back(list[i + 1]);
+      if (!current.empty() && list[i] == current) {
+        sPicker.checked = int(sPicker.labels.size() - 1);
+      }
+    }
+  }
+  if (sPicker.labels.empty()) {
+    return;
+  }
+  sPicker.open = true;
+}
+
+// The toolbar shows only what applies to the selection, to stay narrow.
+struct EditTools {
+  const int* list;
+  int count;
+};
+EditTools Tools() {
+  if (sSelected < 0) {
+    return {kEditToolsNone, int(std::size(kEditToolsNone))};
+  }
+  if (sSelected >= kCCustom) {
+    return {kEditToolsCustom, int(std::size(kEditToolsCustom))};
+  }
+  return {kEditToolsStock, int(std::size(kEditToolsStock))};
+}
+
+void LayoutEditBar(float width) {
+  const EditTools tools = Tools();
+  float total = 0.f;
+  for (int i = 0; i < tools.count; ++i) {
+    total += Dp(kEditWidthsDp[tools.list[i]]);
+  }
+  const float gap = Dp(4);
+  total += gap * float(tools.count - 1);
+  const float fit = std::min(1.f, (width - 2.f * Dp(8)) / total);
+  float x = (width - total * fit) * 0.5f;
+  const float top = Dp(8);
+  for (int i = 0; i < tools.count; ++i) {
+    const int tool = tools.list[i];
+    const float w = Dp(kEditWidthsDp[tool]) * fit;
+    sEditBar[tool] = {x, top, x + w, top + Dp(kEditBarHeightDp)};
+    x += w + gap * fit;
+  }
+}
+
+int EditBarAt(float x, float y) {
+  const EditTools tools = Tools();
+  for (int i = 0; i < tools.count; ++i) {
+    if (sEditBar[tools.list[i]].Contains(x, y)) {
+      return tools.list[i];
+    }
+  }
+  return -1;
+}
+
+void EditAction(int tool, float width, float height) {
+  switch (tool) {
+  case kEditMinus:
+  case kEditPlus:
+    if (sSelected >= 0) {
+      const float step = tool == kEditPlus ? kEditScaleStep : -kEditScaleStep;
+      // Rounded so repeated steps land on tidy percentages.
+      sOvScale[sSelected] = std::clamp(std::round((sOvScale[sSelected] + step) * 100.f) / 100.f,
+                                       kMinScale, kMaxScale);
+      ClampToScreen(sSelected, width, height);
+    }
+    break;
+  case kEditOpacity:
+    if (sSelected >= 0) {
+      sOvAlpha[sSelected] = NextAlpha(sSelected);
+    }
+    break;
+  case kEditHide:
+    if (sSelected >= 0 && sSelected != kCMenu) {
+      sOvHidden[sSelected] = !sOvHidden[sSelected];
+    }
+    break;
+  case kEditReset:
+    if (sSelected >= 0) {
+      ResetControl(sSelected);
+    }
+    break;
+  case kEditResetAll:
+    for (int i = 0; i < kAllControls; ++i) {
+      ResetControl(i);
+    }
+    // The added buttons go too.
+    for (std::string& key : sCustomAction) {
+      key.clear();
+    }
+    sCustomPage.fill(kPagePlay);
+    break;
+  case kEditPage:
+    sBallPage = !sBallPage;
+    sSelected = -1;
+    break;
+  case kEditCustomPage:
+    if (sSelected >= kCCustom) {
+      const int slot = sSelected - kCCustom;
+      sCustomPage[slot] = (sCustomPage[slot] + 1) % 3;
+      if (!OnPage(sSelected)) {
+        sSelected = -1; // it went to the other page
+      }
+    }
+    break;
+  case kEditAdd:
+    if (FreeSlot() < 0 && Restorable().empty()) {
+      sEditNotice = "All " + std::to_string(kCustomSlots) +
+                    " buttons are in use: delete one to add another";
+    } else {
+      OpenActionPicker(-1);
+    }
+    break;
+  case kEditAction:
+    if (sSelected >= kCCustom) {
+      OpenActionPicker(sSelected);
+    }
+    break;
+  case kEditDelete:
+    if (sSelected >= kCCustom) {
+      sCustomAction[sSelected - kCCustom].clear();
+      ResetControl(sSelected);
+      sSelected = -1;
+    } else if (sSelected >= 0 && sSelected != kCMenu) {
+      // Kept where it was, so a restore brings it back as it was.
+      sOvRemoved[sSelected] = true;
+      sSelected = -1;
+    }
+    break;
+  default:
+    EndEdit(true); // Done
+    return;
+  }
+}
+
+// The smallest shown control under (x, y), so a small button on a big one (B near A, the stick under
+// Visor) is still reachable. Of equal ones (added buttons stacked at the centre), the selected one,
+// else the last added.
+int EditHit(float x, float y, float width, float height) {
+  int best = -1;
+  float bestArea = FLT_MAX;
+  const float slack = Dp(kEditGrabDp);
+  for (int c = 0; c < kAllControls; ++c) {
+    if (!EditShown(c)) {
+      continue;
+    }
+    Rect bounds;
+    ControlBounds(c, width, height, bounds);
+    if (bounds.Empty()) {
+      continue;
+    }
+    bounds.Inset(slack);
+    const float area = bounds.Width() * bounds.Height();
+    if (bounds.Contains(x, y) &&
+        (area < bestArea || (area == bestArea && c >= kCCustom && best != sSelected))) {
+      best = c;
+      bestArea = area;
+    }
+  }
+  return best;
+}
+
+// SDL hands one finger per event, so the Java's pointer list is the editor's finger map and the
+// pinch reads both fingers' last positions from it.
+bool EditTouchDown(SDL_FingerID id, float x, float y) {
+  if (sPicker.open) {
+    return true; // the dialog is modal
+  }
+  sEditFingers[id] = ImVec2(x, y);
+  sEditNotice.clear();
+  LayoutEditBar(sW);
+  const int tool = EditBarAt(x, y);
+  if (tool >= 0) {
+    if (!sAnyEditTool) {
+      sAnyEditTool = true;
+      sEditToolPointer = id;
+      EditAction(tool, sW, sH);
+    }
+    return true;
+  }
+  if (sAnyDrag && !sAnyPinch && sSelected >= 0) {
+    const auto drag = sEditFingers.find(sDragPointer);
+    if (drag != sEditFingers.end()) {
+      const float dist = std::hypot(x - drag->second.x, y - drag->second.y);
+      if (dist >= Dp(kMapPinchMinDp)) {
+        sAnyPinch = true;
+        sPinchPointer = id;
+        sPinchStartDist = dist;
+        sPinchStartScale = sOvScale[sSelected];
+      }
+    }
+    return true;
+  }
+  if (!sAnyDrag) {
+    const int hit = EditHit(x, y, sW, sH);
+    sSelected = hit;
+    if (hit >= 0) {
+      sAnyDrag = true;
+      sDragPointer = id;
+      sDragLastX = x;
+      sDragLastY = y;
+    }
+  }
+  return true;
+}
+
+bool EditTouchMove(SDL_FingerID id, float x, float y) {
+  if (sPicker.open) {
+    return true;
+  }
+  if (const auto it = sEditFingers.find(id); it != sEditFingers.end()) {
+    it->second = ImVec2(x, y);
+  }
+  if (sSelected < 0) {
+    return true;
+  }
+  const auto drag = sAnyDrag ? sEditFingers.find(sDragPointer) : sEditFingers.end();
+  const auto pinch = sAnyPinch ? sEditFingers.find(sPinchPointer) : sEditFingers.end();
+  if (drag != sEditFingers.end() && pinch != sEditFingers.end()) {
+    const float dist =
+        std::hypot(pinch->second.x - drag->second.x, pinch->second.y - drag->second.y);
+    sOvScale[sSelected] =
+        std::clamp(sPinchStartScale * dist / sPinchStartDist, kMinScale, kMaxScale);
+    // Keep the drag anchor current so lifting one finger doesn't jump.
+    sDragLastX = drag->second.x;
+    sDragLastY = drag->second.y;
+    ClampToScreen(sSelected, sW, sH);
+  } else if (drag != sEditFingers.end()) {
+    // The dragged finger's own travel: another finger moving moves nothing.
+    const float u = LayoutU(sH);
+    sOvDx[sSelected] += (drag->second.x - sDragLastX) / u;
+    sOvDy[sSelected] += (drag->second.y - sDragLastY) / u;
+    sDragLastX = drag->second.x;
+    sDragLastY = drag->second.y;
+    ClampToScreen(sSelected, sW, sH);
+  }
+  return true;
+}
+
+void EditTouchUp(SDL_FingerID id) {
+  sEditFingers.erase(id);
+  if (sAnyEditTool && id == sEditToolPointer) {
+    sAnyEditTool = false;
+  } else if (sAnyPinch && id == sPinchPointer) {
+    sAnyPinch = false;
+  } else if (sAnyDrag && id == sDragPointer) {
+    // The pinch finger carries on as the drag.
+    sAnyDrag = sAnyPinch;
+    if (sAnyDrag) {
+      sDragPointer = sPinchPointer;
+    }
+    sAnyPinch = false;
+    const auto next = sAnyDrag ? sEditFingers.find(sDragPointer) : sEditFingers.end();
+    if (next != sEditFingers.end()) {
+      sDragLastX = next->second.x;
+      sDragLastY = next->second.y;
+    }
+  }
+  if (sEditFingers.empty()) {
+    sAnyDrag = sAnyPinch = sAnyEditTool = false;
+  }
+}
+
+void EditTouchCancel() {
+  sEditFingers.clear();
+  sAnyDrag = sAnyPinch = sAnyEditTool = false;
 }
 
 // --- aiming, the map, the sticks --------------------------------------------
@@ -2582,6 +3023,166 @@ void DrawCustomButtons(ImDrawList* dl, float width, float height) {
   }
 }
 
+// DashPathEffect's stand-in: ImDrawList has no dash pattern, so each edge is walked in dashes.
+void DashedRect(ImDrawList* dl, const Rect& r, float dash, float gap, ImU32 col, float thickness) {
+  const float step = dash + gap;
+  auto edge = [&](float x0, float y0, float x1, float y1) {
+    const float len = std::hypot(x1 - x0, y1 - y0);
+    if (len <= 0.f) {
+      return;
+    }
+    const float ux = (x1 - x0) / len, uy = (y1 - y0) / len;
+    for (float t = 0.f; t < len; t += step) {
+      const float e = std::min(t + dash, len);
+      dl->AddLine(ImVec2(x0 + ux * t, y0 + uy * t), ImVec2(x0 + ux * e, y0 + uy * e), col,
+                  thickness);
+    }
+  };
+  edge(r.x0, r.y0, r.x1, r.y0);
+  edge(r.x1, r.y0, r.x1, r.y1);
+  edge(r.x1, r.y1, r.x0, r.y1);
+  edge(r.x0, r.y1, r.x0, r.y0);
+}
+
+// The editor's overlay: every shown control's bounds (solid and yellow for the selection, dashed
+// otherwise, orange when hidden), the toolbar, and the hint line.
+void DrawEditOverlay(ImDrawList* dl, float width, float height) {
+  const float slack = Dp(kEditGrabDp) * 0.5f;
+  const float corner = Dp(8);
+  for (int c = 0; c < kAllControls; ++c) {
+    if (!EditShown(c)) {
+      continue;
+    }
+    Rect bounds;
+    ControlBounds(c, width, height, bounds);
+    if (bounds.Empty()) {
+      continue;
+    }
+    bounds.Inset(slack);
+    if (c == sSelected) {
+      dl->AddRectFilled(ImVec2(bounds.x0, bounds.y0), ImVec2(bounds.x1, bounds.y1),
+                        Argb(0x5548C8E8), corner);
+      dl->AddRect(ImVec2(bounds.x0, bounds.y0), ImVec2(bounds.x1, bounds.y1), Argb(0xFFFFE04A),
+                  corner, 0, Dp(2));
+    } else {
+      // Hidden ones in orange, so they stand out from the faint ones.
+      DashedRect(dl, bounds, Dp(6), Dp(4), Argb(sOvHidden[c] ? 0xFFFF9A3C : 0xCCFFFFFF), Dp(2));
+    }
+    // Tag what isn't default, so a faded control reads as faded on purpose.
+    char tag[16];
+    const char* text = nullptr;
+    if (sOvHidden[c]) {
+      text = "hidden";
+    } else if (sOvAlpha[c] != 100) {
+      std::snprintf(tag, sizeof(tag), "%d%%", sOvAlpha[c]);
+      text = tag;
+    }
+    if (text != nullptr) {
+      Text(dl, bounds.Cx(), bounds.y0 + Dp(10), Dp(10), Argb(0xFFFFFFFF), text);
+    }
+  }
+  LayoutEditBar(width);
+  const EditTools tools = Tools();
+  for (int i = 0; i < tools.count; ++i) {
+    const int tool = tools.list[i];
+    const Rect& bar = sEditBar[tool];
+    dl->AddRectFilled(ImVec2(bar.x0, bar.y0), ImVec2(bar.x1, bar.y1),
+                      Argb(tool == kEditDone ? 0xDD2E8B57 : 0xDD081218), corner);
+    dl->AddRect(ImVec2(bar.x0, bar.y0), ImVec2(bar.x1, bar.y1), Argb(0xCCFFFFFF), corner, 0,
+                Dp(2));
+    std::string label = kEditLabels[tool];
+    if (tool == kEditHide && sSelected >= 0 && sOvHidden[sSelected]) {
+      label = "Show";
+    } else if (tool == kEditOpacity && sSelected >= 0) {
+      label = "Opacity " + std::to_string(sOvAlpha[sSelected]) + "%"; // a tap steps it down
+    } else if (tool == kEditPage) {
+      label = sBallPage ? "Play page" : "Ball page"; // the page a tap goes to
+    } else if (tool == kEditCustomPage && sSelected >= kCCustom) {
+      label = std::string("On ") + kPageNames[sCustomPage[sSelected - kCCustom]];
+    }
+    // Tools that can't act now are dimmed: Hide on MENU, Add with no free slot.
+    const bool idle = ((tool == kEditHide || tool == kEditDelete) && sSelected == kCMenu) ||
+                      (tool == kEditAdd && FreeSlot() < 0 && Restorable().empty());
+    Text(dl, bar.Cx(), bar.Cy(), tool <= kEditPlus ? Dp(22) : Dp(14),
+         Argb(0xFFFFFFFF, idle ? 90.f / 255.f : 1.f), label.c_str());
+  }
+
+  // The hint line: the page, the selected control, or why the last tool did nothing.
+  std::string hint = std::string(sBallPage ? "Morph Ball page. " : "Gameplay page. ") +
+                     "Tap a control to select it: drag to move, pinch to resize. "
+                     "Add: a new or deleted button";
+  if (!sEditNotice.empty()) {
+    hint = sEditNotice;
+  } else if (sSelected >= 0) {
+    hint = ControlName(sSelected) + "  " +
+           std::to_string(static_cast< int >(std::lround(sOvScale[sSelected] * 100.f))) + "%";
+    if (sOvAlpha[sSelected] != 100) {
+      hint += "  \xC2\xB7 opacity " + std::to_string(sOvAlpha[sSelected]) + "%";
+    }
+    if (sOvHidden[sSelected]) {
+      hint += "  \xC2\xB7 hidden";
+    }
+  }
+  const float size = Dp(13);
+  ImFont* font = ImGui::GetFont();
+  const float textWidth = font->CalcTextSizeA(size, FLT_MAX, 0.f, hint.c_str()).x;
+  const float top = sEditBar[kEditDone].y1 + Dp(kEditBarGapDp);
+  const float cx = width * 0.5f;
+  const Rect box{cx - textWidth * 0.5f - Dp(10), top, cx + textWidth * 0.5f + Dp(10),
+                 top + Dp(26)};
+  dl->AddRectFilled(ImVec2(box.x0, box.y0), ImVec2(box.x1, box.y1), Argb(0xCC081218), corner);
+  Text(dl, cx, box.Cy(), size, Argb(0xFFFFFFFF), hint.c_str());
+}
+
+// The action picker, as an ImGui window: the port has no dialogs of its own, and the picker has to
+// be reachable by a thumb, so the rows are tall and the list scrolls.
+void DrawActionPicker() {
+  if (!sPicker.open) {
+    return;
+  }
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  const float width = std::min(vp->Size.x * 0.9f, Dp(520));
+  const float rowHeight = std::max(Dp(40), ImGui::GetTextLineHeight() * 1.6f);
+  const float listHeight =
+      std::min(float(sPicker.labels.size()) * rowHeight + Dp(8), vp->Size.y * 0.6f);
+  ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f),
+                          ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0.f), ImVec2(width, vp->Size.y * 0.85f));
+  // A stable id behind the visible title, so the window is one window however the title changes.
+  const char* title = sPicker.control < 0 ? "Add a button###touch-action-picker"
+                                          : "Button action###touch-action-picker";
+  const ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_AlwaysAutoResize;
+  if (ImGui::Begin(title, nullptr, flags)) {
+    int pick = -1;
+    ImGui::BeginChild("##actions", ImVec2(0.f, listHeight), ImGuiChildFlags_Borders);
+    for (size_t i = 0; i < sPicker.labels.size(); ++i) {
+      ImGui::PushID(static_cast< int >(i));
+      if (ImGui::Selectable(sPicker.labels[i].c_str(), int(i) == sPicker.checked, 0,
+                            ImVec2(0.f, rowHeight))) {
+        pick = static_cast< int >(i);
+      }
+      ImGui::PopID();
+    }
+    ImGui::EndChild();
+    ImGui::Separator();
+    if (ImGui::Button("Cancel", ImVec2(-FLT_MIN, rowHeight))) {
+      sPicker.open = false;
+    }
+    if (pick >= 0) {
+      const int restoreCount = static_cast< int >(sPicker.restore.size());
+      sPicker.open = false;
+      if (pick < restoreCount) {
+        RestoreControl(sPicker.restore[pick]);
+      } else {
+        ApplyAction(sPicker.control, sPicker.keys[size_t(pick) - size_t(restoreCount)]);
+      }
+    }
+  }
+  ImGui::End();
+}
+
 void DrawControlButton(ImDrawList* dl, const ControlButton& button, float width, float height) {
   ControlLayer layer(ControlOf(button));
   if (layer.skip) {
@@ -2702,6 +3303,9 @@ void DrawControls(ImDrawList* dl, float width, float height, bool classic) {
   if (sWheels && sWheelOpen) {
     DrawWheel(dl);
   }
+  if (sEditing) {
+    DrawEditOverlay(dl, width, height);
+  }
 }
 
 // The controls-off view: only START and MENU, fully opaque and at their default spots, so MENU is
@@ -2778,6 +3382,19 @@ void PollPhysicalInput() {
   if (TurboTouched() && !PortDebug::TouchTurboFlag()) {
     ReleaseTurbo();
   }
+  // F1's "Edit layout" closes the overlay itself and leaves the request; the editor opens once the
+  // overlay has gone (the toggle lands a frame later).
+  if (PortDebug::TakeTouchEditRequested()) {
+    sEditPending = true;
+  }
+  const bool overlayVisible = OverlayVisibleNow();
+  if (sEditPending && !overlayVisible) {
+    sEditPending = false;
+    BeginEdit();
+  } else if (sEditing && overlayVisible) {
+    // The overlay was opened some other way (a pad's chord): keep what was done.
+    EndEdit(true);
+  }
 }
 
 // --- touch handling ---------------------------------------------------------
@@ -2845,7 +3462,7 @@ void ReleasePointer(SDL_FingerID id, bool act) {
 // A finger lands. Returns true when the overlay takes it; false hands it to the game.
 bool TouchDown(SDL_FingerID id, float x, float y) {
   if (sEditing) {
-    return true; // stage B: the editor takes every touch
+    return EditTouchDown(id, x, y); // the editor takes every touch
   }
   SyncControlsOn();
   const bool overlayVisible = OverlayVisibleNow();
@@ -2913,7 +3530,7 @@ bool TouchDown(SDL_FingerID id, float x, float y) {
 // already declined to SDL, and stays so).
 bool TouchMove(SDL_FingerID id, float x, float y) {
   if (sEditing) {
-    return true;
+    return EditTouchMove(id, x, y);
   }
   if (sForwarded.count(id) != 0) {
     return false; // handed to SDL: it stays the game's
@@ -2950,6 +3567,7 @@ bool TouchUp(SDL_FingerID id) {
     return false;
   }
   if (sEditing) {
+    EditTouchUp(id);
     return true;
   }
   ReleasePointer(id, true);
@@ -2962,6 +3580,7 @@ bool TouchCancel(SDL_FingerID id) {
     return false;
   }
   if (sEditing) {
+    EditTouchCancel();
     return true;
   }
   ReleasePointer(id, false);
@@ -2984,7 +3603,10 @@ bool SDLCALL TouchFilter(void*, SDL_Event* event) {
       return true;
     }
     std::lock_guard lock(sMutex);
-    return OverlayVisibleNow();
+    // SDL's synthesized touch-mouse is how a thumb reaches ImGui (Aurora's backend reads mouse
+    // events only). The editor and its picker are ImGui windows or ImGui-drawn, so they get it;
+    // the fingers themselves stay the editor's.
+    return OverlayVisibleNow() || sEditing;
   }
   case SDL_EVENT_FINGER_DOWN:
   case SDL_EVENT_FINGER_MOTION:
@@ -3029,10 +3651,6 @@ void InstallTouchOverlay() {
   }
   sInstalled = true;
   InitDefaults();
-#if !defined(SDL_PLATFORM_IOS)
-  // The desktop test build: the mouse is the finger it lacks.
-  SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "1");
-#endif
   SDL_SetEventFilter(TouchFilter, nullptr);
 }
 
@@ -3046,13 +3664,16 @@ void DrawTouchOverlay() {
   }
   PollPhysicalInput();
   SyncControlsOn();
-  // The debug overlay is drawn into the surface below; stay out of its way.
-  if (OverlayVisibleNow()) {
+  // The debug overlay is drawn into the surface below; stay out of its way. Not while editing:
+  // the editor has to keep drawing over whatever opened.
+  if (OverlayVisibleNow() && !sEditing) {
     return;
   }
-  if ((sAutoHidden || sHidden) && sControlsOn) {
+  if ((sAutoHidden || sHidden) && sControlsOn && !sEditing) {
     return;
   }
+  // The picker is an ImGui window; it goes over the controls, so they are drawn under it.
+  DrawActionPicker();
   ReadSettings();
   // A finger held on the open map must keep telling the game it is still there, or the map drifts
   // back (the Java view posts panKeepAlive for this).
@@ -3062,7 +3683,8 @@ void DrawTouchOverlay() {
   const float width = sW, height = sH;
   // The classic setting can change mid-session, so re-check it every draw.
   const bool classic = PortDebug::TouchClassic();
-  ImDrawList* dl = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
+  ImDrawList* dl = sPicker.open ? ImGui::GetBackgroundDrawList(ImGui::GetMainViewport())
+                                : ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
   sPointerMenuNow = !sEditing && PortPointer::ScreenActive();
   if (sPointerMenuNow) {
     // Then only the back button and the cog beside it show, fully opaque, so the overlay opens

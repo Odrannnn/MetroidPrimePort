@@ -874,6 +874,8 @@ std::string TouchLayout();
 void SetTouchLayout(const std::string& layout);
 // True once after F1's "Edit layout" was pressed.
 bool TakeTouchEditRequested();
+// Asks for the layout editor as "Edit layout" does (the console's `touchedit`).
+void RequestTouchEdit();
 void Toggle();
 // Asks for the overlay to be toggled on the next frame. Safe to call from any
 // thread, unlike Toggle(), which touches ImGui state.
