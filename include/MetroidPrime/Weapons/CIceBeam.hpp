@@ -36,6 +36,12 @@ private:
   rstl::single_ptr< CElementGen > x244_chargeFx;
   bool x248_24_loaded : 1;
   bool x248_25_inEndFx : 1;
+#ifdef TARGET_PC
+  // Remastered's shell glow pulse (CIceBeamMP1 +0x768/+0x76c): 0..0.5..0 at 1/s, driven by
+  // UpdateGunFx, the shell's IINT 3 + 14 v (PreRenderGunFx). Not reset by ReInitVariables.
+  float mPortShellPulse;
+  bool mPortShellRising;
+#endif
 
   void ReInitVariables();
 };

@@ -244,6 +244,7 @@ f32 sPortKindValue = 0.f;
 bool sPortSky = false;
 f32 sPortSkyGain[3];
 f32 sPortChargeShell = 0.f;
+f32 sPortIceShellIint = 10.f;
 f32 sPortDisintegration = 0.f;
 int sPortActiveVisor = 0;
 unsigned sPortVisorSkipped = 0;
@@ -295,6 +296,8 @@ void CCubeModel::PortTakeVisorSkipCounts(unsigned& visor, unsigned& shadow) {
 }
 
 void CCubeModel::PortSetChargeShell(const f32 amount) { sPortChargeShell = amount; }
+
+void CCubeModel::PortSetIceShellIint(const f32 iint) { sPortIceShellIint = iint; }
 
 void CCubeModel::PortSetDisintegration(const f32 amount) { sPortDisintegration = amount; }
 
@@ -535,11 +538,8 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   }
   if (kind > 11.5f && kind < 12.5f) {
     values[15] = sPortChargeShell;
-    // The glow's IINT pulses 3..10 and back once a second (CIceBeamMP1::PreRenderGunFx:
-    // 3 + 14 v, v 0..0.5..0); the record holds the peak, 10.
-    const f32 phase = CGraphics::GetSecondsMod900();
-    const f32 v = 0.5f - std::fabs(phase - std::floor(phase) - 0.5f);
-    const f32 pulse = (3.f + 14.f * v) / 10.f;
+    // The glow's IINT, set by CIceBeam::PreRenderGunFx; the record holds the peak, 10.
+    const f32 pulse = sPortIceShellIint / 10.f;
     values[0] *= pulse;
     values[1] *= pulse;
     values[2] *= pulse;

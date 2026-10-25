@@ -6,6 +6,12 @@
 #include "Kyoto/Audio/CSfxHandle.hpp"
 #include "Kyoto/Particles/CElementGen.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/Graphics/CCubeModel.hpp"
+
+#include <cmath>
+#endif
+
 CIceBeam::CIceBeam(CAssetId characterId, EWeaponType type, TUniqueId playerId,
                    EMaterialTypes playerMaterial, const CVector3f& scale)
 : CGunWeapon(characterId, type, playerId, playerMaterial, scale)
@@ -15,7 +21,13 @@ CIceBeam::CIceBeam(CAssetId characterId, EWeaponType type, TUniqueId playerId,
 , x234_ice2nd2(gpSimplePool->GetObj("Ice2nd_2"))
 
 , x248_24_loaded(false)
-, x248_25_inEndFx(false) {}
+, x248_25_inEndFx(false)
+#ifdef TARGET_PC
+, mPortShellPulse(0.f)
+, mPortShellRising(true)
+#endif
+{
+}
 
 CIceBeam::~CIceBeam() {}
 
@@ -28,7 +40,12 @@ void CIceBeam::ReInitVariables() {
 }
 
 void CIceBeam::PreRenderGunFx(const CStateManager& mgr, const CTransform4f& xf) {
-  // Empty
+#ifdef TARGET_PC
+  // CIceBeamMP1::PreRenderGunFx: the gun_ice_shell material's IINT.
+  if (x218_26_loaded) {
+    CCubeModel::PortSetIceShellIint(mPortShellPulse * 2.f * 7.f + 3.f);
+  }
+#endif
 }
 
 void CIceBeam::PostRenderGunFx(const CStateManager& mgr, const CTransform4f& xf) {
@@ -69,6 +86,21 @@ void CIceBeam::UpdateGunFx(const bool shotSmoke, const float dt, const CStateMan
       x244_chargeFx->Update(dt);
     }
   }
+
+#ifdef TARGET_PC
+  // CIceBeamMP1::UpdateGunFx: the shell pulse, clamped to 0..0.5, turning at either end.
+  {
+    const bool rising = mPortShellRising;
+    float v = mPortShellPulse + (rising ? dt : -dt);
+    if (v < 0.f)
+      v = 0.f;
+    if (v > 0.5f)
+      v = 0.5f;
+    mPortShellPulse = v;
+    if (std::fabs(rising ? v - 0.5f : v) < 1e-5f)
+      mPortShellRising = !rising;
+  }
+#endif
 
   CGunWeapon::UpdateGunFx(shotSmoke, dt, mgr, xf);
 }

@@ -165,6 +165,8 @@ public:
   // The beam's charge, 0 to 1, which the Ice Beam cannon's frost shell (kind 12) dissolves
   // with: Remastered's DisintegrationAmount. At 0 the shell is not drawn.
   static void PortSetChargeShell(float amount);
+  // The frost shell's glow IINT, 3 to 10 (CIceBeamMP1::PreRenderGunFx); the record holds 10.
+  static void PortSetIceShellIint(float iint);
   // The visor whose mesh filter the world and actor draws apply (CPlayerState::EPlayerVisor
   // order; PortVisorMesh in platform/include/port_visor_mesh.h): set per frame by
   // CStateManager::DrawWorld from GetActiveVisor, i.e. combat when the camera isn't first-person.
