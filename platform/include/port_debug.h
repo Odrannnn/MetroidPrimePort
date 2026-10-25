@@ -876,6 +876,8 @@ void SetTouchLayout(const std::string& layout);
 bool TakeTouchEditRequested();
 // Asks for the layout editor as "Edit layout" does (the console's `touchedit`).
 void RequestTouchEdit();
+// True while the in-game touch layout editor is open (never without PORT_TOUCH_OVERLAY).
+bool TouchEditing();
 void Toggle();
 // Asks for the overlay to be toggled on the next frame. Safe to call from any
 // thread, unlike Toggle(), which touches ImGui state.

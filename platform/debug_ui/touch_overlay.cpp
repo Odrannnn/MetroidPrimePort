@@ -436,6 +436,8 @@ struct ActionPicker {
   std::vector< std::string > keys; // action keys, parallel to labels
   std::vector< std::string > labels;
   int checked = -1;
+  bool armed = false; // the tap that opened it has lifted, so a tap outside cancels
+  int shownFrames = 0;
 };
 ActionPicker sPicker;
 
@@ -1862,7 +1864,7 @@ void EditAction(int tool, float width, float height) {
   case kEditCustomPage:
     if (sSelected >= kCCustom) {
       const int slot = sSelected - kCCustom;
-      sCustomPage[slot] = (sCustomPage[slot] + 1) % 3;
+      sCustomPage[slot] = (sCustomPage[slot] + 1) % int(std::size(kPageNames));
       if (!OnPage(sSelected)) {
         sSelected = -1; // it went to the other page
       }
@@ -3167,9 +3169,17 @@ void DrawActionPicker() {
     }
     ImGui::EndChild();
     ImGui::Separator();
-    if (ImGui::Button("Cancel", ImVec2(-FLT_MIN, rowHeight))) {
+    // Cancel, or a tap outside, as the cancelable AlertDialog.
+    if (ImGui::Button("Cancel", ImVec2(-FLT_MIN, rowHeight)) ||
+        (sPicker.armed && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+         !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows))) {
       sPicker.open = false;
     }
+    // The opening tap can reach ImGui a frame after the picker shows, so wait for its release, or
+    // for two frames with nothing down.
+    ++sPicker.shownFrames;
+    sPicker.armed = sPicker.armed || ImGui::IsMouseReleased(ImGuiMouseButton_Left) ||
+                    (sPicker.shownFrames >= 2 && !ImGui::IsMouseDown(ImGuiMouseButton_Left));
     if (pick >= 0) {
       const int restoreCount = static_cast< int >(sPicker.restore.size());
       sPicker.open = false;
@@ -3599,10 +3609,32 @@ bool SDLCALL TouchFilter(void*, SDL_Event* event) {
     // those, and the pointer menu's own buttons.
     const SDL_MouseID which =
         event->type == SDL_EVENT_MOUSE_MOTION ? event->motion.which : event->button.which;
-    if (which != SDL_TOUCH_MOUSEID) {
-      return true;
-    }
     std::lock_guard lock(sMutex);
+    if (which != SDL_TOUCH_MOUSEID) {
+      // The editor takes a real mouse too (an iPad trackpad), its left button as a finger, as the
+      // Java view takes every event while editing. The picker is ImGui's, so it keeps the mouse.
+      if (!sEditing || sPicker.open || sW <= 0.f) {
+        return true;
+      }
+      const bool motion = event->type == SDL_EVENT_MOUSE_MOTION;
+      if (!motion && event->button.button != SDL_BUTTON_LEFT) {
+        return false;
+      }
+      SDL_Window* window =
+          SDL_GetWindowFromID(motion ? event->motion.windowID : event->button.windowID);
+      const float density = window != nullptr ? SDL_GetWindowPixelDensity(window) : 1.f;
+      const float x = (motion ? event->motion.x : event->button.x) * density;
+      const float y = (motion ? event->motion.y : event->button.y) * density;
+      constexpr SDL_FingerID kMouseFinger = ~SDL_FingerID(0);
+      if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        EditTouchDown(kMouseFinger, x, y);
+      } else if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        EditTouchUp(kMouseFinger);
+      } else if ((event->motion.state & SDL_BUTTON_LMASK) != 0) {
+        EditTouchMove(kMouseFinger, x, y);
+      }
+      return false;
+    }
     // SDL's synthesized touch-mouse is how a thumb reaches ImGui (Aurora's backend reads mouse
     // events only). The editor and its picker are ImGui windows or ImGui-drawn, so they get it;
     // the fingers themselves stay the editor's.
@@ -3711,6 +3743,17 @@ void DrawTouchOverlay() {
   DrawControls(dl, width, height, classic);
 }
 
+bool TouchEditing() {
+  std::lock_guard lock(sMutex);
+  return sEditing;
+}
+
+} // namespace PortDebug
+
+#else
+
+namespace PortDebug {
+bool TouchEditing() { return false; }
 } // namespace PortDebug
 
 #endif // PORT_TOUCH_OVERLAY
