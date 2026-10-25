@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 project(metroid_prime_port LANGUAGES C CXX)
+if(IOS)
+    # platform/port_ios.mm. Enabled here: enabled where the target is made, it
+    # comes after the subdirectories and leaves CMake without its compile rules.
+    enable_language(OBJCXX)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build type" FORCE)
@@ -423,7 +428,6 @@ elseif(IOS)
     # by side. Nothing signs it here; tools/ios_package.sh finishes the bundle
     # (icons, an ad hoc signature) and players re-sign the .ipa with their own
     # Apple ID when they sideload it.
-    enable_language(OBJCXX)
     add_executable(metroid_prime_port MACOSX_BUNDLE ${MP_PORT_SOURCES} platform/port_ios.mm)
     set_source_files_properties(platform/port_ios.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
     target_link_libraries(metroid_prime_port PRIVATE "-framework UIKit" "-framework UniformTypeIdentifiers")
