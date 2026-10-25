@@ -82,6 +82,8 @@ std::set<uint32_t> sDreadSkeletons;
 std::string sThermalLut;
 // envfx.bin: Remastered's EnvironmentFX textures (port_envfx_assets.h).
 std::string sEnvFx;
+// shell.bin: Remastered's silhouette-shell textures (port_shell_assets.h).
+std::string sShell;
 // retailplacements.bin: the transforms objects draw Remastered's per-object retail models through (port_retail_placement.h).
 std::string sRetailPlacements;
 // effectids.map: the retail effect ids a mod gives a second user its own effect for. Loaded on first use.
@@ -435,6 +437,8 @@ std::string ThermalLutPath() { return sThermalLut; }
 
 std::string EnvFxPath() { return sEnvFx; }
 
+std::string ShellPath() { return sShell; }
+
 std::string RetailPlacementPath() { return sRetailPlacements; }
 
 uint32_t RemapEffectId(uint32_t owner, uint32_t field, uint32_t id) {
@@ -530,6 +534,7 @@ void Initialize() {
   sHudBars.clear();
   sThermalLut.clear();
   sEnvFx.clear();
+  sShell.clear();
   sRetailPlacements.clear();
   sDreadBodies.clear();
   sDreadBalls.clear();
@@ -665,6 +670,10 @@ void Initialize() {
       }
       if (name == "envfx.bin") {
         sEnvFx = PathString(file);
+        continue;
+      }
+      if (name == "shell.bin") {
+        sShell = PathString(file);
         continue;
       }
       if (name == PortRetailPlacement::kFileName) {

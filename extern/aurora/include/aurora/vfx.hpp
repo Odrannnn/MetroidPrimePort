@@ -301,6 +301,12 @@ void draw_triangles(const DrawDesc& desc, const Vertex* verts, uint32_t triCount
 // scene, else the RGBA8 display copy) for the later draws of this frame to read, at one pass break.
 // Call once per frame from the game thread. Draws of a frame without a copy, before it, or into
 // another target (an offscreen pass) bind 1x1 dummies, do no DepthSoften and draw no SceneWarp.
-void capture_scene();
+// again: copy anew over this frame's copy of the same kind (the pause screen's copy before its
+// silhouettes, RenderPauseScreenElements, flags 1); draws recorded after it read the new one, its
+// top level alone.
+void capture_scene(bool again = false);
+// Whether draws recorded now would read this frame's copy (capture_scene ran this frame, into the
+// current target, in the same HDR state). Game thread.
+bool scene_copy_available();
 void shutdown();
 } // namespace aurora::gfx::vfx

@@ -397,6 +397,16 @@ GXBool GXPortActorShadowRender() {
   return true;
 }
 
+void GXPortShell(u32 mode, const f32* params) {
+  GX_WRITE_AURORA(GX_AURORA_PORT_SHELL);
+  GX_WRITE_U8(static_cast<u8>(params != nullptr ? mode : 0));
+  if (mode != 0 && params != nullptr) {
+    for (u32 i = 0; i < 24; ++i) {
+      GX_WRITE_F32(params[i]);
+    }
+  }
+}
+
 void GXPortColorGradeLut(u32 id, const u8* rgba) { aurora::gfx::bloom::set_grade_lut(id, rgba); }
 
 GXBool GXPortMeasureScene(f32 exposure) {

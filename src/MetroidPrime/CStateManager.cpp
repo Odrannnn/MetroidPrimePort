@@ -19,6 +19,7 @@
 #include "port_room_liquid.h"
 #include "port_savestate.h"
 #include "port_scene_copy.h"
+#include "port_shell.h"
 #include "port_skip_cutscenes.h"
 #include "port_viewmodel.h"
 #include "port_world_holders.h"
@@ -3365,6 +3366,7 @@ void CStateManager::DrawWorld() const {
   // A zoomed pass (sharp scan window) draws before the frame's own: the frame's captures and
   // the gun belong to that one.
   const bool portZoomed = sPortViewZoom != 1.f;
+  PortShell::Clear();
   const bool portSceneHdrRequested = sPortSceneHdrRequest;
   sPortSceneHdrRequest = false;
   if (!portZoomed)
@@ -3697,6 +3699,9 @@ void CStateManager::DrawWorld() const {
     gpRender->DrawSortedGeometry(area.GetId().Value(), mask, targetMask);
     PortRoomGeo::sReplacingArea = false;
   }
+  // Remastered's silhouette shells (the Phazon Suit's aura) over the sorted geometry, reading the
+  // opaque copy (port_shell.h).
+  PortShell::Flush();
 #endif
 
 #ifdef TARGET_PC

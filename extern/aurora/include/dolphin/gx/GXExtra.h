@@ -372,6 +372,16 @@ void GXPortActorShadowCasters(u32 layer, const f32 clip[16]);
 void GXPortActorShadowDecal(u32 layer, const f32 params[64]);
 void GXPortActorShadowEnd(void);
 GXBool GXPortActorShadowRender(void);
+// Remastered's silhouette shell (shader Model_SilhouetteShell; build/mpr/kb
+// topic/model-black-silhouette.md). Between GXPortShell(1 or 2, params) and GXPortShell(0, NULL)
+// triangle draws are the model's shell, pushed out along its normals and pulled back in depth:
+// mode 1 writes only its depth, mode 2 its colour (depth test, no depth write) from the textures
+// GX_TEXMAP0 (strength colour lookup) and GX_TEXMAP1 (indirect) held when mode 1 was set (the
+// model's materials may load others meanwhile) and the frame's scene copy (see
+// aurora::gfx::vfx::capture_scene). `params` is 6 vec4: CCH0..CCH4, then (time in seconds, the
+// depth bias in view units, 1 when GX_TEXMAP0 is sRGB-encoded, the view depth of the model's
+// bounds centre): every depth moves as far as the centre's does when pushed `bias` farther.
+void GXPortShell(u32 mode, const f32* params);
 // The room's Remastered point and spot lights for the rest of the frame, added on every PBR draw
 // (lit, lightmapped or not) as the sun is. Each record is 16 f32: view-space position, A; colour
 // (linear, scaled), B; view-space axis toward the light, cone scale; cone bias, falloff (0 none,

@@ -689,6 +689,7 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
     const bool prevUsesVolFog = cache.shaderInfo.usesVolFog;
     const bool prevShadowReceive = cache.shaderInfo.shadowReceive;
     const bool prevActorDecal = cache.shaderInfo.actorDecal;
+    const bool prevUsesShell = cache.shaderInfo.usesShell;
     const bool prevUsesLightmap = cache.shaderInfo.usesLightmap;
     populate_pipeline_config(cache.config, prim, fmt);
     // A frame switches pipelines hundreds of times between a few hundred configs. The config's
@@ -752,7 +753,7 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
         prevSampledIndTextures != cache.shaderInfo.sampledIndTextures ||
         prevUsesVolFog != cache.shaderInfo.usesVolFog || prevUsesLightmap != cache.shaderInfo.usesLightmap ||
         prevShadowReceive != cache.shaderInfo.shadowReceive || prevActorDecal != cache.shaderInfo.actorDecal ||
-        cache.cutCaster) {
+        prevUsesShell != cache.shaderInfo.usesShell || cache.cutCaster) {
       cache.bindGeneration = 0;
     }
   }
@@ -1366,6 +1367,45 @@ void handle_aurora(ByteReader& reader) noexcept {
     if (g_gxState.clipPlaneEq != eq) {
       g_gxState.clipPlaneEq = eq;
       g_gxState.dirty |= DirtyUniform;
+    }
+  } else if (subCmd == GX_AURORA_PORT_SHELL) {
+    const u8 mode = reader.read<u8>();
+    auto& st = g_gxState;
+    if (mode == 1 || mode == 2) {
+      for (size_t i = 0; i < 6; ++i) {
+        auto& v = st.shellUniform[i];
+        v.x() = reader.read<f32>();
+        v.y() = reader.read<f32>();
+        v.z() = reader.read<f32>();
+        v.w() = reader.read<f32>();
+      }
+      // The fragment's position over the target it draws into is the scene copy's uv.
+      const auto target = gfx::get_render_target_size();
+      auto& size = st.shellUniform[6];
+      size.x() = 1.f / static_cast<float>(std::max(target.x, 1u));
+      size.y() = 1.f / static_cast<float>(std::max(target.y, 1u));
+      size.z() = 0.f;
+      size.w() = 0.f;
+      st.dirty |= DirtyUniform;
+    }
+    if (mode == 1) {
+      // The slots' binds are resolved only at a draw, so they still hold the last draw's maps.
+      st.shellTexObjs = {st.loadedTextures[GX_TEXMAP0], st.loadedTextures[GX_TEXMAP1]};
+      st.shellTextures = {};
+      st.dirty |= DirtyTextures;
+    } else if (mode == 0) {
+      st.shellTexObjs = {};
+      st.shellTextures = {};
+    }
+    const u8 shell = mode <= 2 ? mode : 0;
+    if (st.shell != shell) {
+      st.shell = shell;
+      // Slot 2 holds the scene copy while the colour pass is on; re-emit the bind groups either way.
+      sDrawCache.hasPipeline = false;
+      sDrawCache.bindGeneration = 0;
+      sDrawCache.uniformRange = {};
+      sDrawCache.lastDrawFmt = GX_MAX_VTXFMT;
+      st.dirty |= DirtyPipeline | DirtyUniform | DirtyTextures;
     }
   } else if (subCmd == GX_AURORA_PORT_DEPTH_PREPASS) {
     const u8 pass = reader.read<u8>();

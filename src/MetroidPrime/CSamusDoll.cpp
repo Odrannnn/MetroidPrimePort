@@ -19,6 +19,9 @@
 #include <dolphin/gx/GXPixel.h>
 #include <float.h>
 #include "MetroidPrime/Tweaks/CTweakPlayer.hpp"
+#ifdef TARGET_PC
+#include "port_shell.h"
+#endif
 
 static const int skSuitToCharacterType[8] = {0, 6, 2, 10, 16, 24, 20, 28};
 static const int skSuitToCharacterType2[8][2] = {{14, 15}, {8, 9},   {4, 5},   {12, 13},
@@ -409,6 +412,9 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
     if (phazonSuit) {
       GXSetDstAlpha(GX_TRUE, 255);
     }
+#ifdef TARGET_PC
+    float portBallAlpha = 0.f;
+#endif
     for (int i = 0; i <= x118_suitModel1and2.size(); ++i) {
       TLockedToken< CSkinnedModel > backupModel = xc8_suitModel0->AnimationData()->GetModelData();
       if (i < x118_suitModel1and2.size()) {
@@ -486,6 +492,9 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
         ballAlpha =
             rstl::max_val(0.f, (x54_remTransitionTime - (x50_totalTransitionTime - 0.25f)) / 0.25f);
       }
+#ifdef TARGET_PC
+      portBallAlpha = ballAlpha;
+#endif
       if (ballAlpha > 0.f) {
         CModelFlags flags[2] = {
             CModelFlags::AlphaBlended(0.f)
@@ -537,7 +546,51 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
                 .UseShaderSet(x1e4_glassMatIdx));
       }
     }
+#ifdef TARGET_PC
+    // Remastered draws Model_SilhouetteShell (type 2) over each part instead (port_shell.h;
+    // CSamusDollMP1::RenderSuit 0xe79c48): the port draws them all after the parts, through the
+    // frame's scene copy.
+    bool portShellDrawn = false;
     if (phazonSuit && drawAlpha > 0.1f) {
+      portShellDrawn = PortShell::DrawNow(
+          PortShell::kDoll, xc8_suitModel0->GetBounds(CTransform4f::Identity()), [&] {
+            const CModelFlags flags = CModelFlags::Normal();
+            for (int i = 0; i <= x118_suitModel1and2.size(); ++i) {
+              TLockedToken< CSkinnedModel > backupModel =
+                  xc8_suitModel0->AnimationData()->GetModelData();
+              if (i < x118_suitModel1and2.size()) {
+                xc8_suitModel0->AnimationData()->SubstituteModelData(x118_suitModel1and2[i]);
+              }
+              xc8_suitModel0->Render(CModelData::kWM_Normal, CTransform4f::Identity(),
+                                     x24c_actorLights.get(), flags);
+              xc8_suitModel0->AnimationData()->SubstituteModelData(backupModel);
+            }
+            x134_suitModelBoots->Render(CModelData::kWM_Normal, CTransform4f::Identity(),
+                                        x24c_actorLights.get(), flags);
+            CGraphics::SetModelMatrix(gunXf);
+            beam->Draw(flags);
+            CGraphics::SetModelMatrix(visorXf);
+            visor->Draw(flags);
+            if (x270_25_hasGrappleBeam) {
+              CGraphics::SetModelMatrix(grappleXf);
+              grapple->Draw(flags);
+            } else if (x44_suit >= CPlayerState::kPS_FusionPower) {
+              CGraphics::SetModelMatrix(grappleXf);
+              fins->Draw(flags);
+            }
+            if (portBallAlpha > 0.f) {
+              x184_ballModelData->Render(CModelData::kWM_Normal, x10_ballTransform,
+                                         x24c_actorLights.get(), flags);
+            }
+          });
+      if (portShellDrawn) {
+        GXSetDstAlpha(GX_FALSE, 0);
+      }
+    }
+    if (!portShellDrawn && phazonSuit && drawAlpha > 0.1f) {
+#else
+    if (phazonSuit && drawAlpha > 0.1f) {
+#endif
       CCubeRenderer* const renderer = gpRender;
       const float radius = CMath::Clamp(
           0.2f, (10.f - (xc0_userZoom >= 0.f ? xc0_userZoom : -xc0_userZoom)) / 20.f, 1.f);

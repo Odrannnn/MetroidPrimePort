@@ -1130,8 +1130,10 @@ void resolve_sampled_textures(const ShaderInfo& info) noexcept {
       continue;
     }
 
-    GXTexObj_ obj = g_gxState.loadedTextures[i];
-    auto& textureBind = g_gxState.textures[i];
+    // The shell's colour pass samples the maps its mode 1 found loaded (GXState::shellTexObjs).
+    const bool shell = info.shellScene && i < g_gxState.shellTexObjs.size();
+    GXTexObj_ obj = shell ? g_gxState.shellTexObjs[i] : g_gxState.loadedTextures[i];
+    auto& textureBind = shell ? g_gxState.shellTextures[i] : g_gxState.textures[i];
     if (textureBind.generation == s_bindGeneration && obj.texObjId != 0 &&
         obj.texObjId == textureBind.texObj.texObjId && obj.texDataVersion == textureBind.texObj.texDataVersion) {
       touch_bound_texture(obj);

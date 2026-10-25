@@ -1,5 +1,6 @@
 #include "MetroidPrime/ScriptObjects/CScriptPlayerActor.hpp"
 #include "port_dread_samus_mod.h"
+#include "port_shell.h"
 
 #include "MetroidPrime/CActorLights.hpp"
 #include "MetroidPrime/CActorModelParticles.hpp"
@@ -203,13 +204,19 @@ void CScriptPlayerActor::Think(float dt, CStateManager& mgr) {
 
 void CScriptPlayerActor::Render(const CStateManager& mgr) const {
   const bool phazonSuit = x2e8_suitRes.GetCharacterNodeId() == 3;
-  if (phazonSuit) {
+  // Remastered draws Model_SilhouetteShell over the Phazon Suit instead (port_shell.h): the body
+  // and the gun each get their own, after the frame's sorted geometry, while the actor is visible.
+  const bool shell = phazonSuit && HasModelData() &&
+                     CModelData::GetRenderingModel(mgr) == CModelData::kWM_Normal &&
+                     PortShell::Enabled();
+  if (phazonSuit && !shell) {
     GXSetDstAlpha(GX_TRUE, 255);
   }
   CPhysicsActor::Render(mgr);
   // The Dread Samus body (port_dread_samus_mod.h) carries its own cannon: Prime's is not drawn on it.
-  if (HasGunModelData() && HasModelData() &&
-      !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(x2e8_suitRes.GetCharacterNodeId()))) {
+  const bool gun = HasGunModelData() && HasModelData() &&
+                   !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(x2e8_suitRes.GetCharacterNodeId()));
+  if (gun) {
     const CTransform4f locator =
         GetModelData()->GetScaledLocatorTransform(rstl::string_l(kGunLocator));
     const CTransform4f modelXf = GetTransform() * locator;
@@ -217,7 +224,22 @@ void CScriptPlayerActor::Render(const CStateManager& mgr) const {
                                CModelFlags::AlphaBlended(GetModelFlags().GetColorRef().GetAlpha())
                                    .DepthCompareUpdate(true, true));
   }
-  if (phazonSuit) {
+  if (shell) {
+    if (GetModelFlags().GetColorRef().GetAlpha() > 0) {
+      const CStateManager* const pmgr = &mgr;
+      const CTransform4f xf = GetTransform();
+      PortShell::Defer(PortShell::kBody, GetModelData()->GetBounds(xf), [this, pmgr, xf] {
+        GetModelData()->Render(*pmgr, xf, GetActorLights(), CModelFlags::Normal());
+      });
+      if (gun) {
+        const CTransform4f gunXf =
+            xf * GetModelData()->GetScaledLocatorTransform(rstl::string_l(kGunLocator));
+        PortShell::Defer(PortShell::kBody, x314_beamModelData->GetBounds(gunXf), [this, pmgr, gunXf] {
+          x314_beamModelData->Render(*pmgr, gunXf, GetActorLights(), CModelFlags::Normal());
+        });
+      }
+    }
+  } else if (phazonSuit) {
     CCubeRenderer* const renderer = gpRender;
     renderer->CopyTex(1, true, CGraphics::GetDolphinSpareBuffer(), GX_TF_RGB565, false);
     const CVector3f& delta = GetBoundingBox().GetCenterPoint() -

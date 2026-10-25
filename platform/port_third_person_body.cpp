@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "port_dread_samus_mod.h"
+#include "port_shell.h"
 #include "port_third_person.h"
 
 #include "Kyoto/Animation/CCharLayoutInfo.hpp"
@@ -1124,7 +1125,10 @@ bool Render(const CStateManager& mgr, const CTransform4f& feet, const CActorLigh
     return false;
   }
   const bool phazon = s.phazonTex && s.phazonTex->IsLoaded();
-  if (phazon) {
+  // Remastered's shell, as CScriptPlayerActor::Render (port_shell.h).
+  const bool shell =
+      phazon && CModelData::GetRenderingModel(mgr) == CModelData::kWM_Normal && PortShell::Enabled();
+  if (phazon && !shell) {
     GXSetDstAlpha(GX_TRUE, 255);
   }
   const CTransform4f xf =
@@ -1132,12 +1136,28 @@ bool Render(const CStateManager& mgr, const CTransform4f& feet, const CActorLigh
   s.body->Touch(mgr, 0);
   s.body->Render(mgr, xf, lights, CModelFlags::Normal());
   // Prime's cannon at the hand locator, unless the dread-samus mod's body carries its own.
-  if (s.beamData && !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(s.loadedChar))) {
-    const CTransform4f gun = xf * s.body->GetScaledLocatorTransform("GUN_LCTR");
+  const bool drawGun = s.beamData && !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(s.loadedChar));
+  const CTransform4f gun = drawGun ? xf * s.body->GetScaledLocatorTransform("GUN_LCTR") : xf;
+  if (drawGun) {
     s.beamData->Touch(mgr, 0);
     s.beamData->Render(mgr, gun, lights, CModelFlags::Normal());
   }
-  if (phazon) {
+  if (shell) {
+    // The lights are the player's, alive until the frame's Flush; the body is this file's.
+    const CStateManager* const pmgr = &mgr;
+    PortShell::Defer(PortShell::kBody, s.body->GetBounds(xf), [pmgr, xf, lights] {
+      if (s.body) {
+        s.body->Render(*pmgr, xf, lights, CModelFlags::Normal());
+      }
+    });
+    if (drawGun) {
+      PortShell::Defer(PortShell::kBody, s.beamData->GetBounds(gun), [pmgr, gun, lights] {
+        if (s.beamData) {
+          s.beamData->Render(*pmgr, gun, lights, CModelFlags::Normal());
+        }
+      });
+    }
+  } else if (phazon) {
     // As CScriptPlayerActor::Render.
     gpRender->CopyTex(1, true, CGraphics::GetDolphinSpareBuffer(), GX_TF_RGB565, false);
     const CVector3f delta = s.body->GetBounds(xf).GetCenterPoint() -

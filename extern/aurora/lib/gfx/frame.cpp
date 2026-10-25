@@ -558,6 +558,21 @@ void initialize() {
         g_bufferSizes.storageReserve = g_bufferSizes.storageCap;
       }
     }
+    // The vertices likewise: a frame drawing skinned models twice more (the Remastered suit
+    // shell) went past 2x with the room geometry kept resident. Only the limit moves; the
+    // device and staging buffers still grow to it when a frame needs more.
+    uint64_t vertexReserve = g_bufferSizes.vertex;
+    if (g_config.frameStorageScale == 0 && g_config.residentGeometryMiB != 0) {
+      for (uint32_t capScale = StorageGrowthCapScale; capScale > scale; --capScale) {
+        FrameBufferSizes probe = g_bufferSizes;
+        probe.vertex = VertexBufferSize * capScale;
+        probe.storage = g_bufferSizes.storageReserve;
+        if (probe.vertex <= maxBinding && probe.staging() <= maxBuffer) {
+          vertexReserve = probe.vertex;
+          break;
+        }
+      }
+    }
     for (auto& want : g_stagingGrowthWant) {
       want.store(0, std::memory_order_release);
     }
@@ -572,7 +587,7 @@ void initialize() {
         return std::min({want, room, uint64_t(UINT32_MAX) - frame}) & ~uint64_t(255);
       };
       const uint64_t bound = std::min(maxBinding, maxBuffer);
-      g_bufferSizes.residentVertex = fit(resident / 5 * 2, g_bufferSizes.vertex, bound);
+      g_bufferSizes.residentVertex = fit(resident / 5 * 2, vertexReserve, bound);
       g_bufferSizes.residentStorage = fit(resident / 5 * 2, g_bufferSizes.storageReserve, bound);
       g_bufferSizes.residentIndex = fit(resident / 5, g_bufferSizes.index, maxBuffer);
       Log.info("Resident geometry: {} MiB of vertices, {} MiB of arrays, {} MiB of indices",
@@ -583,11 +598,12 @@ void initialize() {
     // staging buffers, which there are StagingBufferCount of, start smaller unless the scale
     // was pinned: a frame that needs more spills (see SpillBuffer), and the arrays' staging
     // storage grows after an overflow where it can.
-    g_bufferSizes.maxVertex = g_bufferSizes.vertex;
+    g_bufferSizes.maxVertex = vertexReserve;
     g_bufferSizes.maxUniform = g_bufferSizes.uniform;
     g_bufferSizes.maxIndex = g_bufferSizes.index;
     g_bufferSizes.maxStorage = g_bufferSizes.storageReserve;
     g_bufferSizes.scaledStorage = g_bufferSizes.storage;
+    g_bufferSizes.scaledVertex = g_bufferSizes.vertex;
     g_bufferSizes.textureUpload = TextureUploadSize;
     if (!g_config.frameBuffersPinned) {
       g_bufferSizes.vertex = std::min(g_bufferSizes.vertex, StartVertexSize);
@@ -1079,7 +1095,7 @@ float calculate_fps() noexcept {
 const AuroraStats* aurora_get_stats() { return &aurora::gfx::detail::resources().stats; }
 
 uint32_t aurora_get_frame_buffer_scale() {
-  return static_cast<uint32_t>(aurora::gfx::frame_buffer_sizes().maxVertex / aurora::gfx::VertexBufferSize);
+  return static_cast<uint32_t>(aurora::gfx::frame_buffer_sizes().scaledVertex / aurora::gfx::VertexBufferSize);
 }
 uint32_t aurora_get_frame_storage_scale() {
   return static_cast<uint32_t>(aurora::gfx::frame_buffer_sizes().scaledStorage / aurora::gfx::StorageBufferSize);

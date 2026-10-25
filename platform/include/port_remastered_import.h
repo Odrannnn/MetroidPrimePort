@@ -181,7 +181,8 @@ inline constexpr int kRooms = 36;      // Remastered stand-in actors (m_syntheti
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).
-inline constexpr int kHud = 9;         // port_remastered_hud, port_remastered_map, envfx.bin
+// 10: shell.bin, the silhouette-shell textures (port_shell_file.h).
+inline constexpr int kHud = 10;        // port_remastered_hud, port_remastered_map, envfx.bin, shell.bin
 inline constexpr int kMovies = 0;      // port_remastered_movie
 inline constexpr int kGallery = 0;     // the gallery pictures (port_gallery)
 }  // namespace ImportStage

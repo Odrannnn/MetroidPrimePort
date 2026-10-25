@@ -314,6 +314,9 @@ set(MP_PORT_SOURCES
     platform/port_room_env_tiles.cpp
     platform/port_envfx_assets.cpp
     platform/port_envfx_file.cpp
+    platform/port_shell.cpp
+    platform/port_shell_assets.cpp
+    platform/port_shell_file.cpp
     platform/port_room_geo.cpp
     platform/port_room_geo_file.cpp
     platform/port_room_liquid.cpp
@@ -1106,6 +1109,9 @@ if(MP_BUILD_TESTS)
         ARGS "${CMAKE_CURRENT_BINARY_DIR}/remastered-storage-test")
     mp_port_test(port_envfx_file_tests
         SOURCES tests/port_envfx_file.cpp platform/port_envfx_file.cpp
+        INCLUDES platform/include)
+    mp_port_test(port_shell_file_tests
+        SOURCES tests/port_shell_file.cpp platform/port_shell_file.cpp
         INCLUDES platform/include)
     mp_port_test(port_hud_bars_tests
         SOURCES tests/port_hud_bars.cpp platform/port_hud_bars_file.cpp

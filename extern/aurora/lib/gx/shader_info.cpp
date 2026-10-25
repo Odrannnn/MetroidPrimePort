@@ -384,6 +384,18 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
     info.usesClipPlane = true;
     info.uniformSize += sizeof(Vec4<float>);
   }
+  if (config.shell != 0) {
+    // CCH0..CCH4, (time, depth shift, TCH0 sRGB, 0), (1 / target size), then the tone curve
+    // (pbrTone); the colour pass samples TCH0
+    // and TCH1 on maps 0 and 1 and the scene copy on map 2 (bound by build_bind_groups).
+    info.usesShell = true;
+    info.uniformSize += sizeof(g_gxState.shellUniform) + sizeof(g_gxState.pbrTone);
+    if (config.shell == 2) {
+      info.shellScene = true;
+      info.sampledTextures.set(GX_TEXMAP0);
+      info.sampledTextures.set(GX_TEXMAP1);
+    }
+  }
   if (info.usesPTTexMtx.any()) {
     info.uniformSize += sizeof(Mat3x4<float>) * MaxPTTexMtx;
   }
@@ -582,6 +594,15 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
   }
   if (info.usesClipPlane) {
     buf.append(g_gxState.clipPlaneEq);
+  }
+  if (info.usesShell) {
+    for (const auto& v : g_gxState.shellUniform) {
+      buf.append(v);
+    }
+    // shell_tone: the curve the LDR colour pass decodes the scene copy with (shader.cpp).
+    for (const auto& v : g_gxState.pbrTone) {
+      buf.append(v);
+    }
   }
   if (info.usesPTTexMtx.any()) {
     for (int i = 0; i < info.usesPTTexMtx.size(); ++i) {

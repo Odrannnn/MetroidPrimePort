@@ -156,6 +156,8 @@ struct State_ {
     bool hdr = false;
     wgpu::TextureView depth; // the pass snapshot pool's (null: the device can't snapshot depth)
     TextureHandle color;
+    wgpu::TextureView level0; // color's top level alone, what a copy without mips samples
+    bool mips = true;         // the latest copy is the primary one (flags 3), not a second (flags 1)
   };
   std::array<SceneCopy, detail::FrameSlotCount> scene;
 };
@@ -1903,7 +1905,7 @@ void draw_triangles(const DrawDesc& desc, const Vertex* verts, uint32_t triCount
   }
 }
 
-void capture_scene() {
+void capture_scene(bool again) {
   gx::fifo::drain();
   if (is_offscreen()) {
     return;
@@ -1913,11 +1915,15 @@ void capture_scene() {
     return;
   }
   auto& scene = g_state.scene[current_frame_slot()];
-  if (scene.frame == current_frame()) {
-    return; // one copy per frame
-  }
   const bool hdr = scene_hdr_pass_active();
-  // CopyOpaqueColorBuffer (0xb32f08, flag 3): half size (at least 1), a full mip chain.
+  if (scene.frame == current_frame() &&
+      (!again || scene.hdr != hdr || scene.width != target.x || scene.height != target.y)) {
+    return; // one copy per frame; a second only into the same texture, which earlier draws bound
+  }
+  // copy_opaque_color_buffer_for_context (0xf4a30): flag 1 halves the size (at least 1), flag 2 adds a
+  // mip chain. The primary copy takes both (3); the pause screen's second copy only half size (1), so
+  // a read at lod 1 clamps to the top level. That copy goes into the same texture, sampled through a
+  // view of its top level.
   const uint32_t width = std::max(target.x >> 1, 1u);
   const uint32_t height = std::max(target.y >> 1, 1u);
   if (!scene.color || scene.color->size.width != width || scene.color->size.height != height || scene.hdr != hdr) {
@@ -1930,6 +1936,12 @@ void capture_scene() {
     scene.color = hdr ? new_render_texture(width, height, GX_TF_RGBA8, "VFX Scene Copy", mips,
                                            wgpu::TextureFormat::RGBA16Float)
                       : new_render_texture(width, height, GX_TF_RGBA8, "VFX Scene Copy", mips);
+    const wgpu::TextureViewDescriptor level0{
+        .label = "VFX Scene Copy Level 0",
+        .baseMipLevel = 0,
+        .mipLevelCount = 1,
+    };
+    scene.level0 = scene.color->texture.CreateView(&level0);
     scene.hdr = hdr;
     g_state.groupsStale.store(true, std::memory_order_release);
   }
@@ -1944,6 +1956,22 @@ void capture_scene() {
   scene.width = target.x;
   scene.height = target.y;
   scene.depth = std::move(depth);
+  scene.mips = !again;
+}
+
+wgpu::TextureView scene_copy_view(bool hdr) noexcept {
+  const auto& scene = g_state.scene[current_frame_slot()];
+  const auto target = get_render_target_size();
+  if (scene.frame != current_frame() || is_offscreen() || scene.width != target.x || scene.height != target.y ||
+      !scene.color || scene.hdr != hdr) {
+    return {};
+  }
+  return scene.mips ? scene.color->sampleTextureView : scene.level0;
+}
+
+bool scene_copy_available() {
+  gx::fifo::drain();
+  return static_cast<bool>(scene_copy_view(scene_hdr_pass_active()));
 }
 
 void shutdown() {

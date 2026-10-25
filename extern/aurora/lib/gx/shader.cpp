@@ -3525,6 +3525,28 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
     vtxXfrAttrsPre += "\n    out.dc_pos = mv_pos;"
                       "\n    out.pos = vec4f(mv_pos + vec3f(0.0, 0.0, 0.015), 1.0) * ubuf.proj;";
   }
+  if (config.shell != 0 && config.lineMode == 0) {
+    // GX_AURORA_PORT_SHELL, Model_SilhouetteShell's vertex stage: the model pushed out along its
+    // normalised model-space normal by a breathing amount that grows with the view distance, then
+    // every depth shifted by the constant CScopedGraphicsDepthBias gives: k, the depth change
+    // from moving the bounds centre (view depth shell[5].w) shell[5].y units farther, through
+    // this projection whatever its depth convention (z += k w). Both passes run this same code,
+    // so the colour pass meets the prepass's depth exactly (pos is @invariant).
+    vtxXfrAttrsPre += fmt::format(
+        "\n    let sh_t = clamp((length(mv_pos) - ubuf.shell[4].x) / (ubuf.shell[4].y - ubuf.shell[4].x), 0.0, 1.0);"
+        "\n    let sh_a = ubuf.shell[0].x * ubuf.shell[0].y * (1.0 + sin(ubuf.shell[5].x * 6.0) * ubuf.shell[4].w);"
+        "\n    let sh_e = sh_a * (1.0 + sh_t * (ubuf.shell[4].z - 1.0));"
+        "\n    let sh_n = {0};"
+        "\n    let sh_dir = select(sh_n, normalize(sh_n), dot(sh_n, sh_n) > 1e-10);"
+        "\n    let sh_pos = mv_pos + vec4f(sh_dir * sh_e, 0.0) * ubuf.postex_mtx[in_pnmtxidx];"
+        "\n    out.pos = vec4f(sh_pos, 1.0) * ubuf.proj;"
+        "\n    let sh_c0 = vec4f(0.0, 0.0, -ubuf.shell[5].w, 1.0) * ubuf.proj;"
+        "\n    let sh_c1 = vec4f(0.0, 0.0, -(ubuf.shell[5].w + ubuf.shell[5].y), 1.0) * ubuf.proj;"
+        "\n    if (ubuf.shell[5].w > 0.0) {{"
+        "\n        out.pos.z += (sh_c1.z / sh_c1.w - sh_c0.z / sh_c0.w) * out.pos.w;"
+        "\n    }}",
+        vtx_attr(config, GX_VA_NRM));
+  }
   if (config.clipPlane && config.lineMode == 0) {
     // GX_AURORA_SET_CLIP_PLANE: the signed distance to the plane, interpolated; the fragment stage
     // discards below zero (a hard cut, as a hardware clip distance).
@@ -4330,6 +4352,16 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
   if (info.usesClipPlane) {
     uniBufAttrs += "\n    clip_plane: vec4f,";
   }
+  if (info.usesShell) {
+    uniBufAttrs += "\n    shell: array<vec4f, 7>,\n    shell_tone: array<vec4f, 3>,";
+  }
+  if (info.shellScene) {
+    texBindings += fmt::format("\n@group(2) @binding({})\n"
+                               "var shell_scene: texture_2d<f32>;\n"
+                               "@group(2) @binding({})\n"
+                               "var shell_scene_samp: sampler;",
+                               GX_TEXMAP2 * 2, GX_TEXMAP2 * 2 + 1);
+  }
   if (info.usesPTTexMtx.any()) {
     uniBufAttrs += fmt::format("\n    postmtx: array<mat3x4f, {}>,", MaxPTTexMtx);
   }
@@ -4462,7 +4494,7 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
       fragmentFn += fmt::format("\n    if ({}) {{ discard; }}", discard.expr);
     }
   }
-  if (config.sceneHdr && !pbrEmitted && !hdrConverted) {
+  if (config.sceneHdr && !pbrEmitted && !hdrConverted && config.shell == 0) {
     // Retail TEV (and SDF) colour is display sRGB: decoded and taken back through the room's tone
     // curve. SRCALPHA/ONE weights display RGB first; blends where the source scales the destination
     // (multiply, add-dest-colour) take it as a linear factor; other blends keep the original inverse.
@@ -4881,6 +4913,41 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {{{6}{5}
     shaderSource.replace(at, tail.size(),
                          "    return vec4f(f32(imm.serial & 255u), f32((imm.serial >> 8u) & 255u), "
                          "f32((imm.serial >> 16u) & 255u), 255.0) / 255.0;\n}");
+  }
+  if (config.shell == 2 && config.lineMode == 0) {
+    // Model_SilhouetteShell's colour (kb topic/model-black-silhouette.md): TCH1 (map 1, scrolled in
+    // screen space) offsets the scene copy (lod 1) and TCH0 (map 0, decoded when sRGB), and
+    //   rgb = scene * g * (1 + w1) + (scene + g * invExposure) * (1 + w2), w1 = f CCH3.y - f, w2 = f CCH1.w - f
+    // with f = clamp(1 - pow(|1 - |n.v||, CCH2.z) - CCH2.w) = 1 for every shell the game uses (CCH2.w = -1).
+    // The copy here holds exposed light (scene x exposure), so g * invExposure becomes g. Outside the
+    // HDR scene (the pause screen's doll) the frame and its copy are display-encoded through the tone
+    // curve the PBR models used (shell_tone = pbrTone): the copy goes back through the curve's
+    // inverse and the result through the curve, as Remastered shades the doll in linear light.
+    const bool shellLdr = !config.sceneHdr;
+    constexpr std::string_view tail = "    return prev;\n}";
+    const size_t at = shaderSource.rfind(tail);
+    assert(at != std::string::npos);
+    shaderSource.replace(at, tail.size(), fmt::format(R"WGSL(    let sh_s = in.pos.xy * ubuf.shell[6].xy;
+    let sh_time = ubuf.shell[5].x;
+    let sh_ind = textureSample(tex1, tex1_samp, sh_s * ubuf.shell[3].x + ubuf.shell[1].xy + sh_time * ubuf.shell[2].x).xy;
+    let sh_d = (sh_ind - 0.5) * 2.0 * ubuf.shell[1].z;
+    let sh_scene = {};
+    var sh_g = textureSample(tex0, tex0_samp, sh_s + 2.0 * sh_d - sh_time * ubuf.shell[2].y).rgb;
+    if (ubuf.shell[5].z > 0.5) {{
+        sh_g = srgb_dec(sh_g);
+    }}
+    sh_g *= ubuf.shell[0].w;
+    let sh_rgb = sh_scene * sh_g * ubuf.shell[3].y + (sh_scene + sh_g) * ubuf.shell[1].w;
+    return vec4f({}, ubuf.shell[0].z);
+}})WGSL",
+        shellLdr ? "hdr_exposed(textureSampleLevel(shell_scene, shell_scene_samp, sh_s + sh_d, 1.0).rgb, "
+                   "ubuf.shell_tone[0], ubuf.shell_tone[1], ubuf.shell_tone[2])"
+                 : "textureSampleLevel(shell_scene, shell_scene_samp, sh_s + sh_d, 1.0).rgb",
+        shellLdr ? "hdr_post_tone(sh_rgb, ubuf.shell_tone[0], ubuf.shell_tone[1], ubuf.shell_tone[2])" : "sh_rgb"));
+    if (shellLdr) {
+      shaderSource += gfx::hdr::ToneWgsl;
+      shaderSource += gfx::hdr::PostToneWgsl;
+    }
   }
   if (config.actorDecal != 0 && config.lineMode == 0) {
     // The decal colour: 1 - (1 - vis) * opacity * (1 - sat(w))^2, vis one bilinear compare tap of the caster's

@@ -473,6 +473,15 @@ struct GXState {
   bool actorSavedCasterOnly = false;
   bool actorSavedActive = false;
   std::array<Vec4<float>, 36> actorSavedUniform{};
+  // GX_AURORA_PORT_SHELL: 1 while the draws are a silhouette shell's depth prepass, 2 its colour;
+  // shellUniform holds CCH0..CCH4, (time, depth bias, tex0 sRGB, centre view depth), (1 / render target size, 0, 0).
+  u8 shell = 0;
+  std::array<Vec4<float>, 7> shellUniform{};
+  // Maps 0 and 1 as mode 1 found them loaded (TCH0, TCH1): the model's materials load their own
+  // into those slots as it draws, and the colour pass samples these instead, resolved apart from
+  // the slots' own binds (resolve_sampled_textures).
+  std::array<GXTexObj_, 2> shellTexObjs;
+  std::array<gfx::TextureBind, 2> shellTextures;
 
   // GX2 polygon offset state
   f32 frontOffset = 0.0f;
@@ -635,7 +644,10 @@ struct ShaderConfig {
   // GX_AURORA_SET_CLIP_PLANE on a triangle draw: the clip_plane uniform and a discard. A bit of the
   // perPixelLight byte, so a config with it off keeps its bytes and cache keys.
   u8 clipPlane : 1 = 0;
-  u8 padding0 : 6 = 0;
+  // GX_AURORA_PORT_SHELL on a triangle draw: Remastered's silhouette shell, 1 its depth prepass, 2
+  // its colour (the shell_* uniforms, the scene copy on texture slot 2). Bits of the same byte.
+  u8 shell : 2 = 0;
+  u8 padding0 : 4 = 0;
   // GX_AURORA_PORT_ACTOR_SHADOW decal: the draw is a receiver redrawn as Remastered's actor shadow
   // decal (multiplies the frame by the shadow, shadowUniform holds its view-space planes). The old
   // padding byte, so other configs keep their bytes and cache keys.
@@ -691,6 +703,8 @@ struct ShaderInfo {
   bool actorDecal : 1 = false;    // actor_decal: group 2 uses the shadow layout with the actor maps
   bool usesHdrTone : 1 = false;   // sceneHdr without pbr: hdr_tone (pbrTone) and hdr_tev_blend
   bool usesClipPlane : 1 = false; // ShaderConfig::clipPlane: the clip_plane uniform
+  bool usesShell : 1 = false;
+  bool shellScene : 1 = false; // the shell's colour pass: texture slot 2 holds the scene copy     // ShaderConfig::shell: the shell uniforms; colour: the scene copy on slot 2
 };
 struct BindGroupRanges {
   std::array<gfx::Range, MaxIndexAttr> vaRanges{};

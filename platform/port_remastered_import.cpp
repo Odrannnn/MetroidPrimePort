@@ -2,6 +2,7 @@
 #include "port_remastered_effect_convert.h"
 #include "port_queen_barrier_validate.h"
 #include "port_envfx_file.h"
+#include "port_shell_file.h"
 #include "port_retail_placement.h"
 #include "port_dread_reskin.h"
 #include "port_remastered_anim.h"
@@ -264,6 +265,25 @@ std::string UuidText(const ModelUuid& uuid) {
     text += pair;
   }
   return text;
+}
+
+// A GUID string as the bytes of a ModelUuid, in the order written, else the mixed-endian one
+// the pak may hold it in.
+void GuidUuids(const char* text, ModelUuid& plain, ModelUuid& swapped) {
+  size_t n = 0;
+  for (const char* c = text; *c != 0 && n < 16; ++c) {
+    if (*c == '-') {
+      continue;
+    }
+    const auto hex = [](char h) { return h <= '9' ? h - '0' : (h | 0x20) - 'a' + 10; };
+    plain[n++] = uint8_t(hex(c[0]) << 4 | hex(c[1]));
+    ++c;
+  }
+  swapped = plain;
+  std::swap(swapped[0], swapped[3]);
+  std::swap(swapped[1], swapped[2]);
+  std::swap(swapped[4], swapped[5]);
+  std::swap(swapped[6], swapped[7]);
 }
 
 // The same for the same set of ids, in any order.
@@ -1423,6 +1443,57 @@ private:
   size_t m_budget, m_bytes = 0;
   uint64_t m_hits = 0, m_misses = 0;
 };
+
+// One level of a shell texture's chain: each texel the mean of the 2x2 above it. An odd or
+// 1-wide edge reads its last column/row twice, so a side never halves below 1. An sRGB level
+// averages its colour in linear light (the shader samples colour as sRGB) and its alpha
+// plainly; a linear one averages every channel plainly.
+void ShellLevel(const uint8_t* src, uint32_t sw, uint32_t sh, uint8_t* dst, uint32_t dw, uint32_t dh,
+                bool srgb) {
+  for (uint32_t y = 0; y < dh; ++y) {
+    const uint32_t y0 = std::min(y * 2, sh - 1);
+    const uint32_t y1 = std::min(y * 2 + 1, sh - 1);
+    for (uint32_t x = 0; x < dw; ++x) {
+      const uint32_t x0 = std::min(x * 2, sw - 1);
+      const uint32_t x1 = std::min(x * 2 + 1, sw - 1);
+      const uint8_t* p[4] = {src + (size_t(y0) * sw + x0) * 4, src + (size_t(y0) * sw + x1) * 4,
+                             src + (size_t(y1) * sw + x0) * 4, src + (size_t(y1) * sw + x1) * 4};
+      uint8_t* out = dst + (size_t(y) * dw + x) * 4;
+      for (int c = 0; c < 4; ++c) {
+        if (srgb && c < 3) {
+          const float sum = SrgbByteToLinear(p[0][c]) + SrgbByteToLinear(p[1][c]) +
+                            SrgbByteToLinear(p[2][c]) + SrgbByteToLinear(p[3][c]);
+          out[c] = LinearToSrgbByteExact(sum * 0.25f);
+        } else {
+          out[c] = uint8_t((unsigned(p[0][c]) + p[1][c] + p[2][c] + p[3][c] + 2) / 4);
+        }
+      }
+    }
+  }
+}
+
+// `tex`'s top mip and every level below it, down to 1x1, as shell.bin holds them (port_shell_file.h):
+// the shell shader samples the chain, so the import makes it rather than coding down to 1x1.
+void BuildShellImage(const TxtrImage& tex, PortShell::Image& out) {
+  out = PortShell::Image();
+  out.width = tex.width;
+  out.height = tex.height;
+  out.srgb = tex.srgb;
+  for (uint32_t side = std::max(tex.width, tex.height); side != 0; side >>= 1) {
+    ++out.mips;
+  }
+  out.rgba = tex.rgba;
+  for (uint32_t level = 1; level < out.mips; ++level) {
+    const uint32_t sw = std::max(out.width >> (level - 1), 1u);
+    const uint32_t sh = std::max(out.height >> (level - 1), 1u);
+    const uint32_t dw = std::max(out.width >> level, 1u);
+    const uint32_t dh = std::max(out.height >> level, 1u);
+    const size_t from = out.rgba.size() - size_t(sw) * sh * 4;
+    const size_t to = out.rgba.size();
+    out.rgba.resize(to + size_t(dw) * dh * 4);
+    ShellLevel(out.rgba.data() + from, sw, sh, out.rgba.data() + to, dw, dh, out.srgb);
+  }
+}
 
 void Run(std::string nspPath, std::string keysPath, int threads, fs::path staging) {
   YieldToGame();
@@ -3521,23 +3592,6 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     // The EnvironmentFX textures (port_envfx_file.h) as envfx.bin: the rain, snow and underwater
     // flakes and the fade gradient the native EnvFX draw samples. All four or no file.
     {
-      // A GUID string as the bytes of a ModelUuid, in the order written, else the mixed-endian one.
-      const auto uuids = [](const char* text, ModelUuid& plain, ModelUuid& swapped) {
-        size_t n = 0;
-        for (const char* c = text; *c != 0 && n < 16; ++c) {
-          if (*c == '-') {
-            continue;
-          }
-          const auto hex = [](char h) { return h <= '9' ? h - '0' : (h | 0x20) - 'a' + 10; };
-          plain[n++] = uint8_t(hex(c[0]) << 4 | hex(c[1]));
-          ++c;
-        }
-        swapped = plain;
-        std::swap(swapped[0], swapped[3]);
-        std::swap(swapped[1], swapped[2]);
-        std::swap(swapped[4], swapped[5]);
-        std::swap(swapped[6], swapped[7]);
-      };
       PortEnvFx::Assets envfx;
       std::string envfxError;
       for (int i = 0; i < 4 && envfxError.empty(); ++i) {
@@ -3545,7 +3599,7 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         PortEnvFx::Image& image = i == 0 ? envfx.gradient : envfx.flake[i - 1];
         ModelUuid plain{};
         ModelUuid swapped{};
-        uuids(guid, plain, swapped);
+        GuidUuids(guid, plain, swapped);
         std::vector<uint8_t> raw;
         std::string error;
         if (!remastered.ReadTexture(plain, raw, error) && !remastered.ReadTexture(swapped, raw, error)) {
@@ -3595,6 +3649,50 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         AddLine("EnvironmentFX textures: " + envfxError);
       } else if (!makeIO(0, hudFolder).write("envfx.bin", file)) {
         AddLine("EnvironmentFX textures: cannot write");
+      }
+    }
+
+    // Remastered's silhouette-shell textures (port_shell_file.h) as shell.bin: the strength
+    // gradient the shell reads through, and the indirect noise map the player body and the
+    // Samus doll each sample (build/mpr/kb topic/model-black-silhouette.md). All three or no file.
+    {
+      PortShell::Assets shell;
+      std::string shellError;
+      for (int i = 0; i < PortShell::kCount && shellError.empty(); ++i) {
+        const char* guid = PortShell::kGuid[i];
+        ModelUuid plain{};
+        ModelUuid swapped{};
+        GuidUuids(guid, plain, swapped);
+        std::vector<uint8_t> raw;
+        std::string error;
+        TxtrImage tex;
+        if (!remastered.ReadTexture(plain, raw, error) && !remastered.ReadTexture(swapped, raw, error)) {
+          shellError = std::string(guid) + ": " + error;
+          break;
+        }
+        if (!DecodeTxtr(raw.data(), raw.size(), tex, error)) {
+          shellError = std::string(guid) + ": " + error;
+          break;
+        }
+        if (tex.width < 1 || tex.height < 1 || tex.width > 4096 || tex.height > 4096) {
+          shellError = std::string(guid) + ": " + std::to_string(tex.width) + "x" + std::to_string(tex.height);
+          break;
+        }
+        // The whole chain, down to 1x1: the shader's scene lookup is a textureLod.
+        BuildShellImage(tex, shell.image[i]);
+      }
+      PortShell::Assets check;
+      std::vector<uint8_t> file;
+      if (shellError.empty()) {
+        file = PortShell::Serialize(shell);
+        if (!PortShell::Parse(file.data(), file.size(), check, shellError)) {  // the sizes the draw expects
+          shellError = "unexpected size: " + shellError;
+        }
+      }
+      if (!shellError.empty()) {
+        AddLine("silhouette shell textures: " + shellError);
+      } else if (!makeIO(0, hudFolder).write("shell.bin", file)) {
+        AddLine("silhouette shell textures: cannot write");
       }
     }
     if (hudFrames == 0 && compassModels == 0) {

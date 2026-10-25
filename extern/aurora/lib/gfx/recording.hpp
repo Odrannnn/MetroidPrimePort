@@ -172,6 +172,11 @@ void resolve_pass_into(TextureHandle texture, ClipRect rect, bool clearColor, bo
 // where the device can, snapshots its raw depth (R32Float, this frame slot's pool) into depth. The
 // EFB continues on a pass that loads both. False, with nothing recorded, outside an on-screen EFB pass.
 bool resolve_scene_copy(TextureHandle color, const ResolveHdr* hdr, wgpu::TextureView& depth);
+namespace vfx {
+// This frame's scene copy (capture_scene) of the target being drawn, when it was taken in the scene
+// pass of the same kind (hdr); else null.
+wgpu::TextureView scene_copy_view(bool hdr) noexcept;
+} // namespace vfx
 // The frame slot being recorded: its pool entries stay alive until the render worker has encoded it.
 size_t current_frame_slot() noexcept;
 uint32_t align_uniform(uint32_t value);

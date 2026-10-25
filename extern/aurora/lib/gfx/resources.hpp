@@ -43,6 +43,8 @@ struct FrameBufferSizes {
   uint64_t deviceStorage = StorageBufferSize;
   // The arrays' scaled size (frameStorageScale in use), before staging starts smaller.
   uint64_t scaledStorage = StorageBufferSize;
+  // The vertices' scaled size (frameBufferScale in use); maxVertex can be more in resident mode.
+  uint64_t scaledVertex = VertexBufferSize;
   // The most a frame's arrays take in the device storage buffer: the most `storage` can grow
   // to, which is also maxStorage.
   uint64_t storageReserve = StorageBufferSize;
