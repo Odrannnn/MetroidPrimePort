@@ -445,6 +445,14 @@ void CPlayerGun::PreRender(CStateManager& mgr, const CFrustumPlanes& frustum,
     x740_grappleArm->PreRender(mgr, frustum, camPos);
   }
 
+#ifdef TARGET_PC
+  // Remastered (PreRender 0xc925e8) draws the right hand only in the X-ray visor, wipes too.
+  if (sPortRemasteredGun) {
+    if (activeVisor == CPlayerState::kPV_XRay) {
+      x6e0_rightHandModel.AnimationData()->PreRender();
+    }
+  } else
+#endif
   if (x678_morph.GetGunState() != CGunMorph::kGS_OutWipeDone ||
       activeVisor == CPlayerState::kPV_XRay) {
     x6e0_rightHandModel.AnimationData()->PreRender();
@@ -851,12 +859,19 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   case CGunMorph::kGS_InWipe:
   case CGunMorph::kGS_OutWipe: {
     CTransform4f handXf(elbowOffsetXf * CTransform4f::Translate(0.f, -0.2f, 0.02f));
+    bool drawHoloHand = true;
+#ifdef TARGET_PC
+    // Remastered (Render 0xc926d4) draws the hand in the hologram states only in X-ray.
+    drawHoloHand = !sPortRemasteredGun || visor == CPlayerState::kPV_XRay;
+#endif
     if (gunState != CGunMorph::kGS_InWipeDone) {
       CTransform4f morphXf(elbowOffsetXf *
                            CTransform4f::Translate(0.f, x678_morph.GetYLerp(), 0.f));
       CopyScreenTex();
-      x6e0_rightHandModel.Render(mgr, handXf, &x0_lights,
-                                 thermalVisor ? kHandThermalFlag : kHandHoloFlag);
+      if (drawHoloHand) {
+        x6e0_rightHandModel.Render(mgr, handXf, &x0_lights,
+                                   thermalVisor ? kHandThermalFlag : kHandHoloFlag);
+      }
       x72c_currentBeam->DrawHologram(mgr, offsetWorldXf, CModelFlags::Normal());
       DrawScreenTex(ConvertToScreenSpace(morphXf.GetTranslation(), cam).GetZ());
       if (x0_lights.HasShadowLight()) {
@@ -869,8 +884,10 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
       DrawArm(mgr, pos, flags);
       x82c_shadow->DisableModelProjectedShadow();
     } else {
-      x6e0_rightHandModel.Render(mgr, handXf, &x0_lights,
-                                 thermalVisor ? kHandThermalFlag : kHandHoloFlag);
+      if (drawHoloHand) {
+        x6e0_rightHandModel.Render(mgr, handXf, &x0_lights,
+                                   thermalVisor ? kHandThermalFlag : kHandHoloFlag);
+      }
       x72c_currentBeam->DrawHologram(mgr, offsetWorldXf, CModelFlags::Normal());
       if (x0_lights.HasShadowLight()) {
         x82c_shadow->EnableModelProjectedShadow(offsetWorldXf, x0_lights.GetShadowLightArrIndex(),
