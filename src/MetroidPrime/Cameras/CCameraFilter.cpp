@@ -24,6 +24,7 @@
 #include "math.h"
 #include "stdlib.h"
 #include "string.h"
+#include <cstdio>
 
 const float CCameraBlurPass::skXRayViewportScaleX = 0.9f;
 const float CCameraBlurPass::skXRayViewportScaleY = 0.9f;
@@ -394,6 +395,14 @@ void CCameraFilterPass::Draw() const {
   }
 #endif
   DrawFilter(x0_curType, x8_shape, x18_curColor, tex, t);
+}
+
+void CCameraFilterPass::PortDescribe(char* out, unsigned int size) const {
+  std::snprintf(out, size,
+                "type %d -> %d shape %d rgba %.6g %.6g %.6g %.6g texture %08X resident %d fade %.6g/%.6g",
+                int(x0_curType), int(x4_nextType), int(x8_shape), x18_curColor.GetRed(),
+                x18_curColor.GetGreen(), x18_curColor.GetBlue(), x18_curColor.GetAlpha(),
+                unsigned(x20_nextTxtr), int(!x24_texObj.null()), x10_remTime, xc_duration);
 }
 
 #ifdef TARGET_PC

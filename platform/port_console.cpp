@@ -3286,6 +3286,14 @@ void CmdRoomLiquid() {
   // The water the camera is in: retail's underwater fog colour against Remastered's filter.
   const CStateManager* const mgr = PortDebug::StateManager();
   const CCameraManager* const cameras = mgr != nullptr ? mgr->GetCameraManager() : nullptr;
+  if (mgr != nullptr) {
+    Out("camera fluid counter %d", cameras != nullptr ? cameras->GetFluidCounter() : 0);
+    for (int i = 0; i < CStateManager::kCFS_Max; ++i) {
+      char state[256];
+      mgr->GetCameraFilterPass(CStateManager::ECameraFilterStage(i)).PortDescribe(state, sizeof(state));
+      Out("  camera filter %d: %s", i, state);
+    }
+  }
   if (cameras != nullptr && cameras->GetFluidCounter() != 0) {
     if (const CScriptWater* water = TCastToConstPtr< CScriptWater >(mgr->GetObjectById(cameras->GetFluidId()))) {
       const CColor& retail = water->GetUnderwaterFogColor();

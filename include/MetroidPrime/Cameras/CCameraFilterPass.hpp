@@ -53,6 +53,7 @@ public:
   float GetT(bool invert) const;
   // Port: a filter is applied or still fading (the pass is not a settled passthru).
   bool PortIsActive() const { return x10_remTime > 0.f || x0_curType != kFT_Passthru; }
+  void PortDescribe(char* out, unsigned int size) const;
   // Port: the colour of a plain fullscreen Add filter (what Draw would add), false for any other.
   bool PortAddColor(CColor& out) const;
   // Port: SetFilter with Remastered's SRadialGradientColorData (c0 apex, c1 rim, c2 the texture
