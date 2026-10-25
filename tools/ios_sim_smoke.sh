@@ -40,14 +40,21 @@ run_device() {
   xcrun simctl bootstatus "$udid" -b > /dev/null
   xcrun simctl install "$udid" "$app" || { echo "$name: install failed" >&2; return 1; }
 
-  # 1. No disc and no dialog: the app should log that and exit by itself.
-  SIMCTL_CHILD_MP_NO_DISC_DIALOG=1 xcrun simctl launch --console-pty --terminate-running-process \
-    "$udid" "$id" > "$out/$name.log" 2>&1 &
-  local pid=$! waited=0
-  while kill -0 "$pid" 2>/dev/null && [ $waited -lt 180 ]; do sleep 1; waited=$((waited + 1)); done
-  kill "$pid" 2>/dev/null
-  wait "$pid" 2>/dev/null
-  xcrun simctl terminate "$udid" "$id" 2>/dev/null
+  # 1. No disc and no dialog: the app should log that and exit by itself. A
+  # freshly booted simulator sometimes never starts the first launch (no output,
+  # no files), so a silent attempt gets one retry.
+  local pid waited attempt
+  for attempt in 1 2; do
+    SIMCTL_CHILD_MP_NO_DISC_DIALOG=1 xcrun simctl launch --console-pty --terminate-running-process \
+      "$udid" "$id" > "$out/$name.log" 2>&1 &
+    pid=$! waited=0
+    while kill -0 "$pid" 2>/dev/null && [ $waited -lt 180 ]; do sleep 1; waited=$((waited + 1)); done
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+    xcrun simctl terminate "$udid" "$id" 2>/dev/null
+    [ -s "$out/$name.log" ] && break
+    echo "$name: attempt $attempt printed nothing" >&2
+  done
 
   local data
   data=$(xcrun simctl get_app_container "$udid" "$id" data 2>/dev/null)

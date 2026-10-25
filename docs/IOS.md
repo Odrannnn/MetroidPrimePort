@@ -26,8 +26,10 @@ yourself with a free Apple ID. No paid developer account and no Mac are needed.
    [ios workflow](../.github/workflows/ios.yml) run.
 2. Sign it and install it with a sideloading tool, such as
    [AltStore](https://altstore.io), [SideStore](https://sidestore.io) or
-   [Sideloadly](https://sideloadly.io). They run on Windows or Linux, and
-   SideStore runs on the device itself.
+   [Sideloadly](https://sideloadly.io). AltStore and Sideloadly need a Windows
+   PC or a Mac each time they install or refresh the app. SideStore needs a
+   computer only once, to pair with the device (Linux works too); after that it
+   installs and refreshes the app on the device itself.
 3. On iOS 16 or later, turn on **Settings > Privacy & Security > Developer
    Mode**, then trust your Apple ID under **Settings > General > VPN & Device
    Management**.
