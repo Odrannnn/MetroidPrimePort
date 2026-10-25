@@ -547,8 +547,13 @@
   `auto`, issue #135): which graphics API the port asks Aurora for. Only this
   platform's choices are offered: Windows lists Auto, Direct3D 12, Vulkan,
   Direct3D 11 and OpenGL; desktop Linux lists Auto, Vulkan and OpenGL. OpenGL
-  is Dawn's desktop GL, 4.4 or newer, through EGL on Linux and WGL on Windows,
-  for GPUs whose other drivers are missing or draw wrong; Windows support is
+  is Dawn's desktop GL, through EGL on Linux and WGL on Windows, for GPUs whose
+  other drivers are missing or draw wrong. It runs on 3.3 or newer; below 4.3
+  the driver also needs GL_ARB_shading_language_420pack,
+  GL_ARB_explicit_uniform_location, GL_ARB_texture_storage and
+  GL_ARB_texture_view. Without compute shaders and storage buffers (most 3.3
+  drivers) Aurora reads vertex data from textures and draws the volumetric fog
+  and depth peek with render passes instead (same output). Windows support is
   new and less tested. `auto` asks for nothing in particular, so Aurora takes
   its own order (Direct3D 12, then Vulkan, then Direct3D 11 on Windows; Vulkan,
   then OpenGL ES on Linux); an explicit choice is tried first, and if the driver

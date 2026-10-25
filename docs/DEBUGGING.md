@@ -15,6 +15,12 @@ runs on the real display have taken the desktop session down. The one exception 
 `start --host-display`, for the OpenGL backends only (Xvfb's llvmpipe can't run Dawn's GL): it
 skips Xvfb and opens a window on the user's `$DISPLAY` with the real driver (it picks up the
 newest Xwayland auth file under GNOME). Use it only with the user's OK, one run at a time.
+To test the GL 3.3 path on a Mesa driver, add `--env MP_GRAPHICS_BACKEND=opengl --env
+MESA_GL_VERSION_OVERRIDE=3.3 --env MESA_GLSL_VERSION_OVERRIDE=330 --env
+"MESA_EXTENSION_OVERRIDE=+GL_ARB_texture_storage -GL_ARB_compute_shader
+-GL_ARB_shader_storage_buffer_object -GL_ARB_shader_image_load_store"` (Mesa hides
+texture storage at 3.3, which real 3.3 drivers expose); game.log then reports texture vertex
+fetch and no compute shaders.
 
 ## Setup
 
