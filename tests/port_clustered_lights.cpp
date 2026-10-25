@@ -86,6 +86,12 @@ int main() {
     CHECK_MSG(tiles == 27u * 15u && across == 27u, "c5[2].xy hold tile count and row pitch as int bits");
     CHECK_MSG(validity == 0x5u, "c5[2].z is the validity mask");
     CHECK_MSG(source == 0u, "c5[2].w = 0, the mask is a texture");
+    // Past the caps a tile is ceil(size/tiles) pixels: recip(ucvtf(CClusteredData+0xc/+0x10))
+    // (build_clustered_light_material_data 0x3b8750), not 1/48.
+    Header(MakeGrid(1920, 1080), header, 0u, 0.f);
+    CHECK_MSG(Near(header[0], 1.f / 57.f) && Near(header[1], 1.f / 57.f), "1920x1080: c5[0].xy = 1 / 57");
+    Header(MakeGrid(2560, 1440), header, 0u, 0.f);
+    CHECK_MSG(Near(header[0], 1.f / 76.f) && Near(header[1], 1.f / 76.f), "2560x1440: c5[0].xy = 1 / 76");
   }
 
   // The 80-byte record (SCachedLight::Initialize 0x16b5c8), for a point light at view z -20.
@@ -172,6 +178,45 @@ int main() {
     CHECK_MSG(frame.Mask(0, 0, slice) == 0u, "a corner tile does not");
     CHECK_MSG(frame.Mask(13, 7, 20) == 0u, "a far slice does not");
     CHECK_MSG(frame.SetBits() >= 1, "at least one (cluster, light) pair is set");
+  }
+
+  // Tile row 0 is the top of the target (the shader's fragment position is y down): a light above
+  // the view centre sets an upper row, not the mirrored lower one.
+  {
+    const Camera camera = TestCamera();
+    const RawLight light[1] = {MakeLight(PointLight(0.f, 5.f, -20.f, 0.5f), kIdentityView)};
+    Frame frame;
+    Build(camera, 1280, 720, light, 1, frame);
+    const int slice = SliceForDepth(20.f);
+    // ndc y 0.5 is 180 px from the top: row 3 of 15.
+    CHECK_MSG(frame.Mask(13, 3, slice) == 1u, "a light above the centre sets an upper row");
+    CHECK_MSG(frame.Mask(13, 11, slice) == 0u, "and not the mirrored lower row");
+  }
+
+  // The left and bottom faces are 0 on their own edges too: a light left of and below the centre
+  // (ndc -0.28, -0.3: pixel 462, 468) sets its own tile, tile 9 of row 9.
+  {
+    const Camera camera = TestCamera();
+    const RawLight light[1] = {MakeLight(PointLight(-5.f, -3.f, -20.f, 0.05f), kIdentityView)};
+    Frame frame;
+    Build(camera, 1280, 720, light, 1, frame);
+    const int slice = SliceForDepth(20.f);
+    CHECK_MSG(frame.Mask(9, 9, slice) == 1u, "a light in the lower-left quadrant sets its tile");
+    CHECK_MSG(frame.SetBits() == 1, "and only that one");
+  }
+
+  // Tiles span TilePixels pixels from the left edge, not 1/tilesX of the NDC range: at 1920 wide a
+  // tile is 57 px, so ndc x 0.95 (pixel 1872) is tile 32, where an even NDC split would say 33.
+  {
+    const Camera camera = TestCamera();
+    // At 60 m the 0.25 m sphere spans +-4.5 px around pixel 1872.
+    const RawLight light[1] = {MakeLight(PointLight(0.95f * 60.f * 0.9f, 0.f, -60.f, 0.05f), kIdentityView)};
+    Frame frame;
+    Build(camera, 1920, 1080, light, 1, frame);
+    const int slice = SliceForDepth(60.f);
+    CHECK_MSG(TilePixelsX(frame.grid) == 57u && TilePixelsY(frame.grid) == 57u, "1920x1080 tiles are 57 px");
+    CHECK_MSG(frame.Mask(32, 9, slice) == 1u, "pixel 1872 is in tile 32 (1824..1880)");
+    CHECK_MSG(frame.Mask(33, 9, slice) == 0u, "and not in the last tile (1881..1919)");
   }
 
   // The culls: black, zero radius, beyond the distance cut, and outside the frustum.

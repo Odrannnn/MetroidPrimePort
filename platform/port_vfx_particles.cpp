@@ -1114,9 +1114,13 @@ void PortVfxClusterView(const float* pos, aurora::gfx::vfx::DrawDesc& desc) {
   for (const PortClusteredLights::LightSource& source : sources) {
     lights.push_back(PortClusteredLights::MakeLight(source, camera.worldToView));
   }
-  const PortClusteredLights::Frame& frame = PortClusteredLights::Update(
-      camera, uint32_t(CGraphics::GetViewportWidth()), uint32_t(CGraphics::GetViewportHeight()), lights.data(),
-      int(lights.size()));
+  // The grid is sized from the target the draw lands in: the shader picks a fragment's tile from its
+  // position in that target's pixels, not the 640x480 GX viewport.
+  uint32_t width = 0;
+  uint32_t height = 0;
+  aurora::gfx::vfx::render_target_size(width, height);
+  const PortClusteredLights::Frame& frame =
+      PortClusteredLights::Update(camera, width, height, lights.data(), int(lights.size()));
   desc.cluster.block = frame.header;
   if (!frame.mask.empty() && frame.grid.tilesX > 0 && frame.grid.tilesY > 0) {
     desc.cluster.mask = frame.mask.data();
