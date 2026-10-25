@@ -55,6 +55,12 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.33.0" date="2026-10-25">
+      <description>
+        <p>Metroid Dread Samus bodies imported from your own Metroid Dread dump, a third-person camera with an aiming cannon arm, Morph Ball control rows and controller presets, a reworked resolution scale and dynamic resolution, lock-on free aim, a walk speed setting, a Phazon Beam cheat, many more Prime Remastered models, effects and lighting through the HDR scene, Remastered rain, snow and underwater flakes, and savestates that keep enemies' AI, generated pickups and debris and the music that was playing.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.33.0</url>
+    </release>
     <release version="0.32.0" date="2026-10-22">
       <description>
         <p>Suit colour customisation with a random colours button, the Fusion Suit from the F1 menu, a touch layout editor that adds your own buttons, deletes stock ones and sets per-control opacity, a fix for the crash in the Meta Ridley fight, Aurora graphics fixes (EFB alpha, partial copy clears, texture coordinate generation and minification), Ridley, Thardus, Flaahgra and Metroid Prime restored mid-fight by savestates, a check of the whole disc image against its Redump release, and safer save, movie and disc reads.</p>
