@@ -1149,6 +1149,7 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
         Log.info("Vertex data from storage buffers (the adapter allows {} vertex-stage storage buffers)",
                  adapterVertexStorageBuffers);
       }
+    }
     // Compute (aurora::gfx::g_noCompute): OpenGL 3.3 has no compute shaders, so the volumetric fog's
     // froxels and the depth peek run as render passes with the same per-pixel math instead
     // (gfx/volfog.cpp, gfx/depth_peek.cpp). AURORA_NO_COMPUTE=1 forces them; otherwise the adapter's
@@ -1166,7 +1167,9 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
                                              supportedLimits.maxComputeWorkgroupsPerDimension,
                                              supportedLimits.maxComputeInvocationsPerWorkgroup));
     }
-    }
+    // Storage buffers hold the vertex data and feed the compute passes; with both on their fallbacks
+    // nothing binds one, so require none (OpenGL 3.3 has no shader storage buffers at all).
+    const bool needStorageBuffers = !gfx::g_vertexFetchTexture || !gfx::g_noCompute;
     wgpu::CompatibilityModeLimits compatibilityModeLimits{wgpu::CompatibilityModeLimits::Init{
         .maxStorageBuffersInVertexStage = gfx::g_vertexFetchTexture ? 0u : 2u,
         .maxStorageBuffersInFragmentStage = gfx::g_vertexFetchTexture ? 0u : 2u,
@@ -1185,8 +1188,8 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
         .maxSampledTexturesPerShaderStage = supportedLimits.maxSampledTexturesPerShaderStage >= 17
                                                 ? 17
                                                 : WGPU_LIMIT_U32_UNDEFINED,
-        .maxStorageBuffersPerShaderStage = 2,
-        .maxStorageBufferBindingSize = supportedLimits.maxStorageBufferBindingSize == 0
+        .maxStorageBuffersPerShaderStage = needStorageBuffers ? 2u : WGPU_LIMIT_U32_UNDEFINED,
+        .maxStorageBufferBindingSize = !needStorageBuffers || supportedLimits.maxStorageBufferBindingSize == 0
                                            ? WGPU_LIMIT_U64_UNDEFINED
                                            : supportedLimits.maxStorageBufferBindingSize,
         .minUniformBufferOffsetAlignment =
