@@ -55,6 +55,12 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.33.1" date="2026-10-25">
+      <description>
+        <p>Bug fixes: no more crash with MSAA on at fog volumes (Tallon Canyon's Root Cavern door, Magmoor's Tallon elevator room), cheat sliders no longer max capacities or fire on a scroll, gyro moves the lock-on free aim pointer at Pointer speed, an analog L in the Scan Visor locks the point under the pointer, and many Prime Remastered weapon effects (muzzle flashes, projectile lights and explosions, ice shell, hologram beam swap, underwater bubbles) now match the shipped game.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.33.1</url>
+    </release>
     <release version="0.33.0" date="2026-10-25">
       <description>
         <p>Metroid Dread Samus bodies imported from your own Metroid Dread dump, a third-person camera with an aiming cannon arm, Morph Ball control rows and controller presets, a reworked resolution scale and dynamic resolution, lock-on free aim, a walk speed setting, a Phazon Beam cheat, many more Prime Remastered models, effects and lighting through the HDR scene, Remastered rain, snow and underwater flakes, and savestates that keep enemies' AI, generated pickups and debris and the music that was playing.</p>
