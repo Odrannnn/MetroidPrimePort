@@ -567,10 +567,9 @@ void TestCannonFit() {
       for (int a = 0; a < 3; ++a) tip[a] += m.pos[size_t(v) * 3 + size_t(a)] / 4.f;
     }
   }
-  CHECK_MSG(lo[1] >= backY - 1e-4f && hi[1] <= muzzle[1] + 1e-4f, "the barrel lies between backY and muzzle[1]");
-  CHECK_MSG(std::fabs(lo[1] - backY) < 1e-4f && std::fabs(hi[1] - muzzle[1]) < 1e-4f, "back at backY, tip at muzzle");
+  CHECK_MSG(std::fabs(lo[1] - (backY - muzzle[1])) < 1e-4f && std::fabs(hi[1]) < 1e-4f, "back behind, tip at 0");
   for (int a = 0; a < 3; ++a) {
-    CHECK_MSG(std::fabs(tip[a] - muzzle[a]) < 1e-4f, "the far end's centre is the muzzle");
+    CHECK_MSG(std::fabs(tip[a]) < 1e-4f, "the far end's centre is the origin");
   }
   CHECK_MSG(std::fabs(hi[1] - lo[1] - (muzzle[1] - backY)) < 1e-3f, "the barrel is the gun's length");
   // The box's z (the body's up) went to X and its y to Z; x is now the barrel.

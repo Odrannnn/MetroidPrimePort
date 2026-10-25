@@ -95,13 +95,19 @@ Remastered import's PBR shader path.
 
 ## After an update
 
+Version 9 moves the first-person cannon's muzzle onto the gun's live LBEAM
+locator, so shots and muzzle effects start at its tip and it follows the
+recoil; the beam lights are brighter (peak 4) and keep their colour (the grey
+is taken out of each beam tint); a beam change or the X-ray visor shows the
+Dread cannon instead of Prime's hologram gun; and the Phazon Suit uses the
+Gravity Suit's cannon, as the Metroid Suit's own reads as part of the shell.
+
 Version 8 also replaces the first-person arm cannon with each suit's Dread
 cannon, cut from the body (with the forearm skin that closes its elbow end) and
 fitted along Prime's barrel. Its lights take the beam's colour: one copy of the
-light material per beam, Prime's beam tints at a peak of 1.5 (the material's own
-strength of 11 overexposes every colour to white). The cannon is rolled 30
-degrees and moved slightly right and down so its side light faces the camera;
-seen straight from behind, its wide back end hides it. The left hand stays
+light material per beam, from Prime's beam tints. The cannon is rolled 30
+degrees so its side light faces the camera; seen straight from behind, its
+wide back end hides it. The left hand stays
 retail. Mods > Metroid Dread's "Dread arm cannon in first person"
 (`dread_first_person_cannon`, on by default; console `dreadcannon 0|1`) turns
 it off for Prime's own arm cannon, at once, keeping the Dread bodies.

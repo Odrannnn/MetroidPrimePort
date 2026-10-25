@@ -20,7 +20,9 @@ inline constexpr const char* kStampName = ".dread-samus-version";
 // 6: all four suit Morph Balls, normal/Spider and low-poly, with rigid animated skins.
 // 7: the pause-screen doll's four suit bodies (CINF F76E70A6), skeletons D7EAD009-00C.
 // 8: the first-person cannon: suit-arm variants carrying Dread's cannon, one material set per beam.
-inline constexpr int kVersion = 8;
+// 9: cannon tip at the model origin (drawn on the live LBEAM), saturated beam lights at peak 4,
+//    Phazon on Gravity's cannon.
+inline constexpr int kVersion = 9;
 
 // The first-person suit arms (CGunWeapon::skSuitArmNames PowerArm, GravityArm, VariaArm,
 // PhazonArm) by CPlayerState::EPlayerSuit. The import writes a variant of each holding the suit's

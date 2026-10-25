@@ -169,6 +169,7 @@ public:
   void PortDrawHologramTransition(const CStateManager& mgr, const CTransform4f& xf,
                                   const CVector3f& normal, const CVector3f& point,
                                   const CModelFlags& flags, const CActorLights* lights) const;
+  CTransform4f PortDreadCannonXf(const CTransform4f& xf) const;
 #endif
   void ReturnToDefault(CStateManager& mgr);
   bool ComboFireOver() const;

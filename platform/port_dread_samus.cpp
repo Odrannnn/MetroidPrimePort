@@ -403,7 +403,7 @@ bool FitCannon(const PortDread::ReskinResult& body, const float muzzle[3], float
       }
       turn(d, r);
       for (int a = 0; a < 3; ++a) {
-        m.pos[size_t(v) * 3 + a] = scale * r[a] + muzzle[a];
+        m.pos[size_t(v) * 3 + a] = scale * r[a];
       }
       if (m.normal.size() == m.pos.size()) {
         turn(&rm->normal[size_t(v) * 3], &m.normal[size_t(v) * 3]);
@@ -670,25 +670,36 @@ bool Import(const Io& io, Result& result, std::string& error) {
     PortDread::Bsmat bsmat;
     PortDread::Bctex tex[3];
     std::string why;
+    // The beam textures average to pale colours (Ice is nearly white), and a bright pale light
+    // tone-maps to white. Taking out the grey (the smallest channel) keeps each colour's hue at full
+    // saturation, so the lights stay coloured however bright they are.
+    float pure[kBeams][3];
+    for (uint32_t b = 0; b < kBeams; ++b) {
+      const float lo = std::min({tints[b][0], tints[b][1], tints[b][2]});
+      const float hi = std::max({tints[b][0], tints[b][1], tints[b][2]});
+      for (int k = 0; k < 3; ++k) {
+        pure[b][k] = hi > lo ? (tints[b][k] - lo) / (hi - lo) : 1.f;
+      }
+    }
     double strength = 0.0;
     bool ok = readSuit(bsmatPath, bsmat, tex, why);
     for (uint32_t b = 0; ok && b < kBeams; ++b) {
       double c[3];
-      PortDread::SuitEmissive(bsmat, tints[b], c);
+      PortDread::SuitEmissive(bsmat, pure[b], c);
       strength = std::max({strength, c[0], c[1], c[2]});
     }
     if (ok && !(strength > 0.0)) {
       ok = false, why = "it does not glow";
     }
-    // The cannon lights' own strength (11) overexposes every beam colour to white; scaled down to
-    // a peak of 1.5, the colour survives the tone mapping and the lights still read as lit.
-    constexpr double kBeamGlowPeak = 1.5;
+    // The cannon lights' own strength (11) blows the bloom out over the cannon; a peak of 4 still
+    // reads as a bright light.
+    constexpr double kBeamGlowPeak = 4.0;
     const double scale = strength > kBeamGlowPeak ? kBeamGlowPeak / strength : 1.0;
     strength *= scale;
     for (uint32_t b = 0; ok && b < kBeams; ++b) {
       auto built = std::make_unique<PortDread::SuitMaterial>();
       PortDread::SuitOptions options;
-      const float tint[3] = {float(tints[b][0] * scale), float(tints[b][1] * scale), float(tints[b][2] * scale)};
+      const float tint[3] = {float(pure[b][0] * scale), float(pure[b][1] * scale), float(pure[b][2] * scale)};
       options.emissiveColor = tint;
       options.strength = strength;
       options.icanKey = key(b);
@@ -962,7 +973,7 @@ bool Import(const Io& io, Result& result, std::string& error) {
   for (const CannonTarget& t : kCannonTargets) {
     if (io.progress) io.progress(result.converted, total);
     if (cancelled()) return Fail(&error, "cancelled");
-    const std::string label = std::string(t.suit) + " first-person cannon";
+    const std::string label = std::string(t.suit) + " first-person cannon (suit " + std::to_string(t.primeSuit) + ")";
     const uint32_t id = FirstPersonCannon(t.primeSuit);
     if (id == 0 || (io.retailId && io.retailId(id)) || !reserved.insert(id).second)
       return Fail(&error, label + ": output id collision " + Hex8(id));

@@ -397,14 +397,7 @@ void CGunWeapon::Draw(const bool drawSuitArm, const CStateManager& mgr, const CT
   CTransform4f armXf =
       xf * x10_solidModelData->GetScaledLocatorTransform(rstl::string_l(skElbowLocator));
 #ifdef TARGET_PC
-  // The Dread cannon is built in the gun's bind space along its barrel (the model origin). Seen
-  // from behind, its wide back end hides the beam lights on its sides, so it is rolled 30 degrees
-  // about the barrel and moved a little right and down to turn its left light toward the camera.
-  CTransform4f cannonXf = xf;
-  if (mPortDreadCannon) {
-    cannonXf = xf * CTransform4f::Translate(0.15f, 0.f, -0.03f) *
-               CTransform4f::RotateY(CRelAngle::FromDegrees(30.f));
-  }
+  const CTransform4f cannonXf = mPortDreadCannon ? PortDreadCannonXf(xf) : xf;
 #endif
 
   if (x1bc_rainSplashGenerator && x1bc_rainSplashGenerator->IsRaining()) {
@@ -473,6 +466,15 @@ void CGunWeapon::DrawHologram(const CStateManager& mgr, const CTransform4f& xf,
   if (!x218_26_loaded)
     return;
 
+#ifdef TARGET_PC
+  // The hologram (a beam change, the X-ray visor) is the retail gun's own model: the Dread cannon
+  // stands in for it, unlit like the hologram.
+  if (mPortDreadCannon) {
+    xb0_suitArmModelData->Render(mgr, PortDreadCannonXf(xf), nullptr,
+                                 flags.UseShaderSet(x20c_shaderIdx));
+    return;
+  }
+#endif
   if (x218_29_drawHologram) {
     x60_holoModelData->FlatDraw(CModelData::kWM_Normal, xf, false, flags);
   } else {
@@ -492,6 +494,18 @@ void CGunWeapon::DrawHologram(const CStateManager& mgr, const CTransform4f& xf,
 }
 
 #ifdef TARGET_PC
+// The Dread cannon's model has its muzzle at the origin and its barrel up +Y, the gun's axes. It
+// sits on the gun's live LBEAM locator, where the shots and muzzle effects start, so it follows
+// the recoil too. Seen from behind, its wide back end hides the beam lights on its sides, so it is
+// rolled 30 degrees about the barrel to turn its left light toward the camera.
+CTransform4f CGunWeapon::PortDreadCannonXf(const CTransform4f& xf) const {
+  const CVector3f muzzle =
+      x10_solidModelData->GetScaledLocatorTransform(rstl::string_l(skMuzzleLocator))
+          .GetTranslation();
+  return xf * CTransform4f::Translate(muzzle) *
+         CTransform4f::RotateY(CRelAngle::FromDegrees(30.f));
+}
+
 // Keeps points with dot(normal, p) >= d (world space) on every draw until turned off. The
 // plane goes to the shaders in GX view space, against the current view matrix.
 static void PortSetWorldClipPlane(const CVector3f& normal, const float d) {
