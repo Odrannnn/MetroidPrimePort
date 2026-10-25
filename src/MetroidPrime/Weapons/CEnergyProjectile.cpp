@@ -21,6 +21,12 @@
 #include "Weapons/CCollisionResponseData.hpp"
 #include "Weapons/CWeaponDescription.hpp"
 
+#ifdef TARGET_PC
+#define PORT_REMASTERED_PROJECTILE(p) ((p).PortIsRemastered())
+#else
+#define PORT_REMASTERED_PROJECTILE(p) false
+#endif
+
 #define MATERIAL_FLAG(x) (1 << x)
 
 const CMaterialList CEnergyProjectile::kCheckMaterial(
@@ -162,7 +168,9 @@ const bool CEnergyProjectile::Explode(const CVector3f& pos, const CVector3f& nor
         }
         cameraClose = distance < 4.f;
       }
-      if (!cameraClose && gpMain->GetAverageTickTime() + gpMain->GetAverageDrawTime() > 0.8f) {
+      // Remastered's Explode (0x1011e6c) has no slow-frame test.
+      if (!cameraClose && !PORT_REMASTERED_PROJECTILE(projectile) &&
+          gpMain->GetAverageTickTime() + gpMain->GetAverageDrawTime() > 0.8f) {
         cameraClose = true;
       }
       uint flags = 8;
@@ -245,6 +253,15 @@ void CEnergyProjectile::Render(const CStateManager& mgr) const {
 #endif
     }
   }
+#ifdef TARGET_PC
+  // Remastered: X-ray draws the particles with normal blending and area fog, then falls
+  // through to the base render (CEnergyProjectileMP1::Render 0x1012a1c).
+  if (visor == CPlayerState::kPV_XRay && GetProjectile().PortIsRemastered()) {
+    GetProjectile().RenderParticles();
+    CGameProjectile::Render(mgr);
+    return;
+  }
+#endif
   if (visor == CPlayerState::kPV_XRay) {
     CElementGen::SetSubtractBlend(!HasAttrib(kPA_Ice));
     CGraphics::SetFog(kRFM_PerspLin, 0.f, 75.f, CColor::Black());
@@ -306,6 +323,14 @@ void CEnergyProjectile::Think(float dt, CStateManager& mgr) {
   x3d4_curTime += dt;
   if (x3d4_curTime > 45.f) {
     mgr.DeleteObjectRequest(GetUniqueId());
+#ifdef TARGET_PC
+  } else if (projectile.PortIsRemastered() &&
+             mgr.GetPlayerState()->GetActiveVisor(mgr) == CPlayerState::kPV_Combat &&
+             (HasAttrib(kPA_Charged) || HasAttrib(kPA_ComboShot)) &&
+             1.f - CCast::ToReal32(projectile.GameTime()) > 0.f) {
+    // Remastered keeps a charged/combo shot alive while its space warp runs
+    // (CEnergyProjectileMP1::Think 0x1012b68).
+#endif
   } else if (projectile.IsSystemDeletable() || x3d0_24_dead) {
     mgr.DeleteObjectRequest(GetUniqueId());
   }

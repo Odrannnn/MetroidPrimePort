@@ -573,6 +573,17 @@ const CVector3f& CProjectileWeapon::GetGravity() const { return xbc_gravity; }
 
 void CProjectileWeapon::SetGlobalSeed(const uint seed) { skGlobalSeed = seed; }
 
+#ifdef TARGET_PC
+bool CProjectileWeapon::PortIsRemastered() const {
+  return (xfc_APSMGen && xfc_APSMGen->PortIsRemastered()) ||
+         (x100_APS2Gen && x100_APS2Gen->PortIsRemastered()) ||
+         (x104_ && x104_->PortIsRemastered()) ||
+         (x118_swoosh1 && x118_swoosh1->PortIsRemastered()) ||
+         (x11c_swoosh2 && x11c_swoosh2->PortIsRemastered()) ||
+         (x120_swoosh3 && x120_swoosh3->PortIsRemastered());
+}
+#endif
+
 rstl::optional_object< CAABox > CProjectileWeapon::GetBounds() const {
   CAABox ret = CAABox::MakeMaxInvertedBox();
   bool hasBox = false;

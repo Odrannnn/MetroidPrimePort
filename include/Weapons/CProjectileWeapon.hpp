@@ -65,6 +65,10 @@ public:
   CElementGen* GetAttachedPS1() { return xfc_APSMGen; }
   const CElementGen* GetAttachedPS1() const { return xfc_APSMGen; }
   double GameTime() const { return xd0_curTime; }
+#ifdef TARGET_PC
+  // True when any of the projectile's particle systems came from the Remastered mod.
+  bool PortIsRemastered() const;
+#endif
 
   rstl::optional_object< CAABox > GetBounds() const;
 
