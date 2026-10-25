@@ -1069,6 +1069,18 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     tint = " * pbr_vc.rgb";
     tintAlpha = " * pbr_vc.a";
     vclr = "in.pbr_vclr";
+    if (config.pbrKind == 29) {
+      // E2644678's VS002 decodes the vertex colour per vertex (kb material/e2644678.md).
+      vtxOutAttrs += fmt::format("\n    @location({}) pbr_v5e: vec4f,", vtxOutIdx++);
+      vtxXfrAttrs += fmt::format("\n    out.pbr_v5e = vec4f(2.0 * pow(abs({0}.rgb), vec3f(2.2)), {0}.a);",
+                                 vtx_attr(config, GX_VA_CLR0));
+    }
+  }
+  if (config.pbrKind == 29) {
+    // And takes the depth factor per vertex: the near plane over the view depth, capped by
+    // vp_c1[0].x (shield row 4 y and z).
+    vtxOutAttrs += fmt::format("\n    @location({}) pbr_vxe: f32,", vtxOutIdx++);
+    vtxXfrAttrs += "\n    out.pbr_vxe = min(abs(ubuf.pbr_shield[4].y / min(mv_pos.z, -1e-3)), ubuf.pbr_shield[4].z);";
   }
   // The baked lightmap's UVs (GXSetPBRLightmapAttr), which populate_pipeline_config sets only when the vertices
   // carry them.
@@ -1956,6 +1968,18 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // blended: the sum is all glow (no exposure factor) times DIFC, and the room behind it,
     // bent by TCH2, comes through pbr_pass.
     if (screen && mapStage[0] != -1 && mapStage[5] != -1 && mapStage[6] != -1) {
+      // The vertex colour and depth factor: E2644678 (shield row 5 y) takes VS002's, per vertex. Only
+      // a kind 29 pipeline has those outputs; any other never takes this branch.
+      const bool holo = config.pbrKind == 29;
+      std::string holoVertex =
+          "let pbr_v5f = vec4f(2.0 * pow(abs(pbr_vraw.rgb), vec3f(2.2)), pbr_vraw.a);\n"
+          "          let pbr_vxf = min(abs(1.0 / min(in.pbr_pos.z, -1e-3)), 1.0);\n"
+          "          let pbr_e264 = ubuf.pbr_shield[5].y > 0.5;";
+      holoVertex += holo ? "\n          let pbr_vx = select(pbr_vxf, in.pbr_vxe, pbr_e264);"
+                         : "\n          let pbr_vx = pbr_vxf;";
+      holoVertex += holo && config.attrs[GX_VA_CLR0].attrType != GX_NONE
+                        ? "\n          let pbr_v5 = select(pbr_v5f, in.pbr_v5e, pbr_e264);"
+                        : "\n          let pbr_v5 = pbr_v5f;";
       liquid += fmt::format(R"""(
       if (pbr_kind > 28.5 && pbr_kind < 29.5) {{
           let pbr_h0 = ubuf.pbr_shield[0];
@@ -1976,8 +2000,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
           let pbr_r = {0}.a;
           let pbr_uvb2 = pbr_uvb + (pbr_i1 - 0.5) * pbr_h0.x + (pbr_h0.z * pbr_t * 0.5 + pbr_ph);
           let pbr_bc = textureSampleGrad(tex{8}, tex{8}_samp, pbr_uvb2, dpdx(pbr_uvb), dpdy(pbr_uvb)).rgb;
-          let pbr_v5 = vec4f(2.0 * pow(abs(pbr_vraw.rgb), vec3f(2.2)), pbr_vraw.a);
-          let pbr_vx = min(abs(1.0 / min(in.pbr_pos.z, -1e-3)), 1.0);
+          {9}
           let pbr_suv = in.pbr_scr.xy / in.pbr_scr.w * vec2f(0.5, -0.5) + 0.5 +
                         (pbr_i2 - 0.5) * (pbr_h3.x * pbr_vx) * vec2f(1.0, -1.0);
           let pbr_sdim = vec2f(textureDimensions(tex7));
@@ -2023,7 +2046,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
                           underlying(config.tevStages[mapStage[5]].texCoordId),
                           underlying(config.tevStages[mapStage[6]].texMapId),
                           underlying(config.tevStages[mapStage[6]].texCoordId),
-                          underlying(config.tevStages[mapStage[0]].texMapId));
+                          underlying(config.tevStages[mapStage[0]].texMapId), holoVertex);
     }
     // Kind 43, Remastered's SimpleGlass (084A8DB5, kb material/084a8db5.md): kind 29 less TCH1, TCH2
     // and DIFC. Map 0 is BCLR (alpha = roughness, raw), map 4 TCH0 an indirect offset bending both

@@ -610,6 +610,14 @@ void TestParse() {
   bad = good;
   bad[32 + 88] = 2;
   CHECK_MSG(!PortRoomEnv::Parse(std::vector<uint8_t>(bad), file, error), "parse: cube index");
+  // A probe without a cube (its REFL texture id invalid) is kept, with no cube.
+  bad = good;
+  for (int i = 0; i < 4; ++i) {
+    bad[32 + 88 + i] = 0xFF;
+  }
+  CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(bad), file, error) && !file.probes.empty() &&
+                file.probes[0].cube == PortRoomEnv::kProbeNoCube,
+            "parse: probe without a cube");
   bad = good;
   bad[32 + 300] = 6; // the first cube's size
   CHECK_MSG(!PortRoomEnv::Parse(std::vector<uint8_t>(bad), file, error), "parse: cube size");
@@ -1229,7 +1237,29 @@ void TestExposureAverage() {
 }
 } // namespace
 
+// What the camera's blend overrides a material's cube with (CMaterialMgr::ResolveReflectionProbe):
+// no probe around is a black cube, a lone probe without a cube no override at all.
+void TestCameraCube() {
+  using PortRoomEnv::CameraCube;
+  PortRoomEnv::Probe withCube;
+  withCube.cube = 0;
+  PortRoomEnv::Probe noCube;
+  noCube.cube = PortRoomEnv::kProbeNoCube;
+  PortRoomEnv::Blend blend;
+  CHECK_MSG(PortRoomEnv::CameraCubeState(blend) == CameraCube::Black, "camera cube: empty is black");
+  blend.entries.push_back({1, &withCube, 1.f});
+  CHECK_MSG(PortRoomEnv::CameraCubeState(blend) == CameraCube::Probe, "camera cube: lone probe");
+  blend.entries[0].probe = &noCube;
+  CHECK_MSG(PortRoomEnv::CameraCubeState(blend) == CameraCube::NoOverride, "camera cube: lone probe without a cube");
+  blend.entries[0].probe = nullptr;
+  CHECK_MSG(PortRoomEnv::CameraCubeState(blend) == CameraCube::NoOverride, "camera cube: null result");
+  blend.entries[0].probe = &noCube;
+  blend.entries.push_back({2, &withCube, 0.5f});
+  CHECK_MSG(PortRoomEnv::CameraCubeState(blend) == CameraCube::Probe, "camera cube: two probes");
+}
+
 int main() {
+  TestCameraCube();
   TestWorldVolumes();
   TestTileSection();
   TestBrdfLut();

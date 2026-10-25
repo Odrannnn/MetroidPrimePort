@@ -97,7 +97,8 @@ namespace ImportStage {
 // 74: every retail fx material draws through its Remastered shader (kShaderFxNoKind gone).
 // 75: the three shipped null-model ids retain bounds but emit no render surfaces.
 // 76: Ore Processing EnergyField uses its shipped world-space mask formula.
-inline constexpr int kConverter = 76;
+// 77: E2644678 (the Ore Processing pillar glass) draws as kind 29 with its CCH4 phase scale and depth cap.
+inline constexpr int kConverter = 77;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.

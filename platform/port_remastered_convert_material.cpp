@@ -180,6 +180,11 @@ constexpr uint32_t kShaderRefractGlass = 0x24670BF0;
 // the scene term is v3.w x scene, without the base map and vertex colour tint (kb material/cc8afd0f.md).
 constexpr uint32_t kShaderHoloGlassC = 0x2F95A061;  // HoloGlass's twin: the bent room tinted by CCH1, dual-source blended
 constexpr uint32_t kShaderHoloGlassB = 0x3991DA00;  // HoloGlass: scrolling indirect layers over a distorted screen copy
+// E2644678, the Ore Processing pillar glass (kb material/e2644678.md): 3991da00's body, but its vertex shader scales
+// the phase by CCH4.x and the screen offset by INDP.w (the draw camera's near plane) over the depth, capped at a
+// shipped 0.02, and it reflects the camera's probe (ResolveReflectionProbe), never a cube of the material's own.
+constexpr uint32_t kShaderHoloGlassE264 = 0xE2644678;
+constexpr double kHoloGlassE264DepthCap = 0.019999999552965164;  // vp_c1[0].x, binary32 0x3ca3d70a
 constexpr uint32_t kShaderRefractGlassB = 0xCC8AFD0F;
 // SimpleGlass_DX11_1 (kind 43, kb material/084a8db5.md): HoloGlass (3991da00) without TCH1, TCH2 and DIFC. TCH0
 // bends both the scrolled BCLR and the screen copy, whose blur follows the scrolled BCLR's alpha.
@@ -305,7 +310,7 @@ std::string ShaderRole(uint32_t shader) {
   add(shader == kShaderPhazonPool, "phazon-pool");
   add(shader == kShaderPhazonVeins, "phazon-veins");
   add(shader == kShaderRefractGlass || shader == kShaderRefractGlassB, "refract-glass");
-  add(shader == kShaderHoloGlassB || shader == kShaderHoloGlassC, "holo-glass-b");
+  add(shader == kShaderHoloGlassB || shader == kShaderHoloGlassC || shader == kShaderHoloGlassE264, "holo-glass-b");
   add(shader == kShaderDualGlass, "dual-glass");
   add(shader == kShaderSimpleGlass, "simple-glass");
   add(shader == kShaderInventoryGlass, "inventory-glass");
@@ -1104,8 +1109,8 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     for (int i = 0; i < 4; ++i) {
       out.kindParam[i] = ShortestDouble(cch[0]->color[i]);
     }
-  } else if ((shader == kShaderHoloGlassB || shader == kShaderHoloGlassC) && out.maps[kBase].has && tch[0] && tch[1] && tch[2] && cch[0] && cch[1] &&
-             cch[2] && cch[3]) {
+  } else if ((shader == kShaderHoloGlassB || shader == kShaderHoloGlassC || (shader == kShaderHoloGlassE264 && cch[4])) &&
+             out.maps[kBase].has && tch[0] && tch[1] && tch[2] && cch[0] && cch[1] && cch[2] && cch[3]) {
     out.kind = 29;
     out.vcolor = true;
     // BCLR is the base map (its alpha the roughness); TCH0 and TCH2 are indirect offsets (raw) and TCH1
@@ -1135,6 +1140,14 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     }
     out.shieldRows[20] = shader == kShaderHoloGlassC ? 1.0 : 0.0;  // row 5 x: tint and dual-source terms
     out.shieldRows[27] = out.refl.has ? 1.0 : 0.0;
+    if (shader == kShaderHoloGlassE264) {
+      // Row 4: y the near plane (the game's), z the depth factor's cap, w CCH4.x, the phase's scale; row 5 y
+      // marks E2644678. Its cube is the camera's probe, which the game binds (row 6 w), not the material's.
+      out.shieldRows[18] = kHoloGlassE264DepthCap;
+      out.shieldRows[19] = ShortestDouble(cch[4]->color[0]);
+      out.shieldRows[21] = 1.0;
+      out.shieldRows[27] = 0.0;
+    }
     for (int i = 0; i < 4; ++i) {
       out.shieldRows[28 + i] = difc[i];
     }

@@ -160,13 +160,17 @@
 // same units as the grid's points.
 namespace PortRoomEnv {
 
+// A probe whose REFL names no cube: Remastered still registers it with CReflectionProbeManager, but its
+// cube data stays null (CReflectionProbe::UpdateTokenReadiness).
+constexpr uint32_t kProbeNoCube = 0xFFFFFFFFu;
+
 struct Probe {
   // Rows of world -> box; a point is inside when every coordinate is within -1..1.
   float worldToBox[12];
   // Rows of world direction -> cube lookup direction.
   float worldToCube[9];
   int32_t layer = -1; // the area's script layer it is on; -1: every layer (ProbeOn)
-  uint32_t cube;
+  uint32_t cube;      // index into the file's cubes; kProbeNoCube: none (Remastered's null cube data)
   float scale; // Remastered's intensity
   // Remastered's ReflectionProbe: how far outside the box (metres) the probe fades out, which
   // probes win where boxes overlap, and the intensity's range for the ambient occlusion
@@ -581,6 +585,21 @@ constexpr size_t kMaxBlend = 4;
 // `blend` holds the last frame's list on input. Candidates whose keys repeat count once.
 void UpdateBlend(const BlendCandidate* candidates, size_t count, const float pos[3], Blend& blend);
 
+// What CReflectionProbeManager::ResolveReflectionProbe hands a material that reflects the camera's probe
+// (E2644678) for the blend list: an empty list is the black cube; a lone probe forwards its cube data, which
+// is null for a probe without a cube, and a null result builds no override, so the material draws its
+// permutation without a probe; otherwise the probes' (blended) cube.
+enum class CameraCube { Black, NoOverride, Probe };
+inline CameraCube CameraCubeState(const Blend& blend) {
+  if (blend.entries.empty()) {
+    return CameraCube::Black;
+  }
+  if (blend.entries.size() == 1 && (blend.entries[0].probe == nullptr || blend.entries[0].probe->cube == kProbeNoCube)) {
+    return CameraCube::NoOverride;
+  }
+  return CameraCube::Probe;
+}
+
 // The baked ambient at a point, as Remastered's shaders evaluate it: per colour channel c
 // and for a surface normal n,
 //   mean[c] - lobe[c] + 2 * lobe[c] * (1 + sharpness[c]) * q ^ (1 + 2 * sharpness[c]),
@@ -677,6 +696,10 @@ struct Selection {
 // The room cube and baked ambient for a model at `pos`; false when no loaded area has
 // either (or MP_ROOM_ENV=0).
 bool Select(const float pos[3], Selection& out);
+// The camera's probe for this frame's blend (CameraCubeState), and for Probe its cube and params in `out`
+// (cube 0 while the GPU has not made it). With the blend off (MP_ROOM_ENV_BLEND=0) there is no camera list,
+// and the model's own pick at `pos` stands in for it. Black when room environments are off.
+CameraCube CameraProbe(const float pos[3], Selection& out);
 // The baked ambient at a point as the bake holds it (mean, lobe, sharpness, world-space direction),
 // before the frame's exposure: Remastered's BLPD probe record has these numbers, and its Lit particle
 // material (390fc33b) evaluates them at the fragment. False when no loaded area's grid holds the point

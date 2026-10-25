@@ -29,6 +29,11 @@ static bool sDrawingOccluders = false;
 static bool sDrawingWireframe = false;
 // Port: the current arrays carry a bind pose at GX_VA_TEX7 (SetSkinningArraysCurrent).
 static bool sPortBindPose = false;
+// Where the model drawing now takes its room probe, and the camera's cube for a material that
+// reflects that (E2644678): set by PortSetPBRMaterial, bound by the draw after it.
+static float sPortProbePos[3];
+static PortRoomEnv::Selection sPortCameraEnv;
+static bool sPortCameraCube = false;
 bool CCubeModel::sUsingPackedLightmaps = false;
 
 inline uint GetMaterialOffset(const uchar* materialData, const int idx) {
@@ -606,9 +611,25 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   }
   // The HoloGlass (kind 29) offsets its layers by a per-object phase: the sum of the model matrix's
   // translation, times 0.33 (row 4 x of its constants). The simple glass (43) is taken to do the same.
+  sPortCameraCube = false;
   if ((kind > 28.5f && kind < 29.5f) || (kind > 42.5f && kind < 43.5f)) {
     const CTransform4f& model = CGraphics::GetModelMatrix();
-    shield[16] = (model.Get03() + model.Get13() + model.Get23()) * 0.33f;
+    const f32 sum = model.Get03() + model.Get13() + model.Get23();
+    if (kind < 29.5f && shield[21] > 0.5f) {
+      // E2644678 (row 5 y): VS002 scales the sum by CCH4.x (row 4 w) before the 0.33, takes the
+      // draw camera's near plane (row 4 y) for its depth factor, and reflects the cube
+      // CMaterialMgr::ResolveReflectionProbe gives: the camera's blend, black with no probe
+      // around (the term drops out), none for a lone probe without a cube (permutation 010,
+      // which is 002 without the term). Kb material/e2644678.md.
+      shield[16] = (sum * shield[19]) * 0.33f;
+      shield[17] = CGraphics::GetProjectionState().GetNear();
+      sPortCameraCube = CCubeMaterial::sPortPBRProbeMode != 0 && !CCubeMaterial::sPortCapturingProbe &&
+                        PortRoomEnv::CameraProbe(sPortProbePos, sPortCameraEnv) == PortRoomEnv::CameraCube::Probe &&
+                        sPortCameraEnv.cube != 0;
+      shield[27] = sPortCameraCube ? 1.f : 0.f;
+    } else {
+      shield[16] = sum * 0.33f;
+    }
   }
   // Mode bit 32768: Remastered's procedural wind. The record holds the model's WIND set (v1, v2,
   // rate, b, c); the shader gets CWindModelDataSourceManager::SimulateSingle's constants for
@@ -844,6 +865,7 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
                                                   : modelXf * x20_bounds.GetCenterPoint();
     float pos[3] = {origin.GetX(), origin.GetY(), origin.GetZ()};
     PortRoomEnv::ProbeOverride(pos);
+    std::memcpy(sPortProbePos, pos, sizeof(sPortProbePos));
     PortRoomEnv::Selection env;
     const int mode = CCubeMaterial::sPortPBRProbeMode;
     const bool found = PortRoomEnv::Select(pos, env);
@@ -997,6 +1019,20 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
       const bool occluded = found && kind > 27.5f && kind < 28.5f;
       GXSetPBRProbeEx(viewToCube, 1.f, occluded ? env.occlusionMin : 1.f, occluded ? env.occlusionInvMax : 1.f);
       GXSetPBRCube(materialCubeId, materialCubeParams);
+    } else if (sPortCameraCube) {
+      // The camera's cube in place of the model's own pick (see PortSetPBRMaterial).
+      const PortRoomEnv::Selection& camera = sPortCameraEnv;
+      f32 viewToCube[3][3];
+      for (int row = 0; row < 3; ++row) {
+        for (int col = 0; col < 3; ++col) {
+          viewToCube[row][col] = camera.worldToCube[row * 3] * viewToWorld[0][col] +
+                                 camera.worldToCube[row * 3 + 1] * viewToWorld[1][col] +
+                                 camera.worldToCube[row * 3 + 2] * viewToWorld[2][col];
+        }
+      }
+      GXSetPBRProbeEx(viewToCube, mode > 1 ? static_cast< float >(mode) : 1.f, camera.occlusionMin,
+                      camera.occlusionInvMax);
+      GXSetPBRCube(camera.cube, camera.params);
     } else if (inventory) {
       // The visor reflects its own cube (267ccd84) or, without it or with the probe off,
       // nothing: never the room's.

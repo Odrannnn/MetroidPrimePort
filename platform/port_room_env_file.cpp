@@ -233,7 +233,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       probe.scale = 1.f;
     }
     SetExtents(probe);
-    if (probe.cube >= cubes) {
+    if (probe.cube >= cubes && probe.cube != kProbeNoCube) {
       error = "a probe names a cube the file does not have";
       return false;
     }

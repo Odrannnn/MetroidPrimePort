@@ -808,8 +808,55 @@ void TestFrame() {
 
 } // namespace
 
+// E2644678 (the Ore Processing pillar glass) is kind 29 with its own row 4 and 5: the phase scale CCH4.x, the
+// shipped depth cap 0.02 and the flag that has the game bind the camera's probe. Without CCH4 it is no kind 29.
+void TestHoloGlassE264() {
+  ModelMaterial material = Material(0, false);
+  SetShader(material, 0xE2644678);
+  material.data.push_back(TexParam(FourCC('T', 'C', 'H', '0'), 0x51));
+  material.data.push_back(TexParam(FourCC('T', 'C', 'H', '1'), 0x52));
+  material.data.push_back(TexParam(FourCC('T', 'C', 'H', '2'), 0x53));
+  for (int i = 0; i < 4; ++i) {
+    const float b = float(i * 4);
+    material.data.push_back(ColorParam(FourCC('C', 'C', 'H', char('0' + i)), b + 1.f, b + 2.f, b + 3.f, b + 4.f));
+  }
+  material.data.push_back(ColorParam(FourCC('D', 'I', 'F', 'C'), 0.5f, 0.25f, 0.125f, 0.75f));
+  {
+    std::vector<MaterialDecision> decisions;
+    const auto cmdl = ConvertDecisions(material, decisions, true);
+    CHECK_MSG(decisions.empty() || decisions[0].kind != 29, "E2644678 without CCH4 is not kind 29");
+  }
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '4'), 3.5f, 9.f, 9.f, 9.f));
+  std::vector<MaterialDecision> decisions;
+  const auto cmdl = ConvertDecisions(material, decisions, true);
+  REQUIRE(!decisions.empty());
+  CHECK_MSG(decisions[0].kind == 29 && decisions[0].path == "pbr", "E2644678: kind 29, PBR");
+  size_t at = 0, size = 0;
+  REQUIRE(FirstBlob(cmdl, at, size));
+  const auto t = BlobShield(cmdl, at, size);
+  CHECK_MSG(t.has && t.hasKind && t.kind == 29.f, "E2644678: a kind 29 trailer");
+  for (int i = 0; i < 16; ++i) {
+    CHECK_MSG(Near(t.row[i], float(i + 1)), "E2644678: rows 0-3 are CCH0..CCH3");
+  }
+  CHECK_MSG(t.row[16] == 0.f && t.row[17] == 0.f, "E2644678: phase and near are the game's");
+  CHECK_MSG(t.row[18] == 0.019999999552965164f, "E2644678: the depth cap is binary32 0x3ca3d70a");
+  CHECK_MSG(Near(t.row[19], 3.5f), "E2644678: row 4 w is CCH4.x");
+  CHECK_MSG(t.row[20] == 0.f && t.row[21] == 1.f, "E2644678: row 5 marks it, without HoloGlassC's terms");
+  CHECK_MSG(t.row[27] == 0.f, "E2644678: no cube of its own");
+  CHECK_MSG(Near(t.row[28], 0.5f) && Near(t.row[31], 0.75f), "E2644678: row 7 is DIFC");
+  // 3991da00 keeps rows 4 and 5 clear.
+  SetShader(material, 0x3991DA00);
+  std::vector<MaterialDecision> plainDecisions;
+  const auto plain = ConvertDecisions(material, plainDecisions, true);
+  REQUIRE(FirstBlob(plain, at, size));
+  const auto p = BlobShield(plain, at, size);
+  CHECK_MSG(p.hasKind && p.kind == 29.f && p.row[18] == 0.f && p.row[19] == 0.f && p.row[21] == 0.f,
+            "3991da00: no E2644678 rows");
+}
+
 int main() {
   TestReader();
+  TestHoloGlassE264();
   TestConverter();
   TestHoloKind();
   TestHoloReflKind();
