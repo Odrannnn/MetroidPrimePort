@@ -14,6 +14,9 @@
 #include "Kyoto/Math/CTransform4f.hpp"
 #include "Kyoto/Math/CVector3f.hpp"
 #include "Kyoto/TToken.hpp"
+#ifdef TARGET_PC
+#include "Kyoto/Particles/CPortEffectSet.hpp"
+#endif
 
 #include "Collision/CMaterialList.hpp"
 
@@ -117,6 +120,13 @@ public:
   void PortLockStackTokens();
   void PortUnlockStackTokens();
   bool PortStackTokensLocked() const { return mPortStackWeapons.size() != 0; }
+  // True when the Muzzle PART is Remastered: normal shots then start mPortMuzzleFlash
+  // (CGunWeaponMP1::Fire 0xca2d3c / StartMuzzleFlash 0xca31c4) and muzzle generator 0
+  // is neither updated nor drawn.
+  bool PortRemasteredMuzzle() const;
+  void PortStartMuzzleFlash();
+  // CGunWeaponMP1::UpdateMuzzleFlash 0xca1e74.
+  void PortUpdateMuzzleFlash(float dt, const CVector3f& scale, const CTransform4f& xf);
 #endif
   virtual void EnableFx(const bool enable) {}
   virtual void EnableSecondaryFx(const ESecondaryFxType type) {
@@ -248,6 +258,10 @@ protected:
 
   // Locked copies of x144_weapons; empty while stacking is off.
   rstl::reserved_vector< TCachedToken< CWeaponDescription >, 2 > mPortStackWeapons;
+
+  // Remastered's normal-shot muzzle module (CGunWeaponMP1 +0x588, from the Muzzle PART),
+  // used in place of muzzle generator 0 when that PART is Remastered.
+  CPortEffectSet mPortMuzzleFlash;
 #endif
 };
 CHECK_SIZEOF(CGunWeapon, 0x21c)

@@ -110,6 +110,12 @@ void CWaveBeam::Fire(const bool underwater, const float dt,
       mgr.AddObject(proj);
       proj->Think(dt, mgr);
     }
+#ifdef TARGET_PC
+    // CWaveBeamMP1::Fire starts the normal-shot muzzle module here too.
+    if (PortRemasteredMuzzle()) {
+      PortStartMuzzleFlash();
+    }
+#endif
   }
 
   if (chargeState != CPlayerState::kCS_Normal)

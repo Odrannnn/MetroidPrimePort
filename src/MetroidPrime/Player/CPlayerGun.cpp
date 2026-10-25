@@ -810,7 +810,7 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   }
 
 #ifdef TARGET_PC
-  PortRenderFlashes();
+  PortRenderFlashes(0, kPortFirstChargeFlash);
 #endif
 
   if (gunState == CGunMorph::kGS_InWipe || gunState == CGunMorph::kGS_OutWipe) {
@@ -881,6 +881,9 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   CGraphics::SetViewPointMatrix(offsetWorldXf.GetInverse() * oldViewMtx2);
   gpRender->SetModelMatrix(CTransform4f::Identity());
   x72c_currentBeam->PostRenderGunFx(mgr, offsetWorldXf);
+#ifdef TARGET_PC
+  PortRenderFlashes(kPortFirstChargeFlash, kPortFlashCount);
+#endif
   if (x832_26_comboFiring && x77c_comboXferGen.get()) {
     x77c_comboXferGen->Render();
   }
@@ -1129,11 +1132,11 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   beamWorldXf.AddTranslation(camTrans);
   beamTargetXf.AddTranslation(camTrans);
 
+  const bool emitting = x833_30_canShowAuxMuzzleEffect ? x344_comboXferTimer < 1.f : false;
+  const float scaleFactor =
+      (emitting && x832_26_comboFiring) ? (1.f - x344_comboXferTimer) * 2.f : 2.f;
+  const CVector3f scale(scaleFactor, scaleFactor, scaleFactor);
   if (x832_25_chargeEffectVisible) {
-    const bool emitting = x833_30_canShowAuxMuzzleEffect ? x344_comboXferTimer < 1.f : false;
-    const float scaleFactor =
-        (emitting && x832_26_comboFiring) ? (1.f - x344_comboXferTimer) * 2.f : 2.f;
-    const CVector3f scale(scaleFactor, scaleFactor, scaleFactor);
 #ifdef TARGET_PC
     // The muzzle system inherits the gun/world pose from the render frame; pass only
     // the sampled gun-local LBEAM locator so converted XFMD3 children inherit its rotation.
@@ -1148,11 +1151,10 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   }
 
 #ifdef TARGET_PC
-  {
-    // Same scale as the muzzle flash (Remastered updates them together).
-    const float flashScale = x832_26_comboFiring ? (x344_comboXferTimer < 1.f ? 1.f - x344_comboXferTimer : 0.f) * 2.f : 2.f;
-    PortUpdateFlashes(advDt, CVector3f(flashScale, flashScale, flashScale));
-  }
+  // CPlayerGunMP1::Update updates the muzzle modules every frame with the muzzle
+  // generators' scale, not only while the charge effect is visible.
+  x72c_currentBeam->PortUpdateMuzzleFlash(advDt, scale, x418_beamLocalXf);
+  PortUpdateFlashes(advDt, scale);
 #endif
 
   if (x748_rainSplashGenerator.get()) {
@@ -2244,29 +2246,18 @@ void CPlayerGun::PortStartFlash(int slot) {
   if (slot < 0 || slot >= kPortFlashCount || mPortFlashToken[slot] < 0) {
     return;
   }
-  mPortFlashGens[slot] = rs_new CElementGen(mPortFlashTokens[mPortFlashToken[slot]]);
+  mPortFlashGens[slot].Start(mPortFlashTokens[mPortFlashToken[slot]], 2);
 }
 
 void CPlayerGun::PortUpdateFlashes(float dt, const CVector3f& scale) {
   for (int i = 0; i < kPortFlashCount; ++i) {
-    CElementGen* gen = mPortFlashGens[i].get();
-    if (gen == nullptr) {
-      continue;
-    }
-    gen->SetGlobalOrientAndTrans(x418_beamLocalXf);
-    gen->SetGlobalScale(scale);
-    gen->Update(dt);
-    if (gen->IsSystemDeletable()) {
-      mPortFlashGens[i] = rstl::auto_ptr< CElementGen >();
-    }
+    mPortFlashGens[i].Update(dt, x418_beamLocalXf, scale);
   }
 }
 
-void CPlayerGun::PortRenderFlashes() const {
-  for (int i = 0; i < kPortFlashCount; ++i) {
-    if (mPortFlashGens[i].get() != nullptr) {
-      mPortFlashGens[i]->Render();
-    }
+void CPlayerGun::PortRenderFlashes(int first, int end) const {
+  for (int i = first; i < end; ++i) {
+    mPortFlashGens[i].Render();
   }
 }
 #endif
