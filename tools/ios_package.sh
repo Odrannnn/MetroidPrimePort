@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Finishes the iOS app bundle CMake built and packs it (macOS only).
 #   tools/ios_package.sh <build dir> <iphoneos|iphonesimulator> <out dir>
-# Adds the icons and the keys CMake's bundle template can't know, signs it ad
-# hoc, and for iphoneos writes <out dir>/MetroidPrimePort.ipa. The .ipa is
-# unsigned as far as a device is concerned: SideStore, AltStore or Sideloadly
-# re-sign it with the player's own Apple ID. The simulator runs the ad hoc
+# Adds the icons, the licences and the keys CMake's bundle template can't
+# know, signs it ad hoc, and for iphoneos writes <out dir>/MetroidPrimePort.ipa.
+# The .ipa is unsigned as far as a device is concerned: SideStore, AltStore or
+# Sideloadly re-sign it with the player's own Apple ID. The simulator runs the ad hoc
 # signed bundle as is.
 set -euo pipefail
 
@@ -32,6 +32,10 @@ plutil -replace MinimumOSVersion -string "${minimum:-16.0}" "$plist"
 plutil -replace CFBundleSupportedPlatforms -json "[\"$platform\"]" "$plist"
 plutil -replace DTPlatformName -string "$sdk" "$plist"
 plutil -lint "$plist"
+
+# The notices travel inside the bundle, as in every other release package.
+rm -rf "$app/licenses"
+bash "$root/tools/collect_licenses.sh" "$build" "$app/licenses"
 
 codesign --force --sign - --timestamp=none "$app"
 codesign --verify --strict "$app"
