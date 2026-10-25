@@ -113,7 +113,12 @@ inline constexpr int kTextures = 5;
 // 11: the Elite Quarters stasis tank 3C26F42B is in the table.
 // 10: a plain cutout over a retail fx material is drawn opaque, cut by the shader.
 // 9: a ColorUnlit mesh (the door shields) gets a back copy.
-inline constexpr int kModels = 19;     // remove the obsolete model-driven Queen barrier
+// 19: remove the obsolete model-driven Queen barrier.
+// 20: a skin joint whose pivot sits on one of its retail bones drops that bone's ancestors
+//     (the Parasite Queen's jaw); the 12 artifacts each take their own Remastered model
+//     (CHPR FAA9C708's model node N is name-pool character N), Truth/Lifegiver/Chozo/World added;
+//     the elevator platforms 32103B70/F33A6018 take 6FA561D0's model, not a Frigate rubble sheet.
+inline constexpr int kModels = 20;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.
