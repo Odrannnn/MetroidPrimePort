@@ -42,6 +42,10 @@ struct Chunk {
   uint32_t vertSize;
   uint32_t idxOffset; // into Entry::idx
   uint32_t idxCount;
+  // Where the chunk's vertices start in the display list's bytes, and whether every draw it merged is
+  // contiguous there (a NOP between them leaves no contiguous run to read).
+  uint32_t srcOffset = 0;
+  bool srcContiguous = true;
 };
 
 struct Entry {

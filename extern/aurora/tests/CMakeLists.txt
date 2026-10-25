@@ -103,6 +103,7 @@ if (AURORA_ENABLE_GX)
     gx_dl_test.cpp
     gx_resident_test.cpp
     gx_scene_hdr_fifo_test.cpp
+    gx_vtx_array_check_test.cpp
   )
 
   target_include_directories(gx_fifo_tests PRIVATE
