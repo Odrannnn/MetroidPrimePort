@@ -1408,6 +1408,9 @@ void CElementGen::CreateNewParticles(int count) {
         }
       }
       if (killed) {
+        // Remastered +0x168 is the per-tick active count (UpdateExistingParticles 0x24a26c),
+        // not the cumulative +0x1e8 returned by GetTotalParticlesCreated 0x24db30.
+        // Failed births still consume a cumulative particle number.
         x30_particles.pop_back();
         --mParticleAliveCount;
         --x25c_activeParticleCount;
