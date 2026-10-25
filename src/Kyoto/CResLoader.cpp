@@ -76,11 +76,20 @@ struct PortDiscResource {
   bool compressed;
 };
 
+std::mutex sDiscIndexMutex;
+std::map< uint, PortDiscResource > sDiscIndex;
+bool sDiscIndexBuilt = false;
+
+// Disc reads PortCustomResource keeps for the run (until PortForgetDiscReads).
+std::mutex sCopiesMutex;
+std::map< uint, std::unique_ptr< PortCustomRes::Resource > > sCopies;
+
 // Where each resource sits in the disc's PAKs, loaded or not; built on first use.
 const std::map< uint, PortDiscResource >& PortDiscIndex() {
-  static std::map< uint, PortDiscResource > index;
-  static std::once_flag once;
-  std::call_once(once, [] {
+  std::lock_guard< std::mutex > lock(sDiscIndexMutex);
+  std::map< uint, PortDiscResource >& index = sDiscIndex;
+  if (!sDiscIndexBuilt) {
+    sDiscIndexBuilt = true;
     for (const std::pair< int32_t, std::string >& pak : PortMods::DiscPaks()) {
       DVDFileInfo file;
       if (!DVDFastOpen(pak.first, &file))
@@ -109,8 +118,21 @@ const std::map< uint, PortDiscResource >& PortDiscIndex() {
       }
       DVDClose(&file);
     }
-  });
+  }
   return index;
+}
+
+// The disc's PAKs include the mods' (extra PAKs, resources added to world PAKs), so a mod reload
+// changes them: what was read or indexed before may be gone (a Remastered effect's child, once
+// Remastered is off) or moved.
+void PortForgetDiscReads() {
+  {
+    std::lock_guard< std::mutex > lock(sDiscIndexMutex);
+    sDiscIndex.clear();
+    sDiscIndexBuilt = false;
+  }
+  std::lock_guard< std::mutex > lock(sCopiesMutex);
+  sCopies.clear();
 }
 
 // A resource read straight from its PAK on the disc, decompressed.
@@ -162,9 +184,7 @@ const PortCustomRes::Resource* CResLoader::PortCustomResource(const CAssetId ass
   // has, which retail never asks for but a mod's resource can (an imported Remastered effect's
   // child from another world): it crashed on a null PAK. Kept for the run; a later load of that
   // PAK is found first.
-  static std::mutex sMutex;
-  static std::map< uint, std::unique_ptr< PortCustomRes::Resource > > sCopies;
-  std::lock_guard< std::mutex > lock(sMutex);
+  std::lock_guard< std::mutex > lock(sCopiesMutex);
   std::map< uint, std::unique_ptr< PortCustomRes::Resource > >::iterator found = sCopies.find(asset);
   if (found != sCopies.end())
     return found->second.get();
@@ -346,6 +366,7 @@ void CResLoader::PortReopenPaks(void (*between)()) {
     }
   }
   between();
+  PortForgetDiscReads();
   for (size_t i = 0; i < paks.size(); ++i) {
     CPakFile* pak = rs_new CPakFile(paks[i].name, paks[i].depList, paks[i].worldPak);
     while (!pak->IsCompletelyLoaded()) {
