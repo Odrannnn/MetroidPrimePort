@@ -11,6 +11,7 @@
 #include "port_remastered_convert.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -181,6 +182,104 @@ bool BuildModel(const PortDread::ReskinResult& reskin, const std::vector<const P
     out.boundsMax[a] = hi[a];
   }
   return true;
+}
+
+// The cannon's lights are a glowing core on its barrel axis, which in Dread only shows through the
+// shell's slits; seen from behind, through the back opening Samus's arm fills in Dread, they sit
+// deep in the middle. Each triangle the glow map (ICAN, texcoord 0) lights is pushed out from the
+// axis (the glow's centroid in x and z; y runs along the barrel) onto the inside of the shell, so
+// the lights line the shell's edge. Its vertices are copied first where unlit triangles share them.
+void PushGlowToShell(PortDread::ReskinMesh& rm, const PortRemastered::Image& ican) {
+  if (rm.uv[0].empty() || ican.width == 0 || ican.height == 0) return;
+  auto lit = [&](const uint32_t* t) {
+    double u = 0.0, v = 0.0;
+    for (int c = 0; c < 3; ++c) u += rm.uv[0][2 * t[c]] / 3.0, v += rm.uv[0][2 * t[c] + 1] / 3.0;
+    u -= std::floor(u), v -= std::floor(v);
+    const uint32_t x = std::min(uint32_t(u * ican.width), uint32_t(ican.width) - 1);
+    const uint32_t y = std::min(uint32_t(v * ican.height), uint32_t(ican.height) - 1);
+    const uint8_t* p = &ican.rgba[(size_t(y) * ican.width + x) * 4];
+    return std::max({p[0], p[1], p[2]}) >= 32;
+  };
+  std::vector<uint8_t> glowVertex(rm.vertex_count, 0), plainVertex(rm.vertex_count, 0);
+  std::vector<std::array<float, 9>> shell;  // the unlit triangles, for the push
+  for (const auto& sub : rm.submeshes) {
+    for (size_t i = 0; i + 2 < sub.indices.size(); i += 3) {
+      const uint32_t* t = &sub.indices[i];
+      const bool glow = lit(t);
+      std::array<float, 9> tri;
+      for (int c = 0; c < 3; ++c) {
+        (glow ? glowVertex : plainVertex)[t[c]] = 1;
+        std::copy_n(&rm.pos[3 * t[c]], 3, &tri[3 * c]);
+      }
+      if (!glow) shell.push_back(tri);
+    }
+  }
+  double cx = 0.0, cz = 0.0, n = 0.0;
+  for (uint32_t v = 0; v < rm.vertex_count; ++v) {
+    if (glowVertex[v]) cx += rm.pos[3 * v], cz += rm.pos[3 * v + 2], n += 1.0;
+  }
+  if (n == 0.0) return;
+  cx /= n, cz /= n;
+  // A glow vertex an unlit triangle shares becomes two: the unlit side keeps the original.
+  std::vector<uint32_t> moved(rm.vertex_count, UINT32_MAX);
+  auto copyVertex = [&](uint32_t v) {
+    auto grow = [&](std::vector<float>& a, size_t k) {
+      if (!a.empty()) a.insert(a.end(), a.begin() + k * v, a.begin() + k * (v + 1));
+    };
+    grow(rm.pos, 3), grow(rm.normal, 3), grow(rm.tangent, 4);
+    for (auto& uv : rm.uv) grow(uv, 2);
+    if (!rm.weights.empty()) rm.weights.push_back(rm.weights[v]);
+    if (!rm.source.empty()) rm.source.push_back(rm.source[v]);
+    return rm.vertex_count++;
+  };
+  for (auto& sub : rm.submeshes) {
+    for (size_t i = 0; i + 2 < sub.indices.size(); i += 3) {
+      uint32_t* t = &sub.indices[i];
+      if (!lit(t)) continue;
+      for (int c = 0; c < 3; ++c) {
+        const uint32_t v = t[c];
+        if (v >= moved.size()) continue;
+        if (moved[v] == UINT32_MAX) moved[v] = plainVertex[v] ? copyVertex(v) : v;
+        t[c] = moved[v];
+      }
+    }
+  }
+  // Each moved vertex goes along its ray from the axis to just short of the nearest shell
+  // triangle beyond it (Moller-Trumbore); one on the axis takes its normal's direction.
+  constexpr float kInset = 0.002f;
+  for (uint32_t v = 0; v < moved.size(); ++v) {
+    if (moved[v] == UINT32_MAX) continue;
+    float* p = &rm.pos[3 * size_t(moved[v])];
+    float dx = float(p[0] - cx), dz = float(p[2] - cz);
+    float r = std::sqrt(dx * dx + dz * dz);
+    if (r < 1e-4f) {
+      dx = rm.normal[3 * size_t(moved[v])], dz = rm.normal[3 * size_t(moved[v]) + 2];
+      const float m = std::sqrt(dx * dx + dz * dz);
+      if (m < 1e-4f) continue;
+      dx /= m, dz /= m;
+    } else {
+      dx /= r, dz /= r;
+    }
+    const float o[3] = {float(cx), p[1], float(cz)}, d[3] = {dx, 0.f, dz};
+    float best = INFINITY;
+    for (const auto& s : shell) {
+      const float e1[3] = {s[3] - s[0], s[4] - s[1], s[5] - s[2]}, e2[3] = {s[6] - s[0], s[7] - s[1], s[8] - s[2]};
+      const float q[3] = {d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]};
+      const float det = e1[0] * q[0] + e1[1] * q[1] + e1[2] * q[2];
+      if (std::fabs(det) < 1e-9f) continue;
+      const float tv[3] = {o[0] - s[0], o[1] - s[1], o[2] - s[2]};
+      const float a = (tv[0] * q[0] + tv[1] * q[1] + tv[2] * q[2]) / det;
+      if (a < 0.f || a > 1.f) continue;
+      const float w[3] = {tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]};
+      const float b = (d[0] * w[0] + d[1] * w[1] + d[2] * w[2]) / det;
+      if (b < 0.f || a + b > 1.f) continue;
+      const float h = (e2[0] * w[0] + e2[1] * w[1] + e2[2] * w[2]) / det;
+      if (h > r && h < best) best = h;
+    }
+    if (best == INFINITY) continue;
+    p[0] = o[0] + dx * (best - kInset);
+    p[2] = o[2] + dz * (best - kInset);
+  }
 }
 
 bool FitCannon(const PortDread::ReskinResult& body, const float muzzle[3], float backY, PortDread::ReskinResult& out,
@@ -989,11 +1088,17 @@ bool Import(const Io& io, Result& result, std::string& error) {
     std::vector<const PortDread::SuitMaterial*> mats;
     PortRemastered::ConvertOptions opt;
     opt.setTextures.resize(kBeams);
-    for (const PortDread::ReskinMesh& rm : fit.meshes) {
+    for (PortDread::ReskinMesh& rm : fit.meshes) {
       const PortDread::SuitMaterial* plain = rm.bsmat_path.empty() ? nullptr : material(rm.bsmat_path);
       const auto beams = rm.bsmat_path.find("cannon") != std::string::npos ? beamMaterials(rm.bsmat_path, tints)
                                                                           : std::vector<const PortDread::SuitMaterial*>{};
       mats.push_back(beams.empty() ? plain : beams[0]);
+      if (!beams.empty()) {
+        const PortRemastered::ModelUuid icanId = PortDread::SuitTextureId(beams[0]->name + "#beam0", PortDread::kSuitIcan);
+        for (const PortDread::SuitImage& si : beams[0]->images) {
+          if (si.id == icanId) PushGlowToShell(rm, si.image);
+        }
+      }
       for (uint32_t b = 1; b < beams.size(); ++b) {
         opt.setTextures[b][PortDread::SuitTextureId(beams[0]->name + "#beam0", PortDread::kSuitIcan)] =
             PortDread::SuitTextureId(beams[b]->name + "#beam" + std::to_string(b), PortDread::kSuitIcan);

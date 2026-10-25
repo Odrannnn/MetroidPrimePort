@@ -17,6 +17,7 @@
 
 #include "Weapons/CWeaponDescription.hpp"
 
+#include "Kyoto/Animation/CCharLayoutInfo.hpp"
 #include "Kyoto/Animation/CSkinnedModel.hpp"
 #include "Kyoto/Animation/CVertexMorphEffect.hpp"
 #include "Kyoto/Audio/CSfxManager.hpp"
@@ -495,15 +496,31 @@ void CGunWeapon::DrawHologram(const CStateManager& mgr, const CTransform4f& xf,
 
 #ifdef TARGET_PC
 // The Dread cannon's model has its muzzle at the origin and its barrel up +Y, the gun's axes. It
-// sits on the gun's live LBEAM locator, where the shots and muzzle effects start, so it follows
-// the recoil too. Seen from behind, its wide back end hides the beam lights on its sides, so it is
-// rolled 30 degrees about the barrel to turn its left light toward the camera.
+// sits on the gun's live LBEAM locator, less PortDreadMuzzleShift, so it follows the recoil too.
+// Seen from behind, its wide back end hides the beam lights on its sides, so it is rolled 30
+// degrees about the barrel to turn its left light toward the camera.
 CTransform4f CGunWeapon::PortDreadCannonXf(const CTransform4f& xf) const {
   const CVector3f muzzle =
       x10_solidModelData->GetScaledLocatorTransform(rstl::string_l(skMuzzleLocator))
           .GetTranslation();
-  return xf * CTransform4f::Translate(muzzle) *
+  return xf * CTransform4f::Translate(muzzle + PortDreadMuzzleShift()) *
          CTransform4f::RotateY(CRelAngle::FromDegrees(30.f));
+}
+
+// The Plasma Beam's animations push LBEAM out along the barrel (+Y) past its bind pose, 0.204
+// model units at rest, for its longer gun; the Dread cannon has no such barrel. The shift takes
+// out what lies beyond the bind pose, so the cannon stays where the other beams hold it and keeps
+// only the recoil behind it. CPlayerGun moves its muzzle (shots, muzzle effects) by the same amount.
+CVector3f CGunWeapon::PortDreadMuzzleShift() const {
+  if (!mPortDreadCannon || !x10_solidModelData || !x10_solidModelData->HasAnimation())
+    return CVector3f::Zero();
+  const CAnimData& anim = *x10_solidModelData->GetAnimationData();
+  const CCharLayoutInfo& layout = *anim.GetCharLayoutInfo();
+  const CSegId lbeam = layout.GetSegIdFromString(rstl::string_l(skMuzzleLocator));
+  const float scaleY = x10_solidModelData->GetScale().GetY();
+  const float live = anim.GetLocatorTransform(lbeam, nullptr).GetTranslation().GetY();
+  const float bind = layout.GetReferenceStanceOffset(lbeam).GetY();
+  return live > bind ? CVector3f(0.f, (bind - live) * scaleY, 0.f) : CVector3f::Zero();
 }
 
 // Keeps points with dot(normal, p) >= d (world space) on every draw until turned off. The

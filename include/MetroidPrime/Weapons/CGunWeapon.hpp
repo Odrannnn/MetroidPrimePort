@@ -170,6 +170,7 @@ public:
                                   const CVector3f& normal, const CVector3f& point,
                                   const CModelFlags& flags, const CActorLights* lights) const;
   CTransform4f PortDreadCannonXf(const CTransform4f& xf) const;
+  CVector3f PortDreadMuzzleShift() const;
 #endif
   void ReturnToDefault(CStateManager& mgr);
   bool ComboFireOver() const;

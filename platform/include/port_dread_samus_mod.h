@@ -22,7 +22,8 @@ inline constexpr const char* kStampName = ".dread-samus-version";
 // 8: the first-person cannon: suit-arm variants carrying Dread's cannon, one material set per beam.
 // 9: cannon tip at the model origin (drawn on the live LBEAM), saturated beam lights at peak 4,
 //    Phazon on Gravity's cannon.
-inline constexpr int kVersion = 9;
+// 10: the cannon's glowing core pushed out onto the inside of its shell.
+inline constexpr int kVersion = 10;
 
 // The first-person suit arms (CGunWeapon::skSuitArmNames PowerArm, GravityArm, VariaArm,
 // PhazonArm) by CPlayerState::EPlayerSuit. The import writes a variant of each holding the suit's

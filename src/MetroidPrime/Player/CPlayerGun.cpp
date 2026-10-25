@@ -1131,6 +1131,10 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   GetLctrWithShake(x4d8_gunLocalXf, motionModel, rstl::string_l(kGunLocator), true, true);
   GetLctrWithShake(x418_beamLocalXf, beamModel, rstl::string_l(CGunWeapon::skMuzzleLocator), false,
                    true);
+#ifdef TARGET_PC
+  // The Dread cannon stands in for the gun: keep the shots on its muzzle.
+  x418_beamLocalXf.AddTranslation(x72c_currentBeam->PortDreadMuzzleShift());
+#endif
   GetLctrWithShake(x508_elbowLocalXf, beamModel, rstl::string_l("elbow"), false, false);
   x4a8_gunWorldXf = x3e8_xf * x4d8_gunLocalXf * x550_camBob.GetCameraBobTransformation();
 

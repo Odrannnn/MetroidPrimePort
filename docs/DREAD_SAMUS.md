@@ -95,6 +95,14 @@ Remastered import's PBR shader path.
 
 ## After an update
 
+Version 10 pushes the first-person cannon's glowing core (Dread's lights sit
+on the barrel axis and show only through its slits) out onto the inside of the
+shell, so seen through the open back the lights line its edge rather than
+sitting deep in the middle. Separately from the import, the Plasma Beam no
+longer pushes the cannon forward: its animations extend LBEAM past the bind
+pose for Prime's longer Plasma gun, and that extension is taken back out of
+the cannon and its muzzle (recoil is kept).
+
 Version 9 moves the first-person cannon's muzzle onto the gun's live LBEAM
 locator, so shots and muzzle effects start at its tip and it follows the
 recoil; the beam lights are brighter (peak 4) and keep their colour (the grey
