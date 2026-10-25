@@ -1154,6 +1154,14 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   const CVector3f camTrans = mgr.GetCameraManager()->GetGlobalCameraTranslation(mgr);
   beamWorldXf.AddTranslation(camTrans);
   beamTargetXf.AddTranslation(camTrans);
+#ifdef TARGET_PC
+  // Remastered (Update 0xc93950, UpdateAuxWeapons 0xc977f4) hands the aux weapons the gun x
+  // beam locator moved by the camera translation: no elbow swap or hit point at point blank.
+  if (sPortRemasteredGun) {
+    beamTargetXf = GetGunMotionTransform() * x418_beamLocalXf;
+    beamTargetXf.AddTranslation(camTrans);
+  }
+#endif
 
   const bool emitting = x833_30_canShowAuxMuzzleEffect ? x344_comboXferTimer < 1.f : false;
   const float scaleFactor =
