@@ -105,6 +105,9 @@ bool CElementGen::sSubtractBlend;
 
 int CElementGen::mParticleAliveCount;
 int CElementGen::mParticleSystemAliveCount;
+// Live systems of converted Remastered effects (PIRN): with any, the scene runs Remastered's
+// particle engine, which has no 0xa00 global cap (CreateNewParticles).
+static int sPortIrndSystems;
 
 double CElementGen::kTickTime = 1 / 60.0;
 ushort CElementGen::sSeed = 99;
@@ -246,6 +249,9 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
   x27c_randState.SetSeed(x94_randomSeed);
 #endif
   ++mParticleSystemAliveCount;
+  if (x28_loadedGenDesc->xPortIrnd) {
+    ++sPortIrndSystems;
+  }
 
   x26c_25_LIT_ = x28_loadedGenDesc->x30_29_LIT_;
   x26c_26_AAPH = x28_loadedGenDesc->x30_26_AAPH;
@@ -424,6 +430,9 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
 
 CElementGen::~CElementGen() {
   --mParticleSystemAliveCount;
+  if (x28_loadedGenDesc->xPortIrnd) {
+    --sPortIrndSystems;
+  }
   mParticleAliveCount -= x30_particles.size();
 
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
@@ -1206,8 +1215,11 @@ void CElementGen::CreateNewParticles(int count) {
     newCount = x90_MAXP - x30_particles.size();
   }
 
-  if (newCount + mParticleAliveCount > 0xa00) {
-    newCount = 0xa00 - mParticleAliveCount;
+  // Remastered's CreateNewParticles (0x24a4cc) clamps only to MAXP: the 0xa00 global cap is gone,
+  // for every system. Busy rooms (Exterior Docking Hangar idles near 1900) otherwise starve
+  // projectile emitters. Their last one gone, the count can still be past 0xa00: clamp at zero.
+  if (sPortIrndSystems == 0 && newCount + mParticleAliveCount > 0xa00) {
+    newCount = rstl::max_val(0, 0xa00 - mParticleAliveCount);
   }
 
   CGlobalRandom gr(x27c_randState);
