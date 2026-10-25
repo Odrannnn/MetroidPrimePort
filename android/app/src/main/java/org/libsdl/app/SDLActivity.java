@@ -227,6 +227,10 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     // This is what SDL runs in. It invokes SDL_main(), eventually
     protected static Thread mSDLThread;
     protected static boolean mSDLMainFinished = false;
+    // Set when the system destroys the activity without finishing it (low
+    // memory, "Don't keep activities"), as behind the file picker. The record
+    // must then survive: finishing it drops the picker's result (#203).
+    protected static volatile boolean mDestroyedBySystem = false;
     protected static boolean mActivityCreated = false;
     private static SDLFileDialogState mFileDialogState = null;
     protected static boolean mDispatchingKeyEvent = false;
@@ -701,6 +705,8 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
            return;
         }
 
+        mDestroyedBySystem = !isFinishing();
+
         if (SDLActivity.mSDLThread != null) {
 
             // Send Quit event to "SDLThread" thread
@@ -721,6 +727,18 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         SDLActivity.nativeQuit();
 
         super.onDestroy();
+
+        if (mDestroyedBySystem && (SDLActivity.mSDLThread == null || !SDLActivity.mSDLThread.isAlive())) {
+            endProcessAfterSystemDestroy();
+        }  // else: the SDL thread ends it once main() returns, so a save in progress completes
+    }
+
+    // The native side cannot run main() twice in one process, so a recreation
+    // in this one would exit in onCreate and lose any result sent to it. Ending
+    // the process once the destroy is reported leaves the record for Android to
+    // recreate in a fresh one, results included.
+    static void endProcessAfterSystemDestroy() {
+        new Handler(android.os.Looper.getMainLooper()).post(() -> android.os.Process.killProcess(android.os.Process.myPid()));
     }
 
     @Override
@@ -2147,7 +2165,20 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         mFileDialogState = new SDLFileDialogState();
         mFileDialogState.requestCode = requestCode;
         mFileDialogState.multipleChoice = allowMultiple;
+        mSingleton.onFileDialogShown(filters, forWrite, requestCode);
         return true;
+    }
+
+    // For subclasses: a file dialog was opened with these arguments. The
+    // activity behind it can be destroyed before it answers, and the answer
+    // then reaches a new instance that has no dialog pending.
+    protected void onFileDialogShown(String[] filters, boolean forWrite, int requestCode) {
+    }
+
+    // Whether requestCode is the file dialog this process's native side is
+    // waiting for.
+    protected static boolean isFileDialogPending(int requestCode) {
+        return mFileDialogState != null && mFileDialogState.requestCode == requestCode;
     }
 
     /* Internal class used to track active open file dialog */
@@ -2212,11 +2243,13 @@ class SDLMain implements Runnable {
         SDLActivity.mSingleton.main();
         SDLActivity.nativeCleanupMainThread();
 
-        if (SDLActivity.mSingleton != null && !SDLActivity.mSingleton.isFinishing()) {
+        if (SDLActivity.mSingleton != null && !SDLActivity.mSingleton.isFinishing() && !SDLActivity.mDestroyedBySystem) {
             // Let's finish the Activity
             SDLActivity.mSDLThread = null;
             SDLActivity.mSDLMainFinished = true;
             SDLActivity.mSingleton.finish();
+        } else if (SDLActivity.mDestroyedBySystem) {
+            SDLActivity.endProcessAfterSystemDestroy();
         }  // else: Activity is already being destroyed
 
     }

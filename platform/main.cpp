@@ -52,6 +52,7 @@
 #include <SDL3/SDL_timer.h>
 
 #if defined(__ANDROID__)
+#include <SDL3/SDL_system.h>
 #include <android/log.h>
 #include <sys/system_properties.h>
 #endif
@@ -521,6 +522,39 @@ std::string CopyDiscFromContentUri(const std::string& uri) {
     // refusal leaves the URI to be checked once mounted, as before.
     std::string target;
     return PortDiscReplace::CopyToUserFolder(uri, &target, nullptr, nullptr, nullptr).empty() ? target : std::string();
+}
+
+// A disc picked after Android destroyed the activity behind the picker: the
+// pick arrives at the next launch, which MetroidPrimeActivity.onActivityResult
+// leaves in pending_disc_uri for us. Without this the next launch asked again,
+// and on a phone that destroys the activity each time the picker covers it the
+// game never started (#203). Remembers the pick like AskForDiscImage does.
+void TakeDiscPickedLastLaunch() {
+    const char* dir = SDL_GetAndroidInternalStoragePath();
+    if (dir == nullptr) {
+        return;
+    }
+    const std::filesystem::path file = std::filesystem::path(dir) / "pending_disc_uri";
+    std::string chosen;
+    {
+        std::ifstream in(file);
+        std::getline(in, chosen);
+    }
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+    if (chosen.empty()) {
+        return;
+    }
+    PortLog::Write("metroid_prime_port: using the disc image picked before the app was restarted\n");
+    if (std::strncmp(chosen.c_str(), "content://", 10) == 0) {
+        const std::string local = CopyDiscFromContentUri(chosen);
+        if (!local.empty()) {
+            chosen = local;
+        }
+    }
+    PortDebug::SetDiscPath(chosen.c_str());
+    PortDebug::SaveSettingsNow();
+    PortLog::Write("metroid_prime_port: disc image set to %s\n", chosen.c_str());
 }
 #endif  // __ANDROID__
 
@@ -1258,6 +1292,10 @@ int main(int argc, char** argv) {
     // Disc image: an explicit argument or MP_DISC, else the path saved on a
     // previous launch, else a copy beside the executable, else ask for one.
     PortDebug::LoadDiscPath();
+#if defined(__ANDROID__)
+    // Remembered as the disc path, so the lookup below finds it.
+    TakeDiscPickedLastLaunch();
+#endif
     std::string discImage;
     if (const char* resolved = ResolveDiscPath(argc, argv); resolved != nullptr) {
         discImage = resolved;
