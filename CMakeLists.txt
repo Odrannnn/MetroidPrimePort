@@ -1478,7 +1478,7 @@ if(MP_BUILD_TESTS)
             platform/port_dread_bctex.cpp platform/port_dread_bsmat.cpp platform/port_dread_bcmdl.cpp
             platform/port_dread_pkg.cpp platform/port_dread_reskin.cpp
             platform/port_remastered_tegra_swizzle.cpp platform/port_remastered_bcdec.cpp
-            platform/port_remastered_cmdl.cpp
+            platform/port_remastered_cmdl.cpp platform/port_ball_looks.cpp
         INCLUDES platform platform/include
         LIBRARIES mp_test_remastered_convert ZLIB::ZLIB ${CMAKE_THREAD_LIBS_INIT}
         TIMEOUT 600)

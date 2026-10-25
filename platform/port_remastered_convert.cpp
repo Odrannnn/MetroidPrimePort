@@ -617,6 +617,10 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       throw Fail{"retail model " + Hex8(opt.retail) + " is not on the disc"};
     }
     retail.Parse();
+    if (opt.materialSets > retail.nmat && !retail.sets.empty()) {
+      retail.sets.resize(opt.materialSets, retail.sets[0]);
+      retail.nmat = opt.materialSets;
+    }
   }
 
   const double (*M)[3] = opt.orient;
@@ -1534,6 +1538,23 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
         uint32_t idx[kMacroMaps];
         for (int k = 0; k < nmaps; ++k) {
           idx[k] = texIndex(si, tids[k]);
+        }
+        // This set's swapped maps (ConvertOptions::setTextures), the same map otherwise.
+        if (si < opt.setTextures.size() && !opt.setTextures[si].empty()) {
+          for (int k = 0; k < nmaps; ++k) {
+            const int m = k == kLayeredMaps ? int(kNormal) : k % kMaps;
+            const MapRef& ref = both[k];
+            const auto swap = ref.has ? opt.setTextures[si].find(ref.id) : opt.setTextures[si].end();
+            if (swap == opt.setTextures[si].end()) {
+              continue;
+            }
+            MapRef swapped[kMacroMaps];
+            std::copy(both, both + kMacroMaps, swapped);
+            swapped[k].id = swap->second;
+            swapped[k].src = opt.texturePrefix + IdToString(swap->second) + opt.textureSuffix;
+            idx[k] = texIndex(si, *Get(std::string("pbr:") + kMapName[m], swapped + (k - m),
+                                       m == kBase ? baseAlpha : "", opt));
+          }
         }
         AnuvCounts scratch;  // counted once, not once per material set
         setBlobs[si].push_back(PbrMaterial(pm, vtx, idx, group, coords, rem, wrap, cube, authored, entry,

@@ -50,8 +50,20 @@ PortRemastered::ModelUuid ToModelOrder(const PortRemastered::ModelUuid& pakOrder
 // Fails (false, *error) for other shaders, unsupported state or a texture that does not decode. Images
 // of different sizes are fine: each map keeps its own. Missing uniforms take the shader's
 // defaults (vConstant0.w 1, vConstant4.r 1, everything else 0).
+// What Dread sets at run time and the BSMAT leaves at zero (the cannon's beam colour).
+struct SuitOptions {
+  const float* emissiveColor = nullptr;  // rgb in place of vAlbedoEmissiveColor
+  // Above 0, the ICNC strength the ICAN colour is normalised by (one for every beam's copy, so
+  // only ICAN differs); 0 for the colour's own peak.
+  double strength = 0.0;
+  std::string icanKey;  // tells this copy's ICAN id from the material's own
+};
+
+// The linear self-illumination colour C (below), the beam colour in place of the BSMAT's when set.
+void SuitEmissive(const Bsmat& bsmat, const float* emissiveColor, double out[3]);
+
 bool BuildSuitMaterial(const Bsmat& bsmat, const Bctex& bc, const Bctex& at, const Bctex& nm,
-                       SuitMaterial& out, std::string* error);
+                       SuitMaterial& out, std::string* error, const SuitOptions& options = {});
 
 // The three BCTEX paths a BSMAT references, joined onto `texturesRoot` (the directory holding
 // `actors/...`): the sampler filepaths of texBaseColor / texAttributes / texNormals. False with

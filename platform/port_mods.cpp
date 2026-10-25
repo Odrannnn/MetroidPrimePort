@@ -76,6 +76,7 @@ std::unordered_map<uint32_t, std::string> sHudBars;
 std::set<uint32_t> sDreadBodies;
 std::set<uint32_t> sDreadBalls;
 std::set<uint32_t> sDreadLowBalls;
+std::set<uint32_t> sDreadCannons;  // first-person cannon variants (PortDreadSamus::FirstPersonCannon)
 // The Dread-proportioned CINFs it serves (PortDreadSamus::Skeleton).
 std::set<uint32_t> sDreadSkeletons;
 // thermal.lut: the thermal visor's heat gradient (port_thermal.h).
@@ -372,6 +373,10 @@ bool PortDreadSamus::ReplacesBall(int suit, bool spider) {
 bool PortDreadSamus::ReplacesLowBall(int suit, bool spider) {
   return PortMods::sDreadLowBalls.count(BallModel(suit, spider)) != 0;
 }
+bool PortDreadSamus::ReplacesFirstPersonCannon(int suit) {
+  const uint32_t id = FirstPersonCannon(suit);
+  return id != 0 && PortMods::sDreadCannons.count(id) != 0;
+}
 
 uint32_t PortDreadSamus::Skeleton(uint32_t bodyCmdl) {
   const uint32_t cinf = DreadCinf(bodyCmdl);
@@ -538,6 +543,7 @@ void Initialize() {
   sRetailPlacements.clear();
   sDreadBodies.clear();
   sDreadBalls.clear();
+  sDreadCannons.clear();
   sDreadLowBalls.clear();
   sDreadSkeletons.clear();
   {
@@ -793,6 +799,12 @@ void Initialize() {
       const uint32_t model = PortDreadSamus::BallModel(t.suit, t.spider);
       if (ownership.main) sDreadBalls.insert(model);
       if (ownership.low) sDreadLowBalls.insert(model);
+    }
+    for (int suit = 0; suit < 4; ++suit) {
+      const auto it = loose.find({0x434D444Cu, PortDreadSamus::FirstPersonCannon(suit)});  // 'CMDL'
+      if (it != loose.end() && it->second.mod == PortDreadSamus::kModName) {
+        sDreadCannons.insert(it->first.second);
+      }
     }
     for (const auto& [key, resource] : loose) {
       if (key.first == 0x434D444C && resource.mod == PortDreadSamus::kModName) { // 'CMDL'

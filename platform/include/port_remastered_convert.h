@@ -99,6 +99,14 @@ struct ConvertOptions {
     double head[3] = {};
   };
   std::vector<RetailBone> retailBones;
+  // More than the retail model's material sets: set 0 is copied up to this many (a model drawn
+  // with a shader set its retail one lacks, the Dread cannon's one per beam). 0 keeps the retail
+  // count.
+  uint32_t materialSets = 0;
+  // Per output material set, the PBR maps it samples in place of the model's own: source texture
+  // id (pak order, as ConvertIO::texture is asked) -> the id it is swapped for. Sets past the end
+  // swap nothing.
+  std::vector<std::map<ModelUuid, ModelUuid>> setTextures;
   // A texture's id is hashed from a tag naming its source. These wrap the
   // Remastered texture's uuid in that tag; the test tool sets them to
   // reproduce the reference converter's ids, the game leaves them empty.

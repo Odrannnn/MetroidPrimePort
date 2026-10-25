@@ -59,6 +59,33 @@ inline constexpr Target kTargets[] = {
     {"samushyper", "doll49", 0xF76E70A6, 0x5644E7A1, {0x3D6B4877, 0}},
 };
 
+// The first-person cannons (FirstPersonCannon, port_dread_samus_mod.h): each cutscene body's cannon
+// meshes in the gun model's space. That is CGunWeapon's gun CMDL 19AE626C on CINF 46ED31E0: the
+// elbow at the origin, the barrel up +Y to the LBEAM joint, one material set per beam.
+inline constexpr uint32_t kGunModel = 0x19AE626C;
+inline constexpr uint32_t kGunCinf = 0x46ED31E0;
+inline constexpr uint32_t kBeams = 5;
+struct CannonTarget {
+  const char* suit;  // a cine50 row of kTargets
+  int primeSuit;     // CPlayerState::EPlayerSuit, the kSuitArms index
+};
+inline constexpr CannonTarget kCannonTargets[] = {
+    {"samuspower", 0}, {"samusgravity", 1}, {"samusvaria", 2}, {"samushyper", 3}};
+
+// The meshes of `body` (a cine50 re-skin in bind pose) whose name holds "cannon" (any case), plus
+// the body's right-arm skin (triangles weighted at least half to R_shoulder's subtree), turned so
+// the barrel (the cannon's longest principal axis, away from R_elbow) runs +Y with the body's up
+// on +X (the bind pose is palm down; the gun is held thumb up), and scaled so the cannon spans the retail gun's length: its tip (the mean of the vertices
+// within 2 cm of the far end) lands on `muzzle` and its back end on Y = `backY`. False when there
+// are no cannon meshes.
+bool FitCannon(const PortDread::ReskinResult& body, const float muzzle[3], float backY, PortDread::ReskinResult& out,
+               float& scale, std::string* error);
+// The texture of material 0 in every material set of a retail CMDL, in set order.
+bool FirstTextureOfSets(const std::vector<uint8_t>& cmdl, std::vector<uint32_t>& out, std::string* error);
+// A beam's colour from its gun texture: the mean of the texels weighted by max(rgb)^4 (the glow,
+// not the dark metal), its largest channel scaled to 1.
+bool BeamTint(const PortRemastered::Image& image, float out[3]);
+
 struct Io {
   // A file of the Dread RomFS by its path ("packs/players/samus.pkg", "textures/actors/...").
   std::function<bool(const std::string& path, std::vector<uint8_t>& out, std::string& error)> dread;

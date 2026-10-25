@@ -95,6 +95,15 @@ Remastered import's PBR shader path.
 
 ## After an update
 
+Version 8 also replaces the first-person arm cannon with each suit's Dread
+cannon, cut from the body (with the forearm skin that closes its elbow end) and
+fitted along Prime's barrel. Its lights take the beam's colour: one copy of the
+light material per beam, Prime's beam tints at a peak of 1.5 (the material's own
+strength of 11 overexposes every colour to white). The cannon is rolled 30
+degrees and moved slightly right and down so its side light faces the camera;
+seen straight from behind, its wide back end hides it. The left hand stays
+retail.
+
 Version 7 also dresses the pause screen's Samus (`ANCS_ItemScreenSamus`, CINF
 `F76E70A6`): each suit's first part is the Dread body, and the doll then leaves
 out that suit's other parts, its boots, beam and visor models, which the Dread
@@ -136,7 +145,8 @@ replaces the old mod.
   is refused. Compressed images (`.nsz`/`.xcz`) are refused ("compressed images
   (.nsz/.xcz) are not supported; decompress it first"), and an `.xci` needs the
   key file's `key_area_key_application_XX` keys.
-- In first-person play the body is hidden, as in retail, so the mod shows in
+- In first-person play the body is hidden, as in retail (only the arm cannon is
+  Dread's), so the rest of the mod shows in
   cutscenes, on the pause screen and in the Morph Ball transition unless the third-person camera
   (Video > Display, `third_person`, off by default; see `docs/SETTINGS.md`) is
   on. That camera is experimental.

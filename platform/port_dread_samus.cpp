@@ -3,6 +3,7 @@
 
 #include "port_dread_samus.h"
 
+#include "port_ball_looks.h"
 #include "port_dread_bcmdl.h"
 #include "port_dread_bctex.h"
 #include "port_dread_bsmat.h"
@@ -10,6 +11,7 @@
 #include "port_remastered_convert.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -181,6 +183,290 @@ bool BuildModel(const PortDread::ReskinResult& reskin, const std::vector<const P
   return true;
 }
 
+bool FitCannon(const PortDread::ReskinResult& body, const float muzzle[3], float backY, PortDread::ReskinResult& out,
+               float& scale, std::string* error) {
+  out = {};
+  const int elbow = body.skeleton.Find("R_elbow");
+  if (elbow < 0) {
+    return Fail(error, "cannon: no R_elbow");
+  }
+  std::vector<const PortDread::ReskinMesh*> cannon;
+  double centre[3] = {0, 0, 0};
+  size_t total = 0;
+  for (const PortDread::ReskinMesh& rm : body.meshes) {
+    std::string lower = rm.name;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    if (lower.find("cannon") != std::string::npos && rm.pos.size() == size_t(rm.vertex_count) * 3) {
+      cannon.push_back(&rm);
+      for (uint32_t v = 0; v < rm.vertex_count; ++v, ++total) {
+        for (int a = 0; a < 3; ++a) {
+          centre[a] += rm.pos[size_t(v) * 3 + a];
+        }
+      }
+    }
+  }
+  auto fail = [&] {
+    std::string names;
+    for (const PortDread::ReskinMesh& rm : body.meshes) {
+      names += " " + rm.name;
+    }
+    return Fail(error, "cannon: no cannon meshes past the elbow (meshes:" + names + ")");
+  };
+  if (total == 0) {
+    return fail();
+  }
+  for (double& c : centre) {
+    c /= double(total);
+  }
+  // The barrel's axis is the cannon's longest principal axis (power iteration on
+  // the vertex covariance), pointing away from the elbow. The bind pose angles
+  // the forearm forward, so the X axis alone leaves the cannon rolled and skewed.
+  double cov[3][3] = {};
+  for (const PortDread::ReskinMesh* rm : cannon) {
+    for (uint32_t v = 0; v < rm->vertex_count; ++v) {
+      double d[3];
+      for (int a = 0; a < 3; ++a) {
+        d[a] = rm->pos[size_t(v) * 3 + a] - centre[a];
+      }
+      for (int a = 0; a < 3; ++a) {
+        for (int b = 0; b < 3; ++b) {
+          cov[a][b] += d[a] * d[b];
+        }
+      }
+    }
+  }
+  const float* head = body.skeleton.joints[size_t(elbow)].head;
+  double axis[3] = {centre[0] - head[0], centre[1] - head[1], centre[2] - head[2]};
+  for (int it = 0; it < 64; ++it) {
+    double next[3] = {0, 0, 0};
+    for (int a = 0; a < 3; ++a) {
+      for (int b = 0; b < 3; ++b) {
+        next[a] += cov[a][b] * axis[b];
+      }
+    }
+    const double len = std::sqrt(next[0] * next[0] + next[1] * next[1] + next[2] * next[2]);
+    if (len <= 0.0) {
+      return fail();
+    }
+    for (int a = 0; a < 3; ++a) {
+      axis[a] = next[a] / len;
+    }
+  }
+  if (axis[0] * (centre[0] - head[0]) + axis[1] * (centre[1] - head[1]) + axis[2] * (centre[2] - head[2]) < 0.0) {
+    for (double& a : axis) {
+      a = -a;
+    }
+  }
+  auto along = [&](const float* p) { return (p[0] - head[0]) * axis[0] + (p[1] - head[1]) * axis[1] + (p[2] - head[2]) * axis[2]; };
+  double far = -1e30, back = 1e30;
+  for (const PortDread::ReskinMesh* rm : cannon) {
+    for (uint32_t v = 0; v < rm->vertex_count; ++v) {
+      far = std::max(far, along(&rm->pos[size_t(v) * 3]));
+      back = std::min(back, along(&rm->pos[size_t(v) * 3]));
+    }
+  }
+  // The muzzle is the centre of the barrel's end: the mean of the vertices
+  // within 2 cm of the far end.
+  double sum[3] = {0, 0, 0};
+  size_t count = 0;
+  for (const PortDread::ReskinMesh* rm : cannon) {
+    for (uint32_t v = 0; v < rm->vertex_count; ++v) {
+      if (along(&rm->pos[size_t(v) * 3]) >= far - 0.02) {
+        for (int a = 0; a < 3; ++a) {
+          sum[a] += rm->pos[size_t(v) * 3 + a];
+        }
+        ++count;
+      }
+    }
+  }
+  float tip[3];
+  for (int a = 0; a < 3; ++a) {
+    tip[a] = float(sum[a] / double(count));
+  }
+  const double length = double(muzzle[1]) - backY;
+  const double reach = along(tip) - back;
+  if (along(tip) < 0.05 || reach < 0.05 || length <= 0.0) {
+    return fail();
+  }
+  scale = float(length / reach);
+  // Rotate the barrel onto +Y (the gun's forward). The bind pose holds the arm
+  // palm down, which puts the glow strips on the cannon's top and bottom; Dread
+  // and Prime hold it thumb up, glow on the sides. So the body's up, made square
+  // to the barrel, goes to +X (the back of the hand faces out), and Z = X x Y.
+  double up[3] = {-axis[2] * axis[0], -axis[2] * axis[1], 1.0 - axis[2] * axis[2]};
+  const double upLen = std::sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
+  if (upLen <= 1e-6) {
+    return fail();
+  }
+  for (double& u : up) {
+    u /= upLen;
+  }
+  const double side[3] = {axis[1] * up[2] - axis[2] * up[1], axis[2] * up[0] - axis[0] * up[2],
+                          axis[0] * up[1] - axis[1] * up[0]};
+  auto turn = [&](const float* in, float* o) {
+    const double x = in[0], y = in[1], z = in[2];
+    o[0] = float(x * up[0] + y * up[1] + z * up[2]);
+    o[1] = float(x * axis[0] + y * axis[1] + z * axis[2]);
+    o[2] = -float(x * side[0] + y * side[1] + z * side[2]);
+  };
+  // The cannon shell is open at the elbow end, which faces the first-person
+  // camera; retail closes it with the upper arm (kSuitArms). Add the body's arm
+  // skin (triangles weighted at least half to R_shoulder's subtree), compacted
+  // to the vertices those triangles use.
+  const int shoulder = body.skeleton.Find("R_shoulder");
+  if (shoulder < 0) {
+    return Fail(error, "cannon: no R_shoulder");
+  }
+  std::vector<bool> arm(body.skeleton.joints.size(), false);
+  for (size_t j = 0; j < body.skeleton.joints.size(); ++j) {
+    for (int k = int(j), guard = 0; k >= 0 && guard < 256; ++guard) {
+      if (k == shoulder) {
+        arm[j] = true;
+        break;
+      }
+      k = body.skeleton.IndexOfId(body.skeleton.joints[size_t(k)].parent);
+    }
+  }
+  auto onArm = [&](const PortDread::ReskinMesh& rm, uint32_t v) {
+    float w = 0.f;
+    for (const auto& [bone, weight] : rm.weights[v]) {
+      const int j = body.skeleton.IndexOfId(bone);
+      if (j >= 0 && arm[size_t(j)]) {
+        w += weight;
+      }
+    }
+    return w >= 0.5f;
+  };
+  std::vector<PortDread::ReskinMesh> skin;
+  for (const PortDread::ReskinMesh& rm : body.meshes) {
+    if (std::find(cannon.begin(), cannon.end(), &rm) != cannon.end() ||
+        rm.pos.size() != size_t(rm.vertex_count) * 3 || rm.weights.size() != rm.vertex_count) {
+      continue;
+    }
+    std::vector<uint32_t> remap(rm.vertex_count, UINT32_MAX);
+    PortDread::ReskinMesh part;
+    part.name = rm.name;
+    part.material_name = rm.material_name;
+    part.bsmat_path = rm.bsmat_path;
+    auto keep = [&](uint32_t v) {
+      if (remap[v] == UINT32_MAX) {
+        remap[v] = part.vertex_count++;
+        part.pos.insert(part.pos.end(), &rm.pos[size_t(v) * 3], &rm.pos[size_t(v) * 3 + 3]);
+        if (rm.normal.size() == rm.pos.size()) {
+          part.normal.insert(part.normal.end(), &rm.normal[size_t(v) * 3], &rm.normal[size_t(v) * 3 + 3]);
+        }
+        if (rm.tangent.size() == size_t(rm.vertex_count) * 4) {
+          part.tangent.insert(part.tangent.end(), &rm.tangent[size_t(v) * 4], &rm.tangent[size_t(v) * 4 + 4]);
+        }
+        for (int s = 0; s < 3; ++s) {
+          if (rm.uv[s].size() == size_t(rm.vertex_count) * 2) {
+            part.uv[s].insert(part.uv[s].end(), &rm.uv[s][size_t(v) * 2], &rm.uv[s][size_t(v) * 2 + 2]);
+          }
+        }
+        part.weights.push_back(rm.weights[v]);
+        if (rm.source.size() == rm.vertex_count) {
+          part.source.push_back(rm.source[v]);
+        }
+      }
+      return remap[v];
+    };
+    for (const PortDread::ReskinSubmesh& sub : rm.submeshes) {
+      PortDread::ReskinSubmesh kept;
+      for (size_t i = 0; i + 2 < sub.indices.size(); i += 3) {
+        const uint32_t* tri = &sub.indices[i];
+        if (tri[0] < rm.vertex_count && tri[1] < rm.vertex_count && tri[2] < rm.vertex_count &&
+            onArm(rm, tri[0]) && onArm(rm, tri[1]) && onArm(rm, tri[2])) {
+          for (int c = 0; c < 3; ++c) {
+            kept.indices.push_back(keep(tri[c]));
+          }
+        }
+      }
+      if (!kept.indices.empty()) {
+        part.submeshes.push_back(std::move(kept));
+      }
+    }
+    if (!part.submeshes.empty()) {
+      skin.push_back(std::move(part));
+    }
+  }
+  std::vector<const PortDread::ReskinMesh*> parts = cannon;
+  for (const PortDread::ReskinMesh& m : skin) {
+    parts.push_back(&m);
+  }
+  out.skeleton = body.skeleton;
+  for (const PortDread::ReskinMesh* rm : parts) {
+    PortDread::ReskinMesh& m = out.meshes.emplace_back(*rm);
+    for (uint32_t v = 0; v < m.vertex_count; ++v) {
+      float d[3], r[3];
+      for (int a = 0; a < 3; ++a) {
+        d[a] = rm->pos[size_t(v) * 3 + a] - tip[a];
+      }
+      turn(d, r);
+      for (int a = 0; a < 3; ++a) {
+        m.pos[size_t(v) * 3 + a] = scale * r[a] + muzzle[a];
+      }
+      if (m.normal.size() == m.pos.size()) {
+        turn(&rm->normal[size_t(v) * 3], &m.normal[size_t(v) * 3]);
+      }
+      if (m.tangent.size() == size_t(m.vertex_count) * 4) {
+        turn(&rm->tangent[size_t(v) * 4], &m.tangent[size_t(v) * 4]);
+      }
+    }
+  }
+  return true;
+}
+
+bool FirstTextureOfSets(const std::vector<uint8_t>& m, std::vector<uint32_t>& out, std::string* error) {
+  out.clear();
+  if (m.size() < 0x2c || Be32(m, 0) != 0xDEADBABE) {
+    return Fail(error, "not a CMDL");
+  }
+  const uint32_t nsec = Be32(m, 0x24), nmat = Be32(m, 0x28);
+  if (nmat >= nsec || 0x2c + 4ull * nsec > m.size()) {
+    return Fail(error, "bad section table");
+  }
+  size_t o = (0x2c + 4 * size_t(nsec) + 31) & ~size_t(31);
+  for (uint32_t i = 0; i < nmat; ++i) {
+    const size_t size = Be32(m, 0x2c + 4 * size_t(i));
+    if (o + size > m.size() || size < 8) {
+      return Fail(error, "material set past the end");
+    }
+    // u32 textures, ids; u32 materials, end offsets; then the materials: u32 flags, u32 count,
+    // texture indices.
+    const size_t ntex = Be32(m, o);
+    const size_t at = o + 4 + 4 * ntex;
+    if (at + 4 > o + size) {
+      return Fail(error, "material set cut short");
+    }
+    const size_t first = at + 4 + 4 * size_t(Be32(m, at));
+    if (Be32(m, at) == 0 || first + 12 > o + size || Be32(m, first + 4) == 0 || Be32(m, first + 8) >= ntex) {
+      return Fail(error, "material set " + std::to_string(i) + ": material 0 has no texture");
+    }
+    out.push_back(Be32(m, o + 4 + 4 * size_t(Be32(m, first + 8))));
+    o += size;
+  }
+  return !out.empty() ? true : Fail(error, "no material sets");
+}
+
+bool BeamTint(const PortRemastered::Image& image, float out[3]) {
+  double sum[3] = {0, 0, 0};
+  for (size_t i = 0; i + 3 < image.rgba.size(); i += 4) {
+    const double c[3] = {image.rgba[i] / 255.0, image.rgba[i + 1] / 255.0, image.rgba[i + 2] / 255.0};
+    const double w = std::pow(std::max({c[0], c[1], c[2]}), 4.0);
+    for (int a = 0; a < 3; ++a) {
+      sum[a] += w * c[a];
+    }
+  }
+  const double peak = std::max({sum[0], sum[1], sum[2]});
+  if (!(peak > 0.0)) {
+    return false;
+  }
+  for (int a = 0; a < 3; ++a) {
+    out[a] = float(sum[a] / peak);
+  }
+  return true;
+}
+
 bool FitBall(const PortDread::Bcmdl& source, const std::vector<uint8_t>& retailCmdl,
              uint32_t joint, PortDread::ReskinResult& out, std::string* error) {
   out = {};
@@ -322,6 +608,33 @@ bool Import(const Io& io, Result& result, std::string& error) {
   // Suit materials, one per BSMAT path; null where the BSMAT does not build (not mp_samuspbr,
   // a texture missing): its meshes are left out.
   std::map<std::string, std::unique_ptr<PortDread::SuitMaterial>> materials;
+  auto readSuit = [&](const std::string& bsmatPath, PortDread::Bsmat& bsmat, PortDread::Bctex tex[3],
+                      std::string& why) {
+    std::vector<uint8_t> data;
+    std::string bc, at, nm;
+    if (!pkgFile(bsmatPath, data)) {
+      why = "not in samus.pkg";
+      return false;
+    }
+    if (!PortDread::ParseBsmat(data.data(), data.size(), bsmat, &why) ||
+        !PortDread::SuitTexturePaths(bsmat, "textures", bc, at, nm, &why)) {
+      return false;
+    }
+    const std::string* paths[3] = {&bc, &at, &nm};
+    for (int i = 0; i < 3; ++i) {
+      std::vector<uint8_t> bytes;
+      std::string readError;
+      if (!io.dread(*paths[i], bytes, readError)) {
+        why = "cannot read " + *paths[i] + ": " + readError;
+        return false;
+      }
+      if (!tex[i].Parse(bytes.data(), bytes.size(), readError)) {
+        why = *paths[i] + ": " + readError;
+        return false;
+      }
+    }
+    return true;
+  };
   auto material = [&](const std::string& bsmatPath) -> const PortDread::SuitMaterial* {
     auto found = materials.find(bsmatPath);
     if (found != materials.end()) {
@@ -329,39 +642,66 @@ bool Import(const Io& io, Result& result, std::string& error) {
     }
     std::unique_ptr<PortDread::SuitMaterial> built;
     std::string why;
-    std::vector<uint8_t> data;
     PortDread::Bsmat bsmat;
-    std::string bc, at, nm;
-    if (!pkgFile(bsmatPath, data)) {
-      why = "not in samus.pkg";
-    } else if (!PortDread::ParseBsmat(data.data(), data.size(), bsmat, &why) ||
-               !PortDread::SuitTexturePaths(bsmat, "textures", bc, at, nm, &why)) {
-    } else {
-      PortDread::Bctex tex[3];
-      const std::string* paths[3] = {&bc, &at, &nm};
-      bool ok = true;
-      for (int i = 0; i < 3 && ok; ++i) {
-        std::vector<uint8_t> bytes;
-        std::string readError;
-        if (!io.dread(*paths[i], bytes, readError)) {
-          why = "cannot read " + *paths[i] + ": " + readError;
-          ok = false;
-        } else if (!tex[i].Parse(bytes.data(), bytes.size(), readError)) {
-          why = *paths[i] + ": " + readError;
-          ok = false;
-        }
-      }
-      if (ok) {
-        built = std::make_unique<PortDread::SuitMaterial>();
-        if (!PortDread::BuildSuitMaterial(bsmat, tex[0], tex[1], tex[2], *built, &why)) {
-          built.reset();
-        }
+    PortDread::Bctex tex[3];
+    if (readSuit(bsmatPath, bsmat, tex, why)) {
+      built = std::make_unique<PortDread::SuitMaterial>();
+      if (!PortDread::BuildSuitMaterial(bsmat, tex[0], tex[1], tex[2], *built, &why)) {
+        built.reset();
       }
     }
     if (!built) {
       log("dread: material " + bsmatPath + " left out: " + why);
     }
     return (materials[bsmatPath] = std::move(built)).get();
+  };
+  // One copy of a material per beam, under "<path>#beam<N>": the glow takes the beam's colour, all
+  // normalised by one strength so only the ICAN texture differs between the copies. Empty when
+  // the material does not build or does not glow.
+  auto beamMaterials = [&](const std::string& bsmatPath, const float (*tints)[3]) {
+    std::vector<const PortDread::SuitMaterial*> out;
+    auto key = [&](uint32_t b) { return "#beam" + std::to_string(b); };
+    if (materials.count(bsmatPath + key(0))) {
+      for (uint32_t b = 0; b < kBeams; ++b) {
+        out.push_back(materials[bsmatPath + key(b)].get());
+      }
+      return out[0] != nullptr ? out : std::vector<const PortDread::SuitMaterial*>{};
+    }
+    PortDread::Bsmat bsmat;
+    PortDread::Bctex tex[3];
+    std::string why;
+    double strength = 0.0;
+    bool ok = readSuit(bsmatPath, bsmat, tex, why);
+    for (uint32_t b = 0; ok && b < kBeams; ++b) {
+      double c[3];
+      PortDread::SuitEmissive(bsmat, tints[b], c);
+      strength = std::max({strength, c[0], c[1], c[2]});
+    }
+    if (ok && !(strength > 0.0)) {
+      ok = false, why = "it does not glow";
+    }
+    // The cannon lights' own strength (11) overexposes every beam colour to white; scaled down to
+    // a peak of 1.5, the colour survives the tone mapping and the lights still read as lit.
+    constexpr double kBeamGlowPeak = 1.5;
+    const double scale = strength > kBeamGlowPeak ? kBeamGlowPeak / strength : 1.0;
+    strength *= scale;
+    for (uint32_t b = 0; ok && b < kBeams; ++b) {
+      auto built = std::make_unique<PortDread::SuitMaterial>();
+      PortDread::SuitOptions options;
+      const float tint[3] = {float(tints[b][0] * scale), float(tints[b][1] * scale), float(tints[b][2] * scale)};
+      options.emissiveColor = tint;
+      options.strength = strength;
+      options.icanKey = key(b);
+      ok = PortDread::BuildSuitMaterial(bsmat, tex[0], tex[1], tex[2], *built, &why, options);
+      out.push_back(built.get());
+      materials[bsmatPath + key(b)] = ok ? std::move(built) : nullptr;
+    }
+    if (!ok) {
+      log("dread: beam glow of " + bsmatPath + " left out: " + why);
+      materials[bsmatPath + key(0)] = nullptr;
+      out.clear();
+    }
+    return out;
   };
 
   PortRemastered::ConvertIO cio;
@@ -406,7 +746,8 @@ bool Import(const Io& io, Result& result, std::string& error) {
   std::map<uint32_t, PortDread::PrimeSkeleton> skeletons;
   std::map<uint32_t, std::vector<uint8_t>> cinfData;
   const size_t bodyTotal = std::size(kTargets);
-  const size_t total = bodyTotal + std::size(kBallTargets);
+  const size_t total = bodyTotal + std::size(kCannonTargets) + std::size(kBallTargets);
+  std::map<std::string, PortDread::ReskinResult> cutsceneBodies;  // by suit, for the cannons
   for (size_t ti = 0; ti < bodyTotal; ++ti) {
     const Target& t = kTargets[ti];
     if (io.progress) {
@@ -572,10 +913,102 @@ bool Import(const Io& io, Result& result, std::string& error) {
         log(line);
       }
     }
+    if (std::strcmp(t.skeleton, "cine50") == 0) {
+      cutsceneBodies[t.suit] = std::move(reskin);
+    }
   }
   if (result.failed != 0 || result.converted != bodyTotal) {
     error = "incomplete Dread bodies (the notes say why); no output published";
     return false;
+  }
+
+  // The first-person cannons, one material set per beam like the gun model's: each beam's colour
+  // is read from that set of the gun model, and only the cannon's glow takes it.
+  float tints[kBeams][3];
+  float muzzle[3];
+  float gunBack = 0.f;
+  {
+    std::vector<uint8_t> gun, cinf;
+    std::vector<uint32_t> textures;
+    PortDread::PrimeSkeleton skeleton;
+    if (!io.retail(FourCC('C', 'M', 'D', 'L'), kGunModel, gun) ||
+        !FirstTextureOfSets(gun, textures, &error) || textures.size() != kBeams) {
+      return Fail(&error, "cannon: gun CMDL " + Hex8(kGunModel) + ": " + (error.empty() ? "not 5 sets" : error));
+    }
+    for (uint32_t b = 0; b < kBeams; ++b) {
+      std::vector<uint8_t> txtr;
+      PortRemastered::Image image;
+      if (!io.retail(FourCC('T', 'X', 'T', 'R'), textures[b], txtr) || !PortBallLooks::DecodeCmprTxtr(txtr, image) ||
+          !BeamTint(image, tints[b])) {
+        return Fail(&error, "cannon: beam texture " + Hex8(textures[b]) + " is missing or not CMPR");
+      }
+      char line[128];
+      std::snprintf(line, sizeof(line), "dread: beam %u colour %.3f %.3f %.3f (TXTR %s)", b, tints[b][0], tints[b][1],
+                    tints[b][2], Hex8(textures[b]).c_str());
+      log(line);
+    }
+    if (!io.retail(FourCC('C', 'I', 'N', 'F'), kGunCinf, cinf) ||
+        !PortDread::ParseCinf(cinf.data(), cinf.size(), skeleton, &error) || skeleton.Find("LBEAM") < 0) {
+      return Fail(&error, "cannon: gun CINF " + Hex8(kGunCinf) + " has no LBEAM " + error);
+    }
+    std::copy_n(skeleton.joints[size_t(skeleton.Find("LBEAM"))].head, 3, muzzle);
+    // CMDL header: magic, version, flags, then the bounds (min xyz, max xyz), big-endian.
+    if (gun.size() < 0x24) {
+      return Fail(&error, "cannon: gun CMDL " + Hex8(kGunModel) + " is truncated");
+    }
+    const uint32_t bits = uint32_t(gun[0x10]) << 24 | uint32_t(gun[0x11]) << 16 | uint32_t(gun[0x12]) << 8 | gun[0x13];
+    std::memcpy(&gunBack, &bits, sizeof(gunBack));
+  }
+  for (const CannonTarget& t : kCannonTargets) {
+    if (io.progress) io.progress(result.converted, total);
+    if (cancelled()) return Fail(&error, "cancelled");
+    const std::string label = std::string(t.suit) + " first-person cannon";
+    const uint32_t id = FirstPersonCannon(t.primeSuit);
+    if (id == 0 || (io.retailId && io.retailId(id)) || !reserved.insert(id).second)
+      return Fail(&error, label + ": output id collision " + Hex8(id));
+    for (const auto& [name, data] : pending) {
+      if (name.compare(0, 8, Hex8(id)) == 0)
+        return Fail(&error, label + ": generated resource id collision " + Hex8(id));
+    }
+    const auto body = cutsceneBodies.find(t.suit);
+    PortDread::ReskinResult fit;
+    float scale = 0.f;
+    if (body == cutsceneBodies.end() || !FitCannon(body->second, muzzle, gunBack, fit, scale, &error))
+      return Fail(&error, label + ": " + (error.empty() ? "no cutscene body" : error));
+    std::vector<const PortDread::SuitMaterial*> mats;
+    PortRemastered::ConvertOptions opt;
+    opt.setTextures.resize(kBeams);
+    for (const PortDread::ReskinMesh& rm : fit.meshes) {
+      const PortDread::SuitMaterial* plain = rm.bsmat_path.empty() ? nullptr : material(rm.bsmat_path);
+      const auto beams = rm.bsmat_path.find("cannon") != std::string::npos ? beamMaterials(rm.bsmat_path, tints)
+                                                                          : std::vector<const PortDread::SuitMaterial*>{};
+      mats.push_back(beams.empty() ? plain : beams[0]);
+      for (uint32_t b = 1; b < beams.size(); ++b) {
+        opt.setTextures[b][PortDread::SuitTextureId(beams[0]->name + "#beam0", PortDread::kSuitIcan)] =
+            PortDread::SuitTextureId(beams[b]->name + "#beam" + std::to_string(b), PortDread::kSuitIcan);
+      }
+      if (mats.back() == nullptr) {
+        log("dread: " + label + ": mesh " + rm.name + " left out (no suit material)");
+      }
+    }
+    PortRemastered::Model built;
+    if (!BuildModel(fit, mats, built, opt.boneWeights, &error)) return Fail(&error, label + ": " + error);
+    built.skinned = false;
+    opt.boneWeights.clear();
+    opt.retail = kSuitArms[t.primeSuit];
+    opt.outputModel = id;
+    opt.materialSets = kBeams;
+    opt.texturePrefix = "dread:";
+    opt.source = "dread " + label;
+    opt.skip.clear();
+    for (int r = 0; r < 3; ++r) for (int c = 0; c < 3; ++c) opt.orient[r][c] = r == c ? 1.0 : 0.0;
+    if (!converter.Convert(built, opt, error)) return Fail(&error, label + ": convert: " + error);
+    ++result.converted;
+    char line[256];
+    std::snprintf(line, sizeof(line), "dread: %s -> %s: %zu meshes, scale %.3f, bounds %.3f %.3f %.3f .. %.3f %.3f %.3f",
+                  label.c_str(), Hex8(id).c_str(), built.meshes.size(), scale, built.boundsMin[0], built.boundsMin[1],
+                  built.boundsMin[2], built.boundsMax[0], built.boundsMax[1], built.boundsMax[2]);
+    log(line);
   }
   // Keep Prime's ANCS and animations intact, changing only character 0's model and skin.
   // All resources are buffered until every target succeeds; the installer additionally

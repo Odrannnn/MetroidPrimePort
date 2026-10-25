@@ -19,7 +19,20 @@ inline constexpr const char* kStampName = ".dread-samus-version";
 // 5: Phazon = Dread's Metroid Suit (samushyper), skeletons D7EAD007-008.
 // 6: all four suit Morph Balls, normal/Spider and low-poly, with rigid animated skins.
 // 7: the pause-screen doll's four suit bodies (CINF F76E70A6), skeletons D7EAD009-00C.
-inline constexpr int kVersion = 7;
+// 8: the first-person cannon: suit-arm variants carrying Dread's cannon, one material set per beam.
+inline constexpr int kVersion = 8;
+
+// The first-person suit arms (CGunWeapon::skSuitArmNames PowerArm, GravityArm, VariaArm,
+// PhazonArm) by CPlayerState::EPlayerSuit. The import writes a variant of each holding the suit's
+// Dread cannon, in the arm's own space (the gun's elbow locator), unskinned, with one material set
+// per beam (CPlayerState::EBeamId, the gun's shader set) differing only in the glow's colour.
+inline constexpr uint32_t kSuitArms[4] = {0x07111AA7, 0x81856809, 0x4AD9BBAC, 0x57DC8B14};
+inline uint32_t FirstPersonCannon(int suit) {
+  return suit >= 0 && suit < 4 ? PortModelVariant::Id(kSuitArms[suit], suit) : 0;
+}
+// Whether the mod serves FirstPersonCannon(suit) now: the gun then draws it at the elbow locator in
+// place of both Prime's gun model and its suit arm.
+bool ReplacesFirstPersonCannon(int suit);
 
 struct BallTarget {
   int suit;

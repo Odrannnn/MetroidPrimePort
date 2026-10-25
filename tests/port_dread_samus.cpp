@@ -15,6 +15,7 @@
 #include "port_remastered_storage.h"
 #include "port_test.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -454,6 +455,155 @@ void TestBallFit() {
   CHECK(!PortDreadSamus::FitBall(source,cmdl,4,fit,&why));
 }
 
+// A beam's colour is the glow of its gun texture: the mean of the texels weighted by max(rgb)^4,
+// its largest channel scaled to 1; a texture that is all black has no colour.
+void TestBeamTint() {
+  float tint[3] = {-1, -1, -1};
+  Image orange;
+  orange.width = 2;
+  orange.height = 1;
+  orange.rgba = {255, 128, 0, 255, 0, 0, 0, 255};  // one bright orange texel, one black
+  REQUIRE(PortDreadSamus::BeamTint(orange, tint));
+  CHECK_MSG(std::fabs(tint[0] - 1.f) < 1e-6, "the largest channel is scaled to 1");
+  CHECK_MSG(std::fabs(tint[1] - 128.f / 255.f) < 1e-6, "the other channels keep their ratio");
+  CHECK_MSG(std::fabs(tint[2]) < 1e-6, "blue stays 0");
+  // The dark texel weighs nothing: the weight is the fourth power of the brightest channel.
+  Image dim = orange;
+  dim.rgba = {255, 128, 0, 255, 32, 32, 32, 255};
+  float dimTint[3];
+  REQUIRE(PortDreadSamus::BeamTint(dim, dimTint));
+  CHECK(std::fabs(dimTint[0] - 1.f) < 1e-6 && std::fabs(dimTint[1] - 128.f / 255.f) < 1e-3);
+  Image black;
+  black.width = 1;
+  black.height = 1;
+  black.rgba = {0, 0, 0, 255};
+  CHECK_MSG(!PortDreadSamus::BeamTint(black, tint), "an all-black texture has no tint");
+  Image empty;
+  CHECK(!PortDreadSamus::BeamTint(empty, tint));
+}
+
+// The first-person cannon fit: a Dread suit's cannon meshes turned so the barrel runs +Y with the
+// body's up on +X, scaled to the retail gun's length and placed with its tip on the muzzle. The
+// fixture is a long thin box along +X from just past the elbow (taller in z, so up is well defined)
+// with three rings so a vertex lands partway down the barrel too.
+void CannonBody(PortDread::ReskinResult& body) {
+  PortDread::PrimeJoint root;
+  root.id = 1;
+  root.name = "Root";
+  root.head[0] = 0.f;
+  root.head[1] = -0.5f;
+  root.head[2] = 0.f;
+  PortDread::PrimeJoint shoulder;
+  shoulder.id = 2;
+  shoulder.parent = 1;
+  shoulder.name = "R_shoulder";
+  shoulder.head[0] = -0.05f;
+  PortDread::PrimeJoint elbow;
+  elbow.id = 3;
+  elbow.parent = 2;
+  elbow.name = "R_elbow";  // the barrel leaves the elbow at the origin
+  body.skeleton.joints = {root, shoulder, elbow};
+
+  PortDread::ReskinMesh& cannon = body.meshes.emplace_back();
+  cannon.name = "Samus_Cannon";
+  cannon.material_name = "cannon";
+  const float xs[3] = {0.1f, 0.3f, 0.5f};
+  const float yz[4][2] = {{-0.02f, -0.03f}, {0.02f, -0.03f}, {0.02f, 0.03f}, {-0.02f, 0.03f}};
+  for (int r = 0; r < 3; ++r) {
+    for (int i = 0; i < 4; ++i) {
+      cannon.pos.insert(cannon.pos.end(), {xs[r], yz[i][0], yz[i][1]});
+      cannon.normal.insert(cannon.normal.end(), {1.f, 0.f, 0.f});
+      cannon.weights.push_back({{3, 1.f}});
+      cannon.source.push_back(PortDread::WeightSource::Table);
+    }
+  }
+  cannon.vertex_count = 12;
+  std::vector<uint32_t>& indices = cannon.submeshes.emplace_back().indices;
+  for (int r = 0; r < 2; ++r) {
+    for (int i = 0; i < 4; ++i) {
+      const uint32_t a = uint32_t(r * 4 + i), b = uint32_t(r * 4 + (i + 1) % 4);
+      indices.insert(indices.end(), {a, b, b + 4, a, b + 4, a + 4});
+    }
+  }
+  indices.insert(indices.end(), {0, 2, 1, 0, 3, 2});  // back cap
+  indices.insert(indices.end(), {8, 9, 10, 8, 10, 11});  // muzzle cap
+
+  // The arm skin the fit adds: the mesh past the elbow weighted to the shoulder's subtree.
+  PortDread::ReskinMesh& arm = body.meshes.emplace_back();
+  arm.name = "Samus_Arm";
+  arm.vertex_count = 3;
+  arm.pos = {-0.1f, -0.02f, 0.f, -0.06f, -0.02f, 0.03f, -0.1f, 0.02f, 0.f};
+  arm.normal.assign(9, 0.f);
+  for (int v = 0; v < 3; ++v) {
+    arm.weights.push_back({{2, 1.f}});
+    arm.source.push_back(PortDread::WeightSource::Table);
+  }
+  arm.submeshes.push_back({{0, 1, 2}});
+}
+
+void TestCannonFit() {
+  PortDread::ReskinResult body;
+  CannonBody(body);
+  const float muzzle[3] = {0.02f, 1.0f, -0.05f};
+  const float backY = 0.2f;
+  PortDread::ReskinResult out;
+  float scale = 0.f;
+  std::string error;
+  REQUIRE_MSG(PortDreadSamus::FitCannon(body, muzzle, backY, out, scale, &error), error);
+  REQUIRE(out.meshes.size() == 2);  // the cannon, then the arm skin the fit adds
+  CHECK_MSG(out.meshes[0].name == "Samus_Cannon" && out.meshes[1].name == "Samus_Arm", "cannon first");
+  CHECK(out.meshes[0].vertex_count == 12 && out.meshes[1].vertex_count == 3);
+  CHECK_MSG(std::fabs(scale - (muzzle[1] - backY) / 0.4f) < 1e-3, "the barrel spans muzzle[1] - backY");
+  const PortDread::ReskinMesh& m = out.meshes[0];
+  float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+  float tip[3] = {0, 0, 0};
+  for (uint32_t v = 0; v < m.vertex_count; ++v) {
+    for (int a = 0; a < 3; ++a) {
+      const float c = m.pos[size_t(v) * 3 + size_t(a)];
+      lo[a] = std::min(lo[a], c);
+      hi[a] = std::max(hi[a], c);
+    }
+    if (v >= 8) {  // the far ring
+      for (int a = 0; a < 3; ++a) tip[a] += m.pos[size_t(v) * 3 + size_t(a)] / 4.f;
+    }
+  }
+  CHECK_MSG(lo[1] >= backY - 1e-4f && hi[1] <= muzzle[1] + 1e-4f, "the barrel lies between backY and muzzle[1]");
+  CHECK_MSG(std::fabs(lo[1] - backY) < 1e-4f && std::fabs(hi[1] - muzzle[1]) < 1e-4f, "back at backY, tip at muzzle");
+  for (int a = 0; a < 3; ++a) {
+    CHECK_MSG(std::fabs(tip[a] - muzzle[a]) < 1e-4f, "the far end's centre is the muzzle");
+  }
+  CHECK_MSG(std::fabs(hi[1] - lo[1] - (muzzle[1] - backY)) < 1e-3f, "the barrel is the gun's length");
+  // The box's z (the body's up) went to X and its y to Z; x is now the barrel.
+  CHECK_MSG(std::fabs(hi[0] - lo[0] - 0.06f * scale) < 1e-3f, "the body's up is across X");
+  CHECK_MSG(std::fabs(hi[2] - lo[2] - 0.04f * scale) < 1e-3f, "the box's y is across Z");
+  CHECK_MSG(std::fabs(hi[1] - lo[1] - 0.4f * scale) < 1e-3f, "the box's x is now the barrel");
+  // Normals and weights ride along untouched.
+  CHECK(m.normal.size() == m.pos.size());
+  CHECK(std::fabs(m.normal[0]) < 1e-5f && std::fabs(m.normal[1] - 1.f) < 1e-5f && std::fabs(m.normal[2]) < 1e-5f);
+  CHECK(m.weights.size() == 12 && m.weights[0].size() == 1 && m.weights[0][0].first == 3);
+
+  // No cannon mesh: nothing to fit.
+  PortDread::ReskinResult armless;
+  CannonBody(armless);
+  armless.meshes.erase(armless.meshes.begin());
+  CHECK(!PortDreadSamus::FitCannon(armless, muzzle, backY, out, scale, &error));
+  // The arm skin's shoulder and the elbow are both required.
+  PortDread::ReskinResult noShoulder;
+  CannonBody(noShoulder);
+  noShoulder.skeleton.joints.erase(noShoulder.skeleton.joints.begin() + 1);
+  noShoulder.skeleton.joints[1].parent = 1;
+  CHECK(!PortDreadSamus::FitCannon(noShoulder, muzzle, backY, out, scale, &error));
+  CHECK(!error.empty());
+  PortDread::ReskinResult noElbow;
+  CannonBody(noElbow);
+  noElbow.skeleton.joints.erase(noElbow.skeleton.joints.begin() + 2);
+  CHECK(!PortDreadSamus::FitCannon(noElbow, muzzle, backY, out, scale, &error));
+  // A muzzle that leaves no barrel length is refused.
+  PortDread::ReskinResult good;
+  CannonBody(good);
+  CHECK(!PortDreadSamus::FitCannon(good, muzzle, muzzle[1], out, scale, &error));
+}
+
 void TestTables() {
   CHECK(std::size(PortDreadSamus::kBallTargets) == 8);
   std::set<uint32_t> ballIds;
@@ -615,7 +765,18 @@ void TestRealData() {
               out.string().c_str());
   CHECK(textures > 0);
   CHECK(result.measured);
-  CHECK(result.converted == std::size(PortDreadSamus::kTargets) + std::size(PortDreadSamus::kBallTargets));
+  CHECK(result.converted == std::size(PortDreadSamus::kTargets) + std::size(PortDreadSamus::kCannonTargets) +
+                                std::size(PortDreadSamus::kBallTargets));
+  for (const auto& t : PortDreadSamus::kCannonTargets) {
+    char name[32];
+    std::snprintf(name, sizeof(name), "%08X.CMDL", PortDreadSamus::FirstPersonCannon(t.primeSuit));
+    std::vector<uint8_t> cannon;
+    REQUIRE(readFile(out / name, cannon));
+    REQUIRE(cannon.size() > 0x2c);
+    // One material set per beam, as the gun model has.
+    CHECK((uint32_t(cannon[0x28]) << 24 | uint32_t(cannon[0x29]) << 16 | uint32_t(cannon[0x2a]) << 8 | cannon[0x2b]) ==
+          PortDreadSamus::kBeams);
+  }
   for (const auto& t : PortDreadSamus::kBallTargets) {
     for (const auto& key : std::vector<std::pair<uint32_t, const char*>>{
              {t.ancs, "ANCS"}, {t.cmdl, "CMDL"}, {t.low, "CMDL"}}) {
@@ -697,6 +858,7 @@ void TestRealData() {
 }  // namespace
 
 int main() {
+  TestBeamTint();
   TestBoneWeights();
   TestRetailSkin();
   TestBuildModel();
@@ -704,6 +866,7 @@ int main() {
   TestTables();
   TestBallOwnership();
   TestBallFit();
+  TestCannonFit();
   TestRealData();
   return PORT_TEST_RESULT();
 }

@@ -126,8 +126,29 @@ ModelUuid ToModelOrder(const ModelUuid& pakOrder) {
   return id;
 }
 
+void SuitEmissive(const Bsmat& bsmat, const float* emissiveColor, double out[3]) {
+  const bool constant = bsmat.shader_path == "system/shd/mp_opaque_constant_selfilum.bshdat";
+  const double dimmer = Uniform1(bsmat, "vConstant4", 0, 1.0);
+  const double factor = Uniform1(bsmat, "fAlbedoEmissiveFactor", 0, 0.0);
+  // The shader's self-illumination is
+  //   bc.a * (vAlbedoEmissiveColor.rgb * fAlbedoEmissiveFactor * vConstant4.r + vConstant3 + vConstant5)
+  // plus a rim override (vConstant2, vConstant1; zero in every suit BSMAT, runtime driven) and a
+  // tail that scales only the part above 1 by the global g_EnvMapMultiplier.z. Those are runtime
+  // state, not material data, so they are ignored here: C is the base term, vC3 and vC5 only.
+  for (int i = 0; i < 3; ++i) {
+    const double colour =
+        emissiveColor != nullptr ? emissiveColor[i] : Uniform1(bsmat, "vAlbedoEmissiveColor", size_t(i), 0.0);
+    out[i] = colour * factor * dimmer + Uniform1(bsmat, "vConstant3", size_t(i), 0.0) +
+             Uniform1(bsmat, "vConstant5", size_t(i), 0.0);
+    if (constant) {
+      out[i] = factor * Uniform1(bsmat, "vAlbedoEmissiveColorMultiplier", size_t(i), 0.0) *
+               Uniform1(bsmat, "vConstant0", size_t(i), 1.0);
+    }
+  }
+}
+
 bool BuildSuitMaterial(const Bsmat& bsmat, const Bctex& bc, const Bctex& at, const Bctex& nm,
-                       SuitMaterial& out, std::string* error) {
+                       SuitMaterial& out, std::string* error, const SuitOptions& options) {
   out = SuitMaterial{};
   const bool constant = bsmat.shader_path == "system/shd/mp_opaque_constant_selfilum.bshdat";
   if (!constant && bsmat.shader_path != "system/shd/mp_samuspbr.bshdat") {
@@ -152,24 +173,12 @@ bool BuildSuitMaterial(const Bsmat& bsmat, const Bctex& bc, const Bctex& at, con
 
   // Uniform values; the defaults are the shader's neutral ones (kb: common values per material).
   const double albedoMul = constant ? 1.0 : Uniform1(bsmat, "vConstant0", 3, 1.0);
-  const double dimmer = Uniform1(bsmat, "vConstant4", 0, 1.0);
-  const double factor = Uniform1(bsmat, "fAlbedoEmissiveFactor", 0, 0.0);
-  // The shader's self-illumination is
-  //   bc.a * (vAlbedoEmissiveColor.rgb * fAlbedoEmissiveFactor * vConstant4.r + vConstant3 + vConstant5)
-  // plus a rim override (vConstant2, vConstant1; zero in every suit BSMAT, runtime driven) and a
-  // tail that scales only the part above 1 by the global g_EnvMapMultiplier.z. Those are runtime
-  // state, not material data, so they are ignored here: C is the base term, vC3 and vC5 only.
   double c[3];
+  SuitEmissive(bsmat, options.emissiveColor, c);
   for (int i = 0; i < 3; ++i) {
-    c[i] = Uniform1(bsmat, "vAlbedoEmissiveColor", size_t(i), 0.0) * factor * dimmer +
-           Uniform1(bsmat, "vConstant3", size_t(i), 0.0) + Uniform1(bsmat, "vConstant5", size_t(i), 0.0);
-    if (constant) {
-      c[i] = factor * Uniform1(bsmat, "vAlbedoEmissiveColorMultiplier", size_t(i), 0.0) *
-             Uniform1(bsmat, "vConstant0", size_t(i), 1.0);
-    }
     out.emissiveLinear[i] = float(c[i]);
   }
-  const double s = std::max({c[0], c[1], c[2]});
+  const double s = options.strength > 0.0 ? options.strength : std::max({c[0], c[1], c[2]});
   const bool emissive = s > 0.0;
 
   out.name = bsmat.name;
@@ -223,7 +232,7 @@ bool BuildSuitMaterial(const Bsmat& bsmat, const Bctex& bc, const Bctex& at, con
 
   auto add = [&](SuitSlot slot, uint32_t usage, Image&& img) {
     SuitImage si;
-    si.id = SuitTextureId(bsmat.name, slot);
+    si.id = SuitTextureId(slot == kSuitIcan ? bsmat.name + options.icanKey : bsmat.name, slot);
     si.image = std::move(img);
     m.data.push_back(TextureData(usage, si.id, wu, wv));
     out.images.push_back(std::move(si));
