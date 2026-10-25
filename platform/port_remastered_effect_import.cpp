@@ -923,6 +923,24 @@ public:
            m_io.write(Hex8(id) + ".TXTR", EncodeTxtrRgba8(stub));
   }
 
+  // Writes a VFX material's copy (VfxCopy). An sRGB texture over kStubSide keeps its sRGB
+  // bytes in an sRGB .dds, so the GPU decodes it before filtering as Remastered's does: as
+  // linear bytes its darks fall to a few levels, which BC7 flattens into 4x4 tiles that the
+  // ramp and erosion thresholds show (the bomb's explosion, the beam charges). The TXTR
+  // stub, and a texture small enough to have no .dds, hold the linear bytes.
+  bool WriteVfxTexture(uint32_t id, Image image, bool linear, bool rg) {
+    if (rg || !linear || std::max(image.width, image.height) <= kStubSide) {
+      ToVfx(image.rgba, linear, rg);
+      return WriteTexture(id, image, MapKind::Data);
+    }
+    const int edge = std::max(image.width, image.height);
+    Image stub = Resize(image, std::max(8, RoundUp4(image.width * kStubSide / edge)),
+                        std::max(8, RoundUp4(image.height * kStubSide / edge)), MapKind::Colour);
+    ToVfx(stub.rgba, true, false);
+    return m_io.write(Hex8(id) + ".dds", EncodeDds(image, ColourDdsFormat(), false, MapKind::Colour, true)) &&
+           m_io.write(Hex8(id) + ".TXTR", EncodeTxtrRgba8(stub));
+  }
+
   // Whether a VFX material's copy of the texture differs from the legacy one: sRGB bytes decode
   // to linear, and a BC5's grey plus alpha go back to (R, G, 0, 1), the channels a GPU gives
   // the shader (VFX_DualModColorRamp_Unlit's ramps and the indirect maps read .x and .y).
@@ -975,11 +993,8 @@ public:
       if (width != image.width || height != image.height) {
         image = Resize(image, width, height);
       }
-      if (vfx) {
-        ToVfx(image.rgba, linear, rg);
-      }
       out = m_io.freshId(Hash(id, vfx ? kTxtr ^ 0x5F1Du : kTxtr));
-      if (WriteTexture(out, image, vfx ? MapKind::Data : MapKind::Colour)) {
+      if (vfx ? WriteVfxTexture(out, std::move(image), linear, rg) : WriteTexture(out, image, MapKind::Colour)) {
         ++m_result.textures;
       } else {
         out = 0;
@@ -1041,11 +1056,8 @@ public:
                       frame.rgba.data() + size_t(y) * frameW * 4, size_t(frameW) * 4);
         }
       }
-      if (vfx) {
-        ToVfx(atlas.rgba, linear, rg);
-      }
       const uint32_t fresh = m_io.freshId(Hash(id, kTxtr ^ (vfx ? 0xF11Cu : 0xF11Bu)));
-      if (WriteTexture(fresh, atlas, vfx ? MapKind::Data : MapKind::Colour)) {
+      if (vfx ? WriteVfxTexture(fresh, std::move(atlas), linear, rg) : WriteTexture(fresh, atlas, MapKind::Colour)) {
         ++m_result.textures;
         ++m_result.flipbooks;
         out = FlipbookAtlas{fresh, cols, rows, layers};

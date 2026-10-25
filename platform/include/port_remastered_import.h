@@ -169,7 +169,8 @@ inline constexpr int kModels = 21;
 // 103: the FlickerBat's 0B9E48EB paired with 3b29b0b3 (#visual-inferred: inferred from the
 // look, not proven by any CHPR or other serialized reference).
 // 106: a VMSH whose material's shader reads COLOR (perm 016) is tinted by its vertex colour (VMSH flag 4).
-inline constexpr int kEffects = 111;   // exact GPSM primitive dispatch, transformed squares and SIZE
+// 112: a VFX material's sRGB texture over 64 texels is an sRGB .dds, decoded by the GPU.
+inline constexpr int kEffects = 112;   // exact GPSM primitive dispatch, transformed squares and SIZE
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
