@@ -15,6 +15,19 @@
 
 namespace PortParticleMath {
 
+// CParticleVelocity mode 2: position takes the affine transform, velocity only its linear part.
+// Both references are live particle fields (element trees may read the current particle).
+template <class Evaluate>
+bool EvaluateGlobalVelocity(const CTransform4f& toWorld, const CTransform4f& fromWorld,
+                            CVector3f& velocity, CVector3f& position, Evaluate evaluate) {
+  position = toWorld * position;
+  velocity = toWorld.Rotate(velocity);
+  const bool killed = evaluate(velocity, position);
+  position = fromWorld * position;
+  velocity = fromWorld.Rotate(velocity);
+  return killed;
+}
+
 // GetDefaultParticleVelocity 0x2917a8, expressed in port space (-x, z, y).
 // The AArch64 vector return uses s0/s1/s2; the decompiler's scalar return loses y/z.
 inline CVector3f DefaultParticleVelocity(uint8_t version) {

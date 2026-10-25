@@ -563,16 +563,47 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       break;
     case SBIG('VMD1'):
       desc->x31_28_VMD1 = GetBool(in);
+#ifdef TARGET_PC
+      if (desc->x31_28_VMD1) {
+        desc->xPortVelocityGlobal[0] = false;
+      }
+#endif
       break;
     case SBIG('VMD2'):
       desc->x31_29_VMD2 = GetBool(in);
+#ifdef TARGET_PC
+      if (desc->x31_29_VMD2) {
+        desc->xPortVelocityGlobal[1] = false;
+      }
+#endif
       break;
     case SBIG('VMD3'):
       desc->x31_30_VMD3 = GetBool(in);
+#ifdef TARGET_PC
+      if (desc->x31_30_VMD3) {
+        desc->xPortVelocityGlobal[2] = false;
+      }
+#endif
       break;
     case SBIG('VMD4'):
       desc->x31_31_VMD4 = GetBool(in);
+#ifdef TARGET_PC
+      if (desc->x31_31_VMD4) {
+        desc->xPortVelocityGlobal[3] = false;
+      }
+#endif
       break;
+#ifdef TARGET_PC
+    case SBIG('VGD1'):
+    case SBIG('VGD2'):
+    case SBIG('VGD3'):
+    case SBIG('VGD4'):
+      GetClassID(in);
+      if (in.ReadLong() != 0) {
+        desc->xPortVelocityGlobal[clsId - SBIG('VGD1')] = true;
+      }
+      break;
+#endif
     case SBIG('VEL1'):
       desc->x68_VEL1 = GetModVectorElement(in);
       break;

@@ -221,6 +221,8 @@ public:
   bool xPortNoIvse = false;
   // VMPC: run the complete velocity program once at birth (CreateNewParticles 0x24abd0).
   bool xPortVelocityAtCreation = false;
+  // VGD1..4 select world-space modifiers; VMD true switches the same slot back to emitter space.
+  bool xPortVelocityGlobal[4] = {};
   // DVVN: defaults version for the missing-EMTR velocity; zero preserves retail behavior.
   u8 xPortDefaultValuesVersion = 0;
   // DVVN and IEXP update this in stream order. The marker supersedes legacy VMAT exposure pins.

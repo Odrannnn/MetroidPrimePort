@@ -2916,6 +2916,36 @@ void TestShutdownAndPivot() {
       o.push_back(value);
     });
   };
+  for (const char* tag : {"VGD1", "VGD2", "VGD3", "VGD4"}) {
+    parts = convert([&](auto& o) { PutProperty(o, tag, 0); o.push_back(1); });
+    Retail global;
+    global.f("GPSM").f(tag).f("CNST").w(1).f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+    CHECK_MSG(parts.size() == 1 && parts[0].part == global.bytes && parts[0].dropped.empty(),
+              "VGD true preserves the world-space selector");
+    if (!parts.empty()) {
+      std::vector<RetailPartProperty> properties;
+      std::string error;
+      CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error), "VGD carrier reads");
+    }
+    parts = convert([&](auto& o) { PutProperty(o, tag, 0); o.push_back(0); });
+    CHECK_MSG(parts.size() == 1 && parts[0].part == none.bytes && parts[0].dropped.empty(), "VGD false is a no-op");
+  }
+  for (const bool globalLast : {false, true}) {
+    parts = convert([&](auto& o) {
+      PutProperty(o, globalLast ? "VMD2" : "VGD2", 0); o.push_back(1);
+      PutProperty(o, globalLast ? "VGD2" : "VMD2", 0); o.push_back(1);
+      PutProperty(o, "VMD2", 0); o.push_back(0);
+      PutProperty(o, "VGD2", 0); o.push_back(0);
+    });
+    Retail ordered;
+    ordered.f("GPSM");
+    if (globalLast) ordered.f("VMD2").f("CNST").b(1);
+    ordered.f("VGD2").f("CNST").w(1);
+    if (!globalLast) ordered.f("VMD2").f("CNST").b(1);
+    ordered.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+    CHECK_MSG(parts.size() == 1 && parts[0].part == ordered.bytes && parts[0].dropped.empty(),
+              "VGD/VMD true order preserved; false does not reset either selector");
+  }
   parts = vmpc(1);
   Retail birthVelocity;
   birthVelocity.f("GPSM").f("VMPC").f("CNST").w(1).f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();

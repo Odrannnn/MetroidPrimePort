@@ -403,6 +403,7 @@ private:
   CModVectorElement* x280_VELSources[4];
 #ifdef TARGET_PC
   bool xPortVelFinalizes = false;
+  bool xPortVelocityGlobal[4] = {}; // packed alongside x280_VELSources, as Fixup 0x292ed4
   int xPortShutdownCountdown = -1; // ticks to the delayed shutdown, -1 = not counting
   int xPortShutdownTotal = 0;
 #endif

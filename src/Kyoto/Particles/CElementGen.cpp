@@ -267,21 +267,33 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
   if (CModVectorElement* vel1 = x28_loadedGenDesc->x68_VEL1) {
     x280_VELSources[idx] = vel1;
     x278_hasVMD[idx] = x28_loadedGenDesc->x31_28_VMD1;
+#ifdef TARGET_PC
+    xPortVelocityGlobal[idx] = x28_loadedGenDesc->xPortVelocityGlobal[0];
+#endif
     ++idx;
   }
   if (CModVectorElement* vel2 = x28_loadedGenDesc->x6c_VEL2) {
     x280_VELSources[idx] = vel2;
     x278_hasVMD[idx] = x28_loadedGenDesc->x31_29_VMD2;
+#ifdef TARGET_PC
+    xPortVelocityGlobal[idx] = x28_loadedGenDesc->xPortVelocityGlobal[1];
+#endif
     ++idx;
   }
   if (CModVectorElement* vel3 = x28_loadedGenDesc->x70_VEL3) {
     x280_VELSources[idx] = vel3;
     x278_hasVMD[idx] = x28_loadedGenDesc->x31_30_VMD3;
+#ifdef TARGET_PC
+    xPortVelocityGlobal[idx] = x28_loadedGenDesc->xPortVelocityGlobal[2];
+#endif
     ++idx;
   }
   if (CModVectorElement* vel4 = x28_loadedGenDesc->x74_VEL4) {
     x280_VELSources[idx] = vel4;
     x278_hasVMD[idx] = x28_loadedGenDesc->x31_31_VMD4;
+#ifdef TARGET_PC
+    xPortVelocityGlobal[idx] = x28_loadedGenDesc->xPortVelocityGlobal[3];
+#endif
     ++idx;
   }
   for (int i = idx; i < 4; ++i) {
@@ -1061,7 +1073,19 @@ void CElementGen::UpdateAdvanceAccessParameters(int particleFrame, int particleI
 bool CElementGen::UpdateVelocitySource(int velIdx, int frame, CParticle& particle) {
   bool reset;
 #ifdef TARGET_PC
-  if (x278_hasVMD[velIdx] && PortFollowsEmitter()) {
+  if (xPortVelocityGlobal[velIdx]) {
+    // VGD mode 2: Compile 0x291b90 converts the particle to the global frame around
+    // the evaluator (0x292710/0x292810, inverse 0x2928f0/0x2929f0). In this port the
+    // emitter rotation is already in the particle; PortWorldFromLocal supplies the
+    // remaining global translation and scale. Transform the live particle so element
+    // reads through CParticleGlobals see the same coordinates as the modifier arguments.
+    const CTransform4f toWorld = CTransform4f::Translate(xe8_globalTranslation) * x10c_globalScaleTransform;
+    const CTransform4f fromWorld = x13c_globalScaleTransformInverse * CTransform4f::Translate(-xe8_globalTranslation);
+    reset = PortParticleMath::EvaluateGlobalVelocity(toWorld, fromWorld, particle.x1c_vel, particle.x4_pos,
+        [&](CVector3f& velocity, CVector3f& position) {
+          return x280_VELSources[velIdx]->GetValue(frame, velocity, position);
+        });
+  } else if (x278_hasVMD[velIdx] && PortFollowsEmitter()) {
     const CTransform4f emitter = PortEmitterFrame();
     const CTransform4f inverse = emitter.GetQuickInverse();
     CVector3f localVel = inverse.Rotate(particle.x1c_vel);

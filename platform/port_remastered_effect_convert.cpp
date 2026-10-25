@@ -5102,6 +5102,22 @@ public:
         continue;  // consumed as PIR0/POR0/PLIX below
       }
       const auto found = retail.find(fourcc);
+      // VGD/VMD mutate the same coordinate selector only when true (CreateGPSM 0x256b7c).
+      if (part && ((fourcc >= F("VGD1") && fourcc <= F("VGD4")) ||
+                   (fourcc >= F("VMD1") && fourcc <= F("VMD4")))) {
+        uint32_t value = 0;
+        if (!SmallInteger(property, value) || value > 1) {
+          result.dropped.push_back(EffectFourCCString(fourcc) + ": invalid constant");
+          continue;
+        }
+        if (value == 0) continue;
+        if (fourcc >= F("VGD1") && fourcc <= F("VGD4")) {
+          AppendBE32(out, fourcc);
+          AppendBE32(out, F("CNST"));
+          AppendBE32(out, 1);
+          continue;
+        }
+      }
       // CreateGPSM 0x25acc4 resets IEXP whenever DVVN is read. Preserve stream order.
       if (part && (fourcc == F("DVVN") || fourcc == F("IEXP"))) {
         uint32_t value = 0;
@@ -6182,6 +6198,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||
+                         (fourcc >= F("VGD1") && fourcc <= F("VGD4")) ||
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
                (vfx && fourcc == F("PIRN"))) {
