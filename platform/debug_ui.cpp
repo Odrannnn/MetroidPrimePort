@@ -161,8 +161,8 @@ bool sProjectedShadows = true;
 // Setting `opengles`; sOpenGlesAtStart is what this run was started with.
 bool sOpenGles = false;
 bool sOpenGlesAtStart = false;
-// Setting `graphics_backend` (Windows, issue #135); sGraphicsBackendAtStart is what
-// this run was started with, so the Video page can say when a change needs a restart
+// Setting `graphics_backend` (Windows and desktop Linux, issue #135); sGraphicsBackendAtStart
+// is what this run was started with, so the Video page can say when a change needs a restart
 // and when Aurora fell back from it.
 PortDebug::EGraphicsBackend sGraphicsBackend = PortDebug::kGraphicsBackend_Auto;
 PortDebug::EGraphicsBackend sGraphicsBackendAtStart = PortDebug::kGraphicsBackend_Auto;
