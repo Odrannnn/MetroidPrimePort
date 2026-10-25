@@ -2452,8 +2452,8 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   } else {
     attn = "\n          let attn = 1.0;";
   }
-  const std::string amb = lit ? (cc.ambSrc == GX_SRC_REG ? "ubuf.cc0_amb.rgb"s : "vec3f(0.2)"s)
-                              : (cc.matSrc == GX_SRC_REG ? "ubuf.cc0_mat.rgb"s : "vec3f(1.0)"s);
+  // The retail ambient register, for a lit draw in a retail room (below).
+  const std::string amb = lit && cc.ambSrc == GX_SRC_REG ? "ubuf.cc0_amb.rgb"s : "vec3f(0.0)"s;
   // Kind 27, Remastered's 17e458cd (a decal with an alpha map): g = clamp(2 va (1 + TCH0.x) - 1), c = CCH0.x
   // (pbr_layer.x), t = clamp((g - 0.5 + c) / 2c), alpha = t²(3 - 2t). BCLR.a is not used; no discard.
   std::string decalAlpha;
@@ -2509,6 +2509,8 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       var pbr_lnl = vec3f(0.0);
       // The lights' specular alone (kind 25 adds it unmasked to the matcap).
       var pbr_lspec = vec3f(0.0);
+      // The GX lights' diffuse in display space, as retail's channel sums it.
+      var pbr_gxd = vec3f(0.0);
       // pbr-sun-vis
       // pbr-lights-begin
       for (var i = 0u; i < {4}u; i++) {{
@@ -2554,6 +2556,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
           pbr_lspec += select(spec * pbr_pi, vec3f(0.0), pbr_nols) * rad * nl;
           pbr_lsum += rad;
           pbr_lnl += rad * nl;
+          if (!hdr_on) {{
+              pbr_gxd += light.color.rgb * attn{16} * nl;
+          }}
       }}
       // pbr-lights-end
       // The room's Remastered point and spot lights (GX_AURORA_PORT_ROOM_LIGHTS), on every surface,
@@ -2615,8 +2620,21 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
           pbr_ab = textureSampleLevel(pbr_brdf_lut, pbr_cube_samp, vec2f(saturate(pbr_nv), pbr_rough), 0.0).rg;
       }}
       // The ambient constant is Remastered's raw sum of ambient light nodes (CFeatureAmbientSource
-      // 0x16a004): none exist in the shipped rooms, so 0. The retail area ambient has no counterpart.
+      // 0x16a004): none exist in the shipped rooms, so 0.
       let pbr_amb = vec3f(0.0);
+      // A retail room (no baked ambient, volume, tone data, room lights or lightmap) is never drawn by
+      // Remastered. There the diffuse is lit as retail's channel lights the same model: the area's
+      // ambient register plus the GX lights summed in display space and clamped, then made linear
+      // once. Made linear term by term, the ambient (a few tenths) all but vanishes. The same light
+      // is the least a metal reflects (below): the probe there is the display-referred scene made
+      // linear, a dark room's all but black, which leaves a metal suit black where retail's is lit.
+      let pbr_rgx = ubuf.pbr_ambient[0].w <= 0.0 && ubuf.pbr_volume[3].w <= 0.0 && ubuf.pbr_tone[1].x <= 0.0 &&
+                    ubuf.pbr_room_lights.y < 0.5 && ubuf.pbr_lmap_rect.w == 0.0;
+      let pbr_gxl = pow(clamp({6} + pbr_gxd, vec3f(0.0), vec3f(1.0)), vec3f(2.2));
+      if (pbr_rgx) {{
+          pbr_lo += pbr_diff * pbr_ao * pbr_gxl - pbr_ldiff;
+          pbr_ldiff = pbr_diff * pbr_ao * pbr_gxl;
+      }}
       let pbr_pd = ubuf.pbr_probe[0].xyz * pbr_refl.x + ubuf.pbr_probe[1].xyz * pbr_refl.y +
                    ubuf.pbr_probe[2].xyz * pbr_refl.z;
       // A room cube (GX_AURORA_SET_PBR_CUBE) is linear HDR: x is its exposure, y the mip
@@ -2712,8 +2730,11 @@ R"""(          let pbr_vn = vec3f(dot(ubuf.pbr_volume[3].xyz, pbr_n), dot(ubuf.p
           pbr_ambd = pbr_amb;
       }}
       // Kind 13 scales the probe's reflection by pbr_layer_height.z (CCH1.z); mode 256 has none.
-      pbr_lo += (pbr_ambd * pbr_diff + pbr_envspec * select(select(1.0, ubuf.pbr_layer_height.z, pbr_kind > 12.5 && pbr_kind < 13.5), 0.0, pbr_noenv || pbr_bnoprobe) *
-                                           (pbr_f0 * pbr_ab.x + pbr_ab.y)) * pbr_ao;
+      var pbr_envs = pbr_envspec * select(select(1.0, ubuf.pbr_layer_height.z, pbr_kind > 12.5 && pbr_kind < 13.5), 0.0, pbr_noenv || pbr_bnoprobe);
+      if (pbr_rgx && !pbr_noenv) {{
+          pbr_envs = max(pbr_envs, pbr_gxl);
+      }}
+      pbr_lo += (pbr_ambd * pbr_diff + pbr_envs * (pbr_f0 * pbr_ab.x + pbr_ab.y)) * pbr_ao;
       // Remastered's CharacterBacklight (GX_AURORA_SET_PBR_BACKLIGHT; the material's
       // strengths and falloff in the backlight's place): a light from world up and one from
       // behind, each coloured like the baked ambient on its side brought up to a luminance of
