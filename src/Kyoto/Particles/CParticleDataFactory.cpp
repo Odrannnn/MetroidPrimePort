@@ -733,6 +733,8 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('PIRN'):
       GetClassID(in);
       desc->xPortIrnd = in.ReadLong() != 0;
+      // PPRM overrides the converted format's default sprite primitive.
+      if (desc->xPortIrnd && desc->xPortPrimitive == 255) desc->xPortPrimitive = 1;
       break;
     // Port-only visor effect data of a converted Remastered PART: present, and the splat size
     // range (VESN/VESM as float bits).
@@ -907,6 +909,10 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       desc->xPortMover = std::move(mover);
       break;
     }
+    case SBIG('PPRM'):
+      GetClassID(in);
+      desc->xPortPrimitive = u8(in.ReadLong());
+      break;
     // Port-only: Remastered's sprite polygon (SSHP 3-6; xPortSpriteShape).
     case SBIG('PSHP'):
       GetClassID(in);

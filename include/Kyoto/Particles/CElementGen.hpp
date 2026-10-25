@@ -569,6 +569,7 @@ private:
   CTransform4f PortEmitterFrame() const;
   void PortFollowEmitter(const CTransform4f& before);
   void PortRenderParticlesVfx();
+  void PortRenderPlanarVfx(const CParticle& particle, int frame);
   void PortRenderMeshesVfx(CPortVfxMeshBatch& batch);
 #endif
 

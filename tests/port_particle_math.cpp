@@ -25,6 +25,20 @@ bool Color(const float* out, float r, float g, float b, float a) {
 int main() {
   using namespace PortParticleMath;
 
+  // Primitive 2 uses the particle's model matrix. Opposite UV corners remain
+  // on the authored plane under nonuniform scale/rotation, not a billboard.
+  {
+    const CTransform4f model(0.f, 0.f, -4.f, 10.f,
+                             0.f, 3.f, 0.f, 20.f,
+                             2.f, 0.f, 0.f, 30.f);
+    CHECK_MSG(NearVector(model * PlanarSquareCorner(0.f, 0.f), CVector3f(12.f, 20.f, 31.f)),
+              "planar UV origin follows B and the complete model transform");
+    CHECK_MSG(NearVector(model * PlanarSquareCorner(1.f, 1.f), CVector3f(8.f, 20.f, 29.f)),
+              "planar opposite corner is a unit square before model scale");
+    CHECK_MSG(NearVector(PlanarSquareCorner(0.5f, 0.5f), CVector3f::Zero()),
+              "planar default pivot is centered");
+  }
+
   // VGD (0x292710/0x292810 and inverse): gravity authored in world units must not
   // be multiplied by the emitter's scale, while position-sensitive modifiers see world translation.
   {

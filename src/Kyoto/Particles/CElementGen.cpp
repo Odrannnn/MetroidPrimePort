@@ -2509,12 +2509,14 @@ void CElementGen::Render() {
 #endif
 
   if (x30_particles.size() > 0) {
-    if (x28_loadedGenDesc->x48_PMDL || x28_loadedGenDesc->x31_26_PMUS) {
+    const u8 primitive = x28_loadedGenDesc->xPortPrimitive;
+    if (primitive == 2 || primitive == 3 ||
+        (primitive == 255 && (x28_loadedGenDesc->x48_PMDL || x28_loadedGenDesc->x31_26_PMUS))) {
       RenderModels();
     }
-    if (x26c_31_LINE) {
+    if (primitive == 255 && x26c_31_LINE) {
       RenderLines();
-    } else {
+    } else if (primitive == 255 || primitive == 1) {
       RenderParticles();
     }
   }
@@ -2681,7 +2683,8 @@ void CElementGen::RenderParticles() {
     // Render() runs RenderModels() first. A model PART's TEXR is its VMAT's ramp texture, not a
     // sprite: drawing it as a card too put a 1x1 slab beside the mesh, or round each of the
     // PMDV variants RenderModels draws as retail models.
-    if (x28_loadedGenDesc->x31_26_PMUS || !x28_loadedGenDesc->x48_PMDL) {
+    if (x28_loadedGenDesc->xPortPrimitive == 1 ||
+        x28_loadedGenDesc->x31_26_PMUS || !x28_loadedGenDesc->x48_PMDL) {
       PortRenderParticlesVfx();
     }
     return;
@@ -3317,7 +3320,8 @@ void CElementGen::RenderParticlesFlameThrower(CElementGen* const* gens, int coun
   // then skips them. Retail effects never match, so they keep the batch.
   const auto drawnAlone = [](const CElementGen* gen) {
     const CGenDescription& desc = *gen->x28_loadedGenDesc;
-    return desc.x40_TEXR == nullptr || desc.x48_PMDL || desc.x31_26_PMUS ||
+    return (desc.xPortPrimitive != 255 && desc.xPortPrimitive != 1) ||
+           desc.x40_TEXR == nullptr || desc.x48_PMDL || desc.x31_26_PMUS ||
            PortVfxActive(desc);
   };
   for (int i = 0; i < count; ++i) {
@@ -3978,6 +3982,8 @@ void CElementGen::RenderLines() {
 }
 
 void CElementGen::RenderModels() {
+  const bool square = x28_loadedGenDesc->xPortPrimitive == 2 ||
+                      (x28_loadedGenDesc->xPortPrimitive == 255 && x28_loadedGenDesc->x31_26_PMUS);
   CParticleGlobals::mParticleAccessParameters = NULL;
   if (x26d_26_modelsUseLights) {
     CGraphics::SetLightState(x274_backupLightActive);
@@ -3993,7 +3999,7 @@ void CElementGen::RenderModels() {
   uvs.yMin = 0.f;
   uvs.yMax = 1.f;
 
-  if (x28_loadedGenDesc->x31_26_PMUS) {
+  if (square) {
     bool enableMRTA = false;
     if (sMoveRedToAlphaBuffer && x28_loadedGenDesc->x31_25_PMAB &&
         x28_loadedGenDesc->x40_TEXR != NULL) {
@@ -4067,6 +4073,15 @@ void CElementGen::RenderModels() {
     }
   }
 
+  // Primitive 2 uses the sprite pass's states, not retail PMUS's PMAB states.
+#ifdef TARGET_PC
+  if (x28_loadedGenDesc->xPortPrimitive == 2) {
+    CGraphics::SetDepthWriteMode(x26c_28_zTest, PortNoZTest() ? kE_Always : kE_LEqual,
+                                 x26c_26_AAPH ? false : x26c_27_ZBUF);
+    CGraphics::SetBlendMode(kBM_Blend, PortBlendSrc(x28_loadedGenDesc),
+                            x26c_26_AAPH ? kBF_One : PortBlendDst(x28_loadedGenDesc), kLO_Clear);
+  }
+#endif
   CVector3f pmopVec(0.f, 0.f, 0.f);
 
   CTransform4f orient(CTransform4f::Identity());
@@ -4085,7 +4100,7 @@ void CElementGen::RenderModels() {
 
 #ifdef TARGET_PC
   CPortVfxMeshBatch vfxMeshes;
-  const bool vfxMesh = !x28_loadedGenDesc->x31_26_PMUS && PortVfxHasMesh(*x28_loadedGenDesc);
+  const bool vfxMesh = !square && PortVfxHasMesh(*x28_loadedGenDesc);
 #endif
   CTransform4f rot(CTransform4f::Identity());
   if (pmrtConst) {
@@ -4110,7 +4125,26 @@ void CElementGen::RenderModels() {
 #endif
   CColor col = x338_moduColor;
 
-  for (int i = 0; i < x30_particles.size(); ++i) {
+  // PlanarSquareModel uses the same depth sort as sprites (0x2bb0e0).
+  struct PlanarSortEntry { int index; float depth; };
+  std::vector<PlanarSortEntry> planarOrder;
+  if (x28_loadedGenDesc->xPortPrimitive == 2 && x28_loadedGenDesc->x30_28_SORT) {
+    CTransform4f cameraRotation(CGraphics::GetViewMatrix());
+    cameraRotation.SetTranslation(CVector3f::Zero());
+    const CTransform4f inverse = cameraRotation.GetQuickInverse();
+    const CTransform4f systemCamera = inverse * x22c_globalOrientation;
+    for (int i = 0; i < x30_particles.size(); ++i) {
+      const CParticle& p = x30_particles[i];
+      const CVector3f point = PortParticleMath::ParticlePositionForSort(
+          inverse, systemCamera, PortFollowsEmitter(), p.x4_pos, p.x10_prevPos, x80_timeDeltaScale);
+      planarOrder.push_back({i, point.GetY()});
+    }
+    std::stable_sort(planarOrder.begin(), planarOrder.end(), [](const auto& a, const auto& b) {
+      return a.depth > b.depth;
+    });
+  }
+  for (int draw = 0; draw < x30_particles.size(); ++draw) {
+    const int i = planarOrder.empty() ? draw : planarOrder[draw].index;
     CParticle& particle = x30_particles[i];
     if (particle.x0_endFrame != -1) {
       int lifetime = particle.x0_endFrame - particle.x28_startFrame;
@@ -4198,6 +4232,12 @@ void CElementGen::RenderModels() {
       if (x28_loadedGenDesc->x60_PMSC != NULL) {
         CVector3f pmscVal(0.f, 0.f, 0.f);
         x28_loadedGenDesc->x60_PMSC->GetValue(partFrame, pmscVal);
+        if (x28_loadedGenDesc->xPortPrimitive == 2 || x28_loadedGenDesc->xPortPrimitive == 3) {
+          // SolveParticleTransform 0x2472ac clamps each scale component to 1/256.
+          pmscVal = CVector3f(std::max(pmscVal.GetX(), 0.00390625f),
+                              std::max(pmscVal.GetY(), 0.00390625f),
+                              std::max(pmscVal.GetZ(), 0.00390625f));
+        }
         partTrans *= CTransform4f::Scale(pmscVal.GetX(), pmscVal.GetY(), pmscVal.GetZ());
       }
 
@@ -4213,28 +4253,39 @@ void CElementGen::RenderModels() {
         x28_loadedGenDesc->x64_PMCL->GetValue(partFrame, col);
         col = CColor::Modulate(col, x338_moduColor);
       }
+      if (x28_loadedGenDesc->xPortPrimitive == 2) {
+        col = CColor::Modulate(particle.x34_color, x338_moduColor);
+      }
 
       CGraphics::SetModelMatrix(x10c_globalScaleTransform * partTrans * x178_localScaleTransform);
 
-      if (x28_loadedGenDesc->x31_26_PMUS) {
+      if (square) {
+        // B(x,y,z)=(-x,z,y); retail PMUS uses the opposite UV handedness.
+        const float halfX = x28_loadedGenDesc->xPortPrimitive == 2 ? -0.5f : 0.5f;
 #ifdef TARGET_PC
-        if (!x28_loadedGenDesc->x40_TEXR->HasConstantUV()) {
+        if (x28_loadedGenDesc->xPortPrimitive == 2 && PortVfxActive(*x28_loadedGenDesc)) {
+          PortRenderPlanarVfx(particle, partFrame);
+          continue;
+        }
+#endif
+#ifdef TARGET_PC
+        if (x28_loadedGenDesc->x40_TEXR && !x28_loadedGenDesc->x40_TEXR->HasConstantUV()) {
           PortGetValueUV(x28_loadedGenDesc->x40_TEXR, partFrame, &particle, uvs);
         }
 #endif
         if (moveRedToAlphaBuffer) {
           CGX::Begin(GX_QUADS, GX_VTXFMT0, 4);
-          GXPosition3f32(0.5f, 0.f, 0.5f);
+          GXPosition3f32(halfX, 0.f, 0.5f);
           u32 c = col.GetColor_u32();
           GXColor1u32(c);
           GXTexCoord2f32(uvs.xMax, uvs.yMax);
-          GXPosition3f32(-0.5f, 0.f, 0.5f);
+          GXPosition3f32(-halfX, 0.f, 0.5f);
           GXColor1u32(c);
           GXTexCoord2f32(uvs.xMin, uvs.yMax);
-          GXPosition3f32(-0.5f, 0.f, -0.5f);
+          GXPosition3f32(-halfX, 0.f, -0.5f);
           GXColor1u32(c);
           GXTexCoord2f32(uvs.xMin, uvs.yMin);
-          GXPosition3f32(0.5f, 0.f, -0.5f);
+          GXPosition3f32(halfX, 0.f, -0.5f);
           GXColor1u32(c);
           GXTexCoord2f32(uvs.xMax, uvs.yMin);
           CGX::End();
@@ -4242,13 +4293,13 @@ void CElementGen::RenderModels() {
           CGraphics::StreamBegin(kP_Quads);
           CGraphics::StreamColor(col.GetColor_u32());
           CGraphics::StreamTexcoord(uvs.xMax, uvs.yMax);
-          CGraphics::StreamVertex(0.5f, 0.f, 0.5f);
+          CGraphics::StreamVertex(halfX, 0.f, 0.5f);
           CGraphics::StreamTexcoord(uvs.xMin, uvs.yMax);
-          CGraphics::StreamVertex(-0.5f, 0.f, 0.5f);
+          CGraphics::StreamVertex(-halfX, 0.f, 0.5f);
           CGraphics::StreamTexcoord(uvs.xMin, uvs.yMin);
-          CGraphics::StreamVertex(-0.5f, 0.f, -0.5f);
+          CGraphics::StreamVertex(-halfX, 0.f, -0.5f);
           CGraphics::StreamTexcoord(uvs.xMax, uvs.yMin);
-          CGraphics::StreamVertex(0.5f, 0.f, -0.5f);
+          CGraphics::StreamVertex(halfX, 0.f, -0.5f);
           CGraphics::StreamEnd();
         }
       } else {

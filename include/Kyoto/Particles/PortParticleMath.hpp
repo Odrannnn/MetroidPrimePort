@@ -15,6 +15,13 @@
 
 namespace PortParticleMath {
 
+// Planar-square PMOD=0: unit mesh [0,1]^2, default extents [-.5,.5]
+// (initializer 0x28a600), transformed by SolveParticleTransform, not camera axes.
+// Convert Remastered's local XY plane with B(x,y,z)=(-x,z,y).
+inline CVector3f PlanarSquareCorner(float u, float v) {
+  return CVector3f(0.5f - u, 0.f, v - 0.5f);
+}
+
 // CParticleVelocity mode 2: position takes the affine transform, velocity only its linear part.
 // Both references are live particle fields (element trees may read the current particle).
 template <class Evaluate>

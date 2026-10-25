@@ -4375,42 +4375,18 @@ public:
     const EffectProperty* mover = nullptr;
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
     const bool textured = retail.count(F("TEXR")) != 0;
-    // Remastered draws nothing for a generator with no texture, material or
-    // model (it only carries spawns and lights); retail would draw its
-    // particles as untextured quads (0.1 wide and white without SIZE/COLR).
-    // Such a generator is written with a size of 0, and so is one that draws only
-    // models (retail drew a white quad round each of the Ice charge's shards).
     const auto has = [&](uint32_t fourcc) {
       return std::any_of(node.properties.begin(), node.properties.end(),
                          [&](const EffectProperty& property) { return property.fourcc == fourcc; });
     };
-    // A material whose colour texture (BCLR) is nil binds Remastered's black
-    // texture. These are placeholder MATIs on generators that carry spawns and
-    // lights (PlasmaCharge's root among them), so their quads are taken as
-    // drawing nothing too; model generators keep the black material.
-    const auto nilColour = [&](const EffectProperty& property) {
-      if (!m_io.materialData) {
-        return false;
-      }
-      for (const EffectValue& value : property.value) {
-        if (value.kind != EffectValue::Kind::Guid) {
-          continue;
-        }
-        static constexpr uint8_t kTag[4] = {'B', 'C', 'L', 'R'};
-        const std::vector<uint8_t> data = m_io.materialData(value.guid);
-        const auto tag = std::search(data.begin(), data.end(), std::begin(kTag), std::end(kTag));
-        return tag != data.end() && data.end() - tag >= 20 && std::all_of(tag + 4, tag + 20, [](uint8_t b) { return b == 0; });
-      }
-      return false;
-    };
-    const bool placeholder = part && !has(F("TEXR")) && !has(F("PMDL")) &&
-                             std::any_of(node.properties.begin(), node.properties.end(), [&](const EffectProperty& property) {
-                               return property.fourcc == F("MTIN") && nilColour(property);
-                             });
-    result.placeholder = placeholder;
-    const bool drawsNothing = part && !has(F("TEXR")) && (!has(F("MTIN")) || placeholder) && !has(F("PMDL"));
+    // SetupPrimitiveTypes 0x29069c and FixAndClean 0x2908a4 select geometry,
+    // independently of textures/materials. Primitive 2 is a transformed square:
+    // table 0x1d0b9b4 maps 1/2/3 to render kinds 1/2/0, and Render 0x2b23e8
+    // sends kinds 1 AND 2 to RenderSpriteEntries. Nil BCLR is opaque black.
+    const bool drawsNothing = part && (node.primitiveType == 0 || node.primitiveType == 4 ||
+                                      node.primitiveType == 5 ||
+                                      (node.primitiveType == 3 && !has(F("PMDL"))));
     result.drawsNothing = drawsNothing;
-    const bool modelsOnly = part && !has(F("TEXR")) && !has(F("MTIN")) && has(F("PMDL"));
     for (const EffectProperty& property : node.properties) {
       uint32_t fourcc = property.fourcc;
       m_lifetimeOffset = LifetimeOffset(part, swoosh, electric, property);
@@ -4418,18 +4394,9 @@ public:
         result.dropped.push_back(EffectFourCCString(fourcc) + ": a swoosh has no per-particle variables");
         continue;
       }
-      if (placeholder && fourcc == F("MTIN")) {
-        result.dropped.push_back("MTIN: its colour texture is nil (the generator draws nothing)");
-        continue;
-      }
-      if ((drawsNothing || modelsOnly) && fourcc == F("SIZE")) {
-        // SetupPrimitiveTypes 0x29069c enables SSpritePrim only for primitive 1.
-        // FixAndClean 0x2908a4 clears it otherwise; Fixup 0x28e57c is the only path
-        // copying SIZE into the per-particle evaluator. This is a proven inactive input,
-        // not a fallback. A sprite suppressed by the material heuristics is NOT covered.
-        if (node.primitiveType == -1 || node.primitiveType == 1) {
-          result.dropped.push_back(drawsNothing ? "SIZE: the generator draws nothing" : "SIZE: the generator draws models only");
-        }
+      if (drawsNothing && fourcc == F("SIZE")) {
+        // Both sprite Fixup and transformed Fixup (0x28ec98) consume SIZE.
+        // Only inactive primitives clear it; do not substitute SIZE=0 to hide draws.
         continue;
       }
       // DFOG 1 sets the description's no-fog bit (CreateGPSM 0x25a560, CreateSWSH 0x2dce88: desc+0x6b
@@ -5228,11 +5195,12 @@ public:
         out.erase(out.begin() + v->begin, out.begin() + v->end);
       }
     }
-    if (drawsNothing || modelsOnly) {
-      AppendBE32(out, F("SIZE"));
+    if (part && node.primitiveType >= 0 && node.primitiveType != 1) {
+      AppendBE32(out, F("PPRM"));
       AppendBE32(out, F("CNST"));
-      AppendBE32(out, FloatBits(0.0f));
-    } else if (part && !has(F("SIZE"))) {
+      AppendBE32(out, drawsNothing ? 0u : uint32_t(node.primitiveType));
+    }
+    if (part && node.primitiveType == 1 && !has(F("SIZE"))) {
       // DVVN 1..4 makes a sprite's missing SIZE 1.0 (SSpritePrim::Fixup 0x28e640,
       // GetDefaultParticleSize 0x28e6c8), where retail's default is 0.1.
       uint32_t dvvn = 0;
@@ -6200,7 +6168,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && fourcc == F("PSHT")) {
       ok = reader.Element(Type::Int);
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
-                         fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PGID") || fourcc == F("PBDM") ||
+                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||

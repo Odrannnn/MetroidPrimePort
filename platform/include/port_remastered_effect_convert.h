@@ -99,10 +99,7 @@ struct ConvertedPart {
   EffectGuid id{};  // the child id it was embedded under; zero for the root
   uint32_t type = 0;  // the retail asset type: 'PART', 'SWHC' or 'ELSC'
   bool root = false;  // the effect's own PART, not an embedded child
-  // Written to draw no quads because Remastered draws none either: its material is a
-  // placeholder whose colour texture is nil.
-  bool placeholder = false;
-  bool drawsNothing = false;  // a PART generator with no texture, material or model
+  bool drawsNothing = false;  // inactive GPSM primitive (not a material inference)
   std::vector<uint8_t> part;          // the retail file, of that type
   std::vector<std::string> dropped;   // "FOURCC: why", one per left-out property
   // Properties retail reads that were left out. Remastered-only ones are not

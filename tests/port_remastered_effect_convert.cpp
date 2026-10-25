@@ -56,7 +56,7 @@ void PutConstant(std::vector<uint8_t>& out, uint32_t word) {
 void PutGenerator(std::vector<uint8_t>& out, bool root) {
   PutFourCC(out, "GPSM");
   out.resize(out.size() + 17);
-  Put32(out, root ? 1 : 0);
+  Put32(out, root ? 2 : 0); // GPSM header encodes primitive + 1; sprite = 2.
 }
 
 void PutGuid(std::vector<uint8_t>& out, const EffectGuid& guid) { out.insert(out.end(), guid.begin(), guid.end()); }
@@ -1790,11 +1790,12 @@ void TestPortSpawnComponents() {
 
 // A one-generator effect whose body (properties) `body` writes.
 template <typename Body>
-std::vector<uint8_t> OneGenerator(Body body) {
+std::vector<uint8_t> OneGenerator(Body body, int primitive = 1) {
   std::vector<uint8_t> out(0x3c, 0);
   std::memcpy(out.data(), "RFRM", 4);
   std::memcpy(out.data() + 0x14, "GENP", 4);
   PutGenerator(out, true);
+  out[0x3c + 21] = uint8_t(primitive + 1);
   body(out);
   PutProperty(out, "_END", 4);
   Put32(out, 0);
@@ -1951,19 +1952,19 @@ void TestPortMover() {
     putSmvr(o, 0.5f, false);
   }), {});
   Retail want;
-  want.f("GPSM").f("SIZE").f("CNST").w(0).f("XFMD").f("CNST").w(4).f("PSMV").f("CNST").w(1);
+  want.f("GPSM").f("XFMD").f("CNST").w(4).f("PSMV").f("CNST").w(1);
   want.f("EXTT").w(Bits(0.f)).w(Bits(0.f)).w(Bits(0.5f)).f("NONE").f("NONE");
   want.end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "an SMVR under XFMD 4 becomes PSMV");
   CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && parts[0].dropped.empty(),
             "PSMV leaves nothing out");
   CHECK_MSG(parts.size() == 1 && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error) &&
-                properties.size() == 5,
-            "PSMV reads back");  // SIZE, XFMD, PSMV, PIRN
+                properties.size() == 4,
+            "PSMV reads back");  // XFMD, PSMV, PSLT, PIRN
 
   parts = ConvertOne(OneGenerator(xfmd4), {});
   Retail none;
-  none.f("GPSM").f("SIZE").f("CNST").w(0).f("XFMD").f("CNST").w(4).f("PSMV").f("CNST").w(0).end();
+  none.f("GPSM").f("XFMD").f("CNST").w(4).f("PSMV").f("CNST").w(0).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == none.bytes, "XFMD 4 with no SMVR writes an empty PSMV");
 
   parts = ConvertOne(OneGenerator([&](auto& o) {
@@ -1971,7 +1972,7 @@ void TestPortMover() {
     putSmvr(o, 0.f, true);
   }), {});
   Retail identity;
-  identity.f("GPSM").f("SIZE").f("CNST").w(0).f("XFMD").f("CNST").w(4).end();
+  identity.f("GPSM").f("XFMD").f("CNST").w(4).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == identity.bytes, "the identity SMVR writes no PSMV");
 }
 
@@ -2050,13 +2051,11 @@ void TestColourChoice() {
       want.f("CNST").w(Bits(c));
     }
   }
-  // An untextured generator draws no quads: SIZE 0 is written for it.
-  want.f("SIZE").f("CNST").w(Bits(0.0f));
   want.end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "SLCT of three colours keeps all three");
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "the colour choice drops nothing");
   CHECK_MSG(!parts.empty() && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error) &&
-                properties.size() == 4,
+                properties.size() == 3,
             "a colour SLCT reads as retail");
 
   Retail empty;
@@ -2089,12 +2088,11 @@ void TestRealChoice() {
     want.f("CNST").w(Bits(e));
   }
   want.f("CNST").w(Bits(-1.0f));
-  want.f("SIZE").f("CNST").w(Bits(0.0f));
   want.end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "SLCT of four reals keeps all four");
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "the real choice drops nothing");
   CHECK_MSG(!parts.empty() && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error) &&
-                properties.size() == 4,
+                properties.size() == 3,
             "a real SLCT reads as retail");
 }
 
@@ -2109,14 +2107,12 @@ void TestModelChoice() {
   for (uint32_t i = 0; i < 4; ++i) {
     want.f("CNST").w(0xC0DE000A + i);
   }
-  // A models-only generator draws no quads: SIZE 0 is written for it.
-  want.f("SIZE").f("CNST").w(Bits(0.0f));
   want.end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "SLCT of four models is PMDL and PMDV");
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "the model choice drops nothing");
   CHECK_MSG(!parts.empty() && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error) &&
-                properties.size() == 5,
-            "PMDL, PMDV and SIZE read as retail");
+                properties.size() == 4,
+            "PMDL and PMDV read as retail");
 
   // Remastered takes entry index % n: the PMDV lists IRND's h + 1 outcomes.
   const auto variants = [](std::initializer_list<uint32_t> picks) {
@@ -2128,7 +2124,6 @@ void TestModelChoice() {
         out.f("CNST").w(0xC0DE000A + pick);
       }
     }
-    out.f("SIZE").f("CNST").w(Bits(0.0f));
     out.end();
     return out.bytes;
   };
@@ -2183,9 +2178,9 @@ void TestDrawsNothing() {
                }),
                {});
   Retail want;
-  want.f("GPSM").f("MAXP").f("CNST").w(4).f("SIZE").f("CNST").w(Bits(0.0f)).end();
-  CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a generator with no texture gets SIZE 0");
-  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "inactive SIZE on a shell is consumed silently");
+  want.f("GPSM").f("MAXP").f("CNST").w(4).f("SIZE").f("CNST").w(Bits(2.0f)).end();
+  CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "an untextured sprite retains SIZE");
+  CHECK_MSG(!parts.empty() && !parts[0].drawsNothing, "missing materials do not suppress sprites");
   for (uint8_t encoded : {0, 1, 2, 3, 4, 5, 6, 7}) {
     auto data = OneGenerator([](auto& o) {
       PutProperty(o, "SIZE", 3);
@@ -2198,8 +2193,7 @@ void TestDrawsNothing() {
     CHECK_MSG(node.primitiveType == (encoded >= 1 && encoded <= 6 ? int(encoded - 1) : -1),
               "GPSM header stores primitive type plus one, not merely root status");
     const auto converted = ConvertEffect(node, data.data(), {});
-    CHECK_MSG(!converted.empty() && converted[0].dropped.empty() == (encoded == 1 || (encoded >= 3 && encoded <= 6)),
-              "only proven inactive sprite blocks silently discard SIZE; sprites and unknown types remain diagnosed");
+    CHECK_MSG(!converted.empty() && converted[0].dropped.empty(), "constant SIZE converts or is proven inactive");
   }
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "drawing nothing drops no retail property");
 
@@ -2216,6 +2210,62 @@ void TestDrawsNothing() {
   textured.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == textured.bytes, "a generator with a TEXR keeps its SIZE");
   CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped with a TEXR");
+
+  // Exhaust all primitive/material-presence combinations, including a nil BCLR
+  // MATI. These inputs used to select all three suppression heuristics.
+  for (int primitive = 0; primitive <= 5; ++primitive) {
+    for (unsigned mask = 0; mask != 8; ++mask) {
+      auto data = OneGenerator([&](auto& out) {
+        PutProperty(out, "SIZE", 3);
+        PutConstant(out, Bits(2.f));
+        if (mask & 1) PutTexr(out, 0x1234ABCD);
+        if (mask & 2) {
+          PutProperty(out, "MTIN", 0);
+          out.push_back(1);
+          PutGuid(out, Fresh(1));
+        }
+        if (mask & 4) {
+          PutProperty(out, "PMDL", 0);
+          PutFourCC(out, "CNST");
+          PutGuid(out, Legacy(0x98765432));
+        }
+      });
+      data[0x3c + 21] = uint8_t(primitive + 1);
+      EffectConvertIO io;
+      io.materialData = [](const EffectGuid&) {
+        std::vector<uint8_t> bytes = {'B', 'C', 'L', 'R'};
+        bytes.resize(20, 0);
+        return bytes;
+      };
+      auto converted = ConvertOne(data, io);
+      CHECK_MSG(converted.size() == 1, "primitive matrix converts");
+      if (converted.empty()) continue;
+      const bool inactive = primitive == 0 || primitive >= 4 || (primitive == 3 && !(mask & 4));
+      CHECK_MSG(converted[0].drawsNothing == inactive, "only primitive dispatch suppresses geometry");
+      std::vector<RetailPartProperty> properties;
+      std::string error;
+      CHECK_MSG(SplitRetailPart(converted[0].part.data(), converted[0].part.size(), properties, error),
+                "primitive metadata is readable");
+      const auto size = std::find_if(properties.begin(), properties.end(), [](const auto& p) {
+        return p.fourcc == EffectFourCC("SIZE");
+      });
+      CHECK_MSG((size != properties.end()) == !inactive, "SIZE retained for both transformed primitives");
+      if (size != properties.end()) {
+        Retail expected;
+        expected.f("CNST").w(Bits(2.f));
+        CHECK_MSG(size->value == expected.bytes, "active SIZE is not replaced by zero");
+      }
+      const auto dispatch = std::find_if(properties.begin(), properties.end(), [](const auto& p) {
+        return p.fourcc == EffectFourCC("PPRM");
+      });
+      CHECK_MSG((dispatch != properties.end()) == (primitive != 1), "only sprite uses the default dispatch");
+      if (dispatch != properties.end()) {
+        Retail expected;
+        expected.f("CNST").w(inactive ? 0u : uint32_t(primitive));
+        CHECK_MSG(dispatch->value == expected.bytes, "serialized dispatch distinguishes squares from models");
+      }
+    }
+  }
 }
 
 // PBDM is Remastered's blend mode: 2 is retail's additive AAPH, 1 (premultiplied) and
@@ -5428,24 +5478,23 @@ void TestElc2NclrAndXfmd() {
   }
 }
 
-// A generator with a PMDL but no TEXR or MTIN draws only models: its SIZE is
-// left out and a SIZE of 0 written instead, as with one that draws nothing.
+// Transformed/model primitives consume SIZE, irrespective of TEXR/MTIN.
 void TestModelsOnly() {
   const EffectConvertIO io = AtlasIO();
   auto parts = ConvertOne(OneGenerator([](auto& o) {
                  PutModels(o, 4, 3);
                  PutProperty(o, "SIZE", 3);
                  PutConstant(o, Bits(2.0f));
-               }),
-               io);
+               }, 3),
+                io);
   Retail want;
   want.f("GPSM").f("PMDL").f("CNST").w(0xC0DE000A).f("PMDV").f("CNST").w(4);
   for (uint32_t i = 0; i < 4; ++i) {
     want.f("CNST").w(0xC0DE000A + i);
   }
-  want.f("SIZE").f("CNST").w(Bits(0.0f)).end();
-  CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a models-only generator gets SIZE 0");
-  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "inactive SIZE is consumed silently on non-sprite primitives");
+  want.f("SIZE").f("CNST").w(Bits(2.0f)).f("PPRM").f("CNST").w(3).end();
+  CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a model generator retains SIZE and selects only the model pass");
+  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "model SIZE remains an evaluator");
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "models only drops no retail property");
 }
 

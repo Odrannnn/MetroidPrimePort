@@ -862,15 +862,6 @@ constexpr MatchedEffect kMatchedEffects[] = {
     {"3b29b0b3-0c3d-42b6-9159-f4863f6c3ed9", 0x0B9E48EB},  // 1E14B003 FlickerBat root
 };
 
-// Retail PARTs whose Remastered effect is a stub because Remastered draws them
-// elsewhere: the stub replaces them rather than the disc's being kept. Retail's
-// Artifact Temple laser hit spawns the same five PARTs as Ridley's 2D16014C
-// (which carries them now, as c3a53327), so retail draws them twice.
-// Remastered shows no particle flash on a plasma shot: PlasmaMuzzle and
-// PlasmaAuxMuzzle are stubs and no other code draws one (kb
-// topic/nil-texture-placeholder).
-const std::set<uint32_t> kStubReplaces = {0x53861B29, 0x8D7BBFB2, 0xB0F9DBE6};
-
 // A retail PART an effect replaces, and the rule that paired them.
 struct Pairing {
   uint32_t retail;
@@ -1332,7 +1323,7 @@ public:
         return false;
       }
       const EffectNode* node = part.root ? &out.effect : FindNode(out.effect, part.id);
-      if (node != nullptr && !part.placeholder && LostLook(*node, check)) {
+      if (node != nullptr && !part.drawsNothing && LostLook(*node, check)) {
         error = "SSWH converted " + EffectFourCCString(part.type) + " lost its texture or model";
         return false;
       }
@@ -1582,7 +1573,7 @@ public:
     // effect with an invisible one: keep the disc's, before anything is written.
     for (const ConvertedPart& part : parts) {
       const EffectNode* node = part.root ? &effect : FindNode(effect, part.id);
-      if (node != nullptr && !part.placeholder &&
+      if (node != nullptr && !part.drawsNothing &&
           SplitRetailEffect(part.root ? rootType : kPart, part.part.data(), part.part.size(), check, error) &&
           LostLook(*node, check)) {
         ++m_result.failed;
@@ -1591,15 +1582,6 @@ public:
         Report(row, "failed", "no texture: " + std::string(part.root ? "root" : "child " + EffectGuidString(part.id)));
         return;
       }
-    }
-    // An effect drawn only by placeholder materials would replace the disc's with
-    // an invisible one: keep the disc's unless Remastered draws nothing there too.
-    if (kStubReplaces.count(retail) == 0 && std::any_of(parts.begin(), parts.end(), [](const ConvertedPart& part) { return part.placeholder; }) &&
-        std::all_of(parts.begin(), parts.end(), [](const ConvertedPart& part) { return part.drawsNothing; })) {
-      ++m_result.failed;
-      Log(name + ": only placeholder materials draw, the disc's is kept");
-      Report(row, "failed", "draws nothing: its materials are placeholders");
-      return;
     }
     // A generator that draws nothing and only starts one swoosh stands for a retail SWHC (the
     // CHPR's SpeedSwoosh): the swoosh itself replaces it, a PART under a SWHC's id would not.

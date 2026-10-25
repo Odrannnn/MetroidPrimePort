@@ -68,7 +68,7 @@ void PutProperty(std::vector<uint8_t>& out, const char* name, uint8_t tag) {
 void PutGenerator(std::vector<uint8_t>& out, bool root) {
   PutFourCC(out, "GPSM");
   out.resize(out.size() + 17);
-  Put32(out, root ? 1 : 0);
+  Put32(out, root ? 2 : 0); // GPSM sprite primitive + 1
 }
 
 void PutGuid(std::vector<uint8_t>& out, const EffectGuid& id);

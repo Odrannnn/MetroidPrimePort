@@ -206,6 +206,8 @@ public:
   std::unique_ptr< CPortSys > xPortSys;
   // port-only PSHP: Remastered SSHP sprite mesh (0 quad; 3 triangle, 4 pentagon, 5 hexagon, 6 octagon)
   u8 xPortSpriteShape = 0;
+  // GPSM primitive, independent of TEXR/MTIN/PMDL; 255 denotes a retail PART.
+  u8 xPortPrimitive = 255;
   // port-only PBDM: Remastered's blend row where the alpha blend stands in for it
   // (CElementGen::PortBlendSrc/Dst). 0 = retail alpha, 1 premultiplied, 3 opaque; 2 is AAPH.
   u8 xPortBlend = 0;
