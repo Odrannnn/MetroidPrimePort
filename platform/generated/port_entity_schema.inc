@@ -926,6 +926,7 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CEnergyProjectile
 template <> const PortSchemaClass& PortEntitySchema::Describe< CExplosion >() {
   static const PortSchemaField fields[] = {
       {"xPortNestedLights", "CPortNestedLights", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CExplosion::xPortNestedLights), PES_ADDR(CExplosion, xPortNestedLights), nullptr, nullptr},
+      {"xPortFixedStep", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CExplosion::xPortFixedStep), PES_ADDR(CExplosion, xPortFixedStep), PES_GETI(CExplosion, xPortFixedStep), PES_SETI(CExplosion, xPortFixedStep)},
       {"xe8_particleGen", "rstl::single_ptr<CParticleGen>", PortSchemaKind::smart_ptr, 0, 0, sizeof(CExplosion::xe8_particleGen), PES_ADDR(CExplosion, xe8_particleGen), nullptr, nullptr},
       {"xec_explosionLight", "TUniqueId", PortSchemaKind::uid, 0, 0, sizeof(CExplosion::xec_explosionLight), PES_ADDR(CExplosion, xec_explosionLight), nullptr, nullptr},
       {"xf0_sourceId", "unsigned int", PortSchemaKind::int_, 0, 0, sizeof(CExplosion::xf0_sourceId), PES_ADDR(CExplosion, xf0_sourceId), PES_GETI(CExplosion, xf0_sourceId), PES_SETI(CExplosion, xf0_sourceId)},
@@ -934,7 +935,7 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CExplosion >() {
       {"xf4_26_renderXray", "bool", PortSchemaKind::bitfield, 1, 0, 0, nullptr, PES_GETI(CExplosion, xf4_26_renderXray), PES_SETI(CExplosion, xf4_26_renderXray)},
       {"xf8_time", "float", PortSchemaKind::float_, 0, 0, sizeof(CExplosion::xf8_time), PES_ADDR(CExplosion, xf8_time), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CExplosion", "CEffect", fields, 8, 0x822F198A60528DFBull};
+  static const PortSchemaClass desc = {"CExplosion", "CEffect", fields, 9, 0x42FBD73149022CC0ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CEyeBall >() {
@@ -4663,4 +4664,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3389;
+const int PortEntitySchema::kFieldCount = 3390;

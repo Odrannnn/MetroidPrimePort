@@ -201,6 +201,12 @@ const bool CEnergyProjectile::Explode(const CVector3f& pos, const CVector3f& nor
       if (cameraClose) {
         flags |= 2;
       }
+#ifdef TARGET_PC
+      // Remastered ORs in the WPSM FC60 flag (desc +0xe1 bit 17) as explosion flag 0x10.
+      if (portRemastered && projectile.GetWeaponDescription()->xPortFC60) {
+        flags |= 0x10;
+      }
+#endif
       CEntity* explosion =
           rs_new CExplosion(*particle, mgr.AllocateUniqueId(), true,
                             CEntityInfo(GetCurrentAreaId(), CEntity::NullConnectionList),

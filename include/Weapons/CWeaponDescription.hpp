@@ -77,6 +77,10 @@ public:
   int xa8_PJFX;
   CRealElement* xac_RNGE;
   CRealElement* xb0_FOFF;
+#if defined(TARGET_PC) && (VERSION < VERSION_GM8P_00 || VERSION == VERSION_GM8E_02)
+  // PAL's FC60 (x29_31), kept for Remastered WPSMs: their explosions step at a fixed 1/60 s.
+  bool xPortFC60 = false;
+#endif
 };
 CHECK_SIZEOF(CWeaponDescription,
              (VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02 ? 0xac : 0xb4))

@@ -24,6 +24,9 @@ CExplosion::CExplosion(const TLockedToken< CGenDescription >& particle, TUniqueI
 , xf4_25_hasRenderBounds(true)
 , xf4_26_renderXray(flags & 0x8)
 , xf8_time(0.0f) {
+#ifdef TARGET_PC
+  xPortFixedStep = (flags & 0x10) != 0;
+#endif
   SetThermalFlags(flags & 0x1 ? kTF_Cold : kTF_Hot);
   xe8_particleGen->SetGlobalTranslation(xf.GetTranslation());
   xe8_particleGen->SetOrientation(xf.GetRotation());
@@ -46,6 +49,9 @@ CExplosion::CExplosion(const TLockedToken< CElectricDescription >& electric, TUn
 , xf8_time(0.0f)
 #endif
 {
+#ifdef TARGET_PC
+  xPortFixedStep = (flags & 0x10) != 0;
+#endif
   SetThermalFlags(flags & 0x1 ? kTF_Cold : kTF_Hot);
   xe8_particleGen->SetGlobalTranslation(xf.GetTranslation());
   xe8_particleGen->SetOrientation(xf.GetRotation());
@@ -79,7 +85,12 @@ void CExplosion::Think(float dt, CStateManager& mgr) {
     xe8_particleGen->SetOrientation(GetTransform().GetRotation());
     SetTransformDirtySpare(false);
   }
+#ifdef TARGET_PC
+  // CExplosionMP1::Think (0xd0e300); the 15 s lifetime below still counts real time.
+  xe8_particleGen->Update(xPortFixedStep ? 1.0 / 60.0 : dt);
+#else
   xe8_particleGen->Update(dt);
+#endif
 
   if (xec_explosionLight != kInvalidUniqueId) {
     CGameLight* light = TCastToPtr< CGameLight >(mgr.ObjectById(xec_explosionLight));

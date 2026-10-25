@@ -248,8 +248,10 @@ bool CProjectileWeaponDataFactory::CreateWPSM(CWeaponDescription* desc, CInputSt
     case 'NDTT':
     case 'SPS1':
     case 'SPS2':
-    case 'FC60':
       CParticleDataFactory::GetBool(in);
+      break;
+    case 'FC60':
+      desc->xPortFC60 = CParticleDataFactory::GetBool(in);
       break;
 #endif
     case '_END':

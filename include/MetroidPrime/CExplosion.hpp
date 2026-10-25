@@ -47,6 +47,8 @@ public:
 #ifdef TARGET_PC
 private:
   CPortNestedLights xPortNestedLights;
+  // CExplosionMP1 +0x254 bit 3 (ctor flag 0x10): Think steps the particles by a fixed 1/60 s.
+  bool xPortFixedStep;
   void PortUpdateNestedLights(CStateManager& mgr);
 #endif
 
