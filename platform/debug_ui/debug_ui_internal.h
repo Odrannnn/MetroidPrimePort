@@ -331,6 +331,9 @@ bool Searching();
 void DrawSearchResults();
 ImGuiWindow* ScrollableWindowAt(ImGuiWindow* window);
 
+// window.cpp
+bool TouchScrolling(); // a finger drag is scrolling a page, taken from the widget it began on
+
 // ui_common.cpp
 bool PageLayout();
 SDL_Window* MainWindow();

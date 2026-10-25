@@ -65,6 +65,8 @@ struct TouchScroll {
 };
 TouchScroll sTouchScroll;
 
+bool TouchScrolling() { return sTouchScroll.dragging; }
+
 void UpdateTouchScroll() {
   ImGuiContext& g = *ImGui::GetCurrentContext();
   const ImGuiIO& io = g.IO;

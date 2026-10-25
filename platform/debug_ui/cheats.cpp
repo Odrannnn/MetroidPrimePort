@@ -35,6 +35,42 @@ void GrantItem(CPlayerState& ps, CPlayerState::EItemType type, int amount, int c
   ps.SetPickup(type, amount);
 }
 
+namespace {
+
+// A slider takes the value under the finger the moment it is pressed, before
+// UpdateTouchScroll can tell a scroll from a drag, so scrolling the page past
+// these sliders filled Samus's missiles and tanks. The value is held back
+// until release and dropped when the drag became a scroll.
+bool CheatSlider(const char* label, int& value, int max) {
+  static ImGuiID sEditing = 0;
+  static int sPending = 0;
+  const ImGuiID id = ImGui::GetID(label);
+  int shown = sEditing == id ? sPending : value;
+  ImGui::SliderInt(label, &shown, 0, max);
+  if (ImGui::IsItemActive()) {
+    sEditing = id;
+    sPending = shown;
+    return false;
+  }
+  if (sEditing != id) {
+    return false;
+  }
+  sEditing = 0;
+  if (TouchScrolling() || sPending == value) {
+    return false;
+  }
+  value = sPending;
+  return true;
+}
+
+// Raises the capacity to the amount, never lowers it, so setting a count does
+// not hand out the full expansion.
+void SetAmount(CPlayerState& ps, CPlayerState::EItemType type, int amount) {
+  GrantItem(ps, type, amount, std::max(amount, ps.GetItemCapacity(type)));
+}
+
+} // namespace
+
 void DrawCheats() {
   CStateManager* mgr = sStateManager;
   if (mgr == nullptr) {
@@ -128,16 +164,16 @@ void DrawCheats() {
   }
 
   int missiles = ps->GetItemAmount(CPlayerState::kIT_Missiles);
-  if (ImGui::SliderInt("Missiles", &missiles, 0, 250)) {
-    GrantItem(*ps, CPlayerState::kIT_Missiles, missiles, 250);
+  if (CheatSlider("Missiles", missiles, 250)) {
+    SetAmount(*ps, CPlayerState::kIT_Missiles, missiles);
   }
   int powerBombs = ps->GetItemAmount(CPlayerState::kIT_PowerBombs);
-  if (ImGui::SliderInt("Power Bombs", &powerBombs, 0, 8)) {
-    GrantItem(*ps, CPlayerState::kIT_PowerBombs, powerBombs, 8);
+  if (CheatSlider("Power Bombs", powerBombs, 8)) {
+    SetAmount(*ps, CPlayerState::kIT_PowerBombs, powerBombs);
   }
   int tanks = ps->GetItemAmount(CPlayerState::kIT_EnergyTanks);
-  if (ImGui::SliderInt("Energy Tanks", &tanks, 0, 14)) {
-    GrantItem(*ps, CPlayerState::kIT_EnergyTanks, tanks, 14);
+  if (CheatSlider("Energy Tanks", tanks, 14)) {
+    GrantItem(*ps, CPlayerState::kIT_EnergyTanks, tanks, tanks); // tanks have no ammo: count is capacity
     ps->HealthInfo()->SetHP(ps->CalculateHealth());
   }
 
