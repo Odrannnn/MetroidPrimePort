@@ -379,7 +379,13 @@ void CProjectileWeapon::UpdateChildParticleSystems(float dt) {
       if (xf4_curFrame > xe8_lifetime) {
         x120_swoosh3->SetParticleEmission(false);
       } else {
-        if (x124_30_AS13) {
+#ifdef TARGET_PC
+        // Remastered's UpdateChildTransforms (0xb7ba54) reads AS12 for swoosh 3 too.
+        const bool portGlobal = PortIsRemastered() ? x124_29_AS12 : x124_30_AS13;
+#else
+        const bool portGlobal = x124_30_AS13;
+#endif
+        if (portGlobal) {
           x120_swoosh3->SetGlobalTranslation(GetTranslation());
         } else {
           x120_swoosh3->SetTranslation(GetTranslation());
