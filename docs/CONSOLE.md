@@ -34,7 +34,8 @@ Beam damage, so bosses run their death scripts), `phazongun [off]` (lets the arm
 `language [en|<code>]` (the text language, switched while the game runs; no argument prints it),
 `visor [combat|xray|scan|thermal|0-3]` and `beam [power|ice|wave|plasma|0-3]` (switch as the touch wheels do, so the game's own rules apply: owned items only, not in the ball; no argument prints the current one), `press <a+b> [frames]`
 (`sx:<n>`, `sy:<n>`, `cx:<n>`, `cy:<n>` tokens hold stick axes along with
-the buttons, e.g. `press x+sy:127 30`),
+the buttons, e.g. `press x+sy:127 30`; `lt:<n>`, `rt:<n>` hold a trigger's
+analog travel, 0..255, without its click),
 `stick`/`cstick <x> <y> [frames]` (frames `0` on `press`/`stick`/`cstick`
 keeps holding until the next one), `gyro <pitch> [yaw] [frames]` (stand-in
 gyro rates in rad/s), `shot` (prints the bmp path), `present

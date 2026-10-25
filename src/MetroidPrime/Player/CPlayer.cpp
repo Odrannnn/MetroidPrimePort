@@ -945,9 +945,15 @@ void CPlayer::UpdateMouseAim(CStateManager& mgr) {
   if (carriedYaw != 0.f && active && MouseLookIsFree(mgr)) {
     PortDebug::TurnMouseAim(carriedYaw);
   }
+  // An analog L's travel starts a point orbit a tick or more before its click locks on
+  // (UpdateOrbitInput). In the Scan Visor the pointer holds still through it, so the click
+  // picks the scan point under the pointer's window rather than the one at the centre
+  // (issue #190).
+  const bool scanPointHold = x304_orbitState == kOS_OrbitPoint &&
+                             mgr.GetPlayerState()->GetCurrentVisor() == CPlayerState::kPV_Scan;
   if (PortDebug::UpdateMouseAim(active, !MouseLookIsFree(mgr),
                                forward.GetX(), forward.GetY(), forward.GetZ(),
-                               PortLockFreeAim(mgr))) {
+                               PortLockFreeAim(mgr), scanPointHold)) {
     SetTransform(CQuaternion::ZRotation(CRelAngle(PortDebug::AimYaw()))
                      .BuildTransform4f(GetTransform().GetTranslation()));
   }

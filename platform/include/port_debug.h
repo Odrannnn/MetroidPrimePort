@@ -721,7 +721,10 @@ unsigned MouseHeldButtons();
 bool UpdateToastShowing();
 bool TapUpdateToast(float x, float y);
 // Called during simulation, using the effective unbobbed camera direction.
-bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool pointerLock = false);
+// pointerHold: under pointer aim, a lock that keeps the pointer where it is instead of
+// re-centring it (the Scan Visor's point orbit, CPlayer::UpdateMouseAim).
+bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool pointerLock = false,
+                    bool pointerHold = false);
 void SynchronizeMouseAim(float x, float y, float z);
 // Turns the mouse-look yaw by dyaw radians (the game turned the player: a rotating
 // platform's rider carry). No effect until the aim is initialized.

@@ -2113,6 +2113,16 @@ bool ParseButtons(const std::string& spec, PADStatus& pad) {
       start = end + 1;
       continue;
     }
+    // lt:<n>, rt:<n> hold an analog trigger's travel (0..255) without its click.
+    if (b.size() > 3 && b[1] == 't' && b[2] == ':' && (b[0] == 'l' || b[0] == 'r')) {
+      float v;
+      if (!ParseFloat(b.substr(3), v)) {
+        return false;
+      }
+      (b[0] == 'l' ? pad.triggerLeft : pad.triggerRight) = static_cast< u8 >(std::clamp(v, 0.f, 255.f));
+      start = end + 1;
+      continue;
+    }
     if (b == "a") buttons |= PAD_BUTTON_A;
     else if (b == "b") buttons |= PAD_BUTTON_B;
     else if (b == "x") buttons |= PAD_BUTTON_X;
@@ -3796,7 +3806,8 @@ const CommandSpec kCommands[] = {
      "language [en|EUFR|...]     the text language, changed while the game runs"},
     {"press", CmdPress, nullptr,
      "press <a+b+...> [frames]   hold pad buttons (a b x y z l r start up down left right;\n"
-     "                           sx:<n> sy:<n> cx:<n> cy:<n> also hold a stick axis;\n"
+     "                           sx:<n> sy:<n> cx:<n> cy:<n> also hold a stick axis,\n"
+     "                           lt:<n> rt:<n> a trigger's travel without its click;\n"
      "                           frames 0 = keep holding until the next press/stick)"},
     {"stick", CmdPress, nullptr,
      "stick <x> <y> [frames]     hold the main stick (-127..127); cstick for the C stick"},

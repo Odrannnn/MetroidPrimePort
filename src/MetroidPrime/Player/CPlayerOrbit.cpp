@@ -595,7 +595,8 @@ static float OrbitZoneIdealNdcY(CPlayer::EPlayerZoneInfo zone) {
 // scan window follows the pointer (CPlayerVisor::DrawScanEffect), the scan zone moves with it and
 // candidates rank by their distance from it. The pointer
 // is in [-1, 1] of the half view, +y down; returns it in [-1, 1] screen space, +y up. A lock
-// re-centres the pointer, so a held scan lock is unaffected.
+// re-centres the pointer, so a held scan lock is unaffected; a point orbit holds it still, so
+// an analog L's click picks through it (CPlayer::UpdateMouseAim).
 static bool PortScanPointerNdc(CPlayer::EPlayerZoneInfo zone, float& x, float& y) {
   if (zone != CPlayer::kZI_Scan || !PortDebug::PointerAimPosition(x, y)) {
     return false;
