@@ -4423,7 +4423,13 @@ public:
         continue;
       }
       if ((drawsNothing || modelsOnly) && fourcc == F("SIZE")) {
-        result.dropped.push_back(drawsNothing ? "SIZE: the generator draws nothing" : "SIZE: the generator draws models only");
+        // SetupPrimitiveTypes 0x29069c enables SSpritePrim only for primitive 1.
+        // FixAndClean 0x2908a4 clears it otherwise; Fixup 0x28e57c is the only path
+        // copying SIZE into the per-particle evaluator. This is a proven inactive input,
+        // not a fallback. A sprite suppressed by the material heuristics is NOT covered.
+        if (node.primitiveType == -1 || node.primitiveType == 1) {
+          result.dropped.push_back(drawsNothing ? "SIZE: the generator draws nothing" : "SIZE: the generator draws models only");
+        }
         continue;
       }
       // DFOG 1 sets the description's no-fog bit (CreateGPSM 0x25a560, CreateSWSH 0x2dce88: desc+0x6b

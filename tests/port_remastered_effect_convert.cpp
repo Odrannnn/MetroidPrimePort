@@ -2185,9 +2185,22 @@ void TestDrawsNothing() {
   Retail want;
   want.f("GPSM").f("MAXP").f("CNST").w(4).f("SIZE").f("CNST").w(Bits(0.0f)).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a generator with no texture gets SIZE 0");
-  CHECK_MSG(!parts.empty() && parts[0].dropped.size() == 1 &&
-                parts[0].dropped[0] == "SIZE: the generator draws nothing",
-            "its SIZE is dropped as drawing nothing");
+  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "inactive SIZE on a shell is consumed silently");
+  for (uint8_t encoded : {0, 1, 2, 3, 4, 5, 6, 7}) {
+    auto data = OneGenerator([](auto& o) {
+      PutProperty(o, "SIZE", 3);
+      PutConstant(o, Bits(2.0f));
+    });
+    data[0x3c + 21] = encoded;
+    EffectNode node;
+    std::string error;
+    CHECK_MSG(ParseEffect(data.data(), data.size(), node, error), "primitive header parses");
+    CHECK_MSG(node.primitiveType == (encoded >= 1 && encoded <= 6 ? int(encoded - 1) : -1),
+              "GPSM header stores primitive type plus one, not merely root status");
+    const auto converted = ConvertEffect(node, data.data(), {});
+    CHECK_MSG(!converted.empty() && converted[0].dropped.empty() == (encoded == 1 || (encoded >= 3 && encoded <= 6)),
+              "only proven inactive sprite blocks silently discard SIZE; sprites and unknown types remain diagnosed");
+  }
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "drawing nothing drops no retail property");
 
   parts = ConvertOne(OneGenerator([](auto& o) {
@@ -5432,9 +5445,7 @@ void TestModelsOnly() {
   }
   want.f("SIZE").f("CNST").w(Bits(0.0f)).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a models-only generator gets SIZE 0");
-  CHECK_MSG(!parts.empty() && parts[0].dropped.size() == 1 &&
-                parts[0].dropped[0] == "SIZE: the generator draws models only",
-            "its SIZE is dropped as models only");
+  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "inactive SIZE is consumed silently on non-sprite primitives");
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "models only drops no retail property");
 }
 

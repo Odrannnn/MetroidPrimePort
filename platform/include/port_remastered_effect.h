@@ -69,6 +69,9 @@ struct EffectNode {
   uint32_t form = 0;  // GPSM, SWSH, ELC2...
   EffectGuid id{};    // the id the parent lists it under (zero for the root)
   bool root = false;
+  // GPSM's header word is primitive type + 1 (LoadGeneratorDesc 0x256880).
+  // -1 means unavailable/invalid; 1 is a sprite. Kept separately from parser child-list handling.
+  int primitiveType = -1;
   std::vector<EffectProperty> properties;
   std::vector<EffectNode> children;
 };
