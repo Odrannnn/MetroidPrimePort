@@ -675,21 +675,34 @@ const char* DefaultTexturesPath() {
 }
 
 // The API to ask Aurora for. It is tried first, with Aurora's own order (D3D12,
-// Vulkan, D3D11) as the fallback, so a driver that can't start it still plays.
+// Vulkan, D3D11 on Windows; Vulkan, OpenGL ES on Linux) as the fallback, so a driver
+// that can't start it still plays.
 AuroraBackend DesiredGraphicsBackend() {
-#if defined(_WIN32)
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
     // The `graphics_backend` setting (F1 > Video > Compatibility, issue #135), read at
     // window creation, so a change needs a restart. Auto keeps asking for nothing in
-    // particular. MP_GRAPHICS_BACKEND=auto|d3d12|vulkan|d3d11 overrides the setting for
-    // one run; an unknown value warns and leaves the saved selection in charge.
+    // particular. MP_GRAPHICS_BACKEND=<one of Choices()' names> overrides the setting
+    // for one run; an unknown value warns and leaves the saved selection in charge.
     // port_graphics_backend.h owns the mapping and the same resolution the Video page
     // shows, so a request cannot be described one way and started another.
+#if !defined(_WIN32)
+    // OpenGL ES is not one of that setting's choices on Linux: it keeps its own toggle
+    // for GPUs whose Vulkan driver draws wrong (issue #7), and wins over the choice.
+    if (port::EnvFlag("MP_OPENGLES", PortDebug::OpenGles())) {
+        return BACKEND_OPENGLES;
+    }
+#endif
     const char* const env = PortGraphicsBackend::EnvRequest();
     const PortGraphicsBackend::Request request = PortGraphicsBackend::Resolve(PortDebug::GraphicsBackend(), env);
     if (request.rejected) {
-        PortLog::Write("port: MP_GRAPHICS_BACKEND=%s is not auto, d3d12, vulkan or d3d11; "
-                       "using graphics_backend=%s\n",
-                       env, PortDebug::GraphicsBackendConfigName(request.backend));
+        // The names this build offers, so the warning can't suggest one it can't start.
+        std::string names;
+        for (const PortDebug::EGraphicsBackend choice : PortGraphicsBackend::Choices()) {
+            names += (names.empty() ? "" : ", ");
+            names += PortDebug::GraphicsBackendConfigName(choice);
+        }
+        PortLog::Write("port: MP_GRAPHICS_BACKEND=%s is not one of %s; using graphics_backend=%s\n",
+                       env, names.c_str(), PortDebug::GraphicsBackendConfigName(request.backend));
     }
     return PortGraphicsBackend::ToAurora(request.backend);
 #else
@@ -1114,20 +1127,29 @@ int main(int argc, char** argv) {
         }
     }
 #endif
-    // A driver can crash outright while Dawn starts on OpenGL ES (Mesa does), and the
-    // setting would then crash every launch with no way back to the F1 menu. The marker
-    // outlives such a crash, so the next start turns the setting off and uses Vulkan.
-    const std::filesystem::path glesMarker =
-        std::filesystem::path(userFolder.empty() ? "." : userFolder) / "opengles_starting";
-    if (config.desiredBackend == BACKEND_OPENGLES) {
+    // A driver can crash outright while Dawn starts on OpenGL ES or OpenGL (Mesa does),
+    // and the setting would then crash every launch with no way back to the F1 menu. The
+    // marker outlives such a crash, so the next start turns the setting off and uses the
+    // automatic choice. Both markers share this: same folder, same lifecycle.
+    const std::filesystem::path markerDir = std::filesystem::path(userFolder.empty() ? "." : userFolder);
+    const std::filesystem::path glesMarker = markerDir / "opengles_starting";
+    const std::filesystem::path glMarker = markerDir / "opengl_starting";
+    if (config.desiredBackend == BACKEND_OPENGLES || config.desiredBackend == BACKEND_OPENGL) {
+        const bool gles = config.desiredBackend == BACKEND_OPENGLES;
+        const std::filesystem::path& marker = gles ? glesMarker : glMarker;
         std::error_code ec;
-        if (std::filesystem::exists(glesMarker, ec)) {
-            PortLog::Write("port: the last start on OpenGL ES did not finish; turning it off\n");
-            PortDebug::SetOpenGles(false);
+        if (std::filesystem::exists(marker, ec)) {
+            if (gles) {
+                PortLog::Write("port: the last start on OpenGL ES did not finish; turning it off\n");
+                PortDebug::SetOpenGles(false);
+            } else {
+                PortLog::Write("port: the last start on OpenGL did not finish; using Auto\n");
+                PortDebug::SetGraphicsBackend(PortDebug::kGraphicsBackend_Auto);
+            }
             config.desiredBackend = BACKEND_AUTO;
-            std::filesystem::remove(glesMarker, ec);
+            std::filesystem::remove(marker, ec);
         } else {
-            std::ofstream(glesMarker) << "1\n";
+            std::ofstream(marker) << "1\n";
         }
     }
     // A custom Vulkan driver (Turnip) can crash while it starts, just like GL above; the
@@ -1169,9 +1191,9 @@ int main(int argc, char** argv) {
     // decoration plugin, an input method) may call setlocale(LC_ALL, ""), which
     // under a comma-decimal locale would make "1.5" read as 1 and print as "1,5".
     std::setlocale(LC_NUMERIC, "C");
-    if (config.desiredBackend == BACKEND_OPENGLES) {
+    if (config.desiredBackend == BACKEND_OPENGLES || config.desiredBackend == BACKEND_OPENGL) {
         std::error_code ec;
-        std::filesystem::remove(glesMarker, ec);
+        std::filesystem::remove(config.desiredBackend == BACKEND_OPENGLES ? glesMarker : glMarker, ec);
     }
     // Aurora went back to the system driver when Vulkan failed with the custom one.
     if (aurora_vulkan_library_failed() && !PortGpuDriver::Active().empty()) {

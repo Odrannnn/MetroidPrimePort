@@ -542,22 +542,32 @@
   retail blob quad is drawn. Known gaps: dynamic receivers (platforms) and
   sorted/cutout geometry are not decaled; at most 16 actors per frame.
   Console: `projshadow [0|1]`.
-- Renderer (Video > Compatibility, **Windows only**, persisted as
-  `graphics_backend`: `auto`, `d3d12`, `vulkan` or `d3d11`, default `auto`,
-  issue #135): which graphics API the port asks Aurora for. `auto` asks for
-  nothing in particular, so Aurora takes its own order (Direct3D 12, then Vulkan,
-  then Direct3D 11); an explicit choice is tried first, and if the driver can't
-  start it, that run falls back to the same order. The setting is left as it was
-  by a fallback, so the page keeps showing the choice and names the API actually
-  in use, including "no graphics device" when nothing started.
-  `MP_GRAPHICS_BACKEND=auto|d3d12|vulkan|d3d11` overrides the setting for one run
-  and outranks it (per-run `MP_*` precedence, like `MP_OPENGLES`); any other value
-  warns and starts on the saved selection. While an override is set the page names
-  the API it starts on and says the saved selection applies once the variable is
-  unset, and the fallback message describes what the override asked for, not what
-  the file says. Read at window creation, so a change needs a restart: the page
-  shows "Restart to apply" while the saved selection differs from the one this run
-  started with, and selecting the startup choice again clears it.
+- Renderer (Video > Compatibility, **Windows and desktop Linux**, persisted as
+  `graphics_backend`: `auto`, `d3d12`, `vulkan`, `d3d11` or `opengl`, default
+  `auto`, issue #135): which graphics API the port asks Aurora for. Only this
+  platform's choices are offered: Windows lists Auto, Direct3D 12, Vulkan and
+  Direct3D 11; desktop Linux lists Auto, Vulkan and OpenGL (Dawn's desktop GL,
+  4.4 or newer, for GPUs whose Vulkan driver is missing or draws wrong; Windows
+  has no WGL backend yet). `auto` asks for nothing in particular, so Aurora takes
+  its own order (Direct3D 12, then Vulkan, then Direct3D 11 on Windows; Vulkan,
+  then OpenGL ES on Linux); an explicit choice is tried first, and if the driver
+  can't start it, that run falls back to the same order. The setting is left as it
+  was by a fallback, so the page keeps showing the choice and names the API
+  actually in use, including "no graphics device" when nothing started.
+  `MP_GRAPHICS_BACKEND=<one of that platform's names>` overrides the setting for
+  one run and outranks it (per-run `MP_*` precedence, like `MP_OPENGLES`); any
+  other value warns, listing the names this build accepts, and starts on the saved
+  selection. While an override is set the page names the API it starts on and says
+  the saved selection applies once the variable is unset, and the fallback message
+  describes what the override asked for, not what the file says. Read at window
+  creation, so a change needs a restart: the page shows "Restart to apply" while
+  the saved selection differs from the one this run started with, and selecting
+  the startup choice again clears it. On desktop Linux OpenGL starts through a
+  driver that can crash outright (Mesa does); an `opengl_starting` marker in the
+  user folder outlives such a crash and the next start logs "the last start on
+  OpenGL did not finish", sets the setting back to Auto and uses Vulkan. OpenGL ES
+  still has its own toggle on Linux (`opengles`), and it wins over this setting.
+  Android ignores `graphics_backend`; its GL switch is `opengles`.
   On Windows this replaces asking for OpenGL ES: Dawn's Windows build has no GLES
   backend. Elsewhere the setting is ignored and Android's choice stays `opengles` /
   `MP_OPENGLES`.
