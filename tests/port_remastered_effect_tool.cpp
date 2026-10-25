@@ -984,6 +984,20 @@ int Import(const std::string& romfs, const std::string& retailDir, const std::st
     rgba = std::move(image.rgba);
     return true;
   };
+  // As the game's import: the VFX copies (linear or sRGB, a BC5's red and green) follow the format.
+  io.textureSrgb = [&](const EffectGuid& id) {
+    std::vector<uint8_t> raw;
+    std::string ignored;
+    TxtrImage info;
+    return read(id, raw, ignored) && ReadTxtrInfo(raw.data(), raw.size(), info, ignored) && info.srgb;
+  };
+  io.textureRg = [&](const EffectGuid& id) {
+    std::vector<uint8_t> raw;
+    std::string ignored;
+    TxtrImage info;
+    return read(id, raw, ignored) && ReadTxtrInfo(raw.data(), raw.size(), info, ignored) &&
+           (info.format == kTxtrFormatBc5Unorm || info.format == kTxtrFormatBc5Snorm);
+  };
   io.layers = [&](const EffectGuid& id, int& width, int& height, int& layers, std::vector<uint8_t>& rgba,
                   std::string& error) {
     std::vector<uint8_t> raw;
