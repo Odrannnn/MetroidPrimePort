@@ -599,11 +599,6 @@ static bool ReadAlphaModulate(const Room& room, const Component& c, PortRoomGeo:
       boolean(0xbc6c51a1, false)) {
     return false;
   }
-  // Loader0xd60e1c: F41E2CA0 -> +0xb4; Create0xd61bb0 passes it as
-  // ctor param18, setting +0xc8 bit0x1000. AcceptScriptMsg0xd5fdb8 case
-  // 0x21 self-sends Decrement when set. Leave these nodes on their existing
-  // path until that initialization message is represented in the room graph.
-  if (boolean(0xf41e2ca0, false)) return false;
   for (int color = 0; color < 2; ++color) {
     float rgba[4] = {1, 1, 1, 1};
     for (int channel = 0; channel < 4; ++channel) {
@@ -624,7 +619,8 @@ static bool ReadAlphaModulate(const Room& room, const Component& c, PortRoomGeo:
   }
   node.max = (boolean(0x976a1cfc, false) ? 1u : 0u) | (boolean(0xa51953a4, false) ? 2u : 0u) |
              (boolean(0xee2b08a7, true) ? 4u : 0u) | (boolean(0x48c52c78, true) ? 8u : 0u) |
-             (boolean(0x22ec5b19, false) ? 16u : 0u) | (boolean(0x3fff0f45, false) ? 512u : 0u);
+             (boolean(0x22ec5b19, false) ? 16u : 0u) | (boolean(0x3fff0f45, false) ? 512u : 0u) |
+             (boolean(0xf41e2ca0, false) ? 0x1000u : 0u);
   return true;
 }
 

@@ -16,16 +16,23 @@ inline AlphaRenderPlan PlanAlphaRender(float alpha, bool drawNormal) {
 }
 
 // Linear, white-RGB Alpha mode of CScriptColorModulateMP1. The importer refuses
-// other modes, splines and RGB tints (55 shipped nodes in 16 rooms qualify).
+// other modes, splines and RGB tints.
 struct AlphaModulateConfig {
   float a = 1.f, b = 1.f, timeA2B = 1.f, timeB2A = 1.f;
   // CScriptColorModulateMP1+0xc8: reverse, restore, compare, update, backwards,
-  // and bit 9 draw-normal. Defaults from SLdrColorModulateMP1 (0xd60d00).
+  // bit 9 draw-normal and bit 12 start-on-Registered (0xd5ef34/0xd5fdb8).
+  // Defaults from SLdrColorModulateMP1 (0xd60d00).
   uint32_t flags = 12;
 };
 struct AlphaModulateState {
   float time = 0.f, alpha = 1.f;
   bool enabled = false, reversing = false, toA = false, restore = false;
+
+  // AcceptScriptMsg(Registered), 0xd5fdb8: active + state bit 0x1000
+  // self-sends Decrement; activation alone does not start the transition.
+  bool Registered(const AlphaModulateConfig& c, bool active) {
+    return active && (c.flags & 0x1000) != 0 && Message(c, false);
+  }
 
   // 0xd5fdb8: Increment selects B->A; Decrement selects A->B. In particular
   // the interruption formula is NOT the retail CScriptColorModulate formula.

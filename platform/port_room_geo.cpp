@@ -927,6 +927,8 @@ CTransform4f Pose(const Instance::AnimClip& clip, double seconds) {
                       r[7], r[8], a[6] + (b[6] - a[6]) * w);
 }
 
+void RegisterNodes(Area& area);
+
 // The script objects as the file has them: a counter at 0, the camera in no volume.
 void ResetNodes(Area& area) {
   area.nodes.assign(area.script.nodes.size(), NodeState());
@@ -934,6 +936,7 @@ void ResetNodes(Area& area) {
   for (size_t i = 0; i < area.nodes.size(); ++i) {
     area.nodes[i].active = area.script.nodes[i].active;
   }
+  RegisterNodes(area);
   // CacheTargetFlags (0xd5f1bc), at InitializedInArea: each modulator owns
   // a copy of the actual target state, not an inferred Normal endpoint.
   for (const ScriptEdge& edge : area.script.edges) {
@@ -1182,6 +1185,19 @@ void Send(Area& area, uint32_t node, uint8_t event, int depth) {
     const ScriptEdge& edge = area.script.edges[i];
     if (edge.event == event) {
       Apply(area, edge, depth + 1);
+    }
+  }
+}
+
+void RegisterNodes(Area& area) {
+  // Registered precedes InitializedInArea's target snapshot. Use the same
+  // Decrement state transition and target writes as AcceptScriptMsg0xd5fdb8.
+  for (size_t i = 0; i < area.nodes.size(); ++i) {
+    const ScriptNode& node = area.script.nodes[i];
+    NodeState& state = area.nodes[i];
+    if (node.kind == kAlphaModulate && state.modulation.Registered(node.AlphaConfig(), state.active)) {
+      sApplyBudget = kApplyBudget;
+      Send(area, uint32_t(i), 3, 0);
     }
   }
 }

@@ -85,6 +85,13 @@ void TestAlphaModulate() {
   CHECK(plan.visible && !plan.unsorted && plan.sortedOpaque && !plan.depthOpaque);
   AlphaModulateConfig c{1.f, 0.f, 1.2f, 0.f, 12 | 512};
   AlphaModulateState s;
+  CHECK(!s.Registered(c, true) && !s.enabled);
+  c.flags |= 0x1000;
+  CHECK(!s.Registered(c, false) && !s.enabled);
+  CHECK(s.Registered(c, true) && s.enabled && !s.toA && s.alpha == c.a);
+  CHECK(!s.Tick(c, 0.6f) && std::fabs(s.alpha - 0.5f) < 1e-6f);
+  s = {};
+  c.flags &= ~0x1000u;
   CHECK(s.Message(c, false) && s.alpha == 1.f && !s.toA);
   CHECK(!s.Tick(c, 0.6f) && std::fabs(s.alpha - 0.5f) < 1e-6f);
   CHECK(!s.Tick(c, 0.6f) && s.alpha == 0.f && s.enabled);
@@ -107,7 +114,7 @@ void TestAlphaModulate() {
   Script script;
   ScriptNode node;
   node.kind = kAlphaModulate;
-  node.max = 12 | 512;
+  node.max = 12 | 512 | 0x1000;
   node.centre[0] = 1.f;
   node.centre[1] = 0.f;
   node.half[0] = 1.2f;

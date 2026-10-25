@@ -1395,7 +1395,9 @@ void TestDynamoModulateGraph() {
   CHECK(MatchScripts(unrelated.room, area).group.count(int(f.Entity(3))) == 0);
   f.comps[1].props = Props().Add(0xf41e2ca0, Bytes{1}).b;
   const Parsed autoStart(f);
-  CHECK(MatchScripts(autoStart.room, area).script.nodes.empty());
+  const auto registered = MatchScripts(autoStart.room, area);
+  REQUIRE(registered.script.nodes.size() == 2);
+  CHECK(registered.script.nodes[0].AlphaConfig().flags == (12 | 0x1000));
   // The importer must not reinterpret a non-alpha mode as this evaluator.
   f.comps[1].props = Props().AddU32(kPropModulateBlend, kModulateIncandescence).b;
   const Parsed unsupported(f);
