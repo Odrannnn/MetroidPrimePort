@@ -37,6 +37,7 @@
 {"Controls", "Options", "Buttons", "Sticky Charge", "charge beam hold fire"},
 {"Controls", "Options", "Buttons", "Remastered charge (rapid fire)", "rapid fire autofire charge remastered"},
 {"Controls", "Options", "Buttons", "Swap the Scan and X-Ray visor buttons", "visor scan xray swap buttons"},
+{"Controls", "Options", "Buttons", "Radial beam and visor menus (Trilogy)", "radial wheel ring beam visor menu select wii trilogy hold"},
 {"Controls", "Options", "Aiming", "Auto-aim", "aim assist lock automatic"},
 {"Controls", "Options", "Aiming", "Pointer aim (Trilogy style)", "pointer cursor wii trilogy prime 3 corruption free aim edge turn mouse stick gyro touch"},
 {"Controls", "Options", "Aiming", "Dead box", "pointer aim dead zone box turn edge"},
