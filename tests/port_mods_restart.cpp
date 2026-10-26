@@ -89,7 +89,13 @@ int main() {
   const fs::path root = fs::current_path() / "restart-fixture";
   const fs::path mod = root / "remastered-models";
   fs::create_directories(mod / "nested");
-  SDL_setenv_unsafe("MP_MODS", root.string().c_str(), 1);
+  // PortMods reads MP_MODS with std::getenv, which on Windows sees only the CRT's
+  // copy of the environment, not one SDL_setenv_unsafe sets.
+#ifdef _WIN32
+  _putenv_s("MP_MODS", root.string().c_str());
+#else
+  setenv("MP_MODS", root.string().c_str(), 1);
+#endif
   const auto put = [&](const char* name) { std::ofstream(mod / name) << "fixture"; };
   put("nested/12345678.RoOmGeO"); // actual production parser: any case, any subdirectory
   put("00000001.dds"); // sorts before geometry: must not leak out of deferred mod
