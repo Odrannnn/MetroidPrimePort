@@ -2024,7 +2024,9 @@ void CCompoundTargetReticle::PortTriDrawScan(const CMatrix3f& rot, const CStateM
   // 0x80239014..0x802390AC
   CColor ringColor = CColor::Lerp(skTriScanRingColor, skTriScanLockedColor, x404_scanFade);
   ringColor.SetAlpha(PortTriAlphaU8(intensity * ringColor.GetAlphau8()));
-  CColor bracketColor = CColor::Lerp(skTriScanBracketColor, skTriScanLockedColor, x404_scanFade);
+  // The brackets lerp the other way (0x80239050: from 0x370 to 0x36c): faint on the pointer,
+  // full once they frame a target.
+  CColor bracketColor = CColor::Lerp(skTriScanLockedColor, skTriScanBracketColor, x404_scanFade);
   bracketColor.SetAlpha(PortTriAlphaU8(intensity * bracketColor.GetAlphau8()));
   // 0x80239094: Trilogy recolours both while not scanning and its counter x388 runs. x388 only
   // counts while the Wii pointer is off screen (fn_80015DAC), which the port's never is.
@@ -2051,7 +2053,8 @@ void CCompoundTargetReticle::PortTriDrawScan(const CMatrix3f& rot, const CStateM
   // 0x80239284..0x802392E0
   gpRender->SetModelMatrix(CTransform4f(rot, ringPos) *
                            CTransform4f::Scale(1.8f /* lbl_805C6CE0 */ * skTriScanRingScale));
-  ring->Draw(CModelFlags::Additive(ringColor));
+  // CModelFlags(7, 0, 0, colour): no depth compare or update, so the HUD draws over the world.
+  ring->Draw(CModelFlags::AdditiveDepthCompareUpdate(ringColor, false, false));
 
   // 0x802392F0..0x80239490: project the box corners, clamped to the NDC unit disc.
   CVector3f corners[4];
@@ -2092,7 +2095,7 @@ void CCompoundTargetReticle::PortTriDrawScan(const CMatrix3f& rot, const CStateM
     gpRender->SetModelMatrix(CTransform4f(rot * CMatrix3f::Scale(s), centre) *
                              CTransform4f::Scale(cx, 1.f, cz) *
                              CTransform4f::Translate(pos * invS));
-    bracket->Draw(CModelFlags::Additive(drawColor));
+    bracket->Draw(CModelFlags::AdditiveDepthCompareUpdate(drawColor, false, false));
   }
 }
 #endif
