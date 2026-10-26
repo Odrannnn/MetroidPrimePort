@@ -141,6 +141,7 @@ CHudEnergyInterface::CHudEnergyInterface(CGuiFrame& hud, float energy, int total
     mAlphaWidgets[mAlphaWidgetCount++] = x2c_energybart01_energybar;
   }
   mWarningFaded = false;
+  mMessageAlpha = 1.f;
   for (int i = 0; i < mAlphaWidgetCount; ++i) {
     mAlphaColors[i] = mAlphaWidgets[i]->GetColor();
     for (const CGuiObject* obj = x28_textpane_energywarning; obj; obj = obj->GetParent()) {
@@ -218,8 +219,10 @@ void CHudEnergyInterface::SetEnergyLow(bool low) {
 void CHudEnergyInterface::Update(float dt, float energyLowPulse) {
 #ifdef TARGET_PC
   UpdateHudAlpha();
+  // @ fn_800E3ED0: the warning alpha is farg2 (HUD alpha) * x8 (message fade) * fader * pulse.
   const float warningAlpha =
-      mWarningFaded ? 1.f : gpGameState->GameOptions().GetEnergyHudAlpha(x0_hudType);
+      (mWarningFaded ? 1.f : gpGameState->GameOptions().GetEnergyHudAlpha(x0_hudType)) *
+      mMessageAlpha;
 #else
   const float warningAlpha = 1.f;
 #endif

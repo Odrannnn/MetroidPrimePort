@@ -1464,6 +1464,17 @@ void CSamusHud::Update(float dt, const CStateManager& mgr, uint helmetVis, bool 
   if (!x2b4_bossEnergyIntf.null()) {
     x2b4_bossEnergyIntf->SetAlpha(1.f - messageTextAlpha);
   }
+#ifdef TARGET_PC
+  // @ fn_801C95A0 801C9BA8..801C9CBC: Trilogy also fades the energy warning under a message,
+  // by min(1 - message alpha, deco text alpha - radial menu alpha). The Wii radial menus are
+  // not ported, so their alpha is 0.
+  if (!x28c_energyIntf.null()) {
+    x28c_energyIntf->SetAlpha(PortDisc::IsTrilogy(PortDisc::Current())
+                                  ? rstl::min_val(1.f - messageTextAlpha,
+                                                  rstl::max_val(0.f, allTextAlpha))
+                                  : 1.f);
+  }
+#endif
   if (!x550_hudMemoString.null() && x550_hudMemoString->IsLoaded()) {
     SetMessage(rstl::wstring((**x550_hudMemoString)->GetString(x554_hudMemoIdx)),
                x548_hudMemoParms);
