@@ -1018,7 +1018,8 @@ def cmd_film(a):
     print(out)
     for f, prev, cur, pf in zip(frames[1:], pngs, pngs[1:], frames):
         print(f"frame {pf} -> {f}: {image_stats(prev, cur)[1]}")
-    run_console(run, ["hold 0"], echo=False)
+    if not a.keep_hold:
+        run_console(run, ["hold 0"], echo=False)
 
 
 def region_mad(pa, pb, region):
@@ -1313,6 +1314,8 @@ def build_parser():
     s.add_argument("--pre", help="';'-separated console commands to run first (e.g. 'fx 12345678 5')")
     s.add_argument("--cols", type=int)
     s.add_argument("--width", type=int, default=480)
+    s.add_argument("--keep-hold", action="store_true",
+                   help="leave the game held after the last frame, so a next film carries on from it")
     s = add("fxbisect", cmd_fxbisect, "mute each asset of an effect's tree and rank which one changes a region")
     s.add_argument("name")
     s.add_argument("root", help="root PART asset id (hex) as spawned by --shot-cmds")
