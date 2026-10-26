@@ -644,6 +644,12 @@ constexpr uint32_t kActionTriggerDeactivate = 0xb5dd4543;
 // animation (property kPropKeyframeAnim, a name in STRP; kPropKeyframeLoop: it loops).
 constexpr uint32_t kActorKeyframeMP1 = 0x3ce6630a;
 constexpr uint32_t kActionPlayAnim = 0x7ae20cd8;
+// The same Play sent to a PlatformMP1: action hashes are per target type (the Watery Hall
+// gate's keyframe; ActorRotateMP1 drives platforms with it too).
+constexpr uint32_t kActionPlatformPlayAnim = 0x511ddd00;
+constexpr bool IsKeyframePlay(uint32_t action) {
+  return action == kActionPlayAnim || action == kActionPlatformPlayAnim;
+}
 constexpr uint32_t kPropKeyframeAnim = 0x589ff022;
 constexpr uint32_t kPropKeyframeLoop = 0x3c3ec403;
 // What turns a ColorGradeHint's request on and off, and the senders of it retail has no

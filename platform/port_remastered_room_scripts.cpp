@@ -744,22 +744,32 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     const auto it = entIndex.find(comps[size_t(comp)].entity);
     return it == entIndex.end() ? -1 : int(it->second);
   };
-  std::vector<std::vector<uint32_t>> out(ents.size());
-  for (const Connection& c : conns) {
-    const int s = entityOf(int(c.sender)), t = entityOf(room.ByGuid(c.target));
-    if (s >= 0 && t >= 0 && match[size_t(t)] >= 0) {
-      out[size_t(s)].push_back(objects[size_t(match[size_t(t)])].id);
-    }
-  }
-  for (auto& o : out) {
-    std::sort(o.begin(), o.end());
-    o.erase(std::unique(o.begin(), o.end()), o.end());
-  }
   std::set<uint32_t> ids;
   for (const ScriptObject& o : objects) {
     ids.insert(o.id);
   }
-  for (int round = 0; round < 3; ++round) {
+  // A round takes exact target sets first; when none is left, an entity whose matched targets
+  // are a subset of one unused retail object's targets alone (a cycle, as the Watery Hall gate's
+  // keyframe and the relay that re-arms it, leaves each with an unmatched target).
+  std::map<uint32_t, size_t> objIndex;
+  for (size_t j = 0; j < objects.size(); ++j) {
+    objIndex.emplace(objects[j].id, j);
+  }
+  for (int round = 0, subset = 0; round < 32; ++round) {
+    std::vector<std::vector<uint32_t>> out(ents.size());
+    std::vector<std::multiset<int>> open(ents.size());  // types of each entity's unmatched targets
+    for (const Connection& c : conns) {
+      const int s = entityOf(int(c.sender)), t = entityOf(room.ByGuid(c.target));
+      if (s >= 0 && t >= 0 && match[size_t(t)] >= 0) {
+        out[size_t(s)].push_back(objects[size_t(match[size_t(t)])].id);
+      } else if (s >= 0 && t >= 0) {
+        open[size_t(s)].insert(ents[size_t(t)].type);
+      }
+    }
+    for (auto& o : out) {
+      std::sort(o.begin(), o.end());
+      o.erase(std::unique(o.begin(), o.end()), o.end());
+    }
     std::map<std::pair<int, std::vector<uint32_t>>, std::vector<size_t>> sig;
     for (size_t j = 0; j < objects.size(); ++j) {
       if (used[j]) {
@@ -778,17 +788,62 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       }
     }
     int found = 0;
+    std::vector<int> pick(ents.size(), -1), claims(objects.size(), 0);
     for (size_t k = 0; k < ents.size(); ++k) {
       if (match[k] >= 0 || out[k].empty() || ents[k].type < 0) {
         continue;
       }
-      const auto it = sig.find({ents[k].type, out[k]});
-      if (it != sig.end() && it->second.size() == 1 && !used[it->second[0]]) {
-        take(k, it->second[0]);
+      if (subset == 0) {
+        const auto it = sig.find({ents[k].type, out[k]});
+        if (it != sig.end() && it->second.size() == 1 && !used[it->second[0]]) {
+          take(k, it->second[0]);
+          ++found;
+        }
+        continue;
+      }
+      // Each retail target the entity lacks must be an unused object of a type the entity
+      // still sends to an unmatched entity of.
+      auto accounted = [&](const std::vector<uint32_t>& retail) {
+        std::multiset<int> left = open[k];
+        for (uint32_t t : retail) {
+          if (std::binary_search(out[k].begin(), out[k].end(), t)) {
+            continue;
+          }
+          const size_t j = objIndex.at(t);
+          const auto it = left.find(objects[j].type);
+          if (used[j] || it == left.end()) {
+            return false;
+          }
+          left.erase(it);
+        }
+        return true;
+      };
+      int only = -1, count = 0;
+      for (const auto& [key, js] : sig) {
+        if (key.first == ents[k].type &&
+            std::includes(key.second.begin(), key.second.end(), out[k].begin(), out[k].end()) &&
+            accounted(key.second)) {
+          count += int(js.size());
+          only = int(js[0]);
+        }
+      }
+      if (count == 1 && !used[size_t(only)]) {
+        pick[k] = only;
+        ++claims[size_t(only)];
+      }
+    }
+    // Only a retail object one entity alone can take.
+    for (size_t k = 0; subset != 0 && k < ents.size(); ++k) {
+      if (pick[k] >= 0 && claims[size_t(pick[k])] == 1) {
+        take(k, size_t(pick[k]));
         ++found;
       }
     }
-    if (found == 0) {
+    if (found != 0) {
+      subset = 0;
+    } else if (subset == 0) {
+      subset = 1;
+    } else {
       break;
     }
   }
@@ -1093,7 +1148,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         }
         // Remastered's own objects, and keyframes, are followed by the script (below).
         if (sender.type == kTemplateManager || sender.type == kDebugOptions || isScriptObject(c->sender) ||
-            (sender.type == kActorKeyframeMP1 && c->action == kActionPlayAnim) ||
+            (sender.type == kActorKeyframeMP1 && IsKeyframePlay(c->action)) ||
             (depth > 0 && !PassFires(via, c->action))) {
           continue;
         }
@@ -1296,7 +1351,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       const Component& sender = comps[c->sender];
       const bool fromScript = isScriptObject(c->sender);
       // A matched ActorKeyframe's Play moves an animated actor on to its next clip.
-      const bool keyframe = group && sender.type == kActorKeyframeMP1 && c->action == kActionPlayAnim;
+      const bool keyframe = group && sender.type == kActorKeyframeMP1 && IsKeyframePlay(c->action);
       if (sender.type == kTemplateManager || sender.type == kDebugOptions || (group && !fromScript && !keyframe)) {
         continue;
       }
