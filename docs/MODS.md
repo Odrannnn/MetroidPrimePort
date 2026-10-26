@@ -2,6 +2,16 @@
 
 Texture replacements and the mods folder, moved out of `docs/NATIVE_PORT.md`.
 
+## Community mods
+
+Made and maintained by others, not part of the port; report their problems in
+their own repositories.
+
+- [Russian translation](https://github.com/454135431515/metroid-prime-ru)
+  (USA 1.00): all game text, Cyrillic fonts and redrawn texture labels, built
+  from your own disc into a `mods/russian` folder. With the Remastered import
+  present it also writes a Cyrillic HD font.
+
 ## HD texture replacements
 
 `MP_TEXTURES` points at a folder of
