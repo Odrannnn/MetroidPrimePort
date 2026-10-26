@@ -1259,6 +1259,32 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     }
     return kind == PortRoomGeo::kRelay && action == kActionRelayFire ? PortRoomGeo::kFire : 0;
   };
+  // The retail objects (id, state) a connection from outside the script comes from: its sender,
+  // or what fires an unmatched Relay or MemoryRelay on the way (the relays the hangar's intro
+  // shots count up and down the hull's counter with). Not through a Timer: an edge has no wait.
+  std::function<void(const Connection&, int, std::vector<std::pair<uint32_t, int>>&)> fromRetail =
+      [&](const Connection& c, int depth, std::vector<std::pair<uint32_t, int>>& out) {
+        const Component& sender = comps[c.sender];
+        const int s = entityOf(int(c.sender));
+        const int state = RetailState(sender.type, c.event);
+        if (s < 0 || state < 0 || state >= 256) {
+          return;
+        }
+        if (match[size_t(s)] >= 0) {
+          out.emplace_back(objects[size_t(match[size_t(s)])].id, state);
+          return;
+        }
+        const int type = RetailType(sender.type);
+        const auto in = sender.entity >= 0 ? incoming.find(sender.entity) : incoming.end();
+        if (type == kRetailTimer || !IsPass(type) || depth >= 6 || in == incoming.end()) {
+          return;
+        }
+        for (const Connection* fire : in->second) {
+          if (PassFires(type, fire->action) && !isScriptObject(fire->sender)) {
+            fromRetail(*fire, depth + 1, out);
+          }
+        }
+      };
   // The edges into a geometry entity (group: from the script objects only, the walk above
   // has the rest) or a node (from anything).
   auto inputs = [&](int target, bool group, uint8_t kind) {
@@ -1278,21 +1304,27 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
                             c->event == 0x4ee99d94 && c->action == kActionActivate;
       const uint8_t action = modulate ? static_cast<uint8_t>(PortRoomGeo::kGroupModulate) :
           keyframe ? static_cast<uint8_t>(PortRoomGeo::kGroupNextClip) : scriptAction(kind, c->action);
-      int event = -1;
+      std::vector<std::pair<uint32_t, int>> senders;  // (from, event)
       if (fromScript) {
-        event = nodeEvent(scriptObject.at(sender.entity).first, c->event);
-      } else {
+        const int event = nodeEvent(scriptObject.at(sender.entity).first, c->event);
+        if (event >= 0) {
+          senders.emplace_back(0, event);
+        }
+      } else if (keyframe) {
         const int s = entityOf(int(c->sender));
         const int state = RetailState(sender.type, c->event);
-        event = s >= 0 && match[size_t(s)] >= 0 && state < 256 ? state : -1;
+        if (s >= 0 && match[size_t(s)] >= 0 && state >= 0 && state < 256) {
+          senders.emplace_back(objects[size_t(match[size_t(s)])].id, state);
+        }
+      } else {
+        fromRetail(*c, 0, senders);
       }
-      if (action == 0 || event < 0) {
+      if (action == 0 || senders.empty()) {
         ++result.scriptUnresolved;
         continue;
       }
       PortRoomGeo::ScriptEdge edge;
       edge.retail = !fromScript;
-      edge.event = uint8_t(event);
       edge.action = action;
       if (group) {
         const uint32_t next = uint32_t(result.group.size());
@@ -1305,8 +1337,11 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       } else {
         edge.to = nodeOf.at(target);
       }
-      edge.from = fromScript ? nodeFor(sender.entity) : objects[size_t(match[size_t(entityOf(int(c->sender)))])].id;
-      script.edges.push_back(edge);
+      for (const auto& [from, event] : senders) {
+        edge.from = fromScript ? nodeFor(sender.entity) : from;
+        edge.event = uint8_t(event);
+        script.edges.push_back(edge);
+      }
     }
   };
   for (int entity : geometry) {
