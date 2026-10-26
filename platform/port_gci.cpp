@@ -1153,6 +1153,84 @@ Report MigrateMountedLegacyPal() {
   return migrated;
 }
 
+namespace {
+struct Release {
+  const char* code;
+  const char* label;
+};
+constexpr Release kReleases[] = {
+    {"GM8E", "Metroid Prime (USA GameCube)"},
+    {"GM8P", "Metroid Prime (PAL GameCube)"},
+    {"R3ME", "Metroid Prime Trilogy (USA)"},
+    {"R3MP", "Metroid Prime Trilogy (PAL)"},
+};
+
+fs::path RestoreMarker(const fs::path& folder) { return folder / (std::string(".restore-offered-") + sGameCode); }
+} // namespace
+
+std::vector<OtherRelease> OtherReleaseSaves() {
+  std::vector<OtherRelease> found;
+  fs::path folder = MountedCardFolder();
+  if (folder.empty()) {
+    return found;
+  }
+  if (!folder.has_filename()) {
+    folder = folder.parent_path(); // a trailing separator
+  }
+  // <base>/<region>/Card A: the other region's card sits beside this one.
+  const fs::path base = folder.parent_path().parent_path();
+  const fs::path cardName = folder.filename();
+  for (const Release& release : kReleases) {
+    if (std::strncmp(release.code, sGameCode, 4) == 0) {
+      continue;
+    }
+    const fs::path source = base / (release.code[3] == 'P' ? "EUR" : "USA") / cardName;
+    const std::vector<fs::path> files = FilesOf(source, release.code);
+    if (files.empty()) {
+      continue;
+    }
+    OtherRelease other{source, release.code, release.label, fs::file_time_type::min()};
+    std::error_code ec;
+    for (const fs::path& file : files) {
+      other.written = std::max(other.written, fs::last_write_time(file, ec));
+    }
+    found.push_back(std::move(other));
+  }
+  std::sort(found.begin(), found.end(),
+            [](const OtherRelease& a, const OtherRelease& b) { return a.written > b.written; });
+  return found;
+}
+
+Report RestoreFrom(const OtherRelease& source) {
+  const fs::path folder = MountedCardFolder();
+  if (folder.empty()) {
+    Report report;
+    AddError(report, "the memory card is not a GCI folder");
+    return report;
+  }
+  Report report = CopyFiles(source.folder, FilesOf(source.folder, source.code), folder, sGameCode);
+  if (report.copied > 0) {
+    MarkCardChanged();
+  }
+  return report;
+}
+
+std::vector<OtherRelease> RestoreToOffer() {
+  const fs::path folder = MountedCardFolder();
+  std::error_code ec;
+  if (folder.empty() || !GameFiles(folder).empty() || fs::exists(RestoreMarker(folder), ec)) {
+    return {};
+  }
+  return OtherReleaseSaves();
+}
+
+void MarkRestoreOffered() {
+  const fs::path folder = MountedCardFolder();
+  if (!folder.empty()) {
+    std::ofstream(RestoreMarker(folder)) << "asked\n";
+  }
+}
+
 void MarkCardChanged() { sCardChanged = true; }
 
 bool RemountIfChanged() {

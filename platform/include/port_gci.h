@@ -171,6 +171,27 @@ std::filesystem::path MountedCardFolder();
 // MigrateLegacyPal on the card folder in use (nothing off the PAL disc). Run once
 // the card API is up, and again when another card folder is switched in.
 Report MigrateMountedLegacyPal();
+
+// Saves another release left on the port's card: each disc keeps its own files
+// (GM8E, GM8P, R3ME, R3MP; PAL ones under EUR), so after switching discs the
+// old saves are still there but the game does not see them.
+struct OtherRelease {
+  std::filesystem::path folder;
+  std::string code;  // game code of its files
+  std::string label; // "Metroid Prime (USA GameCube)"
+  std::filesystem::file_time_type written{};
+};
+// Those beside the mounted card, newest first; empty when the card is not a
+// GCI folder.
+std::vector<OtherRelease> OtherReleaseSaves();
+// Copies one into the mounted card, converted to this disc's release; the
+// card's own saves move to _replaced, as an import does.
+Report RestoreFrom(const OtherRelease& source);
+// What the startup offer asks (CMemoryCardSys): the mounted card has no save
+// of this release, others are there, and it was not asked on this card for
+// this release before (a marker file in the card folder remembers).
+std::vector<OtherRelease> RestoreToOffer();
+void MarkRestoreOffered();
 // After an import: the front end's save screen remounts the card and probes it
 // again once the card is idle. Returns true (once) when it did the remount.
 void MarkCardChanged();

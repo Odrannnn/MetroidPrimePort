@@ -5,7 +5,9 @@
 #include "dolphin/os/OSCache.h"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_messagebox.h>
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_video.h>
 #if defined(__ANDROID__)
 #include <SDL3/SDL_system.h>
 #endif
@@ -13,13 +15,16 @@
 #include "Kyoto/MemoryCopy.hpp"
 #include "Kyoto/Basics/CBasics.hpp"
 #include "MetroidPrime/PortSaveFormat.hpp"
+#include "port_env.h"
 #include "port_gci.h"
 #include "port_log.h"
 #include "port_paths.h"
 
 #include <aurora/card.h>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 bool CMemoryCardSys::mIsInitialized;
 bool CMemoryCardSys::mIsCardSysExists;
@@ -45,6 +50,58 @@ void MigrateLegacyPalSave() {
   const PortGci::Report migrated = PortGci::MigrateMountedLegacyPal();
   if (migrated.copied > 0 || !migrated.errors.empty()) {
     PortLog::Write("memory card: %s\n", migrated.Summary("Migrated").c_str());
+  }
+}
+
+// Port: each release keeps its own saves, so after switching discs (USA to
+// PAL, GameCube to Trilogy) the card looks empty. Offer, once, to copy the
+// newest other release's save over, converted. The overlay's Memory card
+// section has the same choice for later (and for the older releases).
+void OfferRestoreFromOtherRelease() {
+  if (port::EnvFlag("MP_NO_DISC_DIALOG") || std::getenv("MP_CONSOLE") != nullptr) {
+    return; // scripted runs: nobody to answer
+  }
+  const std::vector<PortGci::OtherRelease> others = PortGci::RestoreToOffer();
+  if (others.empty()) {
+    return;
+  }
+  int windowCount = 0;
+  SDL_Window** windows = SDL_GetWindows(&windowCount);
+  SDL_Window* window = windows != nullptr && windowCount > 0 ? windows[0] : nullptr;
+  SDL_free(windows);
+  if (window == nullptr) {
+    return;
+  }
+  const PortGci::OtherRelease& newest = others.front();
+  const std::string message = "This disc has no saves yet, but there are saves from\n" + newest.label +
+                              ".\n\nCopy them over? They are converted for this disc;\nthe originals stay "
+                              "where they are.\n\nYou can also do it later: overlay, System tab,\nMemory card.";
+  enum { kSkip, kCopy };
+  const SDL_MessageBoxButtonData buttons[] = {
+      {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, kCopy, "Copy saves"},
+      {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, kSkip, "Start fresh"},
+  };
+  SDL_MessageBoxData data{};
+  data.flags = SDL_MESSAGEBOX_INFORMATION;
+  data.window = window;
+  data.title = "Metroid Prime: saves from another version";
+  data.message = message.c_str();
+  data.numbuttons = 2;
+  data.buttons = buttons;
+  int answer = -1;
+  if (!SDL_ShowMessageBox(&data, &answer)) {
+    PortLog::Write("memory card: could not offer the other release's saves: %s\n", SDL_GetError());
+    return;
+  }
+  PortGci::MarkRestoreOffered();
+  if (answer != kCopy) {
+    return;
+  }
+  const PortGci::Report report = PortGci::RestoreFrom(newest);
+  PortLog::Write("memory card: from %s: %s\n", newest.label.c_str(), report.Summary("Restored").c_str());
+  if (report.copied == 0) {
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Metroid Prime: saves not copied",
+                             report.Summary("Restored").c_str(), window);
   }
 }
 } // namespace
@@ -389,6 +446,7 @@ void CMemoryCardSys::Initialize() {
     if (!shared.empty()) {
       PortSwitchCard(shared.c_str());
     }
+    OfferRestoreFromOtherRelease();
   }
 }
 

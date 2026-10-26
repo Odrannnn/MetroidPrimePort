@@ -1079,7 +1079,12 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   cannot be shared. The card needs to exist (set the emulator's Slot A to "GCI
   Folder", start the game once). Randomizer/Archipelago keep their own cards.
   "Copy port saves into shared card" copies the port's own card over (its old
-  files move to `_replaced`). Logic in `platform/port_gci.cpp` and
+  files move to `_replaced`). Switching discs (USA, PAL, Trilogy) leaves the
+  new release's card empty: at boot the port asks once per card and release
+  whether to copy the newest other release's saves over, converted (skipped
+  under `MP_CONSOLE`/`MP_NO_DISC_DIALOG`); "Restore from <release>" in the
+  Memory card section (console `gci restore [n]`) does it any time, the card's
+  earlier files moving to `_replaced`. Logic in `platform/port_gci.cpp` and
   `platform/port_save_convert.cpp`, covered by `port_gci_tests` and
   `port_save_convert`. Console: `gci list | import <path> | export [usa|pal]
   <dir or .raw> | export trilogy <save.bin> | dolphin import | dolphin export

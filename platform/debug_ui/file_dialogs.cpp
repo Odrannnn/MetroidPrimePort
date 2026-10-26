@@ -23,6 +23,7 @@
 #include <imgui_internal.h>
 #include <SDL3/SDL_dialog.h>
 #include <SDL3/SDL_misc.h>
+#include <SDL3/SDL_timer.h>
 
 #if defined(__ANDROID__)
 #include "touch_pad.h"
@@ -651,6 +652,24 @@ void DrawMemoryCard() {
             "/Card A, GC/MemoryCardA." + PortGci::CardRegion() + ".raw).")
                .c_str());
 #endif
+  // Saves another disc left on the card (each release keeps its own files).
+  // Rescanned every two seconds: it reads every file's header.
+  static std::vector<PortGci::OtherRelease> sOthers;
+  static Uint64 sOthersNext = 0;
+  if (SDL_GetTicks() >= sOthersNext) {
+    sOthers = PortGci::OtherReleaseSaves();
+    sOthersNext = SDL_GetTicks() + 2000;
+  }
+  for (size_t i = 0; i < sOthers.size(); ++i) {
+    ImGui::PushID(static_cast<int>(i));
+    if (ImGui::Button(("Restore from " + sOthers[i].label).c_str())) {
+      sCardStatus = "From " + sOthers[i].label + ": " + PortGci::RestoreFrom(sOthers[i]).Summary("Restored");
+      sOthersNext = 0;
+    }
+    ItemHelp("Copies that version's save onto this disc's card, converted; this card's saves move to "
+             "_replaced first, and the other version's saves are left as they are.");
+    ImGui::PopID();
+  }
   ImGui::EndDisabled();
   ImGui::BeginDisabled(busy || saves == 0);
   const std::string asIs = std::string("As on the card (") +

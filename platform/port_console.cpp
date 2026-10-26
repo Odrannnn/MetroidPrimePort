@@ -3566,12 +3566,25 @@ void CmdGci() {
       why.clear();
     }
     text = "sharing the emulator card: " + sub + why + "; it takes effect at the title screen";
+  } else if (action == "restore" && sCmd.args.size() <= 3) {
+    // Without an index, list the other releases' saves beside the mounted card.
+    const auto others = PortGci::OtherReleaseSaves();
+    if (sCmd.args.size() == 2) {
+      for (size_t i = 0; i < others.size(); ++i) {
+        text += std::to_string(i) + ": " + others[i].label + " (" + others[i].folder.string() + ")\n";
+      }
+      text += others.empty() ? "no other release's saves found" : "gci restore <n> copies one in";
+    } else {
+      const size_t i = std::strtoul(sub.c_str(), nullptr, 10);
+      text = i < others.size() ? others[i].label + ": " + PortGci::RestoreFrom(others[i]).Summary("Restored")
+                               : "no such entry";
+    }
   } else if (action == "emulator" && !path.empty()) {
     PortGci::SetEmulatorFolder(Lower(path) == "auto" ? "" : path);
     PortDebug::SaveSettingsNow();
     text = "emulator folder: " + (PortGci::EmulatorFolder().empty() ? "auto" : PortGci::EmulatorFolder());
   } else {
-    return Finish("usage: gci list | share on|off | emulator <folder|auto> | import <path> | export [usa|pal] <dir or .raw> | export trilogy "
+    return Finish("usage: gci list | share on|off | emulator <folder|auto> | restore [n] | import <path> | export [usa|pal] <dir or .raw> | export trilogy "
                   "<save.bin> | dolphin import | dolphin export [usa|pal|trilogy]");
   }
   size_t start = 0;
@@ -4161,7 +4174,7 @@ const CommandSpec kCommands[] = {
      "disc verify [status|cancel]   check the whole disc image against Redump, in the background; status prints progress or the result"},
     {"discord", CmdDiscord, nullptr, "discord <0|1> | status   Discord Rich Presence"},
     {"gci", CmdGci, nullptr,
-     "gci list | share on|off | emulator <folder|auto> | import <path> | export <dir or .raw> | dolphin import|export   memory card transfer"},
+     "gci list | share on|off | emulator <folder|auto> | restore [n] | import <path> | export <dir or .raw> | dolphin import|export   memory card transfer"},
     {"ap", CmdAp, nullptr,
      "ap [connect <server> <slot> [password] | disconnect | recent | resume <n> | say <text> | chat]   Archipelago, as the F1 Archipelago page does"},
     {"rando", CmdRando, nullptr,
