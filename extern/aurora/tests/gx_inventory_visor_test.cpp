@@ -296,10 +296,17 @@ TEST(GxPbrThermal, OverrideOnlyInHdrSceneWithTheBit) {
   config.fogType = GX_FOG_PERSP_LIN;
   const std::string src = build_shader_source(config);
   const size_t hdr = pos(src, "prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);");
-  const size_t thm = pos(src, "let thm_g = (thm_l * 3.75 + 0.25) * abs(dot(pbr_n, pbr_v)) * ubuf.pbr_thermal.x +");
+  const size_t thmN = pos(src, "let thm_n = ");
+  const size_t thm = pos(src, "let thm_g = (thm_l * 3.75 + 0.25) * abs(dot(thm_n, pbr_v)) * ubuf.pbr_thermal.x +");
   ASSERT_NE(hdr, std::string::npos);
+  ASSERT_NE(thmN, std::string::npos);
   ASSERT_NE(thm, std::string::npos);
-  EXPECT_LT(hdr, thm);
+  EXPECT_LT(hdr, thmN);
+  EXPECT_LT(thmN, thm);
+  // Its own normal: a quarter of the map's tilt, unnormalised (02c254b6 048_0), never the lit pbr_n.
+  if (pos(src, "let thm_ts = ") != std::string::npos) {
+    EXPECT_NE(pos(src, " * 0.498046875 - 0.25;"), std::string::npos);
+  }
   EXPECT_NE(pos(src, "ubuf.pbr_thermal.z > 0.5 && !pbr_cut"), std::string::npos);
   EXPECT_EQ(pos(src, "mix(prev.rgb, hdr_exposed(ubuf.fog.color.rgb"), std::string::npos);
 

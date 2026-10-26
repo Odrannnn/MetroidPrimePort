@@ -3227,17 +3227,29 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
       // thermal technique with 02c254b6 Model_ThermalOverride (kb topic/thermal-model-render.md),
       // which binds the mesh's own BCLR (no DIFC) and rebuilds the normal from its normal map:
       //   g = (clamp(luma(BCLR), 0, 1) * 3.75 + 0.25) * |N.V| * c.x + c.y, unlit, unfogged.
+      // Its normal is its own, not the lit one: the map's xy decode at a quarter of the tilt
+      // (x * 0.498046875 - 0.25, 048_0 temp_52/53), N = T x + (Ng cross T) w y + Ng z is not
+      // normalised, and without a map N is the vertex normal. The full tilt put dark specks on
+      // every silhouette, where |N.V| is small.
       // Alpha: 1 on the opaque and alpha-test perms (the cut above has discarded), else base.a^2 *
       // vertex alpha. c is (0.4 a, 0.4 b + 0.6) times the inverse exposure, which the HDR scene's
       // exposure cancels, so it comes without it.
+      std::string thmN = "      let thm_n = pbr_ngs;\n";
+      if (!normalXy.empty()) {
+        thmN = fmt::format("      let thm_ts = {} * 0.498046875 - 0.25;\n"
+                           "      let thm_tn = vec3f(thm_ts, sqrt(1.0 - clamp(dot(thm_ts, thm_ts), 0.0, 1.0)));\n"
+                           "      let thm_n = select(pbr_ngs, pbr_tu * thm_tn.x + cross(pbr_ngs, pbr_tu) * (in.pbr_tan.w * thm_tn.y) +\n"
+                           "                                  pbr_ngs * thm_tn.z, pbr_tlen > 1e-24);\n",
+                           normalXy);
+      }
       put("prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);",
-          fmt::format("prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);\n"
+          fmt::format("prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);\n{1}"
                       "      let thm_l = clamp(dot(max({0}.rgb, vec3f(0.0)), vec3f(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\n"
-                      "      let thm_g = (thm_l * 3.75 + 0.25) * abs(dot(pbr_n, pbr_v)) * ubuf.pbr_thermal.x +\n"
+                      "      let thm_g = (thm_l * 3.75 + 0.25) * abs(dot(thm_n, pbr_v)) * ubuf.pbr_thermal.x +\n"
                       "                  ubuf.pbr_thermal.y;\n"
                       "      prev = vec4f(vec3f(thm_g),\n"
                       "                   select(1.0, {0}.a * {0}.a * pbr_vraw.a, ubuf.pbr_thermal.z > 0.5 && !pbr_cut));",
-                      base));
+                      base, thmN));
     }
   }
   return source;
