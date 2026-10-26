@@ -428,6 +428,12 @@ void CHudDecoInterfaceScan::InitializeFlatFrame() {
   x274_flat_model_dash =
       static_cast< CGuiModel* >(x10_loadedScanHudFlat->FindWidget(skScanDashName));
   x260_flat_basewidget_textgroup->SetVisibility(false, kTM_Children);
+#ifdef TARGET_PC
+  // @ fn_800E2280: Trilogy draws the status text without a depth test (800E23F0).
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    x254_flat_textpane_scanning->SetDepthTest(false);
+  }
+#endif
   x254_flat_textpane_scanning->SetIsVisible(false);
   x254_flat_textpane_scanning->TextSupport().SetFontColor(gpTweakGuiColors->GetHudMessageFill());
   x254_flat_textpane_scanning->TextSupport().SetOutlineColor(
