@@ -724,6 +724,11 @@ void CmdStatus(CStateManager& mgr) {
     Out("orbit target u%u %08X %s", target->GetUniqueId().Value(), target->GetEditorId().Value(),
         target->GetDebugName().data());
   }
+  Out("orbit nearby %d", static_cast< int >(player.GetOrbitObjectsOnScreenList().size()));
+  if (const CEntity* next = mgr.GetObjectById(player.GetOrbitNextTargetId())) {
+    Out("orbit next u%u %08X %s", next->GetUniqueId().Value(), next->GetEditorId().Value(),
+        next->GetDebugName().data());
+  }
   Out("first person %d, cinematic %d", mgr.GetCameraManager()->IsInFPCamera() ? 1 : 0,
       mgr.GetCameraManager()->IsInCinematicCamera() ? 1 : 0);
   if (world != nullptr) {
