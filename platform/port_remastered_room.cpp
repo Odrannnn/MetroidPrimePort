@@ -217,7 +217,8 @@ private:
   };
   bool MatchRoom(const RoomData& r, const std::map<std::string, Placement>& placed, Match& out) const;
   void Tonemap(const RoomData& r, float out[5]) const;
-  void Exposure(const RoomData& r, float out[5], std::vector<PortRoomEnv::FluidHint>* fluid = nullptr) const;
+  void Exposure(const RoomData& r, const Area* area, float out[5],
+                std::vector<PortRoomEnv::FluidHint>* fluid = nullptr) const;
   void ReadBloom(const RoomData& r, BloomData& out) const;
   // The room's global ColorGrades in component order; `area` gives their retail layers.
   void ReadGrades(const RoomData& r, const Area* area, std::vector<GradeData>& out,
@@ -470,10 +471,17 @@ void Writer::Tonemap(const RoomData& r, float out[5]) const {
 // reaches, 2 for its 0x4ff221ac link; which is the normal view and which the thermal one is
 // inferred from the data (unverified)) go to `fluid` whatever their mode, with the
 // instance's number in `pair`, and out of the plain-hint pick.
-void Writer::Exposure(const RoomData& r, float out[5], std::vector<PortRoomEnv::FluidHint>* fluid) const {
+void Writer::Exposure(const RoomData& r, const Area* area, float out[5],
+                      std::vector<PortRoomEnv::FluidHint>* fluid) const {
   out[0] = out[1] = out[2] = 0.f;
   out[3] = 32.f;
   out[4] = 0.5f;
+  // The hints' entities are (de)activated by the area's scripts (the hangar's intro camera,
+  // say), which registers and unregisters them.
+  SceneryScripts scripts;
+  if (fluid != nullptr && area != nullptr && !r.room.Of(kAutoExposureHint).empty()) {
+    scripts = MatchScripts(r.room, *area);
+  }
   std::map<const Component*, std::pair<uint8_t, uint8_t>> paired;  // hint -> role, pair
   {
     const auto& comps = r.room.Components();
@@ -551,6 +559,33 @@ void Writer::Exposure(const RoomData& r, float out[5], std::vector<PortRoomEnv::
       h.bias = std::isfinite(bias) ? bias : 0.f;
       h.sigma = sigma >= 0.f && sigma < 10000.f ? sigma : 32.f;
       h.staticLerp = lerp >= 0.f && lerp <= 1.f ? lerp : 0.5f;
+      if (const auto linked = scripts.links.find(c->entity); c->entity >= 0 && linked != scripts.links.end()) {
+        for (PortRoomGeo::Link link : linked->second) {
+          if (link.action != PortRoomGeo::kShow && link.action != PortRoomGeo::kHide &&
+              link.action != PortRoomGeo::kToggle) {
+            continue;
+          }
+          if (!PortRoomEnv::PseudoSender(link.sender)) {
+            link.sender &= 0x3ffffff;  // as CEntity sends it: no layer bits
+          }
+          h.links.push_back({link.sender, link.state, link.action});
+        }
+      }
+      if (const auto unresolved = scripts.unresolved.find(c->entity); unresolved != scripts.unresolved.end()) {
+        Log("  " + r.name + ": exposure hint with " + std::to_string(unresolved->second) +
+            " connection(s) not followed (sender type/event/action:" +
+            (scripts.unresolvedHow.count(c->entity) != 0 ? scripts.unresolvedHow.at(c->entity) : std::string()) +
+            "), " + std::to_string(h.links.size()) + " followed");
+      } else if (!h.links.empty()) {
+        std::string how;
+        for (const auto& l : h.links) {
+          char buf[48];
+          std::snprintf(buf, sizeof(buf), " %08X/%d/%d", l.sender, l.state, l.action);
+          how += buf;
+        }
+        Log("  " + r.name + ": exposure hint (priority " + std::to_string(h.priority) + (h.on ? ", on" : ", off") +
+            ") driven by" + how);
+      }
       fluid->push_back(h);
     }
   }
@@ -3247,7 +3282,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 27);
+  AppendLE32(out, 28);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3264,7 +3299,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   out.insert(out.end(), grid.begin(), grid.end());
   float exposure[5];
   std::vector<PortRoomEnv::FluidHint> fluidHints;
-  Exposure(r, exposure, &fluidHints);
+  Exposure(r, m.area, exposure, &fluidHints);
   AppendLEFloat(out, exposure[0]);
   AppendLEFloat(out, exposure[1]);
   AppendLEFloat(out, exposure[2]);
@@ -3540,6 +3575,13 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     AppendLEFloat(out, h.sigma);
     AppendLEFloat(out, h.staticLerp);
     AppendLE32(out, uint32_t(h.priority));
+    AppendLE32(out, uint32_t(h.links.size()));
+    for (const PortRoomEnv::GradeLink& link : h.links) {
+      AppendLE32(out, link.sender);
+      out.push_back(link.state);
+      out.push_back(link.action);
+      out.insert(out.end(), 2, 0);
+    }
   }
   AppendLE32(out, uint32_t(worldVolumes.size()));
   for (const PortRoomEnv::WorldVolume& v : worldVolumes) {

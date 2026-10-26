@@ -197,7 +197,7 @@ inline constexpr int kEffects = 112;   // exact GPSM primitive dispatch, transfo
 // 44: exposure hint fluid enum, priority and initial activation.
 // 45: exclude Landing Site's added unposed gunship hulls; keep retail's animated ship.
 // 46: a script node's retail input passes unmatched Relays (the frigate hangar's intro hull counter).
-inline constexpr int kRooms = 46;
+inline constexpr int kRooms = 48;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

@@ -909,7 +909,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
   std::set<int> hintEntities;
   for (const Component& c : comps) {
     if ((c.type == kColorGradeHint || c.type == kBacklight || c.type == kVolumetricFogHint ||
-         c.type == kVolumetricFogRegion) &&
+         c.type == kVolumetricFogRegion || c.type == kAutoExposureHint) &&
         c.entity >= 0) {
       hintEntities.insert(c.entity);
     }

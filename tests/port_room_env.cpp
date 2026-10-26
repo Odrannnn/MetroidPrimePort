@@ -1,6 +1,7 @@
 #include "port_room_env.h"
 
 #include "port_room_env_lod.h"
+#include "port_room_geo.h"
 #include "port_test.h"
 
 #include <algorithm>
@@ -1179,6 +1180,35 @@ void TestWorldVolumes() {
     CHECK(file.fluidHints[1].exposure[0] == 5.75f && file.envFxIntensity == 1.f);
     v27.resize(v27.size() - 20); // truncate inside the second priority
     CHECK(!PortRoomEnv::Parse(std::move(v27), file, error));
+  }
+  {
+    // Version 28: each hint ends with the script links that (de)activate its entity.
+    auto v28 = MakeVolumeFile({});
+    v28[4] = 28;
+    v28.resize(v28.size() - 8);
+    Put32(v28, 2);
+    for (int i = 0; i < 2; ++i) {
+      v28.insert(v28.end(), {0, 0, 0, 0}); // both start inactive
+      for (float f : {5.75f, 6.f, 0.f, 32.f, 0.5f}) PutFloat(v28, f);
+      Put32(v28, uint32_t(i + 1));
+      Put32(v28, 1);
+      Put32(v28, 0x172);
+      v28.insert(v28.end(), {0, uint8_t(i == 0 ? PortRoomGeo::kShow : PortRoomGeo::kToggle), 0, 0});
+    }
+    Put32(v28, 0);
+    for (float f : {0.f, 0.f, 0.f, 1.f}) PutFloat(v28, f);
+    CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(v28), file, error), "hint v28 links");
+    CHECK(file.fluidHints.size() == 2 && file.fluidHints[1].priority == 2);
+    CHECK(file.fluidHints[0].links.size() == 1 && file.fluidHints[0].links[0].sender == 0x172 &&
+          file.fluidHints[0].links[0].state == 0 && file.fluidHints[0].links[0].action == PortRoomGeo::kShow);
+    PortRoomEnv::ExposureHints hints;
+    hints.Load(file.fluidHints, false);
+    CHECK_MSG(hints.Pick(2) < 0, "hint links: nothing on before the sender fires");
+    CHECK_MSG(!hints.Drive(file.fluidHints, 0x172, 1), "hint links: another state drives nothing");
+    CHECK_MSG(hints.Drive(file.fluidHints, 0x172, 0) && hints.Pick(2) == 1, "hint links: show and toggle on");
+    CHECK_MSG(hints.Drive(file.fluidHints, 0x172, 0) && hints.Pick(2) == 0, "hint links: toggle off again");
+    v28.resize(v28.size() - 24); // inside the second hint's link
+    CHECK(!PortRoomEnv::Parse(std::move(v28), file, error));
   }
   CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(good), file, error), "volumes: parse");
   CHECK_MSG(file.worldVolumes.size() == 2 && PortRoomEnv::SameWorldVolumes(file.worldVolumes, {a, b}),

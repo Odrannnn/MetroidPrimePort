@@ -455,6 +455,9 @@ struct FluidHint {
   float bias = 0.f;
   float sigma = 32.f;
   float staticLerp = 0.5f;
+  // Version 28: kShow / kHide / kToggle (de)activate its entity, which registers or
+  // unregisters it (eased, type 0: only InsideFluidStateChanged snaps).
+  std::vector<GradeLink> links;
 };
 
 // A box of the world the camera is inside or not (version 22).
@@ -892,6 +895,7 @@ struct ExposureHints {
   std::vector<uint8_t> disabled; // per FluidHint: externally disabled by the swap
   std::vector<uint64_t> order; // per FluidHint: registration number, 0 when unregistered
   std::vector<int32_t> priority;
+  std::vector<uint8_t> on; // per FluidHint: its entity is active (FluidHint::on, then its links)
   uint64_t next = 1;
   // Starts the room's hints as EntityLoaded does with the camera's current state. The pair
   // hints start in `pairState` (without a snap: ConnectAreaFunctors' initial disable is type 0;
@@ -901,6 +905,8 @@ struct ExposureHints {
   bool Set(const std::vector<FluidHint>& hints, bool cameraInside);
   // The swap's state of the frame (see SwapState). True when a hint registered, which snaps.
   bool SetPair(const std::vector<FluidHint>& hints, uint8_t state);
+  // What `sender` does on `state` to the hints' entities; true when one changed. Never snaps.
+  bool Drive(const std::vector<FluidHint>& hints, uint32_t sender, int state);
   static uint8_t SwapState(bool unmorphed, bool thermal, bool cinematic) {
     return (unmorphed && thermal) ? (cinematic ? 1 : 0) : 1;
   }

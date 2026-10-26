@@ -276,6 +276,10 @@ void DriveGrades(uint32_t mrea, Area& area, uint32_t sender, int state) {
   DriveHints(mrea, "fog region", area.file.regions, area.regions, sRegionOrder, sender, state);
   DriveTransitions(mrea, area, sender, state);
   DriveLights(mrea, area, sender, state);
+  if (area.hints.Drive(area.file.fluidHints, sender, state)) {
+    PortLog::Write("room env: %08X exposure hints driven by %08X state %d, pick %d\n", mrea, sender, state,
+                   area.hints.Pick(area.file.fluidHints.size()));
+  }
 }
 
 void DriveCameraWaterItems(uint32_t mrea, Area& area, uint64_t items) {
@@ -286,6 +290,18 @@ void DriveCameraWaterItems(uint32_t mrea, Area& area, uint64_t items) {
 
 // Every grade and backlight as it starts, then the fluids the player and camera are in already.
 void StartGrades(uint32_t mrea, Area& area, bool playerFluid, bool cameraWater) {
+  // The exposure hints' entities as they load (their registrations follow).
+  if (area.hints.on.size() == area.file.fluidHints.size()) {
+    bool changed = false;
+    for (size_t i = 0; i < area.hints.on.size(); ++i) {
+      const uint8_t on = area.file.fluidHints[i].on ? 1 : 0;
+      changed |= area.hints.on[i] != on;
+      area.hints.on[i] = on;
+    }
+    if (changed) {
+      area.hints.Update(area.file.fluidHints, false);
+    }
+  }
   area.grades.assign(area.file.grades.size(), {});
   for (size_t i = 0; i < area.grades.size(); ++i) {
     area.grades[i].on = area.file.grades[i].on;

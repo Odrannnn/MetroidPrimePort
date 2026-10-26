@@ -1,5 +1,6 @@
 // The .roomenv file: parsing, and picking the probe for a point. See port_room_env.h.
 #include "port_room_env.h"
+#include "port_room_geo.h"
 #include "port_hash.h"
 #include "port_strings.h"
 #include "port_bytes.h"
@@ -14,7 +15,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 27;
+constexpr uint32_t kVersion = 28;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -970,14 +971,34 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
     }
     const uint32_t hints = ReadLE32(data.data() + at);
     at += 4;
-    const size_t kHintBytes = version >= 27 ? 28 : 24;
+    // Version 28 follows each with its links (a count, then 8 bytes each).
+    const size_t kHintBytes = version >= 28 ? 32 : version >= 27 ? 28 : 24;
     if ((data.size() - at) / kHintBytes < hints) {
       error = "cut short";
       return false;
     }
-    for (uint32_t i = 0; i < hints; ++i, at += kHintBytes) {
+    for (uint32_t i = 0; i < hints; ++i) {
+      if (data.size() - at < kHintBytes) {
+        error = "cut short";
+        return false;
+      }
       const uint8_t* q = data.data() + at;
+      at += kHintBytes;
       FluidHint h;
+      if (version >= 28) {
+        const uint32_t links = ReadLE32(q + 28);
+        if (links > kMaxGradeLinks || (data.size() - at) / 8 < links) {
+          error = "cut short";
+          return false;
+        }
+        h.links.resize(links);
+        for (GradeLink& link : h.links) {
+          link.sender = ReadLE32(data.data() + at);
+          link.state = data[at + 4];
+          link.action = data[at + 5];
+          at += 8;
+        }
+      }
       h.mode = q[0];
       if (version >= 27) {
         h.on = q[3] != 0;
@@ -1132,6 +1153,10 @@ bool ExposureHints::Load(const std::vector<FluidHint>& hints, bool cameraInside,
   active.assign(hints.size(), 0);
   disabled.assign(hints.size(), 0);
   order.assign(hints.size(), 0);
+  on.resize(hints.size());
+  for (size_t i = 0; i < hints.size(); ++i) {
+    on[i] = hints[i].on ? 1 : 0;
+  }
   if (cameraInside) {
     inside = seen = true;
   }
@@ -1155,11 +1180,41 @@ bool ExposureHints::SetPair(const std::vector<FluidHint>& hints, uint8_t state) 
   return Update(hints, true);
 }
 
+bool ExposureHints::Drive(const std::vector<FluidHint>& hints, uint32_t sender, int state) {
+  if (on.size() != hints.size()) {
+    return false;
+  }
+  bool changed = false;
+  for (size_t i = 0; i < hints.size(); ++i) {
+    for (const GradeLink& link : hints[i].links) {
+      if (link.sender != sender || link.state != state) {
+        continue;
+      }
+      const uint8_t now = link.action == PortRoomGeo::kShow     ? 1
+                          : link.action == PortRoomGeo::kHide   ? 0
+                          : link.action == PortRoomGeo::kToggle ? uint8_t(on[i] == 0)
+                                                                : on[i];
+      changed |= now != on[i];
+      on[i] = now;
+    }
+  }
+  if (changed) {
+    Update(hints, false);
+  }
+  return changed;
+}
+
 bool ExposureHints::Update(const std::vector<FluidHint>& hints, bool snapMode0) {
   if (active.size() != hints.size()) {
     active.assign(hints.size(), 0);
     disabled.assign(hints.size(), 0);
     order.assign(hints.size(), 0);
+  }
+  if (on.size() != hints.size()) {
+    on.resize(hints.size());
+    for (size_t i = 0; i < hints.size(); ++i) {
+      on[i] = hints[i].on ? 1 : 0;
+    }
   }
   const uint64_t firstRegistration = next;
   priority.resize(hints.size());
@@ -1181,7 +1236,7 @@ bool ExposureHints::Update(const std::vector<FluidHint>& hints, bool snapMode0) 
     default:
       break;
     }
-    const uint8_t now = eligible && hint.on && !disabled[i] ? 1 : 0;
+    const uint8_t now = eligible && on[i] != 0 && !disabled[i] ? 1 : 0;
     if (now == active[i]) {
       continue;
     }
