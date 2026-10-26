@@ -1,4 +1,5 @@
 #include "port_input_settings.h"
+#include "port_mouse.h"
 #include "port_test.h"
 
 #include <cmath>
@@ -45,6 +46,10 @@ int main() {
   REQUIRE_MSG(Get().stickAimRateY == 450.f, "stick_aim_rate_y above range");
   ApplySetting("stick_aim_split", "0");
   REQUIRE_MSG(!Get().mouseSensitivitySplit && !Get().touchAimSplit && !Get().gyroSplit, "vertical splits default off");
+  // 3.0 on the Source scale (issue #210), both axes.
+  REQUIRE_MSG(std::fabs(PortInput::Settings{}.mouseSensitivity - PortMouse::kDefaultSensitivity) < 1e-8f &&
+                  std::fabs(PortInput::Settings{}.mouseSensitivityY - PortMouse::kDefaultSensitivity) < 1e-8f,
+              "mouse sensitivity defaults to 3.0 Source");
   REQUIRE_MSG(ApplySetting("mouse_sensitivity_split", "1") && Get().mouseSensitivitySplit, "mouse_sensitivity_split");
   REQUIRE_MSG(ApplySetting("mouse_sensitivity_y", "0.002") && Get().mouseSensitivityY == 0.002f, "mouse_sensitivity_y");
   ApplySetting("mouse_sensitivity_y", "5");

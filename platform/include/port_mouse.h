@@ -21,6 +21,16 @@ constexpr float kDefaultSensitivity = float(3.0 * kSourceRadiansPerUnit);
 // the pointer follows the cursor's speed. Fixed (the old mouse default), so stick and
 // touch speeds do not move with the mouse sensitivity (issue #209).
 constexpr float kAimPixelRadians = 0.0035f;
+// Stick or touch travel (pixels) as mouse counts: the aim turns, and the pointer
+// moves, by the mouse sensitivity, so this divides it out.
+inline float AimPixelsAsCounts(float pixels, float mouseSensitivity) {
+  return pixels * kAimPixelRadians / mouseSensitivity;
+}
+// Pointer aim: counts to pointer units (-1..1 of the half view) along a view
+// extent of extentPixels. At kAimPixelRadians the pointer follows the cursor.
+inline float PointerUnitsPerCount(float extentPixels, float mouseSensitivity) {
+  return 2.f / extentPixels * (mouseSensitivity / kAimPixelRadians);
+}
 // Hand travel for a full turn at a mouse's counts per inch.
 inline float CentimetresPer360(float radiansPerCount, float dpi) {
   if (!(radiansPerCount > 0.f) || !(dpi > 0.f)) return 0.f;

@@ -532,9 +532,8 @@ static void PointerAimScale(float& sx, float& sy) {
     width = 640;
     height = 480;
   }
-  const float speed = MouseSensitivity() / PortMouse::kAimPixelRadians;
-  sx = 2.f / static_cast<float>(width) * speed;
-  sy = 2.f / static_cast<float>(height) * speed;
+  sx = PortMouse::PointerUnitsPerCount(static_cast<float>(width), MouseSensitivity());
+  sy = PortMouse::PointerUnitsPerCount(static_cast<float>(height), MouseSensitivity());
 }
 
 bool AimCrosshair() { return MouseCrosshair() || PointerAim(); }
@@ -1047,11 +1046,11 @@ void AddTouchAim(float dxDp, float dyDp) {
     return;
   }
   // As stick aim: a touch pixel turns kAimPixelRadians whatever the mouse sensitivity.
-  const float pixel = PortMouse::kAimPixelRadians / MouseSensitivity();
+  const float sensitivity = MouseSensitivity();
   std::lock_guard lock(sTouchAimMutex);
-  sTouchAimPendingX += dxDp * sInput.touchAimSpeed * pixel;
-  sTouchAimPendingY +=
-      dyDp * (sInput.touchAimSplit ? sInput.touchAimSpeedY : sInput.touchAimSpeed) * pixel;
+  sTouchAimPendingX += PortMouse::AimPixelsAsCounts(dxDp * sInput.touchAimSpeed, sensitivity);
+  sTouchAimPendingY += PortMouse::AimPixelsAsCounts(
+      dyDp * (sInput.touchAimSplit ? sInput.touchAimSpeedY : sInput.touchAimSpeed), sensitivity);
 }
 
 void BeginFrameMouse() {

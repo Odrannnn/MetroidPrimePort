@@ -314,5 +314,25 @@ int main() {
   turned.Synchronize(0.f, 1.f, 0.f);
   turned.Turn(0.25f, 10.f);
   REQUIRE(Near(turned.yaw, 0.25f) && Near(turned.pitch, PortMouse::kMaxPitch));
+  // Stick and touch travel turn the view, and move the pointer, the same at any mouse
+  // sensitivity (issue #209); mouse counts scale with it.
+  for (const float source : {0.3f, 1.f, 3.f, 9.115f, 30.f}) {
+    const float sensitivity = PortMouse::RadiansFromSource(source);
+    const float counts = PortMouse::AimPixelsAsCounts(100.f, sensitivity);
+    PortMouse::AimState stick;
+    stick.Synchronize(0.f, 1.f, 0.f);
+    REQUIRE(stick.Update(true, false, 0.f, 1.f, 0.f, counts, -counts, sensitivity, false, false));
+    REQUIRE(Near(stick.yaw, -100.f * PortMouse::kAimPixelRadians));
+    REQUIRE(Near(stick.pitch, 100.f * PortMouse::kAimPixelRadians));
+    PortMouse::PointerAim stickPointer;
+    stickPointer.Move(counts * PortMouse::PointerUnitsPerCount(1000.f, sensitivity), 0.f);
+    REQUIRE(Near(stickPointer.x, 0.2f));
+    PortMouse::AimState mouse;
+    mouse.Synchronize(0.f, 1.f, 0.f);
+    REQUIRE(mouse.Update(true, false, 0.f, 1.f, 0.f, 10.f, 0.f, sensitivity, false, false));
+    REQUIRE(Near(mouse.yaw, -10.f * sensitivity));
+  }
+  // At kAimPixelRadians a count is a pixel: the pointer follows the cursor.
+  REQUIRE(Near(PortMouse::PointerUnitsPerCount(1000.f, PortMouse::kAimPixelRadians) * 500.f, 1.f));
   std::puts("mouse axes, limits, handoff, held-button and pointer-aim regressions passed");
 }
