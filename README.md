@@ -26,8 +26,8 @@ ships no disc image, and neither does any package or release built from it.
 - **Photo mode** with free-cam and high-resolution capture
 - **Map and tracker:** reveal the map, plus item, scan and room tracking
 - **Dolphin texture packs**, including HD texture replacements
-- **Mods:** drop-in mod folders that replace disc data, reloadable while the game runs, plus
-  community mods such as a Russian translation ([mods guide](docs/MODS.md))
+- **Mods:** drop-in mod folders that replace disc data, plus
+  [community mods](docs/MODS.md))
 - **Discord Rich Presence** on desktop, and a **touch overlay** on Android
 - The **F1 overlay** has every setting, with search; the common ones are also in
   pause > Options
