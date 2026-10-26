@@ -883,7 +883,7 @@ void encode_measure(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& c
   const auto& views = g_state.measureViews;
   draw(cmd, "Scene measure", g_state.measure, 0, source.view, source.view, views[0], false);
   for (size_t mip = 1; mip < views.size(); ++mip) {
-    draw(cmd, "Scene measure", g_state.measure, 0, views[mip - 1], views[mip - 1], views[mip], false);
+    draw(cmd, "Scene measure down", g_state.measure, 0, views[mip - 1], views[mip - 1], views[mip], false);
   }
   const wgpu::TexelCopyTextureInfo copySource{.texture = g_state.measureChain,
                                               .mipLevel = uint32_t(views.size() - 1)};
