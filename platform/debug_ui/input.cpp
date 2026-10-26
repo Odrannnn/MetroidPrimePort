@@ -567,7 +567,8 @@ bool PointerAimPosition(float& x, float& y) {
 bool PresentedPointerAimPosition(float fraction, float& x, float& y) {
   if (!PointerAimPosition(x, y)) return false;
   // Held, the pointer stays put: travel since the tick does not move it.
-  if (sPointerAimHeld) return true;
+  // So does it under an open radial menu, which takes the travel.
+  if (sPointerAimHeld || PortRadial::Capturing()) return true;
   // The travel since the tick, so the drawn pointer moves every frame, and the
   // last tick's stick travel drawn after its tick (PresentedAimDelta).
   float touchX = 0.f, touchY = 0.f;
@@ -1125,8 +1126,10 @@ bool TakeTouchLook(float& dyaw, float& dpitch) {
 
 bool PresentedAimDelta(float fraction, float& dyaw, float& dpitch) {
   dyaw = dpitch = 0.f;
+  // An open radial menu takes the travel as its selection (UpdateMouseAim), so the view
+  // must not show it turning before the tick, then snap back.
   if (!FrameInterpolation() || !sMouseGameplayActive || !sAimAppliedLastTick ||
-      !std::isfinite(fraction) || fraction < 0.f) {
+      PortRadial::Capturing() || !std::isfinite(fraction) || fraction < 0.f) {
     return false;
   }
   // What the next tick will consume: the mouse, gyro and touch travel so far,
