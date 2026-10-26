@@ -100,7 +100,9 @@ namespace ImportStage {
 // 77: E2644678 (the Ore Processing pillar glass) draws as kind 29 with its CCH4 phase scale and depth cap.
 // 78: 5586D988 route hologram retains its vertex data and CCH/DIFC constants as kind 45.
 // 79: the transparent-flagged EnergyField materials keep kind 44 (no not-layered demotion).
-inline constexpr int kConverter = 79;
+// 80: 81B8E136 (Thardus) draws as a978d507, its verbatim subset; a two-tangent model writes the second
+//     frame when the buffers its two-tangent surfaces draw have it, not only when all of them do.
+inline constexpr int kConverter = 80;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.

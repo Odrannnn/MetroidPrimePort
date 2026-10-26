@@ -209,6 +209,10 @@ constexpr ShaderTwin kShaderTwins[] = {
     // v5, weights in v6) and renormalise the skinned N and T (T1 too), nothing else. The port skins on its side
     // (DolphinCSkinRules.cpp, FinishTangentFrame, incl. the second frame).
     {0xC36C5166, kShaderIceSpreader}, {0xB55635D2, 0xA978D507}, {0xEF94ACCF, kShaderLava},
+    // 81b8e136 (thardus_test_shader3, Thardus and his rocks only): every one of its 57 perms, vertex and fragment,
+    // is byte-identical to an a978d507 perm, with the same bindings; only the lightmap perms are left out, which
+    // its actor-only users never select.
+    {0x81B8E136, 0xA978D507},
     // 1ac34e37 (Core_Phazon_Mat) is 07acff46's skinned copy, as the others.
     {0x1AC34E37, kShaderPhazonPool},
     // The fx shaders of kb material/{96009286,a5bd3ed7,ed8ab6e7,937a8c35}.md routed to the kind they match (a5bd3ed7 and

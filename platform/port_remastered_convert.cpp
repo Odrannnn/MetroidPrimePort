@@ -1188,10 +1188,12 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     useTan = useTan && !buffers[bi].T.empty();
   }
   // A second tangent frame (flag 0x10) only for the models that draw a two-tangent shader
-  // with TANGENT_1 on every buffer; its other surfaces keep the first nine floats (0x93).
+  // with TANGENT_1 on every buffer those surfaces draw; its other surfaces keep the first nine
+  // floats (0x93). Remastered's two-tangent perms all fetch TANGENT_1, so their buffers carry it;
+  // the model's other buffers (other shaders, which never read it) take TANGENT_0 in its place.
   auto twoTangent = [&](const Prim& p) {
     for (uint32_t id : kShaderTwoTangent) {
-      if (mats[p.mat].shader == id) {
+      if (mats[p.mat].family == id) {
         return true;
       }
     }
@@ -1201,8 +1203,8 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
   for (const Prim& p : prims) {
     useTan2 = useTan2 || twoTangent(p);
   }
-  for (uint32_t bi : bufOrder) {
-    useTan2 = useTan2 && useTan && !buffers[bi].T1.empty();
+  for (const Prim& p : prims) {
+    useTan2 = useTan2 && useTan && (!twoTangent(p) || !buffers[p.buffer].T1.empty());
   }
   std::vector<double> P, N, T, T1;
   P.reserve(n * 3);
@@ -1214,7 +1216,8 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       T.insert(T.end(), buffers[bi].T.begin(), buffers[bi].T.end());
     }
     if (useTan2) {
-      T1.insert(T1.end(), buffers[bi].T1.begin(), buffers[bi].T1.end());
+      const std::vector<double>& t1 = buffers[bi].T1.empty() ? buffers[bi].T : buffers[bi].T1;
+      T1.insert(T1.end(), t1.begin(), t1.end());
     }
   }
   auto uvSet = [&](size_t i) {
