@@ -912,6 +912,9 @@ if(MP_BUILD_TESTS)
     mp_port_test(port_room_geometry_handedness_tests
         SOURCES tests/port_room_geometry_handedness.cpp
         INCLUDES platform/include extern/aurora/include)
+    mp_port_test(port_gunship_scenery_tests
+        SOURCES tests/port_gunship_scenery.cpp
+        INCLUDES platform/include)
     mp_port_test(port_room_effects_tests
         SOURCES tests/port_room_effects.cpp platform/port_room_effects_file.cpp
         INCLUDES platform/include)

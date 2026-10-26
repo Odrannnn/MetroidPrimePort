@@ -9,6 +9,7 @@
 // port_remastered_room_scripts.cpp, shared through port_remastered_room_internal.h.
 
 #include "port_remastered_room_internal.h"
+#include "port_gunship_scenery.h"
 
 namespace PortRemastered {
 namespace RoomDetail {
@@ -2395,6 +2396,25 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     Id16 model{};
     if (hasModel) {
       model = SwapUuid(r.room.Bytes(prop->second));
+      if (!isPlatform && !synthetic && f.find(kPropActorAdded) != f.end() &&
+          PortGunshipScenery::ExcludeSource(mrea, model)) {
+        // Retail already draws the animated ship; these unposed cinematic hulls would
+        // add a second static copy. Keep supported bindings eligible, including a model
+        // carrying an animation property (hasAnim above ignores it when hasModel is true).
+        const auto bindings = scripts.links.find(c->entity);
+        Span characterBinding;
+        const bool bound = driven ||
+            r.room.Nested(*c, {animProperty, kPropAnimCharacter}, characterBinding) ||
+            scripts.platform.count(c->entity) != 0 || scripts.platformTransform.count(c->entity) != 0 ||
+            (bindings != scripts.links.end() &&
+             std::any_of(bindings->second.begin(), bindings->second.end(), [](const PortRoomGeo::Link& link) {
+               return link.action == PortRoomGeo::kFollow || link.action == PortRoomGeo::kActorTransform;
+             }));
+        if (PortGunshipScenery::ExcludeSource(mrea, model, bound)) {
+          ++posed;
+          continue;
+        }
+      }
     } else {
       const Id16 key = SwapUuid(r.room.Bytes(chprProp));
       auto ch = characters.find(key);
