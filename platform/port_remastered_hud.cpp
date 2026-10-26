@@ -201,6 +201,7 @@ constexpr size_t kTextPaneSize = 74;
 constexpr size_t kPalTextPaneExtra = 12;
 constexpr size_t kTextPaneExtent = 66;
 constexpr size_t kTextPaneJustify = 26;
+constexpr size_t kTextPaneWrap = 24;
 constexpr size_t kModelSize = 12;
 
 struct Widget {
@@ -326,6 +327,49 @@ bool ParseFrame(const Blob& data, uint32_t header[4], std::vector<Widget>& out, 
   return true;
 }
 
+// The cell height of a disc font's capital H, or its 0 in a font of digits, and
+// whether the font is outlined: what PortHdFont fits Remastered's glyphs to.
+bool DiscFontCell(const Blob& font, int& cell, bool& outline) {
+  Reader in{font.data(), font.size(), 0, true};
+  if (in.U32() != FourCC('F', 'O', 'N', 'T')) {
+    return false;
+  }
+  const uint32_t version = in.U32();
+  if (version > 4) {
+    return false;
+  }
+  // Mono width and height, baseline (version 1), line margin (2), two flags,
+  // two ints, the name, the texture.
+  in.Skip(8 + (version >= 1 ? 4 : 0) + (version >= 2 ? 4 : 0) + 10);
+  while (in.Has(1) && in.U8() != 0) {
+  }
+  in.Skip(4);
+  outline = in.U32() == 1;
+  const uint32_t count = in.U32();
+  int found[2] = {0, 0};
+  for (uint32_t i = 0; i < count && in.ok; ++i) {
+    const uint16_t character = in.U16();
+    in.Skip(16);  // texture coordinates
+    int height = 0;
+    if (version >= 4) {  // bytes: layer, spacings, cell width, cell height, baseline, then a short
+      in.Skip(5);
+      height = in.U8();
+      in.Skip(3);
+    } else {  // ints: spacings, cell width, cell height, baseline, kerning start
+      in.Skip(16);
+      height = int(in.U32());
+      in.Skip(8);
+    }
+    if (character == 'H') {
+      found[0] = height;
+    } else if (character == '0') {
+      found[1] = height;
+    }
+  }
+  cell = found[0] > 0 ? found[0] : found[1];
+  return in.ok && cell > 0;
+}
+
 // --- Remastered's frame ----------------------------------------------------------
 
 struct RemWidget {
@@ -343,7 +387,12 @@ struct RemWidget {
   uint32_t projection = 0;
   float camera[4] = {};  // fov, aspect; or right, left, top, bottom
   std::vector<uint32_t> meshes;
-  uint32_t textJustify[2] = {9, 9};  // a text pane's; 9 when unread
+  // A text pane's justification (~0 when unread), box, text scale and word
+  // wrap (-1 when unread).
+  uint32_t textJustify[2] = {~0u, ~0u};
+  float textBox[2] = {};
+  float textScale = 0.f;
+  int textWrap = -1;
 };
 
 constexpr size_t kFrameHeader = 32;
@@ -439,12 +488,19 @@ bool ParseRemFrame(const uint8_t* data, size_t size, std::vector<RemWidget>& out
         in.U32();
       } else {
         // Box (2 floats), offset (3), font name, wrap and horizontal flags,
-        // then the horizontal and vertical justification.
-        in.Skip(20);
-        in.Skip(size_t(in.U32()) + 2);
+        // then the horizontal and vertical justification and the text scale.
+        const float box[2] = {in.Float(), in.Float()};
+        in.Skip(12);
+        in.Skip(size_t(in.U32()));
+        const uint8_t wrap = in.U8();
+        in.Skip(1);
         const uint32_t justify[2] = {in.U32(), in.U32()};
+        const float scale = in.Float();
         if (in.ok) {
           std::memcpy(w.textJustify, justify, sizeof(justify));
+          std::memcpy(w.textBox, box, sizeof(box));
+          w.textScale = scale;
+          w.textWrap = wrap != 0;
         }
         in.ok = true;
         fixed = false;
@@ -1195,6 +1251,42 @@ bool HudConverter::Convert(uint32_t retailFrame, const uint8_t* guif, size_t siz
     const double at[3] = {m.m[0][3], m.m[1][3], m.m[2][3]};
     return viewHeight(remWorld(size_t(camera)), c.camera[0], at);
   };
+  // A text pane's box in pixels of a 1600 x 900 screen, as Remastered's
+  // CGuiTextPane::Initialize measures it: the point (box, 0) of the frame
+  // through the camera (CGuiCamera::ConvertToScreenSpace, GL projection).
+  auto remGrid = [&](const RemWidget& pane, double* grid) {
+    if (camera < 0) {
+      return false;
+    }
+    const RemWidget& c = rem[size_t(camera)];
+    const double point[3] = {pane.textBox[0], pane.textBox[1], 0.0};
+    double v[3] = {};
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        v[i] += c.world.m[j][i] * (point[j] - c.world.m[j][3]);
+      }
+    }
+    double ndc[2];
+    if (c.projection == 0) {
+      const double t = std::tan(double(c.camera[0]) * kPi / 360.0);
+      if (!(-v[2] > 1e-9) || !(t > 1e-9) || !(c.camera[1] > 0.f)) {
+        return false;
+      }
+      ndc[0] = v[0] / (t * c.camera[1]) / -v[2];
+      ndc[1] = v[1] / t / -v[2];
+    } else {
+      const double width = double(c.camera[0]) - c.camera[1];
+      const double height = double(c.camera[2]) - c.camera[3];
+      if (std::abs(width) < 1e-9 || std::abs(height) < 1e-9) {
+        return false;
+      }
+      ndc[0] = (2.0 * v[0] - (double(c.camera[0]) + c.camera[1])) / width;
+      ndc[1] = (2.0 * v[1] - (double(c.camera[2]) + c.camera[3])) / height;
+    }
+    grid[0] = std::floor(ndc[0] * 1600.0 * 0.5 + 0.5);
+    grid[1] = std::floor(ndc[1] * 900.0 * 0.5 + 0.5);
+    return grid[0] != 0.0 && grid[1] != 0.0;
+  };
   auto meshBox = [&](size_t i, double* lo, double* hi) {
     Part part;
     if (rem[i].meshes.empty() || !MeshPart(model, rem[i].meshes[0], part) || part.positions.empty()) {
@@ -1569,10 +1661,14 @@ bool HudConverter::Convert(uint32_t retailFrame, const uint8_t* guif, size_t siz
       std::memcpy(w.color, g.color, sizeof(w.color));
       w.draw = g.draw;
     } else if (w.type == FourCC('T', 'X', 'P', 'N') && w.guif >= 0 && w.typeData.size() >= kTextPaneSize) {
-      // The box is Remastered's mesh for the text. The disc's text is laid out
-      // in whole units of its font: the box's extent in those units gives the
-      // glyphs the proportions they had, filling the box's height or, where
-      // that would draw them bigger than the disc did, at the disc's size.
+      // The box is Remastered's mesh for the text. Remastered lays its text out
+      // in pixels of its font, textScale * box / grid world units each, the
+      // grid being the box's size measured on a 1600 x 900 screen as
+      // CGuiTextPane::Initialize does: the corner (box, 0) seen from the
+      // camera. The port draws Remastered's glyphs fitted to the disc's font,
+      // its capital's ink as tall as the disc's cell (PortHdFont::FitFont), and
+      // lays the disc's text out in box / extent units of that font: the
+      // extent makes the capital as tall as Remastered draws it.
       const RemWidget& g = rem[size_t(w.guif)];
       Part part;
       if (g.meshes.empty() || !MeshPart(model, g.meshes[0], part)) {
@@ -1589,51 +1685,56 @@ bool HudConverter::Convert(uint32_t retailFrame, const uint8_t* guif, size_t siz
         }
       }
       const double dim[2] = {hi[0] - lo[0], hi[2] - lo[2]};
-      const Mat& old = original[discByName[w.name]].world;
-      const double extent[2] = {GetBEFloat(w.typeData, kTextPaneExtent), GetBEFloat(w.typeData, kTextPaneExtent + 4)};
-      const double px = double(GetBEFloat(w.typeData, 0)) * AxisLength(old, 0) / extent[0];
-      const double pz = double(GetBEFloat(w.typeData, 4)) * AxisLength(old, 2) / extent[1];
-      const double pz2 = dim[1] * AxisLength(w.world, 2) / extent[1];
-      const double unit = pz2 * px / pz;
-      if (std::min({std::abs(pz2), std::abs(px), std::abs(pz), dim[0], dim[1]}) < 1e-9 || !std::isfinite(unit)) {
+      double grid[2] = {};
+      if (!remGrid(g, grid)) {
+        log(w.name + ": the camera does not see the text box, the disc's text kept");
+        continue;
+      }
+      Blob font;
+      int cell = 0;
+      bool outline = false;
+      if (!m_io.retail(FourCC('F', 'O', 'N', 'T'), GetBE32(w.typeData, 20), font) ||
+          !DiscFontCell(font, cell, outline) || cell <= (outline ? 2 : 0)) {
+        log(w.name + ": no capital in the disc's font, the disc's text kept");
+        continue;
+      }
+      // World units per pixel of the disc's font: Remastered's per pixel of its
+      // own, times its capital's ink over the disc's cell.
+      const Mat remPane = remWorld(size_t(w.guif));
+      const double fit = double(m_glyphInk) / double(cell - (outline ? 2 : 0));
+      double unit[2], extent[2];
+      for (int a = 0; a < 2; ++a) {
+        const int axis = a == 0 ? 0 : 2;
+        unit[a] = double(g.textScale) * g.textBox[a] / grid[a] * AxisLength(remPane, axis) / AxisLength(w.world, axis) *
+                  fit;
+        extent[a] = std::max(1.0, std::nearbyint(dim[a] / unit[a]));
+      }
+      if (std::min({unit[0], unit[1], dim[0], dim[1]}) < 1e-9 || !std::isfinite(unit[0] + unit[1]) ||
+          !(m_glyphInk > 0.f)) {
         log(w.name + ": no box to lay the text out in, the disc's kept");
         continue;
       }
-      // Remastered's text scale is relative to its own font, so the glyphs
-      // keep the size they had on the disc's screen when Remastered's box would
-      // make them bigger, and then take Remastered's justification in the box.
+      // The disc lays text out in whole pixels of its font: the box is as many
+      // as fit Remastered's, about its centre.
       Mat centre = Identity();
       for (int c = 0; c < 3; ++c) {
         centre.m[c][3] = (lo[c] + hi[c]) / 2.0;
       }
-      double from[3];
-      for (int c = 0; c < 3; ++c) {
-        from[c] = old.m[c][3];
-        for (int k = 0; k < 3; ++k) {
-          from[c] += old.m[c][k] * double(GetBEFloat(w.typeData, 8 + size_t(k) * 4));
-        }
-      }
-      const double was = discView(from);
-      const Mat placed = Mul(w.world, centre);
-      const double now = remView(placed);
-      double scale = 1.0;
-      if (was > 1e-9 && now > 1e-9 && pz / was < pz2 / now) {
-        scale = (pz / was) / (pz2 / now);
-        log(w.name + ": text at the disc's size, " + std::to_string(int(std::lround(100.0 / scale))) + "% of the box");
-        if (g.textJustify[0] <= 2 && g.textJustify[1] <= 2) {
-          SetBE32(w.typeData, kTextPaneJustify, g.textJustify[0]);
-          SetBE32(w.typeData, kTextPaneJustify + 4, g.textJustify[1]);
-        }
-      }
-      w.world = placed;
-      SetBEFloat(w.typeData, 0, float(dim[0]));
-      SetBEFloat(w.typeData, 4, float(dim[1]));
+      w.world = Mul(w.world, centre);
+      SetBEFloat(w.typeData, 0, float(extent[0] * unit[0]));
+      SetBEFloat(w.typeData, 4, float(extent[1] * unit[1]));
       for (size_t at = 8; at < 20; at += 4) {
         SetBEFloat(w.typeData, at, 0.0f);
       }
-      SetBEFloat(w.typeData, kTextPaneExtent,
-               float(std::max(1.0, std::nearbyint(dim[0] * AxisLength(w.world, 0) / (unit * scale)))));
-      SetBEFloat(w.typeData, kTextPaneExtent + 4, float(std::max(1.0, std::nearbyint(extent[1] / scale))));
+      SetBEFloat(w.typeData, kTextPaneExtent, float(extent[0]));
+      SetBEFloat(w.typeData, kTextPaneExtent + 4, float(extent[1]));
+      if (g.textJustify[0] < 10 && g.textJustify[1] < 10) {
+        SetBE32(w.typeData, kTextPaneJustify, g.textJustify[0]);
+        SetBE32(w.typeData, kTextPaneJustify + 4, g.textJustify[1]);
+      }
+      if (g.textWrap >= 0) {
+        w.typeData[kTextPaneWrap] = uint8_t(g.textWrap);
+      }
     } else if (w.type == FourCC('E', 'N', 'R', 'G') && w.guif >= 0 && w.typeData.size() >= 4) {
       const RemWidget& g = rem[size_t(w.guif)];
       Part part;

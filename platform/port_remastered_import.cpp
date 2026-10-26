@@ -3478,18 +3478,11 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     made["text"].counts["translated"] = textTranslated;
     endStage();
   }
-  // Remastered's typeface, which the port draws the disc's text with.
-  bool fontWritten = false;
-  if (beginStage("font", std::to_string(ImportStage::kText) + keyConverter, false)) {
-    fontWritten = made["font"].counts["written"] != 0;
-  } else {
+  // Remastered's typeface, which the port draws the disc's text with: the font
+  // with the most characters, so that every language's text is covered.
+  auto largestFont = [&](PortHdFont::Font& font, ModelUuid& atlas, std::string& fontError) {
     std::vector<uint8_t> raw;
-    std::vector<uint8_t> out;
-    ModelUuid atlas{};
-    PortHdFont::Font font;
-    TxtrImage image;
-    std::string fontError = "not in the image";
-    // The one with the most characters, so that every language's text is covered.
+    fontError = "not in the image";
     for (const ModelUuid& id : remastered.Fonts()) {
       ModelUuid candidateAtlas{};
       PortHdFont::Font candidate;
@@ -3502,6 +3495,18 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         atlas = candidateAtlas;
       }
     }
+  };
+  bool fontWritten = false;
+  if (beginStage("font", std::to_string(ImportStage::kText) + keyConverter, false)) {
+    fontWritten = made["font"].counts["written"] != 0;
+  } else {
+    std::vector<uint8_t> raw;
+    std::vector<uint8_t> out;
+    ModelUuid atlas{};
+    PortHdFont::Font font;
+    TxtrImage image;
+    std::string fontError;
+    largestFont(font, atlas, fontError);
     if (font.glyphs.empty() || !remastered.ReadTexture(atlas, raw, fontError) ||
         !DecodeTxtr(raw.data(), raw.size(), image, fontError)) {
       AddLine("font: " + fontError);
@@ -3534,6 +3539,19 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     fs::create_directories(hudFolder, ec);
     HudConverter converter(makeIO(0, hudFolder));
     HudCounts counts;
+    {
+      // Text panes are sized by the capital the port's text is fitted by.
+      PortHdFont::Font font;
+      ModelUuid atlas{};
+      std::string fontError;
+      largestFont(font, atlas, fontError);
+      const PortHdFont::Glyph* const capital = font.Find(U'H');
+      if (capital != nullptr && capital->height > 2.f * font.padding) {
+        converter.SetGlyphInk(capital->height - 2.f * font.padding);
+      } else {
+        AddLine("hud: no capital in Remastered's font (" + fontError + "); the text keeps the disc's size");
+      }
+    }
     {
       // Remastered colours each beam's icon in the beam menu.
       std::vector<uint8_t> tweak;
