@@ -13,6 +13,20 @@
 
 #include <stdio.h>
 
+#ifdef TARGET_PC
+#include "MetroidPrime/HUD/CSamusHud.hpp"
+#endif
+
+// @ fn_800E7CC8: Trilogy reads the threat warnings from STRG_Hud entries 9 and 10, GC from the
+// main table's entries 10 and 11.
+static const wchar_t* ThreatHudString(int mainIdx) {
+#ifdef TARGET_PC
+  return CSamusHud::PortHudString(mainIdx);
+#else
+  return gpStringTable->GetString(mainIdx);
+#endif
+}
+
 static const char skThreatGroupWidgetName[] = "basewidget_threatstuff";
 static const char skThreatIconWidgetName[] = "basewidget_threaticon";
 static const char skThreatArrowUpWidgetName[] = "model_threatarrowup";
@@ -204,8 +218,8 @@ void CHudThreatInterface::Update(float dt) {
     }
     if (status != x4c_threatStatus) {
       const rstl::wstring text =
-          status == kTS_Warning  ? rstl::wstring_l(gpStringTable->GetString(10))
-          : status == kTS_Damage ? rstl::wstring_l(gpStringTable->GetString(11))
+          status == kTS_Warning  ? rstl::wstring_l(ThreatHudString(10))
+          : status == kTS_Damage ? rstl::wstring_l(ThreatHudString(11))
                                  : rstl::wstring_l(L"");
       x68_textpane_threatwarning->TextSupport().SetText(text);
       if (x4c_threatStatus == kTS_Normal && status == kTS_Warning) {
