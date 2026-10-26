@@ -208,9 +208,11 @@ constexpr std::array PreferredBackendOrder{
 #ifdef DAWN_ENABLE_BACKEND_D3D11
     BACKEND_D3D11,
 #endif
-// #ifdef DAWN_ENABLE_BACKEND_DESKTOP_GL
-//     BACKEND_OPENGL,
-// #endif
+// Desktop GL last among the GPU backends: for GPUs whose D3D and Vulkan drivers all fail (OpenGL 3.3
+// hardware), before the software adapters of the second pass.
+#ifdef DAWN_ENABLE_BACKEND_DESKTOP_GL
+    BACKEND_OPENGL,
+#endif
 #ifdef DAWN_ENABLE_BACKEND_OPENGLES
     BACKEND_OPENGLES,
 #endif

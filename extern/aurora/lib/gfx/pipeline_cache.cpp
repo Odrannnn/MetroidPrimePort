@@ -716,8 +716,16 @@ static PipelineRef find_pipeline_impl(ShaderType type, const PipelineConfig& con
   }
 
   if (blocking && !pipelineReady) {
+    const auto waitStart = std::chrono::steady_clock::now();
     std::unique_lock lock{g_pipelineMutex};
     g_pipelineReadyCv.wait(lock, [=] { return g_pipelines.contains(hash) || g_pipelineThreadEnd; });
+    // A blocking lookup (particles, water, UI) stalls the draw thread for the whole compile.
+    const auto waitMs =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - waitStart).count();
+    if (waitMs >= 50) {
+      Log.warn("pipeline: draw thread waited {} ms for blocking pipeline {:016x} (type {})", waitMs, hash,
+               static_cast<int>(type));
+    }
     auto pipelineIt = g_pipelines.find(hash);
     if (pipelineIt != g_pipelines.end() && persist && firstFrameUsed < pipelineIt->second.firstFrameUsed) {
       pipelineIt->second.firstFrameUsed = firstFrameUsed;
@@ -1341,10 +1349,14 @@ static void pipeline_worker() {
 
 // Pipelines compile on a pool: Tint and the driver's compiler are single threaded, so one
 // worker left a cold cache (a new install, a driver update) compiling for over a minute on
-// phones. GL keeps one worker, since its contexts are per thread. MP_PIPELINE_THREADS
+// phones. GL contexts are per thread: GLES keeps one worker, and desktop GL defaults to one
+// (Dawn has up to 4 shared pipeline contexts for MP_PIPELINE_THREADS to use). MP_PIPELINE_THREADS
 // overrides the count.
 static size_t pipeline_thread_count() {
-  if (webgpu::g_backendType == wgpu::BackendType::OpenGL || webgpu::g_backendType == wgpu::BackendType::OpenGLES) {
+  // OpenGL: one compile context. AMD's Windows driver runs links on shared contexts one at a time
+  // (four threads made each ~4x slower) and crashed in its own threads with four of them.
+  if (webgpu::g_backendType == wgpu::BackendType::OpenGLES ||
+      (webgpu::g_backendType == wgpu::BackendType::OpenGL && std::getenv("MP_PIPELINE_THREADS") == nullptr)) {
     return 1;
   }
   if (const char* env = std::getenv("MP_PIPELINE_THREADS"); env != nullptr && *env != '\0') {
