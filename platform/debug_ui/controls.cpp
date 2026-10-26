@@ -163,7 +163,7 @@ void DrawControlsKeyboardMouse() {
   ImGui::TextDisabled("Also switches on Twin stick, so a controller's right stick aims too.");
   // Shown on the Quake/Source/Apex scale (0.022 degrees a count per unit), stored in radians.
   float sourceSensitivity = PortMouse::SourceFromRadians(sInput.mouseSensitivity);
-  if (ImGui::SliderFloat("Sensitivity", &sourceSensitivity, 0.05f, 30.f, "%.3f",
+  if (ImGui::SliderFloat("Sensitivity", &sourceSensitivity, 0.3f, 30.f, "%.3f",
                          ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
     SetMouseSensitivity(PortMouse::RadiansFromSource(sourceSensitivity));
     MarkDirty();
@@ -177,7 +177,7 @@ void DrawControlsKeyboardMouse() {
   ItemHelp("Own sensitivity for looking up and down; Sensitivity then sets left and right only.");
   if (sInput.mouseSensitivitySplit) {
     float sourceSensitivityY = PortMouse::SourceFromRadians(sInput.mouseSensitivityY);
-    if (ImGui::SliderFloat("Vertical sensitivity", &sourceSensitivityY, 0.05f, 30.f, "%.3f",
+    if (ImGui::SliderFloat("Vertical sensitivity", &sourceSensitivityY, 0.3f, 30.f, "%.3f",
                            ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
       SetMouseSensitivityY(PortMouse::RadiansFromSource(sourceSensitivityY));
       MarkDirty();
@@ -377,7 +377,7 @@ void DrawControlsTouchGyro() {
   ImGui::EndDisabled();
   ImGui::BeginDisabled(!(!sInput.touchClassic || sInput.touchAim));
   float touchAimSpeed = sInput.touchAimSpeed;
-  if (ImGui::SliderFloat("Touch aim speed", &touchAimSpeed, 0.5f, 6.f, "%.2f px/dp",
+  if (ImGui::SliderFloat("Touch aim speed", &touchAimSpeed, 0.5f, 10.f, "%.2f px/dp",
                          ImGuiSliderFlags_Logarithmic)) {
     SetTouchAimSpeed(touchAimSpeed);
   }
@@ -387,7 +387,7 @@ void DrawControlsTouchGyro() {
   }
   if (sInput.touchAimSplit) {
     float touchAimSpeedY = sInput.touchAimSpeedY;
-    if (ImGui::SliderFloat("Vertical touch aim speed", &touchAimSpeedY, 0.5f, 6.f, "%.2f px/dp",
+    if (ImGui::SliderFloat("Vertical touch aim speed", &touchAimSpeedY, 0.5f, 10.f, "%.2f px/dp",
                            ImGuiSliderFlags_Logarithmic)) {
       SetTouchAimSpeedY(touchAimSpeedY);
     }

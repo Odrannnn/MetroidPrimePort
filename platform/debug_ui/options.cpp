@@ -1205,9 +1205,13 @@ void AddStickAim(float x, float y, float dt) {
   if (gpGameState != nullptr && gpGameState->GameOptions().GetInvertYAxis()) {
     y = -y;
   }
-  // x right / y up; the aim state expects SDL-style right/down positive.
-  const float travelX = x * sInput.stickAimRate * dt;
-  const float travelY = -y * (sInput.stickAimSplit ? sInput.stickAimRateY : sInput.stickAimRate) * dt;
+  // x right / y up; the aim state expects SDL-style right/down positive. The travel
+  // turns (and moves the pointer) by the mouse sensitivity, so divide that out: a stick
+  // pixel turns kAimPixelRadians whatever the mouse is set to (issue #209).
+  const float pixel = PortMouse::kAimPixelRadians / MouseSensitivity();
+  const float travelX = x * sInput.stickAimRate * dt * pixel;
+  const float travelY =
+      -y * (sInput.stickAimSplit ? sInput.stickAimRateY : sInput.stickAimRate) * dt * pixel;
   sMouseFrameX += travelX;
   sMouseFrameY += travelY;
   sStickFrameX += travelX;

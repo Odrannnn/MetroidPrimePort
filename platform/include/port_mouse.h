@@ -15,6 +15,12 @@ inline float SourceFromRadians(float radiansPerCount) {
   return float(radiansPerCount / kSourceRadiansPerUnit);
 }
 inline float RadiansFromSource(float source) { return float(source * kSourceRadiansPerUnit); }
+// The default: 3.0 on that scale, as in Quake, Source and Apex (issue #210).
+constexpr float kDefaultSensitivity = float(3.0 * kSourceRadiansPerUnit);
+// What one pixel of stick and touch aim travel turns, and the sensitivity at which
+// the pointer follows the cursor's speed. Fixed (the old mouse default), so stick and
+// touch speeds do not move with the mouse sensitivity (issue #209).
+constexpr float kAimPixelRadians = 0.0035f;
 // Hand travel for a full turn at a mouse's counts per inch.
 inline float CentimetresPer360(float radiansPerCount, float dpi) {
   if (!(radiansPerCount > 0.f) || !(dpi > 0.f)) return 0.f;

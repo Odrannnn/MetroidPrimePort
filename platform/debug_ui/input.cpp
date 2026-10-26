@@ -524,16 +524,15 @@ bool MouseInvertX() { EnsureInitialized(); return sInput.mouseInvertX; }
 bool MouseInvertY() { EnsureInitialized(); return sInput.mouseInvertY; }
 bool MouseButtons() { EnsureInitialized(); return sInput.mouseButtons; }
 bool MouseCrosshair() { EnsureInitialized(); return sInput.mouseCrosshair; }
-// Window travel (pixels) to pointer units (-1..1 of the half view). At the default
-// sensitivity the pointer follows the cursor's speed; the sensitivity slider scales it.
+// Window travel (pixels) to pointer units (-1..1 of the half view). At a sensitivity of
+// kAimPixelRadians the pointer follows the cursor's speed; the sensitivity slider scales it.
 static void PointerAimScale(float& sx, float& sy) {
-  constexpr float kReferenceSensitivity = 0.0035f;
   int width = 0, height = 0;
   if (!WindowSize(width, height)) {
     width = 640;
     height = 480;
   }
-  const float speed = MouseSensitivity() / kReferenceSensitivity;
+  const float speed = MouseSensitivity() / PortMouse::kAimPixelRadians;
   sx = 2.f / static_cast<float>(width) * speed;
   sy = 2.f / static_cast<float>(height) * speed;
 }
@@ -1047,9 +1046,12 @@ void AddTouchAim(float dxDp, float dyDp) {
       !std::isfinite(dyDp)) {
     return;
   }
+  // As stick aim: a touch pixel turns kAimPixelRadians whatever the mouse sensitivity.
+  const float pixel = PortMouse::kAimPixelRadians / MouseSensitivity();
   std::lock_guard lock(sTouchAimMutex);
-  sTouchAimPendingX += dxDp * sInput.touchAimSpeed;
-  sTouchAimPendingY += dyDp * (sInput.touchAimSplit ? sInput.touchAimSpeedY : sInput.touchAimSpeed);
+  sTouchAimPendingX += dxDp * sInput.touchAimSpeed * pixel;
+  sTouchAimPendingY +=
+      dyDp * (sInput.touchAimSplit ? sInput.touchAimSpeedY : sInput.touchAimSpeed) * pixel;
 }
 
 void BeginFrameMouse() {

@@ -134,11 +134,13 @@ struct Settings {
   // shots follow it while the lock steers the view (any direct aim, with or without
   // pointer aim).
   bool lockOnFreeAim = false;
-  float mouseSensitivity = 0.0035f; // radians per count; shown on the Source scale
+  // Radians per count; shown on the Source scale. Defaults to 3.0 there
+  // (PortMouse::kDefaultSensitivity).
+  float mouseSensitivity = 0.00115192f;
   // With mouseSensitivitySplit on, mouseSensitivityY (radians per count) drives vertical mouse
   // aim and mouseSensitivity only the horizontal.
   bool mouseSensitivitySplit = false;
-  float mouseSensitivityY = 0.0035f;
+  float mouseSensitivityY = 0.00115192f;
   int mouseDpi = 800;               // only for the cm/360 readout
   // What each mouse button does under mouse aim (PortInputMap::EMouseAction).
   int mouseActions[PortInputMap::kMouseButtonCount] = {
