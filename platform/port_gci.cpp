@@ -438,8 +438,12 @@ struct Converted {
   uint32_t newest = 0;
 };
 
-std::string ConversionNote(const PortSaveConvert::Conversion& conversion) {
-  std::string text = std::string("converted from ") + PortSaveConvert::FormatName(conversion.from);
+std::string ConversionNote(const PortSaveConvert::Conversion& conversion, const std::vector<uint8_t>& bytes) {
+  // A Trilogy disc's card files hold PAL's layout; name them by what they are.
+  const bool trilogy = bytes.size() >= 4 && std::memcmp(bytes.data(), "R3M", 3) == 0;
+  std::string text = std::string("converted from ") +
+                     (trilogy ? (bytes[3] == 'P' ? "Trilogy (PAL)" : "Trilogy (USA)")
+                              : PortSaveConvert::FormatName(conversion.from));
   if (conversion.stats.Any()) {
     text += " (" + conversion.stats.Summary() + ")";
   }
@@ -462,7 +466,7 @@ bool Convert(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& art,
     return false;
   }
   out.gci = std::move(conversion.gci);
-  out.note = ConversionNote(conversion);
+  out.note = ConversionNote(conversion, bytes);
   out.newest = conversion.newest;
   if (bytes.size() >= 0x2C) {
     out.modTime = port::GetBE32(bytes, 0x28);
@@ -1185,16 +1189,25 @@ std::vector<OtherRelease> OtherReleaseSaves() {
       continue;
     }
     const fs::path source = base / (release.code[3] == 'P' ? "EUR" : "USA") / cardName;
-    const std::vector<fs::path> files = FilesOf(source, release.code);
-    if (files.empty()) {
-      continue;
-    }
     OtherRelease other{source, release.code, release.label, fs::file_time_type::min()};
-    std::error_code ec;
-    for (const fs::path& file : files) {
+    bool any = false;
+    for (const fs::path& file : FilesOf(source, release.code)) {
+      // Only files with a game in them: an empty card is nothing to restore.
+      std::vector<uint8_t> bytes;
+      std::string error;
+      PortSaveConvert::Format format;
+      PortSaveConvert::Save save;
+      if (!ReadAll(file, bytes, error) ||
+          !PortSaveConvert::Read(bytes.data(), bytes.size(), format, save, nullptr, error)) {
+        continue;
+      }
+      std::error_code ec;
       other.written = std::max(other.written, fs::last_write_time(file, ec));
+      any = true;
     }
-    found.push_back(std::move(other));
+    if (any) {
+      found.push_back(std::move(other));
+    }
   }
   std::sort(found.begin(), found.end(),
             [](const OtherRelease& a, const OtherRelease& b) { return a.written > b.written; });
