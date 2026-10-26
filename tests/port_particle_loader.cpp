@@ -112,6 +112,14 @@ int main(int argc,char** argv) {
     Diversity(*Parse(Fixture(1))); Check(CPortParticleParseScope::particleInitialRandom,"nested converted restores parent");
   }
   Retail(*Parse(Fixture(0)));
+  {
+    // The converter writes MPXV as PMXV: an unread element stops the description there, dropping MAXP after it.
+    Bytes s; s.tag("GPSM").tag("ADV1").tag("PMXV").tag("CNST").word(0).real(.5f);
+    s.tag("MAXP").tag("CNST").word(7).tag("_END");
+    auto desc=Parse(s); int maxp=0;
+    Check(desc->x10c_ADV1!=nullptr && desc->x1c_MAXP!=nullptr && !desc->x1c_MAXP->GetValue(0,maxp) && maxp==7,
+          "PMXV reads and the properties after it load");
+  }
   for(bool parent:{false,true}) for(bool child:{false,true}) {
     Bytes bytes=Fixture(parent?1:0);NestedStream in(bytes,parent,child);
     std::unique_ptr<CGenDescription> desc(CParticleDataFactory::GetGeneratorDesc(in,nullptr,0x5678));

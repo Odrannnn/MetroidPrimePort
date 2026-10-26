@@ -1388,8 +1388,9 @@ CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
     }
     return rs_new CREPortInitialRandomSign(slot, value);
   }
-  // MPXV (MPT_CREExternalValue 0x29715c): the index, then the fallback real.
-  case SBIG('MPXV'): {
+  // Port-only PMXV, the converter's name for Remastered's MPXV (MPT_CREExternalValue 0x29715c):
+  // the index, then the fallback real.
+  case SBIG('PMXV'): {
     CIntElement* index = GetIntElement(in);
     CRealElement* fallback = GetRealElement(in);
     if (index == nullptr || fallback == nullptr) {
