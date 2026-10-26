@@ -1177,7 +1177,7 @@ wgpu::RenderPipeline make_pipeline(const PipelineConfig& p) {
       .label = "VFX Pipeline",
       .layout = g_state.pipelineLayout,
       .vertex = {.module = module, .entryPoint = "vs_main", .bufferCount = 1, .buffers = &vertexLayout},
-      .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList, .cullMode = wgpu::CullMode::None},
+      .primitive = pipeline_primitive(p),
       .depthStencil = p.depthStencilFormat != wgpu::TextureFormat::Undefined ? &depth : nullptr,
       .multisample = {.count = p.msaaSamples, .mask = UINT32_MAX},
       .fragment = &fragment,
@@ -1758,7 +1758,7 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     // The scene-reading effects read the HDR scene's light; outside it there is none to read.
     return;
   }
-  u.tone[0][3] = draw_exposure(u.tone[0][3], hdr, desc.alreadyExposed);
+  u.tone[0][3] = draw_exposure(u.tone[0][3], hdr, desc.alreadyExposed, desc.exposureOverride);
   std::memcpy(u.fogColor, &gx.fog.color, sizeof(u.fogColor));
   u.fog[0] = float(gx.fog.type);
   u.fog[1] = gx.fog.a;

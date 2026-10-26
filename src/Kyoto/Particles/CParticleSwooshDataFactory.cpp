@@ -1,6 +1,9 @@
 #include "Kyoto/Particles/CParticleSwooshDataFactory.hpp"
 
 #include "Kyoto/CRandom16.hpp"
+#ifdef TARGET_PC
+#include "Kyoto/Particles/CPortParticleParseScope.hpp"
+#endif
 #include "Kyoto/Particles/CParticleDataFactory.hpp"
 #ifdef TARGET_PC
 #include "Kyoto/Particles/CGenDescription.hpp"
@@ -51,6 +54,9 @@ CSwooshDescription* CParticleSwooshDataFactory::CreateGeneratorDescription(CInpu
 bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputStream& in,
                                             CSimplePool* pool) {
   bool done = false;
+#ifdef TARGET_PC
+  CPortParticleParseScope parseScope;
+#endif
   CRandom16 random(99);
   CGlobalRandom globalRandom(random);
 

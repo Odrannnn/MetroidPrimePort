@@ -743,6 +743,22 @@ TEST(SceneHdrVfx, TheHdrBitKeepsTheConfigLayout) {
   EXPECT_NE(xxh3_hash(a), xxh3_hash(b));
 }
 
+TEST(SceneHdrVfx, IceModelCullIsExplicitAndSeparatesCachedConfigs) {
+  auto plain = vfxConfig(0, true);
+  auto ice = plain;
+  ice.features = shader_features(plain.features | ModelBackCull);
+  EXPECT_EQ(ice.features ^ plain.features, uint32_t(ModelBackCull));
+  EXPECT_NE(xxh3_hash(plain), xxh3_hash(ice));
+  const auto a = pipeline_primitive(plain), b = pipeline_primitive(ice);
+  EXPECT_EQ(a.cullMode, wgpu::CullMode::None);
+  EXPECT_EQ(a.frontFace, wgpu::FrontFace::CCW);
+  EXPECT_EQ(b.cullMode, wgpu::CullMode::Back);
+  EXPECT_EQ(b.frontFace, wgpu::FrontFace::CCW);
+  EXPECT_EQ(b.topology, wgpu::PrimitiveTopology::TriangleList);
+  EXPECT_TRUE(same(pipeline_blend(plain).color, pipeline_blend(ice).color));
+  EXPECT_TRUE(same(pipeline_blend(plain).alpha, pipeline_blend(ice).alpha));
+}
+
 // The wave orb's exposure policy (DrawDesc::alreadyExposed, VMAT's AlreadyExposed bit) is a uniform
 // value per draw, not a shader feature: no source, config or key changes with it.
 TEST(SceneHdrVfx, ThePolicyBitIsNotAShaderFeature) {
@@ -763,6 +779,27 @@ TEST(SceneHdrVfx, ThePolicyBitIsNotAShaderFeature) {
 
 // What the HDR tail does with the uniform's exposure (tone0.w, tone1.x > 0 enables it).
 float hdr_tail(float rgb, float exposure, float tone1x) { return tone1x > 0.f && exposure > 0.f ? rgb * exposure : rgb; }
+
+TEST(SceneHdrVfx, ExplicitModelExposureDoesNotInheritThePriorModelMultiplier) {
+  constexpr float inverse = 13.7331038f;
+  constexpr float frameExposure = 0.07281675101006664f;
+  DrawDesc desc;
+  EXPECT_FALSE(desc.exposureOverride);
+  desc.exposureOverride = frameExposure;
+  for (const float inherited : {0.979701519f, 1.f, 0.125f, 8.f, 0.f}) {
+    SCOPED_TRACE(inherited);
+    const float uniform = draw_exposure(inherited, true, false, desc.exposureOverride);
+    EXPECT_EQ(uniform, frameExposure);
+    EXPECT_NEAR(inverse * uniform, 1.f, 1e-6f);
+    EXPECT_NEAR(hdr_tail(inverse, uniform, 1.38888872f), 1.f, 1e-6f);
+    EXPECT_EQ(draw_exposure(inherited, false, false, desc.exposureOverride), inherited);
+    EXPECT_EQ(draw_exposure(inherited, false, true, desc.exposureOverride), inherited);
+    EXPECT_EQ(draw_exposure(inherited, true, true, desc.exposureOverride), 1.f);
+    EXPECT_EQ(draw_exposure(inherited, false, true, std::nullopt), inherited);
+    EXPECT_EQ(draw_exposure(inherited, true, false, std::nullopt), inherited);
+    EXPECT_EQ(draw_exposure(inherited, true, true, std::nullopt), 1.f);
+  }
+}
 
 TEST(SceneHdrVfx, AnAlreadyExposedDrawIsExposureOneInHdrOnly) {
   constexpr float orb = 33.8f; // T 1 x COLR x ITEN of the source orb

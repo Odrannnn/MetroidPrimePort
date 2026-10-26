@@ -548,6 +548,9 @@ uint32_t MatiBlend(uint32_t mode) {
 }
 // aurora::gfx::vfx::AlreadyExposed: an exposure policy carried in the features word, not a shader feature.
 constexpr uint32_t kAlreadyExposed = 1u << 31;
+constexpr uint32_t kModelBackCull = 1u << 17; // aurora::gfx::vfx::ModelBackCull; VMAT layout unchanged
+constexpr EffectGuid kIceWedgeMati = {0xc6, 0xb1, 0x08, 0xdf, 0x38, 0xe8, 0x7f, 0x4c,
+                                     0xbc, 0x9b, 0xfb, 0x67, 0x54, 0x8b, 0xc1, 0xba};
 
 // The VFX_*_Lit sprite shaders whose lit perms (080_0..091_0) are the unlit perm's colour x the light x
 // BLCM x PCMD / pi (aurora's ParticleLit). Checked perm by perm against 000_0 (re.sh fold); 7a29ff64,
@@ -3652,6 +3655,11 @@ public:
     // net exposure 1. Validated for this MATI only; every other effect keeps the room's exposure.
     // Its own test, not read off the blend: a later blend change must not move the policy.
     uint32_t features = recipe->features | fogPin;
+    // Exact shipped custom model: MATI cull=-1 resolves to back at 0x2bd7f4..0x2bd810;
+    // the sorted model draw binds it at 0x2bda84. No inference for other materials/sprites.
+    if (model && guid->guid == kIceWedgeMati && mati.shader == 0x84e0fe6c && mati.headerBlend == 2) {
+      features |= kModelBackCull;
+    }
     if (!swoosh && find(F("PMDL")) != nullptr && guid->guid == kWaveOrbMati && mati.shader == 0x642dd72b &&
         mati.headerBlend == 1) {
       features |= kAlreadyExposed;
@@ -4139,6 +4147,12 @@ public:
     AppendBE32(out, HeaderOf(type));
     const auto& retail = PropertiesOf(type);
     const bool part = type == F("PART");
+    if (part) {
+      // The loader must know IRND is particle-initial before folding any expressions.
+      AppendBE32(out, F("PIRN"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, 1);
+    }
     bool inverseExposed = false;
     const bool swoosh = type == F("SWHC");
     // An ELC2 (CParticleElectric2) is written as an ELSC stream that starts with the port-only PEL2
@@ -5475,10 +5489,8 @@ public:
       AppendBE32(out, F("CNST"));
       AppendBE32(out, 0x1000000u);
     }
-    if (part || swoosh) {
-      // Port-only: nested IRND elements are evaluated once per particle and element, not at frame 0
-      // only (xPortIrnd). Marks every converted PART; retail's own PARTs do not have it.
-      // On a swoosh it marks Remastered's timing: a point's colour runs over the live points
+    if (swoosh) {
+      // Swoosh marker ordering/semantics stay unchanged: colour runs over the live points
       // (KEWS), not over LENG.
       AppendBE32(out, F("PIRN"));
       AppendBE32(out, F("CNST"));

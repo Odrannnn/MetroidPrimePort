@@ -341,6 +341,24 @@ float PortVfxExposureGain(const CGenDescription& desc, bool model) {
       desc.xPortVfx->mat.blend != uint32_t(aurora::gfx::vfx::Blend::Opaque));
 }
 
+std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc) {
+  if (!desc.xPortExposurePolicy || !desc.xPortInverseExposure || !desc.xPortVfx ||
+      desc.xPortVfx->mat.blend == uint32_t(aurora::gfx::vfx::Blend::Opaque) || !PortRoomEnv::Enabled()) {
+    return std::nullopt;
+  }
+  float tone[3][4];
+  if (!PortRoomEnv::Tone(tone)) {
+    return std::nullopt;
+  }
+  // Same sFrame.exposure as ParticleInverseExposure(true); both return 1 in pause lighting.
+  // Do not recover this from ITEN or an aggregate gain.
+  const float exposure = PortRoomEnv::FrameExposure();
+  if (!(exposure > 0.f) || !std::isfinite(exposure) || !std::isfinite(1.f / exposure)) {
+    return std::nullopt;
+  }
+  return exposure;
+}
+
 bool PortVfxBuildDesc(const CPortVfxData& vfx, const float* vsmt, uint vsmtMask,
                       aurora::gfx::vfx::DrawDesc& desc) {
   const CPortVfxMat& mat = vfx.mat;
@@ -1184,6 +1202,8 @@ void CElementGen::PortRenderMeshesVfx(CPortVfxMeshBatch& batch) {
   CGraphics::SetDepthWriteMode(depth.compare, kE_LEqual, depth.write);
   PortFx::gTriangles += static_cast< uint32_t >(batch.verts.size() / 3);
   ++PortFx::gDraws;
+  // Model-only: Aurora copies this submission's value into its queued uniform payload.
+  desc.exposureOverride = PortVfxModelExposureOverride(*x28_loadedGenDesc);
   aurora::gfx::vfx::draw_triangles(desc, batch.verts.data(), static_cast< uint32_t >(batch.verts.size() / 3));
   batch.verts.clear();
   batch.probePosSet = false;

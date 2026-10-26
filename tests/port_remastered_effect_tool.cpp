@@ -1020,6 +1020,13 @@ int Import(const std::string& romfs, const std::string& retailDir, const std::st
   // Models as the game's import converts them: standalone, one converter for all.
   std::set<uint32_t> claimed;
   std::unique_ptr<Converter> converter;
+  // Match the production import: Converter fills the embedded VMSH alongside the CMDL.
+  // Keep it by the assigned model id for the subsequent effect conversion callback.
+  std::map<uint32_t, std::vector<uint8_t>> modelMeshes;
+  io.modelMesh = [&](uint32_t model) {
+    const auto found = modelMeshes.find(model);
+    return found != modelMeshes.end() ? found->second : std::vector<uint8_t>();
+  };
   io.model = [&](const EffectGuid& id, uint32_t retailId, std::string& error) {
     if (!converter) {
       ConvertIO cio;
@@ -1036,6 +1043,7 @@ int Import(const std::string& romfs, const std::string& retailDir, const std::st
     options.standalone = true;
     options.skip.clear();
     options.nativeMax = 1024;
+    options.vmsh = &modelMeshes[retailId];
     std::vector<uint8_t> raw;
     Model model;
     if (!read(id, raw, error) || !ParseModel(raw.data(), raw.size(), model, error) ||

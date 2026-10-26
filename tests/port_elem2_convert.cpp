@@ -93,11 +93,16 @@ struct Retail {
     bytes.insert(bytes.end(), text, text + 4);
     return *this;
   }
-  // The end of a converted PART: Remastered's default PSLT, the port-only PIRN marker, then _END.
-  Retail& end() { return pslt().f("PIRN").f("CNST").w(1).f("_END"); }
-  // An embedded child's end: PSLT, PIRN, then PGID with its GUID's first word read little-endian.
+  // Converted PART: insert early PIRN, then finish with default PSLT and _END.
+  Retail& pirn() {
+    const uint8_t marker[] = {'P','I','R','N','C','N','S','T',0,0,0,1};
+    bytes.insert(bytes.begin() + 4, std::begin(marker), std::end(marker));
+    return *this;
+  }
+  Retail& end() { return pirn().pslt().f("_END"); }
+  // An embedded child's end also carries PGID (GUID's first word read little-endian).
   Retail& end(const EffectGuid& id) {
-    return pslt().f("PIRN").f("CNST").w(1).f("PGID").f("CNST")
+    return pirn().pslt().f("PGID").f("CNST")
         .w(uint32_t(id[0]) | uint32_t(id[1]) << 8 | uint32_t(id[2]) << 16 | uint32_t(id[3]) << 24)
         .f("_END");
   }

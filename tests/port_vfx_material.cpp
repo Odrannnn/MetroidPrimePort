@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include <limits>
 #include <stdexcept>
 
 // The fixtures have no textures. Fail hard if parsing/building unexpectedly reaches asset loading.
@@ -28,6 +29,11 @@ const CPortVarMemory* CPortVarGlobals::sCurrent = nullptr;
 // Distinct exposures verify which frame the production renderer selects.
 namespace PortRoomEnv {
 float ParticleInverseExposure(bool blended) { return blended ? 0.25f : 0.5f; }
+bool testEnabled = true, testHasTone = true;
+float testFrameExposure = 4.f;
+bool Enabled() { return testEnabled; }
+bool Tone(float rows[3][4]) { rows[1][0] = 1.f; return testHasTone; }
+float FrameExposure() { return testFrameExposure; }
 }
 
 namespace {
@@ -276,7 +282,57 @@ void TestDynamic() {
 }
 } // namespace
 
+void TestModelExposureOverride() {
+  using aurora::gfx::vfx::Blend;
+  CGenDescription desc;
+  Check(!PortVfxModelExposureOverride(desc), "missing VMAT has no exposure override");
+  desc.xPortVfx = std::make_unique<CPortVfxData>();
+  desc.xPortExposurePolicy = desc.xPortInverseExposure = true;
+  desc.xPortVfx->mat.blend = uint32_t(Blend::Alpha);
+  const auto snapshot = PortVfxModelExposureOverride(desc);
+  Check(snapshot && *snapshot == 4.f && *snapshot * PortVfxExposureGain(desc, true) == 1.f,
+        "transparent model snapshots forward frame exposure matching CPU inverse");
+  PortRoomEnv::testFrameExposure = 8.f;
+  Check(*snapshot == 4.f && *PortVfxModelExposureOverride(desc) == 8.f,
+        "submission snapshot is a value, not a later frame-state reference");
+  PortRoomEnv::testFrameExposure = 4.f;
+  desc.xPortVfx->mat.features = aurora::gfx::vfx::ParticleLit;
+  Check(PortVfxModelExposureOverride(desc) == snapshot && PortVfxExposureGain(desc) == 1.f,
+        "lit models still consume inverse; lit sprite selection is unchanged");
+  aurora::gfx::vfx::DrawDesc sprite;
+  Check(!sprite.exposureOverride, "unselected draws default to inherited policy");
+  desc.xPortVfx->mat.blend = uint32_t(Blend::Opaque);
+  Check(!PortVfxModelExposureOverride(desc) && PortVfxExposureGain(desc, true) == 0.5f,
+        "opaque model retains static inverse and inherited exposure");
+  desc.xPortVfx->mat.blend = uint32_t(Blend::Alpha);
+  desc.xPortInverseExposure = false;
+  Check(!PortVfxModelExposureOverride(desc), "explicit inverse disabled retains inherited exposure");
+  desc.xPortInverseExposure = true;
+  desc.xPortExposurePolicy = false;
+  Check(!PortVfxModelExposureOverride(desc), "legacy exposure policy remains unchanged");
+  desc.xPortVfx->mat.features = aurora::gfx::vfx::AlreadyExposed;
+  Check(!PortVfxModelExposureOverride(desc), "legacy AlreadyExposed material is not selected");
+  desc.xPortExposurePolicy = true;
+  // Existing explicit-policy handling clears the legacy material bit at draw construction.
+  Check(PortVfxModelExposureOverride(desc) == snapshot, "explicit inverse policy selects matching forward exposure");
+  PortRoomEnv::testEnabled = false;
+  Check(!PortVfxModelExposureOverride(desc), "disabled room exposure has no override");
+  PortRoomEnv::testEnabled = true;
+  PortRoomEnv::testHasTone = false;
+  Check(!PortVfxModelExposureOverride(desc), "no-tone frame has no override");
+  PortRoomEnv::testHasTone = true;
+  for (float value : {0.f, -1.f, std::numeric_limits<float>::infinity(),
+                      std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::denorm_min()}) {
+    PortRoomEnv::testFrameExposure = value;
+    Check(!PortVfxModelExposureOverride(desc), "invalid frame exposure or inverse has no override");
+  }
+  PortRoomEnv::testFrameExposure = 1.f;
+  Check(PortVfxModelExposureOverride(desc) == 1.f, "pause's neutral forward exposure stays neutral");
+  PortRoomEnv::testFrameExposure = 4.f;
+}
+
 int main() {
+  TestModelExposureOverride();
   TestParsing(); TestPhysicalTruncation(); TestDynamic(); TestHdrEvaluation(); TestTrss();
   CGenDescription exposure;
   exposure.xPortVfx = std::make_unique<CPortVfxData>();

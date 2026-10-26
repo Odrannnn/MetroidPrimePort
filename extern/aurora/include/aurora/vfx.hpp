@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include <dolphin/gx.h>
 
@@ -41,6 +42,9 @@ enum Feature : uint32_t {
                         // + row 0.zw gives w = (d * 0.99609375 - 0.5) * row 0.xy, a view-space offset taken to the quad's
                         // own axes by extra[3] = the inverse basis's rows 0, 1 (xy each): t = colorSlot at uv + that,
                         // rgb = t.rgb * vc.rgb, a = max(0, t.w + row 1.z - 1). The runtime fills extra[2..3] (sprites)
+  // Explicit model raster policy in the backward-compatible VMAT features word. Only the
+  // audited Ice wedge MATI opts in; absent in older imports and every sprite recipe.
+  ModelBackCull = 1u << 17,
   // VFX_IceChargeBeam (9e0605cd, perms 000_1/000_0): a model particle whose CPU feed (CPortVfxMeshBatch::Add) has
   // turned and shaken the mesh by the shader's hash and filled tan. colorSlot = BCLR, normalSlot = NMAP, params =
   // CCH0..2, uv[1].x = the mesh's COLOR.z, extra rows 0..2 = PMTR A, B, C. Unfogged (DFOG 1: perm 000).
@@ -274,6 +278,9 @@ struct DrawDesc {
   // room's (the GX tone row's exposure, as every other draw takes it). An LDR draw ignores it.
   // Set only for the material the converter validated (the wave orb's MATI), not for VFX in general.
   bool alreadyExposed = false;
+  // Explicit forward exposure for this draw's uniform only, never GX or pipeline state.
+  // LDR ignores it; an AlreadyExposed HDR draw still takes exposure 1.
+  std::optional<float> exposureOverride;
   // IceCharge*: the NMAP slot, Remastered's CCHn uniforms (MATI with the SMTR overrides) and its modular
   // simulation time (CScene::GetModularSimulationTime, the port's CGraphics::GetSimTime).
   int8_t normalSlot = -1;

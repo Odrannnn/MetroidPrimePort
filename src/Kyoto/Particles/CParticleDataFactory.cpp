@@ -7,6 +7,7 @@
 #include "aurora/vfx.hpp"
 #include "port_log.h"
 #include "port_vfx_read.h"
+#include "Kyoto/Particles/CPortParticleParseScope.hpp"
 #endif
 #include "Kyoto/CFactoryFnReturn.hpp"
 #include "Kyoto/CRandom16.hpp"
@@ -483,6 +484,9 @@ void CParticleDataFactory::LoadGPSMTokens(CGenDescription* desc) {
 
 bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
                                       rstl::vector< CAssetId >& resources, CSimplePool* pool) {
+#ifdef TARGET_PC
+  CPortParticleParseScope parseScope;
+#endif
   bool done = false;
   CRandom16 random(99);
   CGlobalRandom context(random);
@@ -733,6 +737,8 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('PIRN'):
       GetClassID(in);
       desc->xPortIrnd = in.ReadLong() != 0;
+      // Must precede expressions. A legacy trailing PIRN cannot undo earlier folding.
+      CPortParticleParseScope::particleInitialRandom = desc->xPortIrnd;
       // PPRM overrides the converted format's default sprite primitive.
       if (desc->xPortIrnd && desc->xPortPrimitive == 255) desc->xPortPrimitive = 1;
       break;

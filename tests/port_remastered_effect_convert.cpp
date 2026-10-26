@@ -95,11 +95,16 @@ struct Retail {
     bytes.insert(bytes.end(), text, text + 4);
     return *this;
   }
-  // The end of a converted PART: Remastered's default PSLT, the port-only PIRN marker, then _END.
-  Retail& end() { return pslt().f("PIRN").f("CNST").w(1).f("_END"); }
-  // An embedded child's end: PSLT, PIRN, then PGID with its GUID's first word read little-endian.
+  // Converted PART: insert early PIRN, then finish with default PSLT and _END.
+  Retail& pirn() {
+    const uint8_t marker[] = {'P','I','R','N','C','N','S','T',0,0,0,1};
+    bytes.insert(bytes.begin() + 4, std::begin(marker), std::end(marker));
+    return *this;
+  }
+  Retail& end() { return pirn().pslt().f("_END"); }
+  // An embedded child's end also carries PGID (GUID's first word read little-endian).
   Retail& end(const EffectGuid& id) {
-    return pslt().f("PIRN").f("CNST").w(1).f("PGID").f("CNST")
+    return pirn().pslt().f("PGID").f("CNST")
         .w(uint32_t(id[0]) | uint32_t(id[1]) << 8 | uint32_t(id[2]) << 16 | uint32_t(id[3]) << 24)
         .f("_END");
   }
@@ -519,7 +524,7 @@ void TestConvert() {
   }
   std::vector<RetailPartProperty> properties;
   CHECK_MSG(SplitRetailPart(root.bytes.data(), root.bytes.size(), properties, error) && properties.size() == 12 &&
-            properties[6].fourcc == EffectFourCC("COLR") && properties[6].value.size() == 4 + 22 + 32,
+            properties[7].fourcc == EffectFourCC("COLR") && properties[7].value.size() == 4 + 22 + 32,
         "retail PART splits into its properties");
 }
 
@@ -2491,10 +2496,13 @@ void TestDvvnDefaultSize() {
     CHECK_MSG(exposureParts.size() == 1 &&
                   SplitRetailPart(exposureParts[0].part.data(), exposureParts[0].part.size(), properties, error),
               "exposure properties survive conversion");
-    CHECK_MSG(properties.size() >= 2 &&
-                  properties[0].fourcc == EffectFourCC(versionLast ? "IEXP" : "DVVN") &&
-                  properties[1].fourcc == EffectFourCC(versionLast ? "DVVN" : "IEXP"),
-              "DVVN and IEXP preserve source property order");
+    CHECK_MSG(properties.size() >= 3 && properties[0].fourcc == EffectFourCC("PIRN") &&
+                  std::count_if(properties.begin(), properties.end(), [](const auto& p) {
+                    return p.fourcc == EffectFourCC("PIRN");
+                  }) == 1 &&
+                  properties[1].fourcc == EffectFourCC(versionLast ? "IEXP" : "DVVN") &&
+                  properties[2].fourcc == EffectFourCC(versionLast ? "DVVN" : "IEXP"),
+              "one early PIRN precedes expressions; DVVN/IEXP retain relative source order");
     CHECK_MSG(exposureParts.size() == 1 && exposureParts[0].dropped.size() == size_t(versionLast),
               "only enabled inverse exposure needs a material; DVVN itself is handled");
   }
@@ -3174,8 +3182,8 @@ void TestIntScale() {
             "INTS MULT(EXTS, RTOV(0.6)) reads the external scale");
   parts = withInts(5, false);
   CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() &&
-                std::search(parts[0].part.begin(), parts[0].part.end(), want.bytes.begin() + 4,
-                            want.bytes.begin() + 8) == parts[0].part.end(),
+                std::search(parts[0].part.begin(), parts[0].part.end(), want.bytes.begin() + 16,
+                            want.bytes.begin() + 20) == parts[0].part.end(),
             "INTS under XFMD 5 writes no PINS");
 }
 
@@ -4030,6 +4038,27 @@ void TestWaveOrbSwoosh(const std::vector<uint8_t>& mati) {
   CHECK_MSG(blend == 5, "a swoosh on the orb's MATI takes its EBlendMode 1 (AdditiveOne) over SBDM");
   CHECK_MSG(features != ~0u && (features & (1u << 27)) != 0, "the swoosh keeps SBDM's fog under the MATI's factors");
   CHECK_MSG(features != ~0u && (features & kAlreadyExposedBit) == 0, "a swoosh on the orb's MATI keeps the room's exposure");
+}
+
+// Only the audited material's model draw may opt into the raster-policy bit.
+void TestIceWedgeCullPolicy() {
+  const EffectGuid ice = {0xc6, 0xb1, 0x08, 0xdf, 0x38, 0xe8, 0x7f, 0x4c,
+                          0xbc, 0x9b, 0xfb, 0x67, 0x54, 0x8b, 0xc1, 0xba};
+  constexpr uint32_t bit = 1u << 17;
+  auto mati = Mati(0x84e0fe6c, {{"TCH0", Fresh(8)}});
+  for (int i = 0; i < 4; ++i) mati[0x61 + i] = uint8_t(2u >> (8 * i));
+  const uint32_t target = ConvertBlend(mati, ice, true, 0, 12);
+  const uint32_t other = ConvertBlend(mati, Fresh(7), true, 0, 12);
+  CHECK_MSG(target != ~0u && (target & bit) != 0, "exact Ice model opts into back culling");
+  CHECK_MSG(other != ~0u && (target ^ other) == bit, "other materials keep all prior features");
+  CHECK_MSG(ConvertBlend(mati, ice, false, 0, 12) == other, "same MATI on sprites stays two-sided");
+  CHECK_MSG(ConvertBlend(mati, ice, true) == 0, "Ice alpha blend is unchanged");
+  auto near = Mati(0x461071b8, {{"TCH0", Fresh(8)}});
+  for (int i = 0; i < 4; ++i) near[0x61 + i] = uint8_t(2u >> (8 * i));
+  const uint32_t nearFeatures = ConvertBlend(near, ice, true, 0, 12);
+  CHECK_MSG(nearFeatures != ~0u && (nearFeatures & bit) == 0, "another supported shader cannot opt in");
+  mati[0x61] = 0;
+  CHECK_MSG((ConvertBlend(mati, ice, true, 0, 12) & bit) == 0, "changed material state cannot opt in");
 }
 
 // The exposure policy (aurora::gfx::vfx::AlreadyExposed, the features word's bit 31) is the orb's exact
@@ -5694,6 +5723,7 @@ int main() {
   TestElc2NclrAndXfmd();
   TestWaveOrbHeaderBlend();
   TestWaveOrbExposurePolicy();
+  TestIceWedgeCullPolicy();
   TestPowerBallExposurePolicy();
   TestPowerChargeExposurePolicy();
   TestSmtrCch0Overrides();

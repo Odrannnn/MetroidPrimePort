@@ -80,12 +80,21 @@ public:
 class CREInitialRandom : public CRealElement {
   CRealElement* x4_min;
   CRealElement* x8_max;
+#ifdef TARGET_PC
+  const bool xPortLoadConstant;
+#endif
 
 public:
   CREInitialRandom(CRealElement* min, CRealElement* max);
   ~CREInitialRandom() override;
   bool GetValue(int frame, float& valOut) const override;
-  bool IsConstant() const override { return true; }
+  bool IsConstant() const override {
+#ifdef TARGET_PC
+    return xPortLoadConstant;
+#else
+    return true;
+#endif
+  }
 };
 
 class CRETimeChain : public CRealElement {

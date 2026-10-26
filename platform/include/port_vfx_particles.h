@@ -27,6 +27,8 @@ void PortVfxEvalParticle(const CGenDescription& desc, CElementGen::CParticle& pa
 // Stores the unit launch direction (zero when the particle launched at rest); for VORN 1.
 void PortVfxSetLaunchDir(CElementGen::CParticle& particle);
 float PortVfxExposureGain(const CGenDescription& desc, bool model = false);
+// Explicit inverse-exposed transparent models snapshot the matching forward frame exposure.
+std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc);
 
 // Model particles with a VMSH mesh: RenderModels adds each live particle's CPU-transformed
 // triangles (world space) and PortRenderMeshesVfx draws them all in one aurora draw with the

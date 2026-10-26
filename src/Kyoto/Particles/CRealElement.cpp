@@ -8,6 +8,9 @@
 #include "Kyoto/Particles/CParticleGlobals.hpp"
 #include "Kyoto/Particles/PortParticleMath.hpp"
 #include "Kyoto/Streams/CInputStream.hpp"
+#ifdef TARGET_PC
+#include "Kyoto/Particles/CPortParticleParseScope.hpp"
+#endif
 
 #include "rstl/math.hpp"
 
@@ -119,7 +122,11 @@ bool CRERandom::GetValue(int frame, float& valOut) const {
 }
 
 CREInitialRandom::CREInitialRandom(CRealElement* min, CRealElement* max)
-: x4_min(min), x8_max(max) {}
+: x4_min(min), x8_max(max)
+#ifdef TARGET_PC
+, xPortLoadConstant(!CPortParticleParseScope::particleInitialRandom)
+#endif
+{}
 
 CREInitialRandom::~CREInitialRandom() {
   delete x4_min;
