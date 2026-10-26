@@ -229,7 +229,7 @@ each), named by Remastered's language codes (`EUFR`, `EUSP`, `EUGE`, `EUIT`, `EU
 
 #### Performance mode
 
-"Performance mode" in the same section (setting `remastered_performance`, off by default) trades
+"Performance mode" in the same section (setting `remastered_performance`, on by default) trades
 exactness for speed. On a Radeon 780M at 1080p it saves about 2.4 to 3.3 ms a frame (0.8 ms more
 in rooms with glass); the picture differs by at most 2/255 per channel. Off, the frame is exactly
 as before.

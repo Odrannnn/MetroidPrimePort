@@ -517,7 +517,7 @@ void GXPortSetDepthPrepass(u8 pass) {
   GX_WRITE_U8(pass);
 }
 
-static std::atomic< u32 > sPerformance{0};
+static std::atomic< u32 > sPerformance{GX_PORT_PERF_ALL};
 
 void GXPortSetPerformance(u32 flags) { sPerformance.store(flags & GX_PORT_PERF_ALL, std::memory_order_relaxed); }
 

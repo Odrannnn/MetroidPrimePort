@@ -1272,7 +1272,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   geometry instances that span fewer than n pixels of the game's 480-line
   screen.
 - `remastered_performance=<0|1>` (Mods > Prime Remastered > Performance mode;
-  default 0): faster Remastered drawing that is no longer exact (glass copy
+  default 1): faster Remastered drawing that is no longer exact (glass copy
   every second frame, quarter-size exposure measure, blended volumetric fog,
   arm cannon depth laid first); see `docs/MODS.md`. Console `roomgeo perf
   [mask]` sets single shortcuts (1 glass, 2 measure, 4 fog, 8 gun), not saved.
