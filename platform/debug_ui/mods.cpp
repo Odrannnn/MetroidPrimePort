@@ -14,6 +14,7 @@
 #include "port_savestate.h"
 
 #include <aurora/imgui.h>
+#include <dolphin/gx/GXExtra.h>
 #include <imgui_internal.h>
 #include <SDL3/SDL_misc.h>
 
@@ -177,6 +178,14 @@ void DrawRemasteredImport() {
     ImGui::TextColored(ThemeWarnColor(),
                        "Re-import needed: the installed models were made by an older version.");
   }
+  bool performance = GXPortGetPerformance() != 0;
+  if (ImGui::Checkbox("Performance mode##remastered", &performance)) {
+    GXPortSetPerformance(performance ? GX_PORT_PERF_ALL : 0);
+    MarkDirty();
+  }
+  ItemHelp("Faster drawing that is no longer exactly Remastered's (at most 2/255 apart): glass "
+           "refraction updated every second frame, exposure measured from a smaller image and "
+           "volumetric fog blended onto the scene instead of rewriting it.");
   ImGui::BeginDisabled(state.running);
 #if defined(__ANDROID__)
   // No path to type here: the files are picked, and shown by name.

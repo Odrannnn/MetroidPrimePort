@@ -349,6 +349,15 @@ geometry, particle effects, HUD, text, movies, gallery), kept as
 can still leave a part out the panel keeps. While it runs, the bar counts the
 import's steps; when it ends with models that failed, the panel says how many,
 and "Copy the notes" puts the notes on the clipboard for a report.
+
+"Performance mode" in the same section (setting `remastered_performance`, off by
+default) trades exactness for speed: glass refraction reads a screen copy taken
+every second frame, the exposure measure starts from a quarter-size image instead
+of a half-size one, and volumetric fog is blended onto the scene instead of copying
+the scene and rewriting every pixel (not with MSAA). On a Radeon 780M at 1080p
+it saves about 1.3 to 1.9 ms a frame (0.8 ms more in rooms with glass); the
+picture differs by at most 2/255 per channel. Off, the frame is exactly as
+before. Console `roomgeo perf [mask]` turns on single shortcuts for comparison.
 From a terminal,
 `metroid_prime_port --import-remastered <image.nsp|image.xci> [key file]` does the same
 on every core without starting the game and installs at once, printing the folder it installed into

@@ -741,6 +741,11 @@ struct SPortGlassCopy {
   bool mips; // copied with a mip chain (kind 23 samples blurred levels; the others read level 0)
 };
 SPortGlassCopy sPortGlassCopy = {false, 0, 0, 0, 0, 0, 0, false};
+// Performance mode (GX_PORT_PERF_GLASS_HALF_RATE): the glass's copy goes to a buffer of its own,
+// so nothing else overwrites it, and is taken again only every second frame; between, the glass
+// refracts the frame before's scene.
+SPortGlassCopy sPortGlassPerfCopy = {false, 0, 0, 0, 0, 0, 0, false};
+u8 sPortGlassPerfDest;
 // The pause visor's pass CSamusDoll set (CCubeModel::PortInventoryScope), while it is set.
 bool sPortInventoryActive = false;
 CCubeModel::PortInventoryPass sPortInventoryPass = {false, {1.f, 1.f, 1.f, 1.f}, 0.f, 1.f};
@@ -1090,14 +1095,19 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
         CCubeMaterial::PortScreenCopyUsed()) {
       int portLeft, portTop, portWidth, portHeight;
       CGraphics::GetViewport(portLeft, portTop, portWidth, portHeight);
-      SPortGlassCopy& copy = sPortGlassCopy;
+      const bool visorGlass = kind > 35.5f && kind < 36.5f;
+      const bool halfRate = !visorGlass && (GXPortGetPerformance() & GX_PORT_PERF_GLASS_HALF_RATE) != 0;
+      SPortGlassCopy& copy = halfRate ? sPortGlassPerfCopy : sPortGlassCopy;
+      void* const copyDest = halfRate ? static_cast< void* >(&sPortGlassPerfDest) : CGraphics::GetDolphinSpareBuffer();
       const bool wantMips = (kind > 22.5f && kind < 23.5f) || (kind > 28.5f && kind < 30.5f) || (kind > 42.5f && kind < 43.5f);
+      const int frame = CGraphics::GetFrameCounter();
+      const bool sameView = copy.valid && copy.left == portLeft && copy.top == portTop && copy.width == portWidth &&
+                            copy.height == portHeight && (copy.mips || !wantMips);
       // The visor's glass (36) keeps the scene by its pass's weight, so each pass sees what is
       // there now, the other visor layer's last draw included: it copies every time.
-      const bool current = !(kind > 35.5f && kind < 36.5f) && copy.valid && copy.serial == GXPortCopySerial() &&
-                           copy.frame == CGraphics::GetFrameCounter() && copy.left == portLeft &&
-                           copy.top == portTop && copy.width == portWidth && copy.height == portHeight &&
-                           (copy.mips || !wantMips);
+      const bool current =
+          halfRate ? sameView && u32(frame - copy.frame) < 2u
+                   : !visorGlass && sameView && copy.serial == GXPortCopySerial() && copy.frame == frame;
       if (!current) {
         GXSetTexCopySrc(static_cast< u16 >(portLeft), static_cast< u16 >(portTop), static_cast< u16 >(portWidth),
                         static_cast< u16 >(portHeight));
@@ -1105,12 +1115,12 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
                          wantMips ? GX_TRUE : GX_FALSE);
         const bool useVideoFilter = CGraphics::GetUseVideoFilter();
         CGraphics::SetUseVideoFilter(false);
-        GXPortCopyScene(CGraphics::GetDolphinSpareBuffer(), GX_FALSE);
+        GXPortCopyScene(copyDest, GX_FALSE);
         CGraphics::SetUseVideoFilter(useVideoFilter);
         GXPixModeSync();
         copy.valid = true;
         copy.serial = GXPortCopySerial();
-        copy.frame = CGraphics::GetFrameCounter();
+        copy.frame = frame;
         copy.left = portLeft;
         copy.top = portTop;
         copy.width = portWidth;
@@ -1118,12 +1128,12 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
         copy.mips = wantMips;
       }
       // Map 7 is shared, so it is bound again either way.
-      CGraphics::LoadDolphinSpareTexture(portWidth, portHeight, GX_TF_RGB565, nullptr,
+      CGraphics::LoadDolphinSpareTexture(portWidth, portHeight, GX_TF_RGB565, halfRate ? copyDest : nullptr,
                                          CGraphics::kSpareBufferTexMapID);
       if (wantMips) {
         // The shader picks the level (textureSampleLevel); the sampler must allow them all.
         GXTexObj mipObj;
-        GXInitTexObj(&mipObj, CGraphics::GetDolphinSpareBuffer(), static_cast< u16 >(portWidth),
+        GXInitTexObj(&mipObj, copyDest, static_cast< u16 >(portWidth),
                      static_cast< u16 >(portHeight), GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_TRUE);
         GXInitTexObjLOD(&mipObj, GX_LIN_MIP_LIN, GX_LINEAR, 0.f, 16.f, 0.f, GX_DISABLE, GX_DISABLE,
                         GX_ANISO_1);

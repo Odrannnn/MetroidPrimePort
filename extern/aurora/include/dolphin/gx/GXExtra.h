@@ -40,6 +40,17 @@ void GXSetClipPlane(GXBool enable, const f32 plane[4]);
 // written). The result is what one depth-tested pass gives. Draws that don't write depth
 // are left alone in pass 2 and draw nothing in pass 1. 0 turns it off.
 void GXPortSetDepthPrepass(u8 pass);
+// Port extension: shortcuts that trade exactness for speed (the Remastered mod's performance
+// option), as GX_PORT_PERF_* bits; 0, the default, draws everything exactly. Read when each part
+// is drawn, from any thread.
+enum {
+  GX_PORT_PERF_GLASS_HALF_RATE = 1u << 0, // glass refracts a screen copy taken every second frame
+  GX_PORT_PERF_SMALL_MEASURE = 1u << 1,   // the exposure measure starts at a quarter of the scene
+  GX_PORT_PERF_BLEND_FOG = 1u << 2,       // volumetric fog blended onto the scene, not copied and rewritten
+  GX_PORT_PERF_ALL = (1u << 3) - 1,
+};
+void GXPortSetPerformance(u32 flags);
+u32 GXPortGetPerformance(void);
 // Aurora extension: names the following draws in Aurora's warnings about them (the
 // model's asset id, its index when it has no id, and the material); draws nothing
 // differently. Asset 0 with model 0xFFFFFFFF is no name (the initial state).

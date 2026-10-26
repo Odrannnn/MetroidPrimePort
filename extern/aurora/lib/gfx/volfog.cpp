@@ -9,6 +9,7 @@
 #include "recording.hpp"
 
 #include <aurora/gfx.hpp>
+#include <dolphin/gx/GXExtra.h>
 
 #include <algorithm>
 #include <array>
@@ -240,10 +241,8 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VertexOutput {
   return out;
 }
 
-@fragment
-fn fs_apply(in: VertexOutput) -> @location(0) vec4f {
-  let size = vec2i(textureDimensions(src));
-  let f = textureLoad(src, min(vec2i(floor(in.pos.xy)), size - vec2i(1)), 0);
+// The fog at this pixel: rgb the exposed in-scatter, a the transmittance.
+fn fog_at(in: VertexOutput) -> vec4f {
   let depthSize = vec2i(textureDimensions(depthTex));
   let at = min(vec2i(in.uv * vec2f(depthSize)), depthSize - vec2i(1));
   // Reversed Z. Nearer than the world's depth range is the viewmodel: Remastered draws it in
@@ -260,14 +259,37 @@ fn fs_apply(in: VertexOutput) -> @location(0) vec4f {
   let span = p.fog.x - near;
   let w = sqrt(clamp(select((zlin - near) / span, select(0.0, 1.0, zlin > near), span == 0.0), 0.0, 1.0));
   let fog = textureSampleLevel(froxels, samp, vec3f(in.uv, w), 0.0);
-  let light = max(fog.rgb, vec3f(0.0)) * p.colorA.w;
-  if (fog.a > 0.9995 && max(max(light.r, light.g), light.b) < 1e-4) {
+  return vec4f(max(fog.rgb, vec3f(0.0)) * p.colorA.w, fog.a);
+}
+
+fn fog_free(fog: vec4f) -> bool {
+  return fog.a > 0.9995 && max(max(fog.r, fog.g), fog.b) < 1e-4;
+}
+
+@fragment
+fn fs_apply(in: VertexOutput) -> @location(0) vec4f {
+  let size = vec2i(textureDimensions(src));
+  let f = textureLoad(src, min(vec2i(floor(in.pos.xy)), size - vec2i(1)), 0);
+  let fog = fog_at(in);
+  if (fog_free(fog)) {
     return f;
   }
   // The HDR scene is exposed linear light (RGBA16F): fogged raw and written back as light; the
   // post-tone after the scene curves and encodes it. The in-scatter's exposure is colorA.w.
-  let x = f.rgb * fog.a + light;
+  let x = f.rgb * fog.a + fog.rgb;
   return vec4f(x, f.a);
+}
+
+// Performance mode: the same sum done by the blender on the scene in place (rgb: one * light +
+// scene * transmittance; alpha kept), with no copy of the scene and no write where there is no fog.
+// The blender's rounding can differ from the shader's in the last bit.
+@fragment
+fn fs_apply_blend(in: VertexOutput) -> @location(0) vec4f {
+  let fog = fog_at(in);
+  if (fog_free(fog)) {
+    discard;
+  }
+  return fog;
 }
 )";
 
@@ -321,6 +343,7 @@ struct State {
   // The apply pass for the scene's sample count.
   struct Apply {
     wgpu::RenderPipeline pipeline;
+    wgpu::RenderPipeline blend; // performance mode's (fs_apply_blend)
     wgpu::BindGroupLayout layout;
     wgpu::TextureFormat format = wgpu::TextureFormat::Undefined;
     uint32_t samples = 0;
@@ -698,6 +721,25 @@ void ensure_apply(wgpu::TextureFormat format, uint32_t samples) {
       .fragment = &fragment,
   };
   apply.pipeline = g_device.CreateRenderPipeline(&descriptor);
+  const wgpu::BlendState blend{
+      .color = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::One,
+                .dstFactor = wgpu::BlendFactor::SrcAlpha},
+      .alpha = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::Zero,
+                .dstFactor = wgpu::BlendFactor::One},
+  };
+  const wgpu::ColorTargetState blendTarget{.format = format, .blend = &blend, .writeMask = wgpu::ColorWriteMask::All};
+  const wgpu::FragmentState blendFragment{
+      .module = module,
+      .entryPoint = "fs_apply_blend",
+      .targetCount = 1,
+      .targets = &blendTarget,
+  };
+  wgpu::RenderPipelineDescriptor blendDescriptor = descriptor;
+  blendDescriptor.label = "Volumetric Fog Apply (blended)";
+  blendDescriptor.fragment = &blendFragment;
+  apply.blend = g_device.CreateRenderPipeline(&blendDescriptor);
   apply.format = format;
   apply.samples = samples;
 }
@@ -905,10 +947,14 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
 
   encode_froxels(cmd, froxels, uniforms, params, volume ? volumeId : 0);
 
-  const wgpu::TexelCopyTextureInfo copySource{.texture = source.texture};
-  const wgpu::TexelCopyTextureInfo copyTarget{.texture = frame.texture};
-  const wgpu::Extent3D copySize{width, height, 1};
-  cmd.CopyTextureToTexture(&copySource, &copyTarget, &copySize);
+  // Not with MSAA: the multisampled scene's own samples are not known to hold the scene here.
+  const bool blended = samples == 1 && (GXPortGetPerformance() & GX_PORT_PERF_BLEND_FOG) != 0;
+  if (!blended) {
+    const wgpu::TexelCopyTextureInfo copySource{.texture = source.texture};
+    const wgpu::TexelCopyTextureInfo copyTarget{.texture = frame.texture};
+    const wgpu::Extent3D copySize{width, height, 1};
+    cmd.CopyTextureToTexture(&copySource, &copyTarget, &copySize);
+  }
 
   const std::array applyEntries{
       wgpu::BindGroupEntry{.binding = 0, .buffer = uniforms, .size = sizeof(Params)},
@@ -925,11 +971,12 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
       .entries = applyEntries.data(),
   };
   const auto applyGroup = g_device.CreateBindGroup(&applyGroupDescriptor);
-  // Every pixel is written without blending, so the frame need not be loaded first.
+  // Every pixel is written without blending, so the frame need not be loaded first; blended, it is
+  // the destination.
   const wgpu::RenderPassColorAttachment attachment{
       .view = target.view,
       .resolveTarget = samples > 1 ? resolveTarget.view : wgpu::TextureView{},
-      .loadOp = wgpu::LoadOp::Clear,
+      .loadOp = blended ? wgpu::LoadOp::Load : wgpu::LoadOp::Clear,
       .storeOp = wgpu::StoreOp::Store,
       .clearValue = {0.0, 0.0, 0.0, 0.0},
   };
@@ -940,7 +987,7 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
       .timestampWrites = webgpu::gpu_prof::pass_writes("Volumetric fog apply"),
   };
   const auto pass = cmd.BeginRenderPass(&passDescriptor);
-  pass.SetPipeline(apply.pipeline);
+  pass.SetPipeline(blended ? apply.blend : apply.pipeline);
   pass.SetBindGroup(0, applyGroup);
   pass.Draw(3);
   pass.End();

@@ -94,7 +94,7 @@ TEST(SceneHdrWater, AFormatMismatchIsCaught) {
 
 // --- Full-screen volumetric fog -------------------------------------------------------------------------------
 
-constexpr std::string_view FogHdrTail = R"(  let x = f.rgb * fog.a + light;
+constexpr std::string_view FogHdrTail = R"(  let x = f.rgb * fog.a + fog.rgb;
   return vec4f(x, f.a);
 )";
 
@@ -112,8 +112,15 @@ TEST(SceneHdrVolFog, ApplyFogsRawLight) {
     EXPECT_EQ(count(apply, "srgb_enc("), 0u);
     EXPECT_EQ(count(apply, "srgb_dec("), 0u);
     EXPECT_EQ(count(apply, "vec3f(4.0)"), 0u);
-    // The in-scatter's exposure once.
-    EXPECT_EQ(count(apply, "p.colorA.w"), 1u);
+    // The in-scatter's exposure once, in the fog both applies share.
+    const std::string_view at = body(hdr, "fn fog_at(");
+    ASSERT_FALSE(at.empty());
+    EXPECT_EQ(count(at, "p.colorA.w"), 1u);
+    EXPECT_EQ(count(apply, "fog_at("), 1u);
+    const std::string_view blend = body(hdr, "fn fs_apply_blend(");
+    ASSERT_FALSE(blend.empty());
+    EXPECT_EQ(count(blend, "fog_at("), 1u);
+    EXPECT_EQ(count(blend, "p.colorA.w"), 0u);
   }
 }
 

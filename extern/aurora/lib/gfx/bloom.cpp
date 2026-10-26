@@ -10,6 +10,7 @@
 #include "recording.hpp"
 
 #include <aurora/gfx.hpp>
+#include <dolphin/gx/GXExtra.h>
 
 #include <algorithm>
 #include <array>
@@ -871,8 +872,11 @@ void encode_measure(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& c
   }
   const auto& source = samples > 1 ? measure.resolved : measure.color;
   ensure_pipelines();
-  ensure_measure_chain(ceil_pow2(std::max(source.size.width >> 1, 1u)),
-                       ceil_pow2(std::max(source.size.height >> 1, 1u)));
+  // Performance mode starts the chain at a quarter of the scene, not half: one texel in four of
+  // Remastered's first level, which the average barely notices.
+  const uint32_t shift = (GXPortGetPerformance() & GX_PORT_PERF_SMALL_MEASURE) != 0 ? 2 : 1;
+  ensure_measure_chain(ceil_pow2(std::max(source.size.width >> shift, 1u)),
+                       ceil_pow2(std::max(source.size.height >> shift, 1u)));
   upload_pending(ctx.queue);
   // None free cannot happen (the pool grows); an empty buffer would only follow a failed creation.
   const wgpu::Buffer buffer = g_readbacks.claim(measure.exposure);

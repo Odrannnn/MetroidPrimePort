@@ -19,6 +19,8 @@
 #include "port_suit_colours.h"
 #include "port_dread_samus_mod.h"
 
+#include <dolphin/gx/GXExtra.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -528,6 +530,9 @@ const SettingKey kSettingKeys[] = {
      [](std::ostream& out) { out << sRemasteredKeysPath; }, true, "/keys/prod.keys", "/k/p.keys"},
     {"remastered_skip", [](const std::string& value) { sRemasteredSkip = value; },
      [](std::ostream& out) { out << sRemasteredSkip; }, true, "geometry,movies", "hud"},
+    {"remastered_performance",
+     [](const std::string& value) { GXPortSetPerformance(ParseBool(value) ? GX_PORT_PERF_ALL : 0); },
+     [](std::ostream& out) { out << (GXPortGetPerformance() != 0 ? 1 : 0); }, true, "1", "0"},
 };
 
 // False for a key nothing reads.

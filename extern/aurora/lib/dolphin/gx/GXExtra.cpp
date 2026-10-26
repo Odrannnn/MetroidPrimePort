@@ -517,6 +517,12 @@ void GXPortSetDepthPrepass(u8 pass) {
   GX_WRITE_U8(pass);
 }
 
+static std::atomic< u32 > sPerformance{0};
+
+void GXPortSetPerformance(u32 flags) { sPerformance.store(flags & GX_PORT_PERF_ALL, std::memory_order_relaxed); }
+
+u32 GXPortGetPerformance(void) { return sPerformance.load(std::memory_order_relaxed); }
+
 void GXSetDrawTag(u32 asset, u32 model, u32 material) {
   GX_WRITE_AURORA(GX_AURORA_SET_DRAW_TAG);
   GX_WRITE_U32(asset);
