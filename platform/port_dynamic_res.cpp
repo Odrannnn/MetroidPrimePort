@@ -61,6 +61,7 @@ const char* ReasonText(Reason reason) {
   case Reason::RaiseFailed: return "raise was too slow, undone";
   case Reason::NoGain: return "lowering gained nothing, undone";
   case Reason::NoGpuTimes: return "GPU times unavailable or unreliable; following the frame rate";
+  case Reason::Compiling: return "pipelines compiling: held";
   }
   return "?";
 }
@@ -172,6 +173,13 @@ Decision Controller::Update(const Sample& s) {
     return {mScale, false, mReason};
   }
   if (!useGpu) {
+    // A compile stall looks like a GPU too slow for the scale; GPU times see through it.
+    if (s.compiling) {
+      mSlow = 0;
+      mSteady = 0;
+      mReason = Reason::Compiling;
+      return {mScale, false, mReason};
+    }
     const Decision d = UpdateFromFps(s, top, bottom);
     if (!d.changed && mGpuDropped && d.reason == Reason::Steady) {
       mReason = Reason::NoGpuTimes;

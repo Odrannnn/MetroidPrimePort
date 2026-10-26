@@ -1928,5 +1928,6 @@ void aurora_get_pipeline_stats(AuroraPipelineStats* stats) {
   std::lock_guard guard{g_pipelineMutex};
   stats->pinned = static_cast<uint32_t>(g_pinnedPipelines.size());
   stats->known = static_cast<uint32_t>(g_knownPipelines.size());
+  stats->pending = static_cast<uint32_t>(g_pendingPipelines.size());
 }
 }

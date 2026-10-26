@@ -250,6 +250,9 @@ static void UpdateDynamicRes(double fps, unsigned frames) {
   sample.fps = fps;
   sample.frames = frames;
   sample.targetFps = DynamicResTargetFps();
+  AuroraPipelineStats pipelines{};
+  aurora_get_pipeline_stats(&pipelines);
+  sample.compiling = pipelines.pending > 0;
   sample.top = top;
   sample.bottom = bottom;
   if (gpuTimes) {

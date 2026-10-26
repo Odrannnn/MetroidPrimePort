@@ -26,6 +26,7 @@ struct Scene {
   double gapMs = 0.0;
   double passShare = 1.0;
   bool publishes = true;    // false: GPU times supported but never published
+  bool compiling = false;   // pipelines building in the background
   double Gpu(float scale) const { return fixedMs + perPixelMs * double(scale) * scale; }
   double Span(float scale) const { return Gpu(scale) + gapMs; }
   double Passes(float scale) const { return Gpu(scale) * passShare; }
@@ -71,6 +72,7 @@ struct Run {
       s.gpuMs = !gpuTimes ? -1.0 : scene.publishes ? published : 0.0;
       s.gpuPassMs = gpuTimes && scene.publishes ? publishedPasses : -1.0;
       s.targetFps = target;
+      s.compiling = scene.compiling;
       s.top = top;
       s.bottom = bottom;
       if (controller.Update(s).changed) {
@@ -117,6 +119,18 @@ int main() {
     cpu.perPixelMs = 2.0;
     CHECK_MSG(run.Seconds(cpu, 60) == 0 && Near(run.controller.Scale(), 2.f), "CPU-bound: never lowers");
     CHECK_MSG(run.controller.LastReason() == Reason::NotGpuBound, "CPU-bound: says why");
+  }
+  // Without GPU times, slow seconds while pipelines compile are the compiles, not the
+  // pixels: held at the top until they finish, then followed as usual.
+  {
+    Run run;
+    run.gpuTimes = false;
+    Scene heavy;
+    heavy.compiling = true;
+    CHECK_MSG(run.Seconds(heavy, 30) == 0 && Near(run.controller.Scale(), 2.f), "compiling: never lowers");
+    CHECK_MSG(run.controller.LastReason() == Reason::Compiling, "compiling: says why");
+    heavy.compiling = false;
+    CHECK_MSG(run.Seconds(heavy, 30) >= 1 && run.controller.Scale() < 2.f, "compiling done: lowers again");
   }
   // One slow second (a hitch) costs nothing.
   {

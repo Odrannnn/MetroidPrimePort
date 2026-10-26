@@ -78,6 +78,7 @@ typedef struct {
   uint64_t prefetchQueued; // rows those requests queued for a build
   uint32_t pinned;       // GLOBAL pipelines kept from eviction
   uint32_t known;        // pipelines the cache has rows for (lazy only)
+  uint32_t pending;      // pipelines queued or building
 } AuroraPipelineStats;
 void aurora_get_pipeline_stats(AuroraPipelineStats* out);
 // Live sampled/target TextureRefs grouped by creation label, size and format, most numerous first. Fills up to
