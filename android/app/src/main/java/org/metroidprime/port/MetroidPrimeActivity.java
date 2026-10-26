@@ -43,6 +43,9 @@ public final class MetroidPrimeActivity extends SDLActivity {
     private static final String TAG = "MetroidPrimePort";
     // Distinct from SDL's own dialog request codes, which count up from 0.
     private static final int REQUEST_TEXTURE_PACK = 0x7e57;
+    // Asks the system picker to list the phone's storage root, which it otherwise
+    // hides behind its shortcuts (Downloads, Recent, ...).
+    private static final String SHOW_ADVANCED = "android.content.extra.SHOW_ADVANCED";
     private static final int REQUEST_STORAGE = 0x7e58;
     // The Remastered import's .nsp/.xci (+0) and prod.keys (+1), a PAL disc for its
     // languages (+2) and a disc for the full Flaahgra theme (+3).
@@ -376,7 +379,9 @@ public final class MetroidPrimeActivity extends SDLActivity {
             }
             texturePackFolder = folder;
             try {
-                startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQUEST_TEXTURE_PACK);
+                startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                                           .putExtra(SHOW_ADVANCED, true),
+                                       REQUEST_TEXTURE_PACK);
             } catch (android.content.ActivityNotFoundException e) {
                 nativeTexturePackStatus("This device has no folder picker.");
             }
@@ -391,7 +396,8 @@ public final class MetroidPrimeActivity extends SDLActivity {
         runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE)
-                .setType("*/*");
+                .setType("*/*")
+                .putExtra(SHOW_ADVANCED, true);
             try {
                 startActivityForResult(intent, REQUEST_REMASTERED + which);
             } catch (android.content.ActivityNotFoundException e) {
