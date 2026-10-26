@@ -1,5 +1,7 @@
 #include "MetroidPrime/CDecalManager.hpp"
 
+#include "Kyoto/Graphics/CCubeMaterial.hpp"
+#include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Math/CAABox.hpp"
 #include "MetaRender/CCubeRenderer.hpp"
 #include "MetroidPrime/CStateManager.hpp"
@@ -215,11 +217,27 @@ void CDecalManager::AddToRenderer(const CFrustumPlanes&, const CStateManager& mg
 #ifdef TARGET_PC
   // GenerateDecalGeometry's place in RenderPrimaryPass: the opaque world (the receivers) is in.
   PortProjectedDecal::Build();
+  // In the HDR scene the Remastered decals draw as their clipped meshes, here, ahead of the
+  // sorted drawables: RenderDecalGeometry 0xb386a8 from the main (and thermal cold) scene at
+  // 0xf9d854 and from the thermal hot pass at 0xf9dd28. Without HDR they keep the retail quads.
+  const bool portHdr = CCubeMaterial::sPortSceneHdr;
+  if (portHdr) {
+    PortRenderProjected(mgr);
+  }
+  // Retail adds no decal in the thermal cold pass (DrawWorld only calls this there in the HDR scene).
+  if (mgr.GetThermalDrawFlag() == kTD_Cold) {
+    return;
+  }
 #endif
   AUTO(it, mActiveIndexList.begin());
   AUTO(end, mActiveIndexList.end());
   for (; it != end; ++it) {
     const rstl::optional_object< CDecal >& decal = mDecalPool[*it].mDecal;
+#ifdef TARGET_PC
+    if (portHdr && decal->IsPortRemastered()) {
+      continue;
+    }
+#endif
     if (mDecalPool[*it].mNotIce || mgr.GetThermalDrawFlag() != kTD_Hot) {
       gpRender->AddDrawable(&*decal, decal->GetTranslation(),
                             CAABox(decal->GetTranslation(), decal->GetTranslation()), 2,
@@ -227,3 +245,37 @@ void CDecalManager::AddToRenderer(const CFrustumPlanes&, const CStateManager& mg
     }
   }
 }
+
+#ifdef TARGET_PC
+void CDecalManager::PortRenderProjected(const CStateManager& mgr) {
+  // The thermal mask (info+0x138): the main scene draws every decal, the thermal cold scene the
+  // ice ones, the thermal hot pass the others.
+  const EThermalDrawFlag flag = mgr.GetThermalDrawFlag();
+  // RenderDecalGeometry pushes the camera's near plane out by 0.01 (camera+0x64) for both passes,
+  // the field of view kept: the same frustum at the new near distance.
+  const CGraphics::CProjectionState saved = CGraphics::GetProjectionState();
+  const float nearZ = saved.GetNear() + 0.01f;
+  const float k = saved.IsPerspective() ? nearZ / saved.GetNear() : 1.f;
+  CGraphics::SetProjectionState(CGraphics::CProjectionState(
+      saved.IsPerspective(), saved.GetLeft() * k, saved.GetRight() * k, saved.GetTop() * k,
+      saved.GetBottom() * k, nearZ, saved.GetFar()));
+  // Pass 0 the non-additive materials, pass 1 the additive (MATI blend 1/6), each decal by decal.
+  for (int pass = 0; pass < 2; ++pass) {
+    for (AUTO(it, mActiveIndexList.begin()); it != mActiveIndexList.end(); ++it) {
+      const SDecal& entry = mDecalPool[*it];
+      const CDecal& decal = *entry.mDecal;
+      if (!decal.IsPortRemastered()) {
+        continue;
+      }
+      if ((flag == kTD_Cold && entry.mNotIce) || (flag == kTD_Hot && !entry.mNotIce)) {
+        continue;
+      }
+      const PortProjectedDecal::Mesh* mesh = PortProjectedDecal::MeshFor(*it);
+      if (mesh != nullptr) {
+        decal.PortRenderProjected(*mesh, pass);
+      }
+    }
+  }
+  CGraphics::SetProjectionState(saved);
+}
+#endif

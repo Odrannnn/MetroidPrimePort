@@ -10,6 +10,11 @@
 #include <types.h>
 
 class CDecalDescription;
+#ifdef TARGET_PC
+namespace PortProjectedDecal {
+struct Mesh;
+}
+#endif
 class CDecal {
   static CRandom16 sDecalRandom;
   static bool sMoveRedToAlphaBuffer;
@@ -56,10 +61,18 @@ public:
   float GetPortBoxDepth() const { return xPortBoxDepth; }
   // Remastered's decal transform (+0x4c): the spawn transform times RotateZ(MSTR).
   const CTransform4f& GetPortTransform() const { return xPortTransform; }
-  // A material slot's fade (UpdateMaterialData 0xb7d07c): DUL1/DUL2 at the current frame, 1
-  // without one. A fade <= 0 skips the slot's draw.
-  float GetPortFade(int slot) const;
   const CDecalDescription& GetDescription() const { return *x0_description.operator->(); }
+  // A material slot's draw data at the current frame (UpdateMaterialData 0xb7d07c): the MATI's
+  // DIFC/CCH0/CCH1 with the SMTR writes, the material alpha (DUL) and the TMTR's TRSS(A..F).
+  struct SPortSlotData {
+    float xAlpha;
+    float xParams[3][4];
+    float xTrss[6];
+  };
+  void PortUpdateMaterialData(int slot, SPortSlotData& out) const;
+  // RenderDecalGeometry 0xb386a8's draw of this decal's clipped mesh (world-space triangles with
+  // their box UV) into the HDR scene: each loaded material slot of the pass, slot 0 then 1.
+  void PortRenderProjected(const PortProjectedDecal::Mesh& mesh, int pass) const;
 #endif
 
   void RenderQuad(CQuadDecal& quad, const CDecalDescription::SQuadDescr& quadDesc) const;

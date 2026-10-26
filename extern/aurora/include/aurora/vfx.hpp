@@ -151,6 +151,26 @@ inline constexpr bool is_barrier_exterior(uint32_t features) {
 // 0x1d0cc48/0x1d0cd38): One/InvSrcAlpha and SrcAlpha/One for colour and alpha alike, where the PBDM rows
 // Premultiplied and Additive keep the target's alpha (Zero/One).
 // The values are serialised in VMAT blobs (0..4 older, 5..7 new) and form part of the pipeline key.
+// DualSource is Remastered's EBlendMode 10 (the scorch decal's MATI): colour One/InvSrc1Color, alpha
+// One/InvSrcAlpha, the second source being the shader's o1. Never in a VMAT blob; drawn only where the
+// device has dual-source blending (dual_source_supported()).
+// Remastered's projected decals (CDecal, RenderDecalGeometry 0xb386a8; mpr-tools kb topic/projected-decals.md):
+// triangles clipped to the decal's box, uv0 = the box uv after the slot's TMTR, color = c4[0] (the decal colour,
+// rgb x the material alpha), extra[0].x = the box fade. params = DIFC, CCH0, CCH1 (the MATI's, SMTR-animated);
+// colorSlot = the MATI's texture, read at layer 0. Unfogged (none of the three has fog), drawn into the HDR
+// scene only. Selected by DrawDesc::decal, not a feature bit (none is left).
+enum class Decal : uint8_t {
+  None = 0,
+  // DecalColorErosion (e37ab789, perm 000_0): rgb = t.rgb x DIFC.rgb x c.rgb, a = max(0, t.a - CCH0.x) x DIFC.a x
+  // c.a x fade.
+  ColorErosion = 1,
+  // DecalIce (05ae8d81, perm 000_0): ColorErosion's colour plus itself x CCH0.y / exposure; alpha the same.
+  Ice = 2,
+  // DecalScorch (a19fec01, perm 000_0), drawn with Blend::DualSource: s = t.x x CCH0.w, e = t.y x CCH1.w;
+  // o0 = (e x CCH1.rgb, 1), o1 = (fade x s x (1 - CCH0.rgb x c.rgb), 1). Needs dual-source blending.
+  Scorch = 3
+};
+
 enum class Blend : uint32_t {
   Alpha = 0,
   Premultiplied = 1,
@@ -159,11 +179,14 @@ enum class Blend : uint32_t {
   Multiply = 4,
   AdditiveOne = 5,
   PremultipliedAlpha = 6,
-  AdditiveAlpha = 7
+  AdditiveAlpha = 7,
+  DualSource = 8
 };
 
 // The highest Blend value a VMAT blob may carry.
 inline constexpr uint32_t MaxBlend = uint32_t(Blend::AdditiveAlpha);
+// Whether the device can draw Blend::DualSource. A DualSource draw is dropped where it can't.
+bool dual_source_supported();
 
 // A model draw of this blend never writes depth and always depth-tests (LEqual), whatever its generator asked for.
 inline constexpr bool forces_depth_write_off(Blend blend) { return blend == Blend::AdditiveOne; }
@@ -320,6 +343,11 @@ struct DrawDesc {
   ClusterView cluster;
   // IceChargeCollisionLit, ParticleLit: the baked ambient and probe (see LitAmbient). Ignored by every other feature.
   LitAmbient lit;
+  // Cull back faces, with GX's winding (clockwise front, as gx::to_primitive_state): Remastered's MATI cull 2.
+  // Off: nothing is culled.
+  bool cullBack = false;
+  // A projected decal's shader (see Decal); features stay 0 for one.
+  Decal decal = Decal::None;
 };
 
 // Records quadCount quads (4 vertices each, drawn as two triangles) into the current pass with the

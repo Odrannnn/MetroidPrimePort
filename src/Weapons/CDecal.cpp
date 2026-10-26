@@ -12,7 +12,15 @@
 #include "dolphin/gx/GXVert.h"
 
 #ifdef TARGET_PC
+#include "aurora/vfx.hpp"
+#include "port_fx_debug.h"
 #include "port_projected_decal.h"
+#include "port_vfx_particles.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <vector>
 #endif
 
 CRandom16 CDecal::sDecalRandom(99);
@@ -114,8 +122,8 @@ CDecal::CDecal(const TToken< CDecalDescription >& desc, uint seed, const CTransf
 , xPortTime(0.0)
 , xPortAngle(0.f)
 , xPortFlags(0) {
-  // TODO(chunk3): the retail quads only stand in for the projected draw until it exists; they
-  // keep their own lifetimes and random, as retail's.
+  // Outside the HDR scene a Remastered decal draws retail's quads (the HDR scene draws its
+  // clipped mesh, PortRenderProjected); they keep their own lifetimes and random, as retail's.
   {
     CGlobalRandom gr(sDecalRandom);
     InitQuad(x3c_quad1, x0_description->x0_quad1, 1);
@@ -197,16 +205,157 @@ void CDecal::PortRemasteredUpdate(float dt) {
   } while (0.0 < frames);
 }
 
-float CDecal::GetPortFade(int slot) const {
-  float alpha = 1.f;
-  if (CRealElement* dul = x0_description->xPortDUL[slot].get()) {
-    CPortDecalEval eval(const_cast< CRandom16& >(xPortRandom));
-    CParticleGlobals::SetEmitterTime(xPortFrame);
-    CParticleGlobals::SetParticleLifetime(xPortLifetime);
-    CParticleGlobals::UpdateParticleLifetimeTweenValues(xPortFrame);
-    dul->GetValue(xPortFrame, alpha);
+// UpdateMaterialData 0xb7d07c, run per frame by UpdateDecalRenderable 0x10106c4 in a CVarContext
+// on the decal's random (lifetime MSTL, frame +0x90): BuildUniformMaterialData seeds the MATI's
+// parameters and an override alpha of 1, the DUL sets the alpha, and only without a DUL or with
+// an alpha above 0 do FillInUniformMaterialData (SMTR) and the TMTR run.
+void CDecal::PortUpdateMaterialData(int slot, SPortSlotData& out) const {
+  const CDecalDescription::SPortMaterial& material = x0_description->xPortMaterial[slot];
+  std::memcpy(out.xParams, material.xDefaults, sizeof(out.xParams));
+  out.xAlpha = 1.f;
+  // The TRSS default (0x20e9d0): no offset, unit scale, no rotation, layer 0.
+  static const float kIdentityTrss[6] = {0.f, 0.f, 1.f, 1.f, 0.f, 0.f};
+  std::memcpy(out.xTrss, kIdentityTrss, sizeof(out.xTrss));
+  CPortDecalEval eval(const_cast< CRandom16& >(xPortRandom));
+  CParticleGlobals::SetEmitterTime(xPortFrame);
+  CParticleGlobals::SetParticleLifetime(xPortLifetime);
+  CParticleGlobals::UpdateParticleLifetimeTweenValues(xPortFrame);
+  CRealElement* dul = x0_description->xPortDUL[slot].get();
+  if (dul != nullptr) {
+    dul->GetValue(xPortFrame, out.xAlpha);
+    if (!(out.xAlpha > 0.f)) {
+      return;
+    }
   }
-  return alpha;
+  // A colour fills its whole row (unclamped), a real its one component.
+  for (size_t i = 0; i < material.xSmtr.size(); ++i) {
+    const CDecalDescription::SPortParam& param = material.xSmtr[i];
+    float* row = out.xParams[param.xRow];
+    if (param.xColor) {
+      param.xColor->GetValueHdr(xPortFrame, row);
+    } else {
+      param.xReal->GetValue(xPortFrame, row[param.xComp]);
+    }
+  }
+  for (int i = 0; i < 6; ++i) {
+    if (material.xTmtr[i]) {
+      material.xTmtr[i]->GetValue(xPortFrame, out.xTrss[i]);
+    }
+  }
+}
+
+void CDecal::PortRenderProjected(const PortProjectedDecal::Mesh& mesh, int pass) const {
+  const uint32_t triCount = static_cast< uint32_t >(mesh.Triangles());
+  if (triCount == 0) {
+    return;
+  }
+  // SDecalSystemParams c4[4..5]: the box plane through the centre along the normalized OBB column 2,
+  // and 5 / ext.z; the VS's fade is sat(1 - |dot(n, p) - d| * 5 / ext.z), per vertex.
+  const CVector3f normal = xPortTransform.GetColumn(kDZ).AsNormalized();
+  const float planeD = CVector3f::Dot(normal, xPortTransform.GetTranslation());
+  const float fadeScale = 5.f / xPortBoxDepth;
+  static std::vector< aurora::gfx::vfx::Vertex > sVerts;
+  for (int slot = 0; slot < 2; ++slot) {
+    const CDecalDescription::SPortMaterial& material = x0_description->xPortMaterial[slot];
+    if (!material.xPresent) {
+      continue;
+    }
+    // Pass 0 takes the materials whose blend is not 1 or 6, pass 1 the additive 1/6 ones.
+    const bool additive = material.xBlend == 1 || material.xBlend == 6;
+    if ((pass != 1) == additive) {
+      continue;
+    }
+    aurora::gfx::vfx::DrawDesc desc;
+    switch (material.xShader) {
+    case 0xe37ab789u:
+      desc.decal = aurora::gfx::vfx::Decal::ColorErosion;
+      break;
+    case 0x05ae8d81u:
+      desc.decal = aurora::gfx::vfx::Decal::Ice;
+      break;
+    case 0xa19fec01u:
+      desc.decal = aurora::gfx::vfx::Decal::Scorch;
+      break;
+    default:
+      continue;
+    }
+    desc.features = aurora::gfx::vfx::Unfogged;
+    // The decal MATIs carry blend 2 (SrcAlpha/InvSrcAlpha) or 10 (dual source); the importer
+    // passes no other.
+    switch (material.xBlend) {
+    case 2:
+      desc.blend = aurora::gfx::vfx::Blend::Alpha;
+      break;
+    case 10:
+      desc.blend = aurora::gfx::vfx::Blend::DualSource;
+      break;
+    default:
+      continue;
+    }
+    SPortSlotData data;
+    PortUpdateMaterialData(slot, data);
+    if (!(data.xAlpha > 0.f)) {
+      continue;
+    }
+    if (!material.xTextureToken) {
+      continue;
+    }
+    TCachedToken< CTexture >& token = const_cast< TCachedToken< CTexture >& >(*material.xTextureToken);
+    if (!token.TryCache()) {
+      continue; // the MATI's texture is not loaded yet
+    }
+    CTexture* tex = token.GetObject();
+    tex->PortLoad(GX_TEXMAP0, static_cast< CTexture::EClampMode >(material.xWrapS),
+                  static_cast< CTexture::EClampMode >(material.xWrapT));
+    aurora::gfx::vfx::Texture& t = desc.tex[0];
+    t.obj = tex->PortTexObj();
+    t.wrapS = static_cast< GXTexWrapMode >(material.xWrapS);
+    t.wrapT = static_cast< GXTexWrapMode >(material.xWrapT);
+    t.linear = material.xLinear != 0;
+    desc.colorSlot = 0;
+    std::memcpy(desc.params, data.xParams, sizeof(data.xParams));
+    // MATI cull 0xff -> 2: back faces.
+    desc.cullBack = true;
+
+    // The VS's TMTR (c4[1] as pack_texture_transform leaves it) on the box UV.
+    const float offU = PortVfxTrssOffset(data.xTrss[0]);
+    const float offV = PortVfxTrssOffset(data.xTrss[1]);
+    const float scaleU = data.xTrss[2];
+    const float scaleV = data.xTrss[3];
+    const float angle = PortVfxTrssAngle(data.xTrss[4]);
+    const float cosE = std::cos(angle);
+    const float sinE = std::sin(angle);
+    // c4[0] = ScaleRGB(info+0xec, alpha), info+0xec white.
+    const float a = data.xAlpha;
+    sVerts.resize(mesh.vertices.size());
+    for (size_t i = 0; i < mesh.vertices.size(); ++i) {
+      const PortProjectedDecal::Vertex& src = mesh.vertices[i];
+      aurora::gfx::vfx::Vertex& v = sVerts[i];
+      v = aurora::gfx::vfx::Vertex{};
+      v.pos[0] = src.pos.x;
+      v.pos[1] = src.pos.y;
+      v.pos[2] = src.pos.z;
+      const float u = src.u - 0.5f;
+      const float w = src.v - 0.5f;
+      v.uv[0][0] = cosE * scaleU * u + sinE * scaleV * w + offU + 0.5f;
+      v.uv[0][1] = -sinE * scaleU * u + cosE * scaleV * w + offV + 0.5f;
+      v.color[0] = a;
+      v.color[1] = a;
+      v.color[2] = a;
+      v.color[3] = 1.f;
+      const float dist = normal.GetX() * src.pos.x + normal.GetY() * src.pos.y +
+                         normal.GetZ() * src.pos.z - planeD;
+      const float fade = 1.f - std::fabs(dist) * fadeScale;
+      v.extra[0][0] = fade < 0.f ? 0.f : fade > 1.f ? 1.f : fade;
+    }
+    CGraphics::SetModelMatrix(CTransform4f::Identity());
+    CGraphics::SetCullMode(kCM_None);
+    // Depth test on (compare 4, LEqual), no write.
+    CGraphics::SetDepthWriteMode(true, kE_LEqual, false);
+    PortFx::gTriangles += triCount;
+    ++PortFx::gDraws;
+    aurora::gfx::vfx::draw_triangles(desc, sVerts.data(), triCount);
+  }
 }
 #endif
 
@@ -412,8 +561,8 @@ void CDecal::Render() const {
   if (IsDone()) {
     return;
   }
-  // TODO(chunk3): a Remastered decal (xPortRemastered) still draws retail's flat quads here, at its
-  // Remastered frame; chunk 3 replaces this with the clipped mesh (port_projected_decal.h).
+  // A Remastered decal reaches this only outside the HDR scene (CDecalManager::AddToRenderer): it
+  // draws retail's flat quads at its Remastered frame.
 
   CGraphics::DisableAllLights();
   CParticleGlobals::SetEmitterTime(x58_frameIdx);
@@ -431,7 +580,7 @@ void CDecal::Update(float dt) {
 #ifdef TARGET_PC
   if (xPortRemastered) {
     PortRemasteredUpdate(dt);
-    // TODO(chunk3): drives the stand-in retail quads (ProcessQuad) until the projected draw.
+    // Drives the retail quads (ProcessQuad) a Remastered decal draws outside the HDR scene.
     x58_frameIdx = xPortFrame;
     if (x58_frameIdx >= x3c_quad1.GetLifetime()) {
       x5c_flags |= 1;

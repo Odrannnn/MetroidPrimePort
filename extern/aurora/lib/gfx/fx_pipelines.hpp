@@ -34,13 +34,30 @@ constexpr uint32_t BlendSceneHdr = 1u << 31;
 // Set in PipelineConfig::blend for a visor effect drawn into the display output after the post
 // (vfx::begin_visor_effects): no exposure, tone, alpha trade or fog, a plain sRGB encode.
 constexpr uint32_t BlendAfterPost = 1u << 30;
-constexpr uint32_t BlendFlags = BlendSceneHdr | BlendAfterPost;
+// Set in PipelineConfig::blend for a draw that culls back faces with GX's winding (DrawDesc::cullBack).
+// Like the flags above it sits over every blend mode, so no config built before it carries it and the
+// config layout is unchanged.
+constexpr uint32_t BlendCullBack = 1u << 29;
+// PipelineConfig::blend bits 27..28: the decal shader (DrawDesc::decal, 0 = none). The feature word has
+// no bit left, so they live here, over every blend mode like the flags.
+constexpr uint32_t BlendDecalShift = 27;
+constexpr uint32_t BlendDecalMask = 3u << BlendDecalShift;
+constexpr uint32_t BlendFlags = BlendSceneHdr | BlendAfterPost | BlendCullBack | BlendDecalMask;
+// The blend mode of a config's blend word, without the flags.
+constexpr uint32_t blend_mode(uint32_t blend) noexcept { return blend & ~BlendFlags; }
+constexpr uint32_t blend_decal(uint32_t blend) noexcept { return (blend & BlendDecalMask) >> BlendDecalShift; }
 
 wgpu::RenderPipeline create_pipeline(const PipelineConfig& config);
 // The blend a config's pipeline uses: its mode's, whatever the HDR bit.
 wgpu::BlendState pipeline_blend(const PipelineConfig& config);
 // ModelBackCull remains in features, so both cached config bytes and the live key distinguish it.
 inline wgpu::PrimitiveState pipeline_primitive(const PipelineConfig& config) {
+  if ((config.blend & BlendCullBack) != 0) {
+    // A decal's receiver triangles keep GX's winding (gx::to_primitive_state): clockwise front.
+    return {.topology = wgpu::PrimitiveTopology::TriangleList,
+            .frontFace = wgpu::FrontFace::CW,
+            .cullMode = wgpu::CullMode::Back};
+  }
   const bool back = (config.features & ModelBackCull) != 0;
   // Native nonmirrored Ice: main 0x1ae378 selects NVN front-face 1; SDK 0x493890
   // emits Maxwell 0x191c/0x901 (CCW). Its origin compensation and the proper

@@ -18,6 +18,10 @@
 #include <utility>
 #include <vector>
 
+namespace PortRoomEnv {
+float ParticleInverseExposure(bool blended);
+}
+
 // Port-only Remastered particle variables (PVAR). A converted generator or swoosh description
 // carries the table (PVRT); each CElementGen/CParticleSwoosh holds the live values, which start at
 // the defaults. VARF/VARI/VARV/VARC elements read the slot of the system being updated or rendered.
@@ -810,6 +814,77 @@ public:
     for (int i = 0; i < 4; ++i) {
       out[i] = a[i] * b[i];
     }
+    return false;
+  }
+};
+
+// A decal SMTR's IEXP (CREInverseExposure 0x299830, CCEInverseExposure 0x2c8f80): the child times
+// CParticleGen::GetInverseExposure(1), the auto inverse exposure (CPostFXManager 0xb005ac); a colour
+// scales its RGB only (ScaleRGB). The importer writes it as the port-only PIEX.
+class CREPortInverseExposure : public CRealElement {
+  CRealElement* x4_value;
+
+public:
+  explicit CREPortInverseExposure(CRealElement* value) : x4_value(value) {}
+  ~CREPortInverseExposure() override { delete x4_value; }
+  bool GetValue(int frame, float& out) const override {
+    x4_value->GetValue(frame, out);
+    out *= PortRoomEnv::ParticleInverseExposure(true);
+    return false;
+  }
+};
+
+class CCEPortInverseExposure : public CColorElement {
+  CColorElement* x4_value;
+
+public:
+  explicit CCEPortInverseExposure(CColorElement* value) : x4_value(value) {}
+  ~CCEPortInverseExposure() override { delete x4_value; }
+  bool GetValue(int frame, CColor& out) const override {
+    float v[4];
+    GetValueHdr(frame, v);
+    auto clamp = [](float f) { return f < 0.f ? 0.f : f > 1.f ? 1.f : f; };
+    out = CColor(clamp(v[0]), clamp(v[1]), clamp(v[2]), clamp(v[3]));
+    return false;
+  }
+  bool GetValueHdr(int frame, float out[4]) const override {
+    x4_value->GetValueHdr(frame, out);
+    const float scale = PortRoomEnv::ParticleInverseExposure(true);
+    for (int i = 0; i < 3; ++i) {
+      out[i] *= scale;
+    }
+    return false;
+  }
+};
+
+// VRTC: CCEVectorAndRealToColor 0x2c84fc, (max(vector, 0), max(real, 0)) from a zero vector and a
+// real of 1. The importer writes it as the port-only PVRC.
+class CCEPortVectorAndRealToColor : public CColorElement {
+  CVectorElement* x4_vector;
+  CRealElement* x8_real;
+
+public:
+  CCEPortVectorAndRealToColor(CVectorElement* vector, CRealElement* real) : x4_vector(vector), x8_real(real) {}
+  ~CCEPortVectorAndRealToColor() override {
+    delete x4_vector;
+    delete x8_real;
+  }
+  bool GetValue(int frame, CColor& out) const override {
+    float v[4];
+    GetValueHdr(frame, v);
+    auto clamp = [](float f) { return f > 1.f ? 1.f : f; };
+    out = CColor(clamp(v[0]), clamp(v[1]), clamp(v[2]), clamp(v[3]));
+    return false;
+  }
+  bool GetValueHdr(int frame, float out[4]) const override {
+    CVector3f vector = CVector3f::Zero();
+    float real = 1.f;
+    x4_vector->GetValue(frame, vector);
+    x8_real->GetValue(frame, real);
+    out[0] = std::max(vector.GetX(), 0.f);
+    out[1] = std::max(vector.GetY(), 0.f);
+    out[2] = std::max(vector.GetZ(), 0.f);
+    out[3] = std::max(real, 0.f);
     return false;
   }
 };

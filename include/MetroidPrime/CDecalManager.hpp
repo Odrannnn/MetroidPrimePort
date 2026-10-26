@@ -28,6 +28,10 @@ public:
   static void Reinitialize();
   static void Update(float dt, CStateManager& mgr);
   static void AddToRenderer(const CFrustumPlanes& frustum, const CStateManager& mgr);
+#ifdef TARGET_PC
+  // Remastered's RenderDecalGeometry 0xb386a8: the projected meshes, HDR scene only.
+  static void PortRenderProjected(const CStateManager& mgr);
+#endif
   static rstl::reserved_vector< int, 64 >::iterator
   RemoveFromActiveList(rstl::reserved_vector< int, 64 >::iterator it, int idx);
   static void AddDecal(const TToken< CDecalDescription >& desc, const CTransform4f& xf,

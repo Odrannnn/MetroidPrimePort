@@ -1020,7 +1020,25 @@ R"(  } else if ((FEAT & 524288u) != 0u) {
     let lighting = u.lit0.xyz + probe_ambient(N) + cluster_lights(in, N);
     rgb = rgb * lighting * u.lit6.rgb * 0.3183098862;
   }
+  if (DECAL != 0u) {
+    // The projected decals' e37ab789 and 05ae8d81 (perm 000_0): the map at the box uv after the slot's
+    // TMTR (the VS's, per vertex on the CPU), layer 0. rgb = (t.rgb x DIFC.rgb) x c.rgb; 05ae8d81 adds
+    // that x CCH0.y x the inverse exposure (GSV[0].z). Alpha: max(0, t.a - CCH0.x) x DIFC.a, then x c.a
+    // and the box fade below, in the shader's order. c = c4[0] = the vertex colour; M is 1.
+    let t = sample_raw(S_COLOR, in.uv0.xy, 0);
+    let c = t.rgb * u.ice0.rgb * vc.rgb;
+    rgb = c;
+    if (DECAL == 2u) {
+      var ie = 1.0;
+      if (u.tone1.x > 0.0 && u.tone0.w > 0.0) { ie = 1.0 / u.tone0.w; }
+      rgb = fma(c * u.ice1.y, vec3f(ie), c);
+    }
+    x = max(0.0, t.w - u.ice1.x) * u.ice0.w;
+  }
   var a = x * vc.w;
+  if (DECAL != 0u) {
+    a = a * in.e0.x;
+  }
   if ((FEAT & 32u) != 0u && u.soft.z > 0.5 && u.misc2.w > 0.0) {
     // DepthSoften, as VFX_DualModColorRamp_Indirect_Unlit (71dc2465, perm 000) does it: the opaque
     // scene's depth at this pixel back to view space through the draw's own projection, and the
@@ -1031,7 +1049,8 @@ R"(  } else if ((FEAT & 524288u) != 0u) {
     let f = clamp((1.0 / u.misc2.w) * abs(sz - in.vz), 0.0, 1.0);
     a = (3.0 - 2.0 * f) * f * f * a;
   }
-  if (a <= 0.0) { discard; }
+  // The decal shaders never discard (with their blends a zero alpha draws nothing anyway).
+  if (a <= 0.0 && DECAL == 0u) { discard; }
   var alpha = clamp(a, 0.0, 1.0);
   if (BLEND == 4u) {
     // Multiply: the target times rgb where alpha covers it. Unfogged, as every blend but
@@ -1171,6 +1190,12 @@ wgpu::BlendState blend_state(Blend blend) {
     c.srcFactor = a.srcFactor = wgpu::BlendFactor::SrcAlpha;
     c.dstFactor = a.dstFactor = wgpu::BlendFactor::One;
     break;
+  case Blend::DualSource:
+    c.srcFactor = wgpu::BlendFactor::One;
+    c.dstFactor = wgpu::BlendFactor::OneMinusSrc1;
+    a.srcFactor = wgpu::BlendFactor::One;
+    a.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+    break;
   case Blend::Multiply:
     c.srcFactor = wgpu::BlendFactor::Dst;
     c.dstFactor = wgpu::BlendFactor::Zero;
@@ -1304,7 +1329,7 @@ wgpu::RenderPipeline make_pipeline(const PipelineConfig& p) {
   }
   const wgpu::FragmentState fragment{
       .module = module,
-      .entryPoint = "fs_main",
+      .entryPoint = blend_mode(p.blend) == uint32_t(Blend::DualSource) ? "fs_dual" : "fs_main",
       .targetCount = p.colorAttachmentCount,
       .targets = targets.data(),
   };
@@ -1762,8 +1787,10 @@ bool upload_cluster_mask(const ClusterView& view) {
 
 wgpu::RenderPipeline create_pipeline(const PipelineConfig& config) { return make_pipeline(config); }
 
+bool dual_source_supported() { return webgpu::g_dualSourceBlendingSupported; }
+
 wgpu::BlendState pipeline_blend(const PipelineConfig& config) {
-  return blend_state(static_cast<Blend>(config.blend & ~BlendFlags));
+  return blend_state(static_cast<Blend>(blend_mode(config.blend)));
 }
 
 void write_cluster_block(const ClusterView& view, float* uniform) {
@@ -1786,7 +1813,8 @@ std::string pipeline_source(const PipelineConfig& p) {
                                               "S_THRESHOLD", "S_INDIRECT", "S_PALETTE", "S_NORMAL",
                                               "S_ENV"};
   std::string source = "const FEAT: u32 = " + std::to_string(p.features) + "u;\nconst BLEND: u32 = " +
-                       std::to_string(p.blend & ~BlendFlags) + "u;\n";
+                       std::to_string(blend_mode(p.blend)) + "u;\nconst DECAL: u32 = " +
+                       std::to_string(blend_decal(p.blend)) + "u;\n";
   for (uint32_t i = 0; i < std::size(SlotNames); ++i) {
     const uint32_t v = (p.slotKey >> (3 * i)) & 7;
     source += std::string("const ") + SlotNames[i] + ": i32 = " + (v == 7 ? "-1" : std::to_string(v)) + ";\n";
@@ -1794,6 +1822,39 @@ std::string pipeline_source(const PipelineConfig& p) {
   // The scene copy's light: the HDR copy holds the exposed linear the HDR tail writes already. LDR
   // draws never read a scene copy (draw_prims drops them), so theirs is never called.
   static constexpr std::string_view SceneLight = "fn scene_light(c: vec3f) -> vec3f { return c; }\n";
+  // Blend::DualSource draws through fs_dual, the scorch decal's two outputs (a19fec01 perm 000_0):
+  // s = t.x x CCH0.w, e = t.y x CCH1.w; o0 = (e x CCH1.rgb, 1) is light, so the HDR scene takes it
+  // exposed; o1 = (fade x s x (1 - CCH0.rgb x c.rgb), 1) is the factor the target keeps (1 - o1), unexposed.
+  // No fog, no discard.
+  const bool dual = blend_mode(p.blend) == uint32_t(Blend::DualSource);
+  if (dual) {
+    source.insert(0, "enable dual_source_blending;\n");
+  }
+  const auto dualTail = [&] {
+    if (!dual) {
+      return;
+    }
+    source += R"(
+struct DualOut {
+  @location(0) @blend_src(0) color: vec4f,
+  @location(0) @blend_src(1) blend: vec4f,
+}
+@fragment
+fn fs_dual(in: VOut) -> DualOut {
+  let t = sample_raw(S_COLOR, in.uv0.xy, 0).xy;
+  let f = in.e0.x;
+  let s = t.x * u.ice1.w;
+  let e = t.y * u.ice2.w;
+  var o0 = e * u.ice2.rgb;
+)";
+    if (hdr) {
+      source += "  if (u.tone1.x > 0.0 && u.tone0.w > 0.0) { o0 = o0 * u.tone0.w; }\n";
+    }
+    source += R"(  let o1 = fma(fma(u.ice1.rgb * in.color.rgb, vec3f(s), vec3f(-s)), vec3f(-f), vec3f(-0.0));
+  return DualOut(vec4f(o0, 1.0), vec4f(o1, 1.0));
+}
+)";
+  };
   static constexpr std::string_view Anchor = "  var col = tone(rgb);\n";
   if (!hdr && (p.blend & BlendAfterPost) != 0) {
     // A visor effect after the post (RenderVisorEffectsCustom): Remastered's shader writes linear light
@@ -1814,6 +1875,7 @@ std::string pipeline_source(const PipelineConfig& p) {
   if (!hdr) {
     source += ShaderSource;
     source += SceneLight;
+    dualTail();
     return source;
   }
   source += "const HDR: bool = true;\n";
@@ -1842,6 +1904,7 @@ std::string pipeline_source(const PipelineConfig& p) {
   source += body;
   source += SceneLight;
   source += hdr::ToneWgsl;
+  dualTail();
   return source;
 }
 
@@ -1858,6 +1921,7 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   }
   evict_idle();
   const uint32_t features = shader_features(desc.features);
+  const bool decal = desc.decal != Decal::None;
   // The slots each enabled feature reads; a slot nothing reads is left unbound (the dummy).
   const std::pair<uint32_t, int8_t> reads[] = {
       {ColorTex | ColorIndexing | Pyro | Disintegration | VisorSplat | IceChargeBeam | IceChargeCollision |
@@ -1877,8 +1941,10 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   bool used[SlotCount]{};
   for (uint32_t i = 0; i < std::size(reads); ++i) {
     const auto [mask, slot] = reads[i];
-    // DualMod's second ramp needs both bits; every other row needs any of its bits.
-    const bool on = i == 3 ? (features & Ramp) != 0 && (features & DualMod) != 0 : (features & mask) != 0;
+    // DualMod's second ramp needs both bits; every other row needs any of its bits. A decal reads the colour.
+    const bool on = i == 3   ? (features & Ramp) != 0 && (features & DualMod) != 0
+                    : i == 0 ? (features & mask) != 0 || decal
+                             : (features & mask) != 0;
     const uint32_t v = on && slot >= 0 && slot < int(SlotCount) ? uint32_t(slot) : 7u;
     slotKey |= v << (3 * i);
     if (v != 7) {
@@ -1925,6 +1991,13 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     // the visor copy.
     return;
   }
+  // The projected decals are Remastered's HDR scene's; outside it the game draws its retail quads.
+  if (decal && (!hdr || afterPost)) {
+    return;
+  }
+  if (desc.blend == Blend::DualSource && !dual_source_supported()) {
+    return;
+  }
   u.tone[0][3] = draw_exposure(u.tone[0][3], hdr, desc.alreadyExposed, desc.exposureOverride);
   if (afterPost) {
     // No exposure after the post: the shader neither scales the light nor divides a copy read by it.
@@ -1967,10 +2040,10 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     u.scene[2] = gx.proj.m2[3] / (gx.proj.m2[2] - 1.f);
     u.scene[3] = 1.f;
   }
-  if ((features & (IceChargeBeam | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit |
-                   VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion | VisorSteam | Pyro)) != 0) {
-    // The recipe's CCH rows: IceChargeCollision 0..6, VisorRunOff and VisorSteam 0..4, IceChargeBeam 0..2,
-    // VisorRain, BarrierShield, BarrierGlow, FrameBufferColorErosion and Pyro 0 only.
+  if (decal || (features & (IceChargeBeam | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit |
+                             VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion | VisorSteam | Pyro)) != 0) {
+    // The recipe's CCH rows: IceChargeCollision 0..6, VisorRunOff and VisorSteam 0..4, IceChargeBeam and the
+    // decals (DIFC, CCH0, CCH1) 0..2, VisorRain, BarrierShield, BarrierGlow, FrameBufferColorErosion and Pyro 0 only.
     uint32_t rows = 3;
     if ((features & (IceChargeCollision | IceChargeCollisionLit)) != 0) {
       rows = 7;
@@ -2047,7 +2120,8 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   Payload p{};
   p.features = features;
   p.slotKey = slotKey;
-  p.blend = uint32_t(desc.blend) | (hdr ? BlendSceneHdr : 0u) | (afterPost ? BlendAfterPost : 0u);
+  p.blend = uint32_t(desc.blend) | (hdr ? BlendSceneHdr : 0u) | (afterPost ? BlendAfterPost : 0u) |
+            (desc.cullBack ? BlendCullBack : 0u) | (uint32_t(desc.decal) << BlendDecalShift);
   p.compare = uint32_t(gx.depthCompare ? to_compare(gx.depthFunc) : wgpu::CompareFunction::Always);
   p.depthWrite = gx.depthCompare && gx.depthUpdate ? 1 : 0;
   p.indexCount = uint32_t(indices.size());

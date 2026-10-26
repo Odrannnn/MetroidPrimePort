@@ -3975,7 +3975,8 @@ void CStateManager::DrawWorld() const {
     // stash for pass B; its decals and simple shadows draw now, sorted among themselves.
     portDrawToken[i] = x8dc_objectDrawToken;
     gpRender->PortStashBuckets(i);
-    if (isVisArea && !thermal && !portCollisionOnly) {
+    // The HDR thermal cold scene draws its decals too (RenderDecalGeometry 0xf9d854).
+    if (isVisArea && (!thermal || portThermalScene) && !portCollisionOnly) {
       CDecalManager::AddToRenderer(frustum, *this);
     }
     gpRender->PortDrawSortedDrawables(area.GetId().Value());

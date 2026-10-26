@@ -1583,7 +1583,15 @@ CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
     }
     return rs_new CREPortExternalVar(index, fallback);
   }
-  // ABS_ (CREAbsoluteValue 0x295094), RSGN (CRERandomSign 0x299318): one real child.
+  // PIEX (CREInverseExposure 0x299830), ABS_ (CREAbsoluteValue 0x295094), RSGN (CRERandomSign
+  // 0x299318): one real child.
+  case SBIG('PIEX'): {
+    CRealElement* value = GetRealElement(in);
+    if (value == nullptr) {
+      return nullptr;
+    }
+    return rs_new CREPortInverseExposure(value);
+  }
   case SBIG('ABS_'): {
     CRealElement* value = GetRealElement(in);
     if (value == nullptr) {
@@ -2562,6 +2570,25 @@ CColorElement* CParticleDataFactory::GetColorElement(CInputStream& in) {
     CColorElement* a = GetColorElement(in);
     CColorElement* b = GetColorElement(in);
     ret = rs_new CCEPortMultiply(a, b);
+    break;
+  }
+  case SBIG('PIEX'): {
+    CColorElement* c = GetColorElement(in);
+    if (c == nullptr) {
+      return nullptr;
+    }
+    ret = rs_new CCEPortInverseExposure(c);
+    break;
+  }
+  case SBIG('PVRC'): {
+    CVectorElement* v = GetVectorElement(in);
+    CRealElement* r = GetRealElement(in);
+    if (v == nullptr || r == nullptr) {
+      delete v;
+      delete r;
+      return nullptr;
+    }
+    ret = rs_new CCEPortVectorAndRealToColor(v, r);
     break;
   }
   case SBIG('MDAO'): {
