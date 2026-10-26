@@ -184,8 +184,9 @@ void DrawRemasteredImport() {
     MarkDirty();
   }
   ItemHelp("Faster drawing that is no longer exactly Remastered's (at most 2/255 apart): glass "
-           "refraction updated every second frame, exposure measured from a smaller image and "
-           "volumetric fog blended onto the scene instead of rewriting it.");
+           "refraction updated every second frame, exposure measured from a smaller image, "
+           "volumetric fog blended onto the scene instead of rewriting it, and the world left "
+           "unshaded behind the arm cannon.");
   ImGui::BeginDisabled(state.running);
 #if defined(__ANDROID__)
   // No path to type here: the files are picked, and shown by name.

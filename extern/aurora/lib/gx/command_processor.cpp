@@ -592,7 +592,7 @@ static bool bind_pos_read(GXPrimitive prim) noexcept {
     return false;
   }
   const auto& state = g_gxState;
-  const bool depthOnly = state.depthPrepass == 1;
+  const bool depthOnly = state.depthPrepass == 1 || state.depthPrepass == 3;
   const bool drawId = state.drawIdMode && !depthOnly;
   const bool shadow =
       state.shadowCaster && state.shadowActive && prim != GX_LINES && prim != GX_LINESTRIP && prim != GX_POINTS;
@@ -699,7 +699,7 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
     // plain EQUAL draw's, which doesn't cast, so it bypasses the memo.
     const bool prepassEligible = state.depthPrepass != 0 && depth_prepass_eligible(lineMode);
     const bool prepassShade = state.depthPrepass == 2 && prepassEligible;
-    cache.prepassSkip = state.depthPrepass == 1 && !prepassEligible;
+    cache.prepassSkip = (state.depthPrepass == 1 || state.depthPrepass == 3) && !prepassEligible;
     // A frame switches pipelines hundreds of times between a few hundred configs. The config's
     // hash is the pipeline's ref, so a config seen before reuses its shader info and shadow
     // pipeline without the second lookup (shader info depends on the config alone). With blocking

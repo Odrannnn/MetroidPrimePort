@@ -4692,7 +4692,7 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
   if (config.depthOnly != 0) {
     // Depth pre-pass: nothing is written but the depth, so the compiler can drop all the
     // shading that the alpha compare doesn't read.
-    fragmentFn += "\n    prev = vec4f(0.0);";
+    fragmentFn += config.depthOnly == 2 ? "\n    prev = vec4f(0.0, 0.0, 0.0, -1.0);" : "\n    prev = vec4f(0.0);";
   }
   if constexpr (EnableNormalVisualization) {
     fragmentFn += "\n    prev = vec4f(in.nrm, prev.a);";

@@ -169,6 +169,9 @@ public:
   void PortDrawHologramTransition(const CStateManager& mgr, const CTransform4f& xf,
                                   const CVector3f& normal, const CVector3f& point,
                                   const CModelFlags& flags, const CActorLights* lights) const;
+  // Performance mode's gun-first pass: the solid gun and suit arm, opaque, for their depth.
+  void PortDrawDepth(const bool drawSuitArm, const CStateManager& mgr,
+                     const CTransform4f& xf) const;
   CTransform4f PortDreadCannonXf(const CTransform4f& xf) const;
   CVector3f PortDreadMuzzleShift() const;
 #endif

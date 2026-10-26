@@ -38,7 +38,9 @@ void GXSetClipPlane(GXBool enable, const f32 plane[4]);
 // surfaces again where the depth is equal, without writing it, so each pixel is shaded once
 // and the GPU can still test depth before shading (a discard stops that only while depth is
 // written). The result is what one depth-tested pass gives. Draws that don't write depth
-// are left alone in pass 2 and draw nothing in pass 1. 0 turns it off.
+// are left alone in pass 2 and draw nothing in pass 1. 0 turns it off. Pass 3 is pass 1 that also
+// marks its pixels in an EFB without alpha (alpha -1, which nothing there reads), so that
+// GX_PORT_PERF_GUN_FIRST's exposure measure can leave out the area the gun hides.
 void GXPortSetDepthPrepass(u8 pass);
 // Port extension: shortcuts that trade exactness for speed (the Remastered mod's performance
 // option), as GX_PORT_PERF_* bits; 0, the default, draws everything exactly. Read when each part
@@ -47,7 +49,8 @@ enum {
   GX_PORT_PERF_GLASS_HALF_RATE = 1u << 0, // glass refracts a screen copy taken every second frame
   GX_PORT_PERF_SMALL_MEASURE = 1u << 1,   // the exposure measure starts at a quarter of the scene
   GX_PORT_PERF_BLEND_FOG = 1u << 2,       // volumetric fog blended onto the scene, not copied and rewritten
-  GX_PORT_PERF_ALL = (1u << 3) - 1,
+  GX_PORT_PERF_GUN_FIRST = 1u << 3,       // the gun's depth is laid before the world, hiding it there
+  GX_PORT_PERF_ALL = (1u << 4) - 1,
 };
 void GXPortSetPerformance(u32 flags);
 u32 GXPortGetPerformance(void);

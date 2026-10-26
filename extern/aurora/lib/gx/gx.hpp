@@ -632,7 +632,7 @@ struct ShaderConfig {
   u8 sceneHdr : 1 = false;
   u8 pbr = 0; // GX_AURORA_SET_PBR
   u8 sdf = 0; // GX_AURORA_SET_SDF
-  u8 depthOnly = 0; // pass 1 of GX_AURORA_PORT_DEPTH_PREPASS: the colour is not written
+  u8 depthOnly = 0; // pass 1 of GX_AURORA_PORT_DEPTH_PREPASS: the colour is not written (2: pass 3's alpha mark)
   u8 pbrKind = 0; // with pbr, the special surface kind (pbrLayer.y), a constant in the shader
   // GXState::volFog: how the draw fogs itself (VolFog*), chosen from its blend.
   u8 volFog = 0;

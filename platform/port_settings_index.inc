@@ -194,7 +194,7 @@
 {"Mods", "", "Mods", "Open mods folder", "mods folder open directory"},
 #endif
 {"Mods", "", "Built-in mods > Prime Remastered", "Use the Remastered models", "remastered mod enable disable toggle on off retail models"},
-{"Mods", "", "Built-in mods > Prime Remastered", "Performance mode", "performance fast faster speed fps glass fog exposure remastered"},
+{"Mods", "", "Built-in mods > Prime Remastered", "Performance mode", "performance fast faster speed fps glass fog exposure gun cannon remastered"},
 // The one key file row, above both built-in sections: both imports read it, so it has one row.
 #if defined(__ANDROID__)
 {"Mods", "", "Built-in mods", "Pick the keys...", "keys prod.keys remastered dread pick decryption both imports shared"},

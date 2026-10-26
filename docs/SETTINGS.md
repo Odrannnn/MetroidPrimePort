@@ -1261,9 +1261,9 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   screen.
 - `remastered_performance=<0|1>` (Mods > Prime Remastered > Performance mode;
   default 0): faster Remastered drawing that is no longer exact (glass copy
-  every second frame, quarter-size exposure measure, blended volumetric fog);
-  see `docs/MODS.md`. Console `roomgeo perf [mask]` sets single shortcuts
-  (1 glass, 2 measure, 4 fog), not saved.
+  every second frame, quarter-size exposure measure, blended volumetric fog,
+  arm cannon depth laid first); see `docs/MODS.md`. Console `roomgeo perf
+  [mask]` sets single shortcuts (1 glass, 2 measure, 4 fog, 8 gun), not saved.
 - `MP_ROOM_GEO_LOD=<scale>` (setting `room_geo_lod`, F1 > Debug >
   Remastered room models > Detail distance, console `roomgeo lod <scale>`;
   default 1): the import also converts each room model's coarser Remastered

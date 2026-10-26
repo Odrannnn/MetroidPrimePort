@@ -123,6 +123,32 @@ fn fs_measure(in: VertexOutput) -> @location(0) vec4f {
   return vec4f(textureSampleLevel(src, samp, in.uv, 0.0).rgb, 1.0);
 }
 
+// Performance mode's gun-first frames: the same bilinear tap, leaving out the texels the gun's depth
+// marked (alpha -1; the HDR scene's alpha is otherwise 0 there, as an EFB without alpha never
+// writes it). Alpha carries the weight, and the levels below average it with the light, so the 1x1
+// holds the unmarked scene's mean times its weight.
+@fragment
+fn fs_measure_marked(in: VertexOutput) -> @location(0) vec4f {
+  let size = vec2i(textureDimensions(src));
+  let f = in.uv * vec2f(size) - 0.5;
+  let base = vec2i(floor(f));
+  let t = fract(f);
+  var sum = vec4f(0.0);
+  for (var j = 0; j < 2; j++) {
+    for (var i = 0; i < 2; i++) {
+      let c = textureLoad(src, clamp(base + vec2i(i, j), vec2i(0), size - 1), 0);
+      let w = select(1.0 - t.x, t.x, i == 1) * select(1.0 - t.y, t.y, j == 1) * select(1.0, 0.0, c.a < -0.5);
+      sum += vec4f(c.rgb * w, w);
+    }
+  }
+  return sum;
+}
+
+@fragment
+fn fs_measure_weighted(in: VertexOutput) -> @location(0) vec4f {
+  return textureSampleLevel(src, samp, in.uv, 0.0);
+}
+
 @fragment
 fn fs_down(in: VertexOutput) -> @location(0) vec4f {
   let t = p.texel.xy;
@@ -302,6 +328,9 @@ struct State {
   // drawn from the one before); remade when the chain's size changes.
   EncoderTaskId measureTask = InvalidEncoderTask;
   wgpu::RenderPipeline measure;
+  // Performance mode's chain, weighted by alpha: its first level and the levels below.
+  wgpu::RenderPipeline measureMarked;
+  wgpu::RenderPipeline measureDown;
   wgpu::Texture measureChain;
   std::vector<wgpu::TextureView> measureViews;
   uint32_t measureWidth = 0;
@@ -371,13 +400,16 @@ void complete_readback(const ReadbackSlots::Key& key, wgpu::MapAsyncStatus statu
     }
     // A failed map keeps the last value, as Remastered's does.
     const auto* texel = static_cast<const uint16_t*>(buffer.GetConstMappedRange(0, MeasureBytes));
-    if (texel != nullptr && exposure > 0.f) {
+    // Alpha is the measure's weight: 1, or in performance mode the share of the scene it counted
+    // (none when the gun covered it all, which keeps the last value).
+    const float weight = texel != nullptr ? half_to_float(texel[3]) : 0.f;
+    if (texel != nullptr && exposure > 0.f && weight > 0.f) {
       const std::lock_guard lock(g_radianceMutex);
       if (order > g_radianceOrder) {
         g_radianceOrder = order;
         // The HDR scene holds the exposed light: undone by the exposure the frame was drawn at.
         for (int c = 0; c < 3; ++c) {
-          g_radiance[c] = half_to_float(texel[c]) / exposure;
+          g_radiance[c] = half_to_float(texel[c]) / weight / exposure;
         }
         ++g_radianceSerial;
       }
@@ -541,6 +573,8 @@ void ensure_pipelines() {
   };
   g_state.up = make_pipeline("Bloom Upsample", "fs_up", LevelFormat, &add);
   g_state.measure = make_pipeline("Scene Measure", "fs_measure", MeasureFormat, nullptr);
+  g_state.measureMarked = make_pipeline("Scene Measure Marked", "fs_measure_marked", MeasureFormat, nullptr);
+  g_state.measureDown = make_pipeline("Scene Measure Weighted", "fs_measure_weighted", MeasureFormat, nullptr);
 }
 
 void ensure_levels(uint32_t width, uint32_t height) {
@@ -885,9 +919,13 @@ void encode_measure(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& c
   }
   // The shader reads no uniforms; slot 0 only fills the layout.
   const auto& views = g_state.measureViews;
-  draw(cmd, "Scene measure", g_state.measure, 0, source.view, source.view, views[0], false);
+  // The gun-first shortcut leaves the gun's area unshaded in this copy, marked: weighed out.
+  const bool marked = (GXPortGetPerformance() & GX_PORT_PERF_GUN_FIRST) != 0;
+  draw(cmd, "Scene measure", marked ? g_state.measureMarked : g_state.measure, 0, source.view, source.view,
+       views[0], false);
   for (size_t mip = 1; mip < views.size(); ++mip) {
-    draw(cmd, "Scene measure down", g_state.measure, 0, views[mip - 1], views[mip - 1], views[mip], false);
+    draw(cmd, "Scene measure down", marked ? g_state.measureDown : g_state.measure, 0, views[mip - 1],
+         views[mip - 1], views[mip], false);
   }
   const wgpu::TexelCopyTextureInfo copySource{.texture = g_state.measureChain,
                                               .mipLevel = uint32_t(views.size() - 1)};

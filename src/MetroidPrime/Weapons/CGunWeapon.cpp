@@ -470,6 +470,26 @@ void CGunWeapon::Draw(const bool drawSuitArm, const CStateManager& mgr, const CT
   }
 }
 
+#ifdef TARGET_PC
+void CGunWeapon::PortDrawDepth(const bool drawSuitArm, const CStateManager& mgr,
+                               const CTransform4f& xf) const {
+  // Draw's cold path without the rain splashes, which a second skinning would emit again.
+  if (!x218_26_loaded || x218_29_drawHologram)
+    return;
+  const CModelFlags flags = CModelFlags::Normal().UseShaderSet(x20c_shaderIdx);
+  if (mPortDreadCannon) {
+    xb0_suitArmModelData->Render(mgr, PortDreadCannonXf(xf), nullptr, flags);
+    return;
+  }
+  x10_solidModelData->Render(mgr, xf, nullptr, flags);
+  if (drawSuitArm && xb0_suitArmModelData) {
+    xb0_suitArmModelData->Render(
+        mgr, xf * x10_solidModelData->GetScaledLocatorTransform(rstl::string_l(skElbowLocator)),
+        nullptr, CModelFlags::Normal());
+  }
+}
+#endif
+
 void CGunWeapon::DrawHologram(const CStateManager& mgr, const CTransform4f& xf,
                               const CModelFlags& flags) const {
   if (!x218_26_loaded)

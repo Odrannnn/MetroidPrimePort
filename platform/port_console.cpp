@@ -3167,7 +3167,7 @@ void CmdRoomGeo() {
       if (sCmd.args.size() > 2) {
         GXPortSetPerformance(u32(std::strtoul(sCmd.args[2].c_str(), nullptr, 0)));
       }
-      Out("performance shortcuts: 0x%x (glass 0x1, measure 0x2, fog 0x4; 0 exact)",
+      Out("performance shortcuts: 0x%x (glass 0x1, measure 0x2, fog 0x4, gun 0x8; 0 exact)",
           unsigned(GXPortGetPerformance()));
       return Finish();
     } else if (arg == "script") {

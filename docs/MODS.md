@@ -354,9 +354,12 @@ and "Copy the notes" puts the notes on the clipboard for a report.
 default) trades exactness for speed: glass refraction reads a screen copy taken
 every second frame, the exposure measure starts from a quarter-size image instead
 of a half-size one, and volumetric fog is blended onto the scene instead of copying
-the scene and rewriting every pixel (not with MSAA). On a Radeon 780M at 1080p
-it saves about 1.3 to 1.9 ms a frame (0.8 ms more in rooms with glass); the
-picture differs by at most 2/255 per channel. Off, the frame is exactly as
+the scene and rewriting every pixel (not with MSAA), and in first person with the
+combat visor the arm cannon's depth is laid before the world, so the world behind
+it is never shaded (the exposure measure leaves that area out; frames that copy
+the screen while drawing the world, such as glass, turn this off for a few
+frames). On a Radeon 780M at 1080p it saves about 2.4 to 3.3 ms a frame (0.8 ms
+more in rooms with glass); the picture differs by at most 2/255 per channel. Off, the frame is exactly as
 before. Console `roomgeo perf [mask]` turns on single shortcuts for comparison.
 From a terminal,
 `metroid_prime_port --import-remastered <image.nsp|image.xci> [key file]` does the same

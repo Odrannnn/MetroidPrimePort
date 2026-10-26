@@ -3354,6 +3354,8 @@ void CStateManager::PortCaptureProbeFace() const {
 #ifdef TARGET_PC
 bool CStateManager::sPortSceneHdrRequest = false;
 float CStateManager::sPortViewZoom = 1.f;
+// Frames performance mode's gun-first pass stays off after a world screen copy (DrawWorld).
+static int sPortGunFirstHold = 0;
 
 float CStateManager::PortZoomedFov(float fov) {
   if (sPortViewZoom == 1.f)
@@ -3454,6 +3456,36 @@ void CStateManager::DrawWorld() const {
       portVisArea = areas[i];
     }
   }
+  // Performance mode: the settled gun's depth goes down first, so the world isn't shaded under
+  // it. A screen copy taken during the world (glass, distortion) would hold the unshaded hole,
+  // so a frame with one turns this off for the next few.
+  bool portGunFirst = false;
+  if ((GXPortGetPerformance() & GX_PORT_PERF_GUN_FIRST) != 0 && sPortGunFirstHold == 0 &&
+      !portZoomed && CCubeMaterial::sPortSceneHdr && visor == CPlayerState::kPV_Combat &&
+      x84c_player != nullptr && !x870_cameraManager->IsInCinematicCamera() &&
+      x870_cameraManager->IsInFPCamera() &&
+      x84c_player->GetCameraState() == CPlayer::kCS_FirstPerson &&
+      x84c_player->GetMorphballTransitionState() == CPlayer::kMS_Unmorphed &&
+      x84c_player->GetGunAlpha() >= 1.f && !PortViewModel::Active() && !PortFreeCam::Active() &&
+      !PortThirdPerson::Active()) {
+    const CGameCamera& gunCam = x870_cameraManager->GetCurrentCamera(*this);
+    const CGraphics::CProjectionState gunProj = CGraphics::GetProjectionState();
+    if (gunCam.GetFov() != PortDebug::kFovRetail) {
+      const CViewport& gunViewport = CGraphics::GetViewport();
+      gpRender->SetPerspective(
+          CGameCamera::VertPlusFov(PortDebug::kFovRetail, gunCam.GetAspectRatio()),
+          static_cast< float >(gunViewport.mWidth), static_cast< float >(gunViewport.mHeight),
+          gunCam.GetNearClipDistance(), gunCam.GetFarClipDistance());
+    }
+    GXPortSetShadowCaster(GX_FALSE);
+    CPortPipelineContextScope globalPipelines(AURORA_PIPELINE_CONTEXT_GLOBAL);
+    portGunFirst = x84c_player->GetPlayerGun()->PortRenderDepth(
+        *this, x870_cameraManager->GetGlobalCameraTranslation(*this));
+    CGraphics::SetProjectionState(gunProj);
+  } else if (sPortGunFirstHold != 0) {
+    --sPortGunFirstHold;
+  }
+  const u32 portGunFirstSerial = GXPortCopySerial();
   // The opaque world casts (and receives) from here to GXPortRenderShadowMap, but for the sky.
   const bool portShadow =
       PortSetupShadow(backupViewMatrix, portVisArea, x8c8_worldLayerState.GetPtr(),
@@ -3865,6 +3897,9 @@ void CStateManager::DrawWorld() const {
     {
 #ifdef TARGET_PC
       CPortPipelineContextScope globalPipelines(AURORA_PIPELINE_CONTEXT_GLOBAL);
+      if (portGunFirst && GXPortCopySerial() != portGunFirstSerial) {
+        sPortGunFirstHold = 3;
+      }
 #endif
       x84c_player->RenderGun(*this, x870_cameraManager->GetGlobalCameraTranslation(*this));
     }

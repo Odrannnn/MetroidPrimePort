@@ -625,9 +625,11 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   // Both keep the vertex stage and the polygon offset, so their depths match exactly (the
   // position is @invariant). Only depth_prepass_eligible draws take part: the others are left out
   // of pass 1 (push_gx_draw) and draw unchanged in pass 2.
-  const bool depthOnly = g_gxState.depthPrepass == 1;
+  const bool depthOnly = g_gxState.depthPrepass == 1 || g_gxState.depthPrepass == 3;
+  // Pass 3's mark: only in an EFB without alpha, where nothing reads it.
+  const bool depthMark = g_gxState.depthPrepass == 3 && !efb_has_alpha(g_gxState.pixelFmt);
   const bool depthEqual = g_gxState.depthPrepass == 2 && depth_prepass_eligible(config.shaderConfig.lineMode);
-  config.shaderConfig.depthOnly = depthOnly;
+  config.shaderConfig.depthOnly = depthMark ? 2 : depthOnly ? 1 : 0;
   // The "drawid" view: flat colours that must reach the frame as they are, so no fog and no blend (a
   // depth-only pass stays one).
   const bool drawId = g_gxState.drawIdMode && !depthOnly;
@@ -745,7 +747,10 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     config.depthCompare = true;
     config.depthUpdate = true;
   }
-  config.alphaUpdate = hasAlpha && g_gxState.alphaUpdate && !depthOnly && shell != 1;
+  config.alphaUpdate = (hasAlpha && g_gxState.alphaUpdate && !depthOnly && shell != 1) || depthMark;
+  if (depthMark) {
+    config.blendMode = GX_BM_NONE;
+  }
   config.colorUpdate = g_gxState.colorUpdate && !depthOnly && shell != 1;
   static_assert(sizeof(PipelineConfig) == sizeof(ShaderConfig) + 13 * sizeof(uint32_t) + 4 * sizeof(bool),
                 "a new PipelineConfig field must be written above");

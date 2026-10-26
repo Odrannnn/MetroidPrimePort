@@ -81,6 +81,9 @@
 
 #include "dolphin/gx/GXFrameBuffer.h"
 #include "dolphin/gx/GXManage.h"
+#ifdef TARGET_PC
+#include "dolphin/gx/GXExtra.h"
+#endif
 
 #include "math.h"
 
@@ -763,6 +766,32 @@ CTransform4f CPlayerGun::PortGunView(const CStateManager& mgr,
     }
   }
   return simView;
+}
+#endif
+
+#ifdef TARGET_PC
+bool CPlayerGun::PortRenderDepth(const CStateManager& mgr, const CVector3f& pos) const {
+  // Render's kGS_OutWipeDone placement of the gun; the grapple arm, the phazon beam and
+  // its morph keep only their own draw.
+  if (x678_morph.GetGunState() != CGunMorph::kGS_OutWipeDone || x835_26_phazonBeamMorphing ||
+      x310_currentBeam == CPlayerState::kBI_Phazon || x740_grappleArm->GetActive()) {
+    return false;
+  }
+  const CTransform4f worldView = CGraphics::GetViewMatrix();
+  CGraphics::SetViewPointMatrix(PortGunView(mgr, worldView));
+  CGraphics::SetDepthRange(kDepthGun, kDepthWorld);
+  CTransform4f offsetWorldXf(CTransform4f::Translate(pos) * GetGunMotionTransform());
+  if (x32c_chargePhase != kCP_NotCharging && !IsWeaponStateSet(0x10)) {
+    offsetWorldXf.AddTranslation(CVector3f(x34c_shakeX, 0.f, x350_shakeZ));
+  }
+  const bool drawSuitArm = !x740_grappleArm->IsGrappling() &&
+                           mgr.GetPlayer()->GetGunHolsterState() == CPlayer::kGH_Drawn;
+  GXPortSetDepthPrepass(3); // marks the area for the exposure measure to leave out
+  x72c_currentBeam->PortDrawDepth(drawSuitArm, mgr, offsetWorldXf);
+  GXPortSetDepthPrepass(0);
+  CGraphics::SetViewPointMatrix(worldView);
+  CGraphics::SetDepthRange(kDepthWorld, kDepthFar);
+  return true;
 }
 #endif
 
