@@ -165,10 +165,12 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
    - Flatpak: `tools/make_flatpak.sh` (committed `port` branch), shipped as
      `MetroidPrimePort.flatpak`.
    - Android: the signed APK, staged as `metroid-prime-port-X-android-arm64.apk`.
+   - iOS: run `ios.yml`, `gh run download <id> -n metroid_prime_port-ios`, and ship
+     the unsigned `MetroidPrimePort.ipa` under that name (`docs/IOS.md` points at it).
 
-   Every release ships all nine assets (AppImage and tarball, each x86_64 and
-   aarch64, Flatpak, Windows x86_64 and arm64, macOS, APK); start all the builds
-   together.
+   Every release ships all ten assets (AppImage and tarball, each x86_64 and
+   aarch64, Flatpak, Windows x86_64 and arm64, macOS, APK, IPA); start all the
+   builds together.
 3. Crash soak the release commit before tagging:
    `python3 tools/mpsoak.py --evidence-dir build/s-release-<date>/soak`; every
    row in `summary.tsv` must be `ok` (a `warn` only after reading it), exit 0.
@@ -186,6 +188,7 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
 | Linux | `tools/make_flatpak.sh` | Flatpak | manifest installs a working tree and collects notices; builds (`tools/make_flatpak.sh` writes `build/flatpak/MetroidPrimePort.flatpak`). The app id is `io.github.odrannnn.metroidprimeport`, with AppStream metainfo shipped |
 | Windows | `.github/workflows/windows.yml` | zipped `dist/`, x64 and arm64 | weekly (Mondays) and manual trigger; green when run, artifact uploaded, packaged startup checked. arm64 builds natively on `windows-11-arm` with vcpkg's OpenSSL, never run on a real Windows on Arm machine |
 | macOS | `.github/workflows/macos.yml` | ad-hoc signed `.app` (arm64) + `licenses/` | experimental; weekly and manual trigger; builds, tests and packaged startup checked in CI, never run on a real Mac |
+| iOS | `.github/workflows/ios.yml` | unsigned `.ipa` (arm64, iOS 16+) | manual trigger; Simulator smoke test in CI, never run on a real iPhone or iPad (`docs/IOS.md`) |
 | Android | `tools/android_apk.sh :app:assembleRelease` | APK | builds, signed with this project's own key; runs on-device (POCO F8 Ultra, 60 FPS), touch/Continue-load still unverified |
 
 The Linux binary is the only one with a test suite attached: 54 `port`-labelled
