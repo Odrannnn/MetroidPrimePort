@@ -504,6 +504,14 @@ static u8 vol_fog_mode(bool depthOnly) noexcept {
   return VolFogNone;
 }
 
+bool depth_prepass_eligible(u8 lineMode) noexcept {
+  const auto& st = g_gxState;
+  const bool opaque = st.blendMode == GX_BM_NONE ||
+                      (st.blendMode == GX_BM_BLEND && st.blendFacSrc == GX_BL_ONE && st.blendFacDst == GX_BL_ZERO);
+  return lineMode == 0 && st.depthCompare && st.depthUpdate && st.depthFunc == GX_LEQUAL && st.colorUpdate &&
+         (st.alphaUpdate || !efb_has_alpha(st.pixelFmt)) && opaque && st.shell == 0 && !st.actorDecal;
+}
+
 void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXVtxFmt fmt) noexcept {
   ZoneScoped;
 
@@ -614,10 +622,10 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   const auto [polygonOffset, polygonOffsetScale] = polygon_offset_for_cull_mode(cullMode);
   // GX_AURORA_PORT_DEPTH_PREPASS: pass 1 writes only the depth, pass 2 shades where it is equal.
   // Both keep the vertex stage and the polygon offset, so their depths match exactly (the
-  // position is @invariant).
-  const bool writesDepth = g_gxState.depthCompare && g_gxState.depthUpdate;
+  // position is @invariant). Only depth_prepass_eligible draws take part: the others are left out
+  // of pass 1 (push_gx_draw) and draw unchanged in pass 2.
   const bool depthOnly = g_gxState.depthPrepass == 1;
-  const bool depthEqual = g_gxState.depthPrepass == 2 && writesDepth;
+  const bool depthEqual = g_gxState.depthPrepass == 2 && depth_prepass_eligible(config.shaderConfig.lineMode);
   config.shaderConfig.depthOnly = depthOnly;
   // The "drawid" view: flat colours that must reach the frame as they are, so no fog and no blend (a
   // depth-only pass stays one).

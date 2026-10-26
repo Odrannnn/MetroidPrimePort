@@ -281,6 +281,11 @@ float sMinPixels = -1.f; // < 0 until MinPixels reads MP_ROOM_GEO_MIN_PX
 bool sMergedDraws = true;
 bool sFrontToBack = true;
 bool sDepthPrepass = false;
+#ifdef __ANDROID__
+bool sOpaquePrepass = false;
+#else
+bool sOpaquePrepass = true;
+#endif
 bool sOffscreenCasters = true;
 // Out-of-view models drawn caster-only, summed over the frame's areas (the last whole frame's in
 // sLastCasterCount), for the console.
@@ -1799,16 +1804,20 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     }
   };
   // With the sort, the cut-outs come last, after every opaque model: they go twice, depth only
-  // and then shaded where the depth is equal, so the grass hidden behind grass isn't shaded.
-  const auto firstCutout = sFrontToBack && sDepthPrepass
-                               ? std::find_if(visible.begin(), visible.end(), [](const Visible& v) { return v.cutout; })
-                               : visible.end();
-  std::for_each(visible.begin(), firstCutout, drawOne);
-  if (firstCutout != visible.end()) {
+  // and then shaded where the depth is equal, so the grass hidden behind grass isn't shaded. The
+  // opaque pre-pass does the same with every model.
+  auto firstPrepass = visible.end();
+  if (sOpaquePrepass) {
+    firstPrepass = visible.begin();
+  } else if (sFrontToBack && sDepthPrepass) {
+    firstPrepass = std::find_if(visible.begin(), visible.end(), [](const Visible& v) { return v.cutout; });
+  }
+  std::for_each(visible.begin(), firstPrepass, drawOne);
+  if (firstPrepass != visible.end()) {
     GXPortSetDepthPrepass(1);
-    std::for_each(firstCutout, visible.end(), drawOne);
+    std::for_each(firstPrepass, visible.end(), drawOne);
     GXPortSetDepthPrepass(2);
-    std::for_each(firstCutout, visible.end(), drawOne);
+    std::for_each(firstPrepass, visible.end(), drawOne);
     GXPortSetDepthPrepass(0);
   }
   if (sCasterFrame != CGraphics::GetFrameCounter()) {
@@ -2558,6 +2567,10 @@ bool FrontToBack() { return sFrontToBack; }
 void SetDepthPrepass(bool on) { sDepthPrepass = on; }
 
 bool DepthPrepass() { return sDepthPrepass; }
+
+void SetOpaquePrepass(bool on) { sOpaquePrepass = on; }
+
+bool OpaquePrepass() { return sOpaquePrepass; }
 
 void SetMode(Mode mode) {
   sMode = int(mode);

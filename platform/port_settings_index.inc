@@ -349,6 +349,7 @@
 {"Debug", "", "Remastered room models", "Draw merged copies", "remastered merged copies rooms draw"},
 {"Debug", "", "Remastered room models", "Draw nearest first", "remastered nearest first order draw"},
 {"Debug", "", "Remastered room models", "Depth pre-pass for cut-outs", "remastered depth cutout pre pass"},
+{"Debug", "", "Remastered room models", "Depth pre-pass for all room models", "remastered depth opaque pre pass"},
 {"Debug", "", "Remastered room models", "GPU pass times", "remastered gpu timing performance"},
 {"Debug", "", "Remastered room models", "Shading cost test", "remastered shading cost test performance"},
 {"Debug", "", "Remastered room models", "Pick the model ahead", "remastered model debug pick"},

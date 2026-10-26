@@ -3158,6 +3158,9 @@ void CmdRoomGeo() {
     } else if (arg == "prepass" && sCmd.args.size() > 2 &&
                (Lower(sCmd.args[2]) == "on" || Lower(sCmd.args[2]) == "off")) {
       PortRoomGeo::SetDepthPrepass(Lower(sCmd.args[2]) == "on");
+    } else if (arg == "opaqueprepass" && sCmd.args.size() > 2 &&
+               (Lower(sCmd.args[2]) == "on" || Lower(sCmd.args[2]) == "off")) {
+      PortRoomGeo::SetOpaquePrepass(Lower(sCmd.args[2]) == "on");
     } else if (arg == "costtest" && sCmd.args.size() > 2) {
       GXSetPBRCostTest(u32(std::atoi(sCmd.args[2].c_str())));
     } else if (arg == "script") {
@@ -3967,6 +3970,7 @@ const CommandSpec kCommands[] = {
      "roomgeo lod <scale>       scale the distances where models switch to coarser levels; 0 never switches\n"
      "roomgeo sort on|off       draw opaque room models nearest first (default on)\n"
      "roomgeo prepass on|off    depth-only pass first for cut-out room models (default off)\n"
+     "roomgeo opaqueprepass on|off  depth-only pass first for all room models (default on, off on Android)\n"
      "roomgeo casters on|off    out-of-view room models cast the sun's shadow (default on)"},
     {"shadow", CmdShadow, nullptr,
      "shadow [casters on|off]   the sun's shadow map last frame: direction, colour, box, casters, and the room's suns"},

@@ -152,6 +152,8 @@ struct DrawCache {
   // A cutout caster's own texture group: the receiver layout holds the shadow map being drawn into.
   gfx::PipelineRef cutPipelineRef{};
   bool cutCaster = false;
+  // GX_AURORA_PORT_DEPTH_PREPASS pass 1 and a draw that can't go in it (depth_prepass_eligible)
+  bool prepassSkip = false;
   GXBindGroups cutBindGroups{};
   GXBindGroups bindGroups{};
   uint64_t bindGeneration = 0;
@@ -692,13 +694,19 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
     const bool prevUsesShell = cache.shaderInfo.usesShell;
     const bool prevUsesLightmap = cache.shaderInfo.usesLightmap;
     populate_pipeline_config(cache.config, prim, fmt);
+    // GX_AURORA_PORT_DEPTH_PREPASS: pass 2 shades an eligible draw where the depth is equal without
+    // writing it, yet it casts as the draw it stands for (LEQUAL, writing). Its config can equal a
+    // plain EQUAL draw's, which doesn't cast, so it bypasses the memo.
+    const bool prepassEligible = state.depthPrepass != 0 && depth_prepass_eligible(lineMode);
+    const bool prepassShade = state.depthPrepass == 2 && prepassEligible;
+    cache.prepassSkip = state.depthPrepass == 1 && !prepassEligible;
     // A frame switches pipelines hundreds of times between a few hundred configs. The config's
     // hash is the pipeline's ref, so a config seen before reuses its shader info and shadow
     // pipeline without the second lookup (shader info depends on the config alone). With blocking
     // pipelines the lookup must still happen, since it is what waits for this draw's pipeline.
     const bool blocking = blocking_pipelines();
     const gfx::PipelineRef ref = xxh3_hash(cache.config, static_cast<HashType>(gfx::ShaderType::GX));
-    auto memoIt = blocking ? sPipelineMemo.end() : sPipelineMemo.find(ref);
+    auto memoIt = blocking || prepassShade ? sPipelineMemo.end() : sPipelineMemo.find(ref);
     if (memoIt != sPipelineMemo.end() && gfx::touch_pipeline(ref) &&
         (!memoIt->second.shadowCaster || gfx::touch_pipeline(memoIt->second.shadowPipelineRef)) &&
         (!memoIt->second.cutCaster || gfx::touch_pipeline(memoIt->second.cutPipelineRef))) {
@@ -719,29 +727,37 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
       const bool opaque = cache.config.blendMode == GX_BM_NONE ||
                           (cache.config.blendMode == GX_BM_BLEND && cache.config.blendFacSrc == GX_BL_ONE &&
                            cache.config.blendFacDst == GX_BL_ZERO);
-      cache.shadowCaster = cache.shaderInfo.usesShadow && cache.config.depthCompare && cache.config.depthUpdate &&
-                           opaque && !sc.alphaCompare && sc.depthOnly == 0;
+      cache.shadowCaster = cache.shaderInfo.usesShadow && cache.config.depthCompare &&
+                           (cache.config.depthUpdate || prepassShade) && opaque && !sc.alphaCompare &&
+                           sc.depthOnly == 0;
+      // The caster pipelines take the draw's own depth state, not pass 2's.
+      const auto casterConfig = [&](u8 shadowPass) {
+        PipelineConfig config = cache.config;
+        config.shadowPass = shadowPass;
+        config.msaaSamples = 1;
+        if (prepassShade) {
+          config.depthFunc = state.depthFunc;
+          config.depthUpdate = true;
+        }
+        return config;
+      };
       if (cache.shadowCaster) {
-        PipelineConfig shadowConfig = cache.config;
-        shadowConfig.shadowPass = 1;
-        shadowConfig.msaaSamples = 1;
-        cache.shadowPipelineRef = gfx::pipeline_ref(shadowConfig, blocking);
+        cache.shadowPipelineRef = gfx::pipeline_ref(casterConfig(1), blocking);
       }
       // A Remastered cutout (the PBR cut bit of a draw's mode) casts through its own cut test.
       cache.cutCaster = cache.shadowCaster && sc.pbr != 0 && sc.shadow && shader_has_cut_caster(sc);
       if (cache.cutCaster) {
-        PipelineConfig cutConfig = cache.config;
-        cutConfig.shadowPass = 2;
-        cutConfig.msaaSamples = 1;
-        cache.cutPipelineRef = gfx::pipeline_ref(cutConfig, blocking);
+        cache.cutPipelineRef = gfx::pipeline_ref(casterConfig(2), blocking);
       }
-      sPipelineMemo.insert_or_assign(cache.pipelineRef, PipelineMemo{
-                                                            .shaderInfo = cache.shaderInfo,
-                                                            .shadowPipelineRef = cache.shadowPipelineRef,
-                                                            .cutPipelineRef = cache.cutPipelineRef,
-                                                            .shadowCaster = cache.shadowCaster,
-                                                            .cutCaster = cache.cutCaster,
-                                                        });
+      if (!prepassShade) {
+        sPipelineMemo.insert_or_assign(cache.pipelineRef, PipelineMemo{
+                                                              .shaderInfo = cache.shaderInfo,
+                                                              .shadowPipelineRef = cache.shadowPipelineRef,
+                                                              .cutPipelineRef = cache.cutPipelineRef,
+                                                              .shadowCaster = cache.shadowCaster,
+                                                              .cutCaster = cache.cutCaster,
+                                                          });
+      }
     }
     cache.fmt = fmt;
     cache.lineMode = lineMode;
@@ -826,6 +842,9 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
       .dstAlpha = state.dstAlpha,
       .shadowGroup = cache.shaderInfo.shadowReceive,
   };
+  if (cache.prepassSkip) {
+    return;
+  }
   if (!state.shadowCasterOnly) {
     gfx::push_draw_command(draw);
   }
@@ -893,8 +912,9 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader& 
     return;
   }
 
-  // A cast-only draw pushes no command of its own, so it must not extend the last world draw.
-  const bool cleanState = g_gxState.dirty == 0 && !g_gxState.shadowCasterOnly && g_gxState.actorLayer < 0 && fmt == sDrawCache.lastDrawFmt && sDrawCache.lineMode == 0 &&
+  // A cast-only draw pushes no command of its own, so it must not extend the last world draw; nor
+  // must one that pass 1 of a depth pre-pass leaves out.
+  const bool cleanState = g_gxState.dirty == 0 && !g_gxState.shadowCasterOnly && !sDrawCache.prepassSkip && g_gxState.actorLayer < 0 && fmt == sDrawCache.lastDrawFmt && sDrawCache.lineMode == 0 &&
                           prim != GX_LINES && prim != GX_LINESTRIP && prim != GX_POINTS;
   auto* lastDraw = cleanState ? gfx::get_last_draw_command<DrawData>() : nullptr;
   const bool canMerge = lastDraw != nullptr && lastDraw->instanceCount == 1;

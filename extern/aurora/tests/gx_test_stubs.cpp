@@ -142,6 +142,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   ++g_testPopulateCount;
   config.shaderConfig.sceneHdr = gfx::scene_hdr_pass_active();
 }
+bool depth_prepass_eligible(u8) noexcept { return false; }
 bool per_pixel_lighting() noexcept { return false; }
 // The GPU self-test is not linked here; its blocking lookups stay off.
 bool blocking_pipelines() noexcept { return false; }

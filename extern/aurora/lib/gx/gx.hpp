@@ -712,6 +712,11 @@ struct ShaderInfo {
 struct BindGroupRanges {
   std::array<gfx::Range, MaxIndexAttr> vaRanges{};
 };
+// GX_AURORA_PORT_DEPTH_PREPASS: whether the current draw can go in the depth-only pass and then
+// shade where the depth is equal. It must replace every pixel it passes (depth tested LEQUAL and
+// written; colour and alpha written without a blend), so the frame is what one depth-tested pass
+// of the same draws gives: the last of the nearest draws at a pixel wins either way.
+bool depth_prepass_eligible(u8 lineMode) noexcept;
 void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXVtxFmt fmt) noexcept;
 // aurora_set_per_pixel_lighting; any thread.
 void set_per_pixel_lighting(bool enabled) noexcept;
