@@ -1,6 +1,7 @@
 #include "pipeline.hpp"
 
 #include "../gfx/encoding.hpp"
+#include "../gfx/overdraw.hpp"
 #include "../gfx/resources.hpp"
 #include "../gfx/pipeline_cache.hpp"
 #include "../gfx/resource_cache.hpp"
@@ -57,11 +58,13 @@ void render(const DrawData& data, const wgpu::RenderPassEncoder& pass) {
     const wgpu::Color color{0.f, 0.f, 0.f, data.dstAlpha / 255.f};
     pass.SetBlendConstant(&color);
   }
+  const uint32_t query = gfx::overdraw::draw_begin(data.pipeline, pass);
   if (data.indexCount == 0) {
     pass.Draw(data.vtxCount, data.instanceCount);
   } else {
     pass.DrawIndexed(data.indexCount, data.instanceCount);
   }
+  gfx::overdraw::draw_end(query, pass);
 }
 
 } // namespace aurora::gx

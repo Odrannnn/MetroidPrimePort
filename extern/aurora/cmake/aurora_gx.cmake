@@ -12,6 +12,7 @@ add_library(aurora_gx STATIC
         lib/gfx/clear.cpp
         lib/gfx/depth_peek.cpp
         lib/gfx/encoding.cpp
+        lib/gfx/overdraw.cpp
         lib/gfx/frame.cpp
         lib/gfx/pipeline_cache.cpp
         lib/gfx/probe.cpp

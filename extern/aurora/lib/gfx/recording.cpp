@@ -1,4 +1,5 @@
 #include "recording.hpp"
+#include "overdraw.hpp"
 
 #include <aurora/phase.hpp>
 
@@ -1600,7 +1601,7 @@ void push_draw_command(rmlui::DrawData data) {
 
 // A GX draw's pipeline: blocking when the caller must not lose its draw (gx::blocking_pipelines).
 static PipelineRef gx_pipeline_ref(const gx::PipelineConfig& config, bool blocking) {
-  return find_pipeline(
+  const auto ref = find_pipeline(
       ShaderType::GX, config,
       [=] {
         phase::Scope compiling(render_worker::is_worker_thread() ? phase::Render : phase::Main,
@@ -1608,6 +1609,8 @@ static PipelineRef gx_pipeline_ref(const gx::PipelineConfig& config, bool blocki
         return create_pipeline(config);
       },
       blocking ? PipelinePriority::Blocking : PipelinePriority::Normal);
+  overdraw::note_pipeline(ref, config);
+  return ref;
 }
 
 template <>

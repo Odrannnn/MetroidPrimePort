@@ -1,4 +1,5 @@
 #include "encoding.hpp"
+#include "overdraw.hpp"
 
 #include "frame.hpp"
 
@@ -250,12 +251,15 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
       .colorAttachmentCount = passInfo.colorAttachmentCount,
       .colorAttachments = attachments.data(),
       .depthStencilAttachment = depthStencilAttachmentPtr,
+      .occlusionQuerySet = overdraw::pass_begin(passIndex, passInfo.colorAttachments[SceneColorAttachmentIndex].size,
+                                                passInfo.msaaSamples),
       .timestampWrites = webgpu::gpu_prof::pass_writes(profName),
   };
 
   auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
   render_pass(pass, frame, passInfo);
   pass.End();
+  overdraw::pass_end();
 
   if (passInfo.captureDepthSnapshot) {
     depth_peek::encode_frame_snapshot(cmd, passInfo.copySourceDepthView,

@@ -1,4 +1,5 @@
 #include "frame.hpp"
+#include "overdraw.hpp"
 
 #include "depth_peek.hpp"
 #include "pipeline_cache.hpp"
@@ -1119,6 +1120,7 @@ bool begin_frame() {
     constexpr wgpu::CommandEncoderDescriptor EncoderDescriptor{.label = "Redraw encoder"};
     g_framePackets[frameSlot].encoder = g_device.CreateCommandEncoder(&EncoderDescriptor);
     webgpu::gpu_prof::frame_begin(g_framePackets[frameSlot].encoder);
+    overdraw::frame_begin();
   });
   g_cpuFrameStart = PresentClock::now();
   return true;
