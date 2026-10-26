@@ -1757,9 +1757,17 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
         }
       }
       const bool pivoted = skinned && !pivots.empty() && !opt.retailBones.empty();
+      // The triangles (already in P's numbering), so a static model's pieces stay whole.
+      std::vector<uint32_t> tris;
+      if (!skinned) {
+        for (const Prim& p : prims) {
+          tris.insert(tris.end(), p.I.begin(), p.I.end());
+        }
+      }
       perVertex = SkinWeights(P, n, skinned ? &J : nullptr, skinned ? &W : nullptr, retail, refSpan,
                               [this](const std::string& line) { Log(Hex8(this->model) + line); },
-                              pivoted ? &pivots : nullptr, pivoted ? &opt.retailBones : nullptr);
+                              pivoted ? &pivots : nullptr, pivoted ? &opt.retailBones : nullptr,
+                              skinned ? nullptr : &tris);
     }
     std::map<WeightKey, int> intern;
     weights.resize(n);

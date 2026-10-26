@@ -73,7 +73,8 @@ std::vector<WeightKey> SkinWeights(const std::vector<double>& P, size_t n, const
                                    const std::vector<float>* W, const Retail& retail, Span cskr,
                                    const std::function<void(const std::string&)>& log,
                                    const std::vector<std::array<double, 3>>* pivots,
-                                   const std::vector<ConvertOptions::RetailBone>* skeleton) {
+                                   const std::vector<ConvertOptions::RetailBone>* skeleton,
+                                   const std::vector<uint32_t>* tris) {
   const std::vector<SkinGroup> groups = ReadCskr(cskr);
   std::vector<uint32_t> gid;
   for (size_t i = 0; i < groups.size(); ++i) {
@@ -485,8 +486,63 @@ std::vector<WeightKey> SkinWeights(const std::vector<double>& P, size_t n, const
     }
   } else {
     log("  static Remastered model on a skinned retail one: weights from the nearest retail vertex");
+    // The group each vertex takes. Where retail binds every vertex of a
+    // connected Remastered piece rigidly, the piece takes the group most of its
+    // vertices are nearest to: per vertex, a piece lying across two retail
+    // bones (the gunship's hatch rim, its iris petals) tears when they move.
+    std::vector<uint32_t> take(n);
     for (size_t v = 0; v < n; ++v) {
-      for (const auto& w : groups[gid[nn[v]]].weights) {
+      take[v] = gid[nn[v]];
+    }
+    if (tris) {
+      std::vector<uint32_t> root(n);
+      for (size_t v = 0; v < n; ++v) {
+        root[v] = uint32_t(v);
+      }
+      auto find = [&](uint32_t v) {
+        while (root[v] != v) {
+          v = root[v] = root[root[v]];
+        }
+        return v;
+      };
+      for (size_t t = 0; t + 2 < tris->size(); t += 3) {
+        for (int k = 1; k < 3; ++k) {
+          const uint32_t a = find((*tris)[t]), b = find((*tris)[t + k]);
+          if (a != b) {
+            root[b] = a;
+          }
+        }
+      }
+      std::map<uint32_t, std::map<uint32_t, size_t>> votes;  // piece -> group -> vertices
+      std::vector<char> smooth(n, 0);                          // per piece root: some vertex is blended
+      for (size_t v = 0; v < n; ++v) {
+        const uint32_t r = find(uint32_t(v));
+        ++votes[r][take[v]];
+        smooth[r] |= groups[take[v]].weights.size() != 1;
+      }
+      size_t moved = 0;
+      std::map<uint32_t, uint32_t> pick;
+      for (const auto& [r, by] : votes) {
+        if (by.size() < 2 || smooth[r]) {
+          continue;
+        }
+        // Most votes; a tie goes to the lower group, so the result is stable.
+        pick[r] = std::max_element(by.begin(), by.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->first;
+      }
+      for (size_t v = 0; v < n; ++v) {
+        const auto it = pick.find(find(uint32_t(v)));
+        if (it != pick.end() && take[v] != it->second) {
+          take[v] = it->second;
+          ++moved;
+        }
+      }
+      if (moved) {
+        log("  " + std::to_string(pick.size()) + " rigid pieces across retail bones: " + std::to_string(moved) +
+            " vertices moved to their piece's bone");
+      }
+    }
+    for (size_t v = 0; v < n; ++v) {
+      for (const auto& w : groups[take[v]].weights) {
         bool found = false;
         for (auto& have : weights[v]) {
           if (have.first == w.first) {
