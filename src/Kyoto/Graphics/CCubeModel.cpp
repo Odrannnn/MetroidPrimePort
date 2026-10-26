@@ -1442,6 +1442,31 @@ void CCubeModel::PortSetThermalOverrideConstants(const float x, const float y) {
 
 void CCubeModel::PortClearThermalOverride() { sPortThermalOverride.on = false; }
 
+void CCubeModel::PortGetThermalOverride(bool& on, float& x, float& y) {
+  on = sPortThermalOverride.on;
+  x = sPortThermalOverride.x;
+  y = sPortThermalOverride.y;
+}
+
+void CCubeModel::PortRestoreThermalOverride(const bool on, const float x, const float y) {
+  sPortThermalOverride.on = on;
+  sPortThermalOverride.x = x;
+  sPortThermalOverride.y = y;
+}
+
+void CCubeModel::PortDrawThermalHotNode(const CModelFlags& flags, const ESurfaceSelection which) const {
+  if (!TryLockTextures()) {
+    return;
+  }
+  const SPortThermalOverride outer = sPortThermalOverride;
+  const int outerPass = sPortThermalPass;
+  sPortThermalPass = PortVisorMesh::kTP_Hot;
+  PortSetThermalOverrideConstants(1.f, 0.2509804f);
+  PortDrawThermalOverride(nullptr, nullptr, flags, which);
+  sPortThermalOverride = outer;
+  sPortThermalPass = outerPass;
+}
+
 bool CCubeModel::PortThermalOverrideActive() {
   return sPortThermalOverride.on && CCubeMaterial::sPortSceneHdr && CCubeRenderer::That()->GetThermal();
 }

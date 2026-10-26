@@ -3,6 +3,8 @@
 #include "Kyoto/Animation/CSkinnedModel.hpp"
 #include "Kyoto/Animation/CVertexMorphEffect.hpp"
 #include "Kyoto/CResFactory.hpp"
+#include "Kyoto/Graphics/CCubeMaterial.hpp"
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
 #include "Kyoto/Graphics/CModelFlags.hpp"
@@ -91,6 +93,21 @@ CModelData::~CModelData() {}
 
 void CModelData::Render(EWhichModel which, const CTransform4f& xf, const CActorLights* lights,
                         const CModelFlags& flags) const {
+#ifdef TARGET_PC
+  // Remastered's CModelDataMP1::Render (0xfa6c0c): model 3 is always a thermal command with
+  // SModelThermalParams::DefaultOverride (a = 1, b = 0), a = the flags' alpha for a sort-thermal
+  // model; no sort-thermal test gates it. HDR scene only; without HDR it stays retail.
+  if (which == kWM_ThermalHot && CCubeMaterial::sPortSceneHdr) {
+    const float a = x14_25_sortThermal ? flags.GetColorRef().GetAlpha() : 1.f;
+    bool outerOn;
+    float outerX, outerY;
+    CCubeModel::PortGetThermalOverride(outerOn, outerX, outerY);
+    CCubeModel::PortSetThermalOverride(a, 0.f);
+    RenderThermal(xf, CColor(a, a, a, a), CColor(uchar(0), uchar(0), uchar(0), uchar(0x40)), flags);
+    CCubeModel::PortRestoreThermalOverride(outerOn, outerX, outerY);
+    return;
+  }
+#endif
   if (x14_25_sortThermal && which == kWM_ThermalHot) {
     const float alpha = flags.GetColorRef().GetAlpha();
     const CColor mulColor(alpha, alpha, alpha, alpha);
@@ -135,6 +152,20 @@ void CModelData::RenderUnsortedParts(EWhichModel which, const CTransform4f& xf,
       xf * CTransform4f::Scale(x0_scale.GetX(), x0_scale.GetY(), x0_scale.GetZ());
 #ifdef TARGET_PC
   scaledXf = PortScaledXf(which, xf);
+  // Remastered's RenderUnsortedParts (0xfa71c4) queues a non-sort-thermal model 3 as a normal
+  // unsorted node; in the hot pass (RenderUnsorted(8)) only its bit-19 surfaces draw, through
+  // the override at the world's global constants. HDR scene only.
+  if (which == kWM_ThermalHot && CCubeMaterial::sPortSceneHdr) {
+    gpRender->SetModelMatrix(scaledXf);
+    CGraphics::DisableAllLights();
+    const CModel& model = **PickStaticModel(which);
+    model.UpdateLastFrame();
+    if (const CCubeModel* cube = model.GetCubeModel()) {
+      cube->PortDrawThermalHotNode(flags, kSS_Unsorted);
+    }
+    x14_24_renderSorted = true;
+    return;
+  }
 #endif
   gpRender->SetModelMatrix(scaledXf);
   if (lights != nullptr) {

@@ -313,6 +313,13 @@ public:
   // The override's x and y as they are: the hot world's global (1.0, 0.2509804).
   static void PortSetThermalOverrideConstants(float x, float y);
   static void PortClearThermalOverride();
+  // The override as it is now, to put back after a nested one (PortRestoreThermalOverride).
+  static void PortGetThermalOverride(bool& on, float& x, float& y);
+  static void PortRestoreThermalOverride(bool on, float x, float y);
+  // Remastered's normal scene node for a model drawn as model 3 (CModelDataMP1::RenderUnsortedParts
+  // 0xfa71c4) as the hot pass draws it: its bit-19 surfaces in `which` through the override at
+  // the hot world's global (1.0, 0.2509804). The caller sets the model matrix.
+  void PortDrawThermalHotNode(const CModelFlags& flags, ESurfaceSelection which) const;
   // Whether the hot draws take the override now: one is set, the visor is thermal and the
   // scene is HDR (without HDR they stay retail).
   static bool PortThermalOverrideActive();

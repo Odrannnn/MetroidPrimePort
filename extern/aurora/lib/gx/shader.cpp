@@ -3229,7 +3229,9 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
       //   g = (clamp(luma(BCLR), 0, 1) * 3.75 + 0.25) * |N.V| * c.x + c.y, unlit, unfogged.
       // Its normal is its own, not the lit one: the map's xy decode at a quarter of the tilt
       // (x * 0.498046875 - 0.25, 048_0 temp_52/53), N = T x + (Ng cross T) w y + Ng z is not
-      // normalised, and without a map N is the vertex normal. The full tilt put dark specks on
+      // normalised (pbr_t / pbr_b scaled back to unit T and (Ng cross T) w; a mesh the port gave no
+      // tangent stream takes the derivative frame, as its lit normal does), and without a map N is
+      // the vertex normal. The full tilt put dark specks on
       // every silhouette, where |N.V| is small.
       // Alpha: 1 on the opaque and alpha-test perms (the cut above has discarded), else base.a^2 *
       // vertex alpha. c is (0.4 a, 0.4 b + 0.6) times the inverse exposure, which the HDR scene's
@@ -3238,7 +3240,8 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
       if (!normalXy.empty()) {
         thmN = fmt::format("      let thm_ts = {} * 0.498046875 - 0.25;\n"
                            "      let thm_tn = vec3f(thm_ts, sqrt(1.0 - clamp(dot(thm_ts, thm_ts), 0.0, 1.0)));\n"
-                           "      let thm_n = select(pbr_ngs, pbr_tu * thm_tn.x + cross(pbr_ngs, pbr_tu) * (in.pbr_tan.w * thm_tn.y) +\n"
+                           "      let thm_s = select(0.0, inverseSqrt(pbr_tlen), pbr_tlen > 1e-24);\n"
+                           "      let thm_n = select(pbr_ngs, pbr_t * (thm_s * thm_tn.x) - pbr_b * (thm_s * thm_tn.y) +\n"
                            "                                  pbr_ngs * thm_tn.z, pbr_tlen > 1e-24);\n",
                            normalXy);
       }
