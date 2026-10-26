@@ -1851,7 +1851,8 @@ void CCompoundTargetReticle::PortTriUpdateScanBounds(const CStateManager& mgr) {
   CVector3f size = CVector3f::Zero();
   const TUniqueId first = x440_scanTargetCount != 0 ? x444_scanTargets[0] : kInvalidUniqueId;
   if (TCastToConstPtr< CActor >(mgr.GetObjectById(first))) {
-    CAABox accum = CAABox::MakeNullBox(); // lbl_804DF2E8
+    // lbl_804DF2E8 = (FLT_MAX x3, -FLT_MAX x3), set by fn_802C8734 (802C8750)
+    CAABox accum = CAABox::MakeMaxInvertedBox();
     bool any = false;
     for (int i = 0; i < x440_scanTargetCount; ++i) {
       const CActor* actor = TCastToConstPtr< CActor >(mgr.GetObjectById(x444_scanTargets[i]));
