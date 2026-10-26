@@ -517,6 +517,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   config.shaderConfig.pbr = g_gxState.pbr;
   if (g_gxState.pbr != 0) {
     config.shaderConfig.pbrKind = static_cast<u8>(std::clamp(std::lround(g_gxState.pbrLayer.y()), 0L, 255L));
+    config.shaderConfig.pbrCut = pbr_cut_mode(g_gxState.pbrBacklight);
     // The lightmap's UV attribute, when the bound vertex format has it (and the device a slot for the lightmap).
     const u8 lightmapAttr = g_gxState.pbrLightmapAttr;
     if (webgpu::g_lightmapBinding && lightmapAttr >= GX_VA_TEX0 && lightmapAttr <= GX_VA_TEX7 &&
@@ -635,6 +636,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     sc.actorDecal = 1;
     sc.pbr = 0;
     sc.pbrKind = 0;
+    sc.pbrCut = 0;
     sc.pbrBindPos = false;
     sc.pbrBindLe = false;
     sc.pbrLightmapAttr = GX_VA_NULL;
@@ -665,6 +667,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     sc.actorDecal = 0;
     sc.pbr = 0;
     sc.pbrKind = 0;
+    sc.pbrCut = 0;
     sc.pbrBindPos = false;
     sc.pbrBindLe = false;
     sc.pbrLightmapAttr = GX_VA_NULL;

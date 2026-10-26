@@ -1215,7 +1215,10 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
                            tintAlpha, discard.expr);
     }
   }
-  if (mapStage[4] == -1 && config.pbrKind == 24) {
+  // Only a cutout's config (pbrCut) has the cut tests: elsewhere pbr_cut is false and the discard
+  // would only force late depth. Without the marker the config has no cut caster either.
+  const bool cutTests = config.pbrCut && mapStage[4] == -1;
+  if (cutTests && config.pbrKind == 24) {
     // The decal cutouts (kind 24: e538b757, 42fe2ed0): t = clamp((A - 0.5 + c) / 2c), cut where t²(3 - 2t) < 0.25,
     // with c = CCH0.x = 0.5 on all of them, so t = A. A is the alpha map's red (42fe2ed0's TCH0, map 3), else
     // the base alpha squared; no vertex alpha.
@@ -1226,7 +1229,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       }}
       //@CUT_END)""",
                          mapStage[3] != -1 ? fmt::format("sampled{}.r", mapStage[3]) : "prev.a * prev.a"s);
-  } else if (mapStage[4] == -1) {
+  } else if (cutTests) {
     // Remastered's cutout (mode 512): the filtered base alpha squared against 0.25. The
     // DepthOnly caster (93e0c484, 0b2e072b) multiplies by c3[0].w = DIFC.w = 1 and has no
     // vertex colour, so the caster test (up to the marker) has no vertex alpha. The colour
@@ -5185,11 +5188,12 @@ void read_shader_env(ShaderDebug& dbg) {
 std::string describe_config(u64 hash, const ShaderConfig& c) {
   std::string out = fmt::format(
       "// hash {:016x}\n"
-      "// pbr {} ({}) pbrKind {} sdf {} depthOnly {} volFog {} drawId {}\n"
+      "// pbr {} ({}) pbrKind {} pbrCut {} sdf {} depthOnly {} volFog {} drawId {}\n"
       "// fogType {} fogRange {} lineMode {} vtxStride {}\n"
       "// tevStages {} indStages {} alphaCompare {}/{}/{}/{}/{}\n"
       "// (the PBR debug view is a uniform, not part of the config)\n",
-      hash, c.pbr, c.pbr == 0 ? "off" : c.pbr == 1 ? "full" : "cost test", c.pbrKind, c.sdf, c.depthOnly, c.volFog,
+      hash, c.pbr, c.pbr == 0 ? "off" : c.pbr == 1 ? "full" : "cost test", c.pbrKind, static_cast<u32>(c.pbrCut),
+      c.sdf, c.depthOnly, c.volFog,
       static_cast<u32>(c.drawId), c.fogType, static_cast<u32>(c.fogRangeEnabled), static_cast<u32>(c.lineMode),
       c.vtxStride, c.tevStageCount, c.numIndStages, static_cast<u32>(c.alphaCompare.comp0), c.alphaCompare.ref0,
       static_cast<u32>(c.alphaCompare.op), static_cast<u32>(c.alphaCompare.comp1), c.alphaCompare.ref1);

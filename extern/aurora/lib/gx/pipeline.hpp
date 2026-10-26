@@ -18,7 +18,7 @@ struct DrawData {
   bool shadowGroup; // bindGroups.textureBindGroup has the shadow receiver layout
 };
 
-constexpr uint32_t GXPipelineConfigVersion = 15;
+constexpr uint32_t GXPipelineConfigVersion = 16;
 struct PipelineConfig {
   uint32_t version = GXPipelineConfigVersion;
   uint32_t msaaSamples = 1;

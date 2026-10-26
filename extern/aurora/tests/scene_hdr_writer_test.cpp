@@ -470,7 +470,15 @@ TEST(SceneHdrGx, TheModeBitIsTheOldPaddingSoLdrKeysKeepTheirBytes) {
   EXPECT_EQ(differing, 1u);
   EXPECT_NE(xxh3_hash(hdr), xxh3_hash(defaults));
   EXPECT_FALSE(hdr == defaults);
-  EXPECT_EQ(GXPipelineConfigVersion, 15u);
+  // 16: pbrCut (also old padding) moved the cut tests into the key, so a cached cutout caster
+  // (shadowPass 2) of 15 names an fs_shadow its shader no longer has.
+  EXPECT_EQ(GXPipelineConfigVersion, 16u);
+  ShaderConfig cut = defaults;
+  cut.pbrCut = 1;
+  differing = 0;
+  for (size_t i = 0; i < sizeof(ShaderConfig); ++i)
+    differing += reinterpret_cast<const u8*>(&cut)[i] != reinterpret_cast<const u8*>(&defaults)[i];
+  EXPECT_EQ(differing, 1u);
   // The pipeline key around it has no padding either (pipeline.hpp asserts it too): every key byte
   // is a config field, so the xxh3 key of a config is fully determined by its values.
   static_assert(std::has_unique_object_representations_v<PipelineConfig>);

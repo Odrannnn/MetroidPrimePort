@@ -834,7 +834,7 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
     caster.pipeline = cache.shadowPipelineRef;
     caster.bindGroups = {};
     // The PBR mode's cut bit (512): the colour pass discards the pixel, so it casts no shadow either.
-    if (cache.cutCaster && (static_cast<u32>(std::max(state.pbrBacklight.w(), 0.f)) & 512u) != 0) {
+    if (cache.cutCaster && pbr_cut_mode(state.pbrBacklight)) {
       caster.pipeline = cache.cutPipelineRef;
       caster.bindGroups = cache.cutBindGroups;
     }
@@ -1912,6 +1912,10 @@ void handle_aurora(ByteReader& reader) noexcept {
       const f32 w = reader.read<f32>();
       const Vec4<float> value{x, y, z, w};
       if (*v != value) {
+        // The cut bit is in the shader key (ShaderConfig::pbrCut).
+        if (v == &g_gxState.pbrBacklight && pbr_cut_mode(*v) != pbr_cut_mode(value)) {
+          g_gxState.dirty |= DirtyPipeline;
+        }
         *v = value;
         g_gxState.dirty |= DirtyUniform;
       }

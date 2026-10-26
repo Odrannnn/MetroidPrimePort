@@ -647,7 +647,10 @@ struct ShaderConfig {
   // GX_AURORA_PORT_SHELL on a triangle draw: Remastered's silhouette shell, 1 its depth prepass, 2
   // its colour (the shell_* uniforms, the scene copy on texture slot 2). Bits of the same byte.
   u8 shell : 2 = 0;
-  u8 padding0 : 4 = 0;
+  // With pbr, the mode's cut bit (512, pbr_backlight.w): only a cutout's shader has the cut
+  // discards (a discard forces late depth on every pixel of the draw).
+  u8 pbrCut : 1 = 0;
+  u8 padding0 : 3 = 0;
   // GX_AURORA_PORT_ACTOR_SHADOW decal: the draw is a receiver redrawn as Remastered's actor shadow
   // decal (multiplies the frame by the shadow, shadowUniform holds its view-space planes). The old
   // padding byte, so other configs keep their bytes and cache keys.
@@ -745,6 +748,10 @@ std::string build_shader_source(const ShaderConfig& config) noexcept;
 // source (build_shader_source's) writing its alpha as mode has it.
 // False (source unchanged) when it has no fs_main return to rewrite: the draw must then use DstAlphaMode::None.
 bool apply_dst_alpha_mode(std::string& source, DstAlphaMode mode) noexcept;
+// The PBR mode's cut bit (512) of GXState::pbrBacklight.w, as the shader decodes it.
+inline bool pbr_cut_mode(const Vec4<float>& backlight) noexcept {
+  return backlight.w() > 0.f && (static_cast<u32>(backlight.w()) & 512u) != 0;
+}
 // Whether the config's shader has the alpha-tested sun shadow caster (shadowPass 2: vs_shadow_cut, fs_shadow).
 bool shader_has_cut_caster(const ShaderConfig& config) noexcept;
 // dstAlphaMode falls back to None when the shader can't be rewritten for it; build the pipeline with that.
