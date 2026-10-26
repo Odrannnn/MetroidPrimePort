@@ -82,7 +82,7 @@ The package name is `org.metroidprime.port`; the launcher activity is
 Framework (SAF) to pick the disc: it opens the system document picker, retains a
 persistable read URI permission, and feeds the resulting file-descriptor stream
 to `nod` without assuming a filesystem path. It accepts only the user's disc:
-`GM8E01`, disc 0, revision 0, 1 or 2, or `GM8P01` (verified in
+`GM8E01`, disc 0, revision 0, 1 or 2, `GM8P01` or `R3ME01` (verified in
 `platform/main.cpp`); any other image is rejected. No game data is bundled, and the app requests no broad storage
 permission - it reads only the single persisted document URI. The bundled
 `textures` and `initial_pipeline_cache.db` are copied on launch from the APK

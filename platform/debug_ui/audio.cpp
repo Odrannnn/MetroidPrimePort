@@ -34,9 +34,8 @@ void DrawAudio() {
 
 // The full Flaahgra boss theme for an NTSC disc (port_flaahgra_music.h).
 void DrawFlaahgraTheme() {
-  const PortDisc::Version disc = PortDisc::Current();
-  if (disc == PortDisc::Version::Pal) {
-    return;  // the PAL disc already has the whole track
+  if (PortDisc::HasPalData()) {
+    return;  // PAL and Trilogy discs already have the whole track
   }
   ImGui::SeparatorText("Flaahgra boss theme");
   std::string picked;

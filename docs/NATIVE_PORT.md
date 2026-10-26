@@ -116,14 +116,19 @@ image. Otherwise, when no disc is found it opens the platform's file dialog and
 remembers the answer as `disc_path` in the settings file. There is no prompt
 when the port has no window to show one on, or with `MP_NO_DISC_DIALOG=1`
 (for scripted runs that do have a window, as on a build runner). The disc must
-identify as **GM8E01, disc 0, revision 0, 1 or 2** (USA 1.00, 1.01 or 1.02) or **GM8P01** (PAL).
+identify as **GM8E01, disc 0, revision 0, 1 or 2** (USA 1.00, 1.01 or 1.02), **GM8P01** (PAL) or
+**R3ME01** (Metroid Prime Trilogy, USA; experimental). A Trilogy disc runs its Metroid Prime: the
+`MP1` directory is the disc's root (with the rest of the disc still visible) and `rs5mp1_p.dol` its
+DOL. That data is the PAL revision's, so it runs like a PAL disc (PAL skips and script fixes, except
+PAL's extra Main Quarry lock, which Trilogy lacks). The front end plays Trilogy's own Metroid Prime
+menu movies from `fe/Video/mp1`. Saves are a PAL-layout `R3ME` file, apart from the GameCube ones.
 PAL support is experimental: a PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port
 feature (Remastered import, randomizer, Archipelago, cutscene skips) and its
 languages; its saves are kept apart from USA ones. USA 1.01 runs the same
 way; its data differs from 1.00 only in a few rooms' scripts and one credits
 name. USA 1.02 runs the same way (its rooms' scripts differ more, and the
-cutscene skips and the Arboretum gate fix have 1.02 variants); Japanese, Korean and Wii discs
-are rejected. Nod/Aurora supports additional image
+cutscene skips and the Arboretum gate fix have 1.02 variants); Japanese, Korean and other Wii
+discs are rejected. Nod/Aurora supports additional image
 containers, but the same retail content is required.
 
 `metroid_prime_port --version` prints the source revision without initializing

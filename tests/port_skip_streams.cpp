@@ -152,6 +152,10 @@ int main() {
   CHECK_MSG(PortSkipCutscenes::SkipStreamFor(Version::Usa101, kChapel, usa101), "USA 1.01 has the Chapel skip");
   CHECK_MSG(PortSkipCutscenes::SkipStreamFor(Version::Usa102, kChapel, rev2), "USA 1.02 has the Chapel skip");
   CHECK_MSG(PortSkipCutscenes::SkipStreamFor(Version::Pal, kChapel, pal), "PAL has the Chapel skip");
+  SkipStream trilogy;
+  CHECK_MSG(PortSkipCutscenes::SkipStreamFor(Version::Trilogy, kChapel, trilogy) &&
+                trilogy.ops == pal.ops && trilogy.size == pal.size,
+            "Trilogy uses the PAL stream");
   CHECK_MSG(usa101.ops == usa.ops && usa101.size == usa.size, "1.01 uses the generic stream");
   CHECK_MSG(rev2.ops != usa.ops && rev2.size != usa.size, "1.02 has its own Chapel stream");
 

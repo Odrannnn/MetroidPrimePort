@@ -9,7 +9,8 @@
 // "MetroidPrime": a header sector and two copies of the save area).
 namespace PortSaveFormat {
 
-inline bool IsPal() { return PortDisc::Current() == PortDisc::Version::Pal; }
+// Trilogy's data is PAL's, so are its saves' sizes (under their own game code).
+inline bool IsPal() { return PortDisc::HasPalData(); }
 
 // CMemoryCardDriver's system options block.
 inline int SystemBytes() { return IsPal() ? 114 : 174; }

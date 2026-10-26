@@ -53,8 +53,9 @@ CTweakPlayer::CTweakPlayer(CInputStream& in)
   mMinDoubleJumpTime = in.ReadFloat();
 #ifdef TARGET_PC
   // PAL lengthened the jump windows for 50 Hz; the port runs at 1.00's rate,
-  // so it keeps 1.00's (the only values PAL's player tweak changes).
-  if (PortDisc::Current() == PortDisc::Version::Pal) {
+  // so it keeps 1.00's (the only values PAL's player tweak changes; Trilogy's
+  // has them too).
+  if (PortDisc::HasPalData()) {
     mAllowedJumpTime = mMinJumpTime = 0.235f;
     mAllowedDoubleJumpTime = mMinDoubleJumpTime = 0.1f;
   }

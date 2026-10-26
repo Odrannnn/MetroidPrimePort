@@ -111,6 +111,42 @@ static const FEMovie FEMovies[] = {
     {"Video/08_GBA_fileselect.thp", false},
     {"Video/08_GBA_fileselect.thp", false},
 };
+
+#ifdef TARGET_PC
+// Port: Trilogy's MP1 has none of the GameCube front-end movies; its own MP1 menu
+// movies sit in fe/Video/mp1. Each GameCube movie falls back to the nearest one there.
+static const char* PortFrontEndMovie(const char* path) {
+  static const struct {
+    const char* prefix;
+    const char* trilogy;
+  } skTrilogyMovies[] = {
+      {"Video/00_", "fe/Video/mp1/Mp1_wii_Titles_To_Logo.thp"},
+      {"Video/01_", "fe/Video/mp1/Mp1_wii_Logo_Loop.thp"},
+      {"Video/02_", "fe/Video/mp1/Mp1_wii_Logo_To_Main.thp"},
+      {"Video/03_", "fe/Video/mp1/Mp1_wii_Main_Menu_Loop.thp"},
+      {"Video/04_", "fe/Video/mp1/Mp1_wii_Main_To_Game.thp"},
+      {"Video/06_", "fe/Video/mp1/Mp1_wii_Main_Menu_Loop.thp"},
+      {"Video/07_", "fe/Video/mp1/Mp1_wii_Main_Menu_Loop.thp"},
+      {"Video/08_", "fe/Video/mp1/Mp1_wii_Main_Menu_Loop.thp"},
+      {"Video/attract0.", "fe/Video/mp1/Attract01.thp"},
+      {"Video/attract1.", "fe/Video/mp1/Attract02.thp"},
+  };
+  if (CDvdFile::FileExists(path)) {
+    return path;
+  }
+  for (int i = 0; i < static_cast< int >(sizeof(skTrilogyMovies) / sizeof(skTrilogyMovies[0]));
+       ++i) {
+    if (strncmp(path, skTrilogyMovies[i].prefix, strlen(skTrilogyMovies[i].prefix)) == 0 &&
+        CDvdFile::FileExists(skTrilogyMovies[i].trilogy)) {
+      return skTrilogyMovies[i].trilogy;
+    }
+  }
+  return path;
+}
+#define PORT_FE_MOVIE(path) PortFrontEndMovie(path)
+#else
+#define PORT_FE_MOVIE(path) (path)
+#endif
 // TODO: set this to the default value and bake version string as a post-build step
 #if VERSION == VERSION_GM8E_00
 const char MetroidBuildInfo[] = BUILD_INFO_TAG "Build v1.088 10/29/2002 2:21:25\0PAD";
@@ -2411,7 +2447,7 @@ bool CFrontEndUI::PumpMovieLoad() {
         path[strlen(path) - 5] = static_cast< char >(x1c_rndB + 'A');
       }
 
-      x6c_menuMovies[i].x0_movie = rs_new CMoviePlayer(path, 0.05f, movie->loop, true);
+      x6c_menuMovies[i].x0_movie = rs_new CMoviePlayer(PORT_FE_MOVIE(path), 0.05f, movie->loop, true);
       x6c_menuMovies[i].x0_movie->SetPlayMode(CMoviePlayer::kPM_Stopped);
       return false;
     }
@@ -2852,7 +2888,7 @@ const char* CFrontEndUI::GetNextAttractMovieFileName() {
 }
 
 const char* CFrontEndUI::GetAttractMovieFileName(int idx) {
-  return CBasics::Stringize("Video/attract%d.thp", idx);
+  return PORT_FE_MOVIE(CBasics::Stringize("Video/attract%d.thp", idx));
 }
 
 #ifdef TARGET_PC

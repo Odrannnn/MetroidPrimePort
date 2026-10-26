@@ -297,7 +297,7 @@ const CFactoryFnReturn FRasterFontFactory(const SObjectTag& tag, CInputStream& i
 #ifdef TARGET_PC
   // A French, German, Spanish or Italian text from an imported PAL disc draws
   // with that disc's font (same id): the USA fonts have no accented letters.
-  if (PortDisc::Current() != PortDisc::Version::Pal) {
+  if (!PortDisc::HasPalData()) {
     const char* code = PortDebug::TextLanguage();
     static const char* const kPalLanguages[] = {"EUFR", "USFR", "EUGE", "EUSP", "USSP", "EUIT"};
     bool palLanguage = false;

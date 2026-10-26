@@ -17,11 +17,23 @@ CGBASupport* g_GBA;
 
 inline bool GetFontEncoding() { return OSGetFontEncode() == 1; }
 
+#ifdef TARGET_PC
+// Metroid Prime Trilogy's MP1 has no GBA client. The link is stubbed on PC
+// (shims.cpp: no GBA answers the probe), so the client is never sent and a
+// small file every disc has stands in for it.
+static const char* PortClientPadFile(const char* name) {
+  return CDvdFile::FileExists(name) ? name : "Tweaks.Pak";
+}
+#define PORT_CLIENT_PAD(name) PortClientPadFile(name)
+#else
+#define PORT_CLIENT_PAD(name) name
+#endif
+
 CGBASupport::CGBASupport()
 #if VERSION >= VERSION_GM8E_48
-: x0_file(GetFontEncoding() ? "client_jap.bin" : "client_pad.bin")
+: x0_file(PORT_CLIENT_PAD(GetFontEncoding() ? "client_jap.bin" : "client_pad.bin"))
 #else
-: x0_file("client_pad.bin")
+: x0_file(PORT_CLIENT_PAD("client_pad.bin"))
 #endif
 , x28_fileSize(OSRoundUp32B(x0_file.Length()))
 , x2c_buffer((uchar*)CMemory::Alloc(x28_fileSize, IAllocator::kHI_RoundUpLen))

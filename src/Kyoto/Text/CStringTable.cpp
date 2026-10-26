@@ -446,7 +446,7 @@ const CFactoryFnReturn FStringTableFactory(const SObjectTag& tag, CInputStream& 
 #ifdef TARGET_PC
   CStringTable* table = rs_new CStringTable(in);
   const uint id = tag.GetId();
-  if (PortDisc::Current() == PortDisc::Version::Pal) {
+  if (PortDisc::HasPalData()) {
     const rstl::single_ptr< CStringTable > slideShow(id == 0x0552A456 ? PortLoadDiscSlideShow()
                                                                        : rstl::single_ptr< CStringTable >());
     PortRemapPalTable(id, *table, slideShow.get());

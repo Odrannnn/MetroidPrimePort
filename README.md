@@ -47,9 +47,10 @@ Every build needs your own disc image; none of them contains one.
 **Quick start:** download the build for your platform (Windows zip, Linux
 AppImage or tarball, Android APK), start it, and pick your disc image when it
 asks. It remembers the choice. Supported discs are the GameCube USA 1.00, 1.01
-and 1.02 (`GM8E01`) and PAL (`GM8P01`) releases, as `.iso`, `.gcm`, `.rvz`,
-`.wbfs`, `.ciso` or `.nkit`. The Japanese and Korean releases, the Wii Trilogy and
-Remastered are not run as the base game. Press **F1** for every setting.
+and 1.02 (`GM8E01`) and PAL (`GM8P01`) releases and the Wii Metroid Prime
+Trilogy (USA, `R3ME01`; its Metroid Prime, experimental), as `.iso`, `.gcm`,
+`.rvz`, `.wbfs`, `.ciso` or `.nkit`. The Japanese and Korean releases, other
+Trilogy regions and Remastered are not run as the base game. Press **F1** for every setting.
 
 ## Building
 

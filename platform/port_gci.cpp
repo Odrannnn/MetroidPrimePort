@@ -45,7 +45,10 @@ const char* GameCode() { return sGameCode; }
 
 const char* CardRegion() { return sGameCode[3] == 'P' ? "EUR" : "USA"; }
 
-ExportFormat NativeExport() { return PortSaveConvert::NativeFormat(sGameCode[3] == 'P'); }
+// Trilogy's (R3ME) saves have PAL's layout.
+ExportFormat NativeExport() {
+  return PortSaveConvert::NativeFormat(sGameCode[3] == 'P' || std::memcmp(sGameCode, "R3M", 3) == 0);
+}
 
 const char* GameCodeOf(ExportFormat format) { return format == ExportFormat::PalGci ? "GM8P" : "GM8E"; }
 

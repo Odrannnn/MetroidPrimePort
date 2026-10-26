@@ -370,6 +370,21 @@ bool IsSupportedDisc(const DVDDiskID* id) {
     return id != nullptr && IsSupportedId(DiscId6(*id).data(), id->diskNumber, id->gameVersion);
 }
 
+// aurora_dvd_open, then for Metroid Prime Trilogy its Metroid Prime: the MP1
+// directory as the root (the paks the game opens) and rs5mp1_p.dol as the DOL
+// (the embedded font and tables), so the rest reads it like a GameCube disc.
+bool OpenDiscImage(const char* path) {
+    if (!aurora_dvd_open(path)) {
+        return false;
+    }
+    if (PortDisc::Current() == PortDisc::Version::Trilogy && !aurora_dvd_set_root("MP1", "rs5mp1_p.dol")) {
+        PortLog::Write("metroid_prime_port: the Trilogy disc has no MP1 directory or rs5mp1_p.dol\n");
+        aurora_dvd_close();
+        return false;
+    }
+    return true;
+}
+
 // A compressed image (RVZ, WIA, GCZ) cut short by an interrupted download or
 // copy still opens, since the header is at the front, and the game only finds
 // out a few frames in, when a read fails (issue #8). Containers store the disc
@@ -839,7 +854,7 @@ int main(int argc, char** argv) {
         }
         PortDebug::LoadDiscPath();
         const char* disc = ResolveDiscPath(1, argv);
-        if (disc == nullptr || !aurora_dvd_open(disc)) {
+        if (disc == nullptr || !OpenDiscImage(disc)) {
             std::fprintf(stderr, "cannot open the Metroid Prime disc image; set MP_DISC\n");
             return 1;
         }
@@ -864,7 +879,7 @@ int main(int argc, char** argv) {
         }
         PortDebug::LoadDiscPath();
         const char* disc = ResolveDiscPath(1, argv);
-        if (disc == nullptr || !aurora_dvd_open(disc)) {
+        if (disc == nullptr || !OpenDiscImage(disc)) {
             std::fprintf(stderr, "cannot open the Metroid Prime disc image; set MP_DISC\n");
             return 1;
         }
@@ -1370,7 +1385,7 @@ int main(int argc, char** argv) {
     const bool discFromArgs = ResolveDiscFromArgs(argc, argv);
     for (;;) {
         std::string problem;
-        if (!aurora_dvd_open(discPath)) {
+        if (!OpenDiscImage(discPath)) {
             ReportDiscOpenFailure(discPath);
             problem = "This file could not be read as a GameCube disc image.";
         } else if (!IsSupportedDisc(DVDGetCurrentDiskID())) {
@@ -1410,11 +1425,15 @@ int main(int argc, char** argv) {
     }
     PortLog::Write("metroid_prime_port: disc mounted: %s\n", discPath);
     PortDiscVerify::SetImagePath(discImage);
-    PortLog::Write("metroid_prime_port: disc is %s%s\n", PortDisc::Name(PortDisc::Current()),
-                   PortDisc::Current() == PortDisc::Version::Pal ? " (experimental support)" : "");
+    const PortDisc::Version discVersion = PortDisc::Current();
+    PortLog::Write("metroid_prime_port: disc is %s%s\n", PortDisc::Name(discVersion),
+                   PortDisc::HasPalData(discVersion) ? " (experimental support)" : "");
     // Saves are the disc's region's (a PAL save's worlds are laid out
-    // differently): its game code and Dolphin's card for that region.
-    PortGci::SetGameCode(PortDisc::Current() == PortDisc::Version::Pal ? "GM8P" : "GM8E");
+    // differently): its game code and Dolphin's card for that region. Trilogy's
+    // are PAL-sized but its own, so neither disc loads the other's.
+    PortGci::SetGameCode(discVersion == PortDisc::Version::Trilogy ? "R3ME"
+                         : discVersion == PortDisc::Version::Pal   ? "GM8P"
+                                                                   : "GM8E");
     s_mountedDisc = discImage;
     aurora_dvd_set_read_error_callback(NoteDiscReadFailure);
     // A Remastered import finished in the last session becomes the mod now,

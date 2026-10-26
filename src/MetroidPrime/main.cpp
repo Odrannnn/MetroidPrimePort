@@ -409,7 +409,7 @@ CRasterFont* CGameGlobalObjects::LoadDefaultFont() {
   std::vector< uint8_t > fontData, fontTexture;
   // PAL's has other bytes (FONT v4): the font naming the same texture. Looked up
   // first there, so a PAL boot doesn't throw (and log) on the way.
-  const bool palFont = PortDisc::Current() == PortDisc::Version::Pal &&
+  const bool palFont = PortDisc::HasPalData() &&
                        PortFindDolFont(0x6065853f, fontData, fontTexture);
   if (!palFont) {
     try {
