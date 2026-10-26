@@ -70,6 +70,9 @@ public:
   bool PortCompositeRadial(float c0[4], float c1[4], float c2[4]) const;
   // CMFGame sets it when the composite took the tint; Draw then skips the filter, once.
   static void PortSetTintFolded(bool folded);
+  // Trilogy's HUD text comes from STRG_Hud, and STRG_Main index mainIdx (1..16) is STRG_Hud's
+  // mainIdx - 1. Without it (GC) this is gpStringTable->GetString(mainIdx).
+  static const wchar_t* PortHudString(int mainIdx);
 #endif
   void ProcessControllerInput(const CFinalInput& input);
   void UpdateStateTransition(float dt, const CStateManager& mgr);
@@ -256,6 +259,9 @@ private:
   uint xPortLagPrevGeneration = 0; // tick of xPortLag[0]
   bool xPortLagPresented = false;
   void PortApplyHudLag(const SPortHudLag& state);
+  // Trilogy: STRG_Hud, CSamusHud+0x494 (fn_801C5694); null on GC.
+  rstl::single_ptr< TLockedToken< CStringTable > > xPortHudStrings;
+  static const CStringTable* sPortHudStrings;
 #endif
 
   rstl::reserved_vector< bool, 4 > BuildPlayerHasVisors(const CStateManager& mgr) const;

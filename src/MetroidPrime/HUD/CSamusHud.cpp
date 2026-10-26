@@ -51,6 +51,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/CActor.hpp"
 #include "port_debug.h"
+#include "port_disc.h"
 #endif
 
 #include <float.h>
@@ -479,6 +480,15 @@ CSamusHud::CSamusHud(const CStateManager& mgr)
 , x5a4_videoBands(4, SVideoBand())
 , x5d8_guiLights(4, nullptr)
 , x7ac_profileInfo(15, SProfileInfo()) {
+#ifdef TARGET_PC
+  // @ fn_801C5694: Trilogy's HUD panes read their text from STRG_Hud. It takes
+  // STRG_HudEngOnly instead when bit 4 of lbl_805C2768+0x20 is set (fn_800C9DEC). That flag is
+  // set outside the HUD and is not ported. Loaded before UpdateStateTransition builds the HUD.
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    xPortHudStrings = rs_new TLockedToken< CStringTable >(gpSimplePool->GetObj("STRG_Hud"));
+    sPortHudStrings = **xPortHudStrings;
+  }
+#endif
   UpdateStateTransition(1.f, mgr);
   spSamusHud = this;
   for (int i = 0; i < 16; ++i) {
@@ -541,7 +551,21 @@ CSamusHud::~CSamusHud() {
     CSfxManager::SfxStop(x50c_staticSfxLo);
   }
   spSamusHud = nullptr;
+#ifdef TARGET_PC
+  sPortHudStrings = nullptr;
+#endif
 }
+
+#ifdef TARGET_PC
+const CStringTable* CSamusHud::sPortHudStrings = nullptr;
+
+const wchar_t* CSamusHud::PortHudString(int mainIdx) {
+  if (sPortHudStrings != nullptr) {
+    return sPortHudStrings->GetString(mainIdx - 1);
+  }
+  return gpStringTable->GetString(mainIdx);
+}
+#endif
 
 bool CSamusHud::CheckLoadComplete(const CStateManager& mgr) {
   switch (x4_loadPhase) {

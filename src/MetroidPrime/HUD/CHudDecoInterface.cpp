@@ -22,6 +22,15 @@
 #include "port_disc.h"
 #endif
 
+// The scan HUD's status text: STRG_Main idx on GC, STRG_Hud idx - 1 on Trilogy (fn_800E2864).
+static const wchar_t* ScanHudString(int idx) {
+#ifdef TARGET_PC
+  return CSamusHud::PortHudString(idx);
+#else
+  return gpStringTable->GetString(idx);
+#endif
+}
+
 static const char skDecoWidgetName[] = "basewidget_deco";
 static const char skBarDecoWidgetName[] = "basewidget_tickdeco0";
 static const char skPivotWidgetName[] = "basewidget_pivot";
@@ -517,13 +526,13 @@ void CHudDecoInterfaceScan::UpdateScanDisplay(const CStateManager& mgr, float dt
       if (scanState == CPlayer::kSS_ScanComplete) {
         if (x1d4_latestScanState == CPlayer::kSS_Scanning) {
           x254_flat_textpane_scanning->TextSupport().SetText(
-              rstl::wstring_l(gpStringTable->GetString(15)));
+              rstl::wstring_l(ScanHudString(15)));
           x254_flat_textpane_scanning->TextSupport().SetTypeWriteEffectOptions(false, 0.f, 40.f);
           x238_scanningTextAlpha = 2.f;
         }
       } else if (scanState == CPlayer::kSS_Scanning) {
         x254_flat_textpane_scanning->TextSupport().SetText(
-            rstl::wstring_l(gpStringTable->GetString(14)));
+            rstl::wstring_l(ScanHudString(14)));
         x254_flat_textpane_scanning->TextSupport().SetTypeWriteEffectOptions(false, 0.f, 40.f);
         x238_scanningTextAlpha = 1.f;
       }
@@ -539,7 +548,7 @@ void CHudDecoInterfaceScan::UpdateScanDisplay(const CStateManager& mgr, float dt
       if (!const_cast< CPlayer* >(mgr.GetPlayer())->ObjectInScanningRange(orbitTarget, mgr)) {
         x254_flat_textpane_scanning->TextSupport().SetText(rstl::wstring_l(L""));
         x254_flat_textpane_scanning->TextSupport().SetText(
-            rstl::wstring_l(gpStringTable->GetString(16)));
+            rstl::wstring_l(ScanHudString(16)));
         x254_flat_textpane_scanning->TextSupport().SetTypeWriteEffectOptions(true, 0.f, 40.f);
         x238_scanningTextAlpha = 1.f;
       }
