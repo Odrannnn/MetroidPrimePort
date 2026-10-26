@@ -956,6 +956,11 @@ int main(int argc, char** argv) {
 #else
     const unsigned long kRoomGeoFrameBuffers = 12;
 #endif
+    // Install last session's finished import before sizing the arena and frame
+    // buffers from its geometry. No disc or renderer is needed for the move.
+    if (PortRemastered::ApplyPendingImport()) {
+        PortLog::Write("metroid_prime_port: installed the imported Remastered models\n");
+    }
     const bool roomGeometry = PortMods::HasRoomGeometry();
     uint32_t mem1Size = MEM1_DEFAULT_SIZE;
     {
@@ -1437,11 +1442,6 @@ int main(int argc, char** argv) {
                                                                         : "GM8E");
     s_mountedDisc = discImage;
     aurora_dvd_set_read_error_callback(NoteDiscReadFailure);
-    // A Remastered import finished in the last session becomes the mod now,
-    // before anything has a file of the old one open.
-    if (PortRemastered::ApplyPendingImport()) {
-        PortLog::Write("metroid_prime_port: installed the imported Remastered models\n");
-    }
     PortRemastered::RemoveLegacyImport();
     PortStorageReport::StartLogging();
     PortMods::Initialize();

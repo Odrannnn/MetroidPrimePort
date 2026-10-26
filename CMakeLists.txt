@@ -889,6 +889,12 @@ if(MP_BUILD_TESTS)
     mp_port_test(port_mods_tests
         SOURCES tests/port_mods.cpp platform/port_mods_pak.cpp
         INCLUDES platform/include)
+    mp_port_test(port_mods_restart_tests
+        SOURCES tests/port_mods_restart.cpp platform/port_mods.cpp platform/port_mods_pak.cpp
+            platform/port_room_geo_file.cpp
+        INCLUDES platform/include include extern/aurora/include
+        DEFINITIONS TARGET_PC AURORA AURORA_ENABLE_GX
+        LIBRARIES ${AURORA_SDL3_TARGET})
     # The collision-box reader indexes PAK tables and inflates them; a test
     # drives it over synthetic PAKs instead of a disc, so the DVD calls the
     # production source is built from are stubbed out.

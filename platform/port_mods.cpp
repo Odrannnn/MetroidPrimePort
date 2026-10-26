@@ -638,6 +638,19 @@ void Initialize() {
         files.push_back(it->path());
       }
     }
+    // Geometry buffers are reserved at process startup. Defer the WHOLE mod if
+    // it arrived later, before even textures/sidecars can register: a partially
+    // active Remastered import is not a usable fallback. Keep mods_disabled as
+    // saved so the next process loads it. Reuse the file list (no second walk).
+    if (!PortRoomGeo::BuffersReady() && std::any_of(files.begin(), files.end(), [](const fs::path& file) {
+          uint32_t id = 0;
+          return PortRoomGeo::ParseFileName(PathString(file.filename()), id);
+        })) {
+      info.enabled = false;
+      info.pendingRestart = true;
+      Message(info.name + ": Restart the application to apply (room geometry buffers were not reserved at startup)");
+      continue;
+    }
     std::sort(files.begin(), files.end());
     std::unordered_map<uint32_t, std::string> native;
     for (const fs::path& file : files) {

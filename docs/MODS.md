@@ -56,8 +56,16 @@ everything reads through Aurora's DVD overlays, so the game code is unchanged.
 ### Reloading without a restart
 
 F1 > Mods > Reload mods (console: `mods reload`) reads the mods folder again while the game runs.
-Added, removed, edited, enabled and disabled mods all take effect, PAK resources and native `.dds`
-textures alike.
+
+If a geometry-bearing mod is installed after startup and room geometry buffers were not reserved,
+the **entire mod** stays unloaded (including its models, textures and other replacements). The Mods
+page says **Restart the application to apply**; reloading mods or the world cannot apply it. Its
+enabled switch is kept, so restarting loads it automatically. Preinstalled geometry mods reserve
+buffers even when disabled, so they can still be enabled with a mod reload. Mods without room
+geometry, including the Dread Samus import, do not need this restart.
+
+Except for geometry mods awaiting that startup allocation, added, removed, edited, enabled and
+disabled mods take effect on reload, PAK resources and native `.dds` textures alike.
 
 - The game is rebuilt where Samus stands, exactly as a save state load does, with every PAK
   reopened so that all it draws is loaded from the new files.

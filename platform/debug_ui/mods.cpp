@@ -510,17 +510,25 @@ void DrawMods() {
   // What the settings would load next time, against what this launch loaded: every mod, the
   // built-in ones included, so their switches share this line and button.
   bool changed = ModsEnabled() != status.active;
+  bool restartRequired = false;
   {
     const std::vector<std::string> disabled = PortMods::SplitDisabled(sModsDisabled);
     for (const PortMods::ModInfo& mod : status.mods) {
       const bool on = std::find(disabled.begin(), disabled.end(), mod.name) == disabled.end();
-      changed = changed || (ModsEnabled() && on) != mod.enabled;
+      const bool wanted = ModsEnabled() && on;
+      restartRequired = restartRequired || (wanted && mod.pendingRestart);
+      changed = changed || (wanted != mod.enabled && !(wanted && mod.pendingRestart));
     }
   }
   if (PortMods::Suspended()) {
     ImGui::TextColored(ThemeWarnColor(), "Unloaded while an import runs; they load again when it ends.");
-  } else if (changed) {
-    ImGui::TextColored(ThemeWarnColor(), "Reload the mods to apply.");
+  } else {
+    if (changed) {
+      ImGui::TextColored(ThemeWarnColor(), "Reload the mods to apply.");
+    }
+    if (restartRequired) {
+      ImGui::TextColored(ThemeWarnColor(), "Restart the application to apply pending room geometry mods.");
+    }
   }
   if (ImGui::Button("Reload mods")) {
     PortSaveState::RequestModReload();
@@ -575,6 +583,8 @@ void DrawMods() {
       } else {
         ImGui::TextDisabled("%d file(s), %d resource(s)", mod.files, mod.resources);
       }
+    } else if (ModsEnabled() && on && mod.pendingRestart) {
+      ImGui::TextColored(ThemeWarnColor(), "not loaded: Restart the application to apply.");
     } else {
       ImGui::TextDisabled("not loaded");
     }

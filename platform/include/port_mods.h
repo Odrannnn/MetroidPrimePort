@@ -148,7 +148,8 @@ private:
 
 struct ModInfo {
   std::string name;
-  bool enabled = true;
+  bool enabled = true; // loaded by the last scan, not the saved enabled intent
+  bool pendingRestart = false; // enabled intent retained; geometry buffers were not reserved at startup
   int files = 0;     // disc files replaced
   int resources = 0; // loose resources used
   int textures = 0;  // <id>.dds images

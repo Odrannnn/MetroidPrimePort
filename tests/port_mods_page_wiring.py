@@ -71,6 +71,44 @@ def builtin_bodies():
 
 
 class Wiring(WiringCase):
+    def test_pending_restart_is_not_a_reloadable_mismatch(self):
+        text = MODS.read_text()
+        body = text[text.index("void DrawMods() {"):]
+        # Keep the global-setting mismatch independent: turning mods off still reloads.
+        self.assertIn("bool changed = ModsEnabled() != status.active;", body)
+        self.assertIn("const bool wanted = ModsEnabled() && on;", body)
+        self.assertIn("restartRequired = restartRequired || (wanted && mod.pendingRestart);", body)
+        self.assertIn("changed = changed || (wanted != mod.enabled && !(wanted && mod.pendingRestart));", body)
+        self.assertIn('"Restart the application to apply pending room geometry mods."', body)
+        # Ordinary mods, not just the built-in toggle, expose the deferred state.
+        other = body[body.index('ImGui::SeparatorText("Other mods");'):]
+        self.assertIn("ModsEnabled() && on && mod.pendingRestart", other)
+        self.assertIn('"not loaded: Restart the application to apply."', other)
+
+    def test_startup_installs_pending_import_before_geometry_capacity_detection(self):
+        text = (root / "platform/main.cpp").read_text()
+        install = text.index("PortRemastered::ApplyPendingImport()")
+        geometry = text.index("PortMods::HasRoomGeometry()")
+        ready = text.index("PortRoomGeo::SetBuffersReady(")
+        legacy = text.index("PortRemastered::RemoveLegacyImport()")
+        mods = text.index("PortMods::Initialize()")
+        self.assertEqual(text.count("PortRemastered::ApplyPendingImport()"), 1)
+        self.assertLess(text.index("PortLogFile::Start()"), install)
+        self.assertLess(text.index("PortPaths::MigrationLog()"), install)
+        self.assertLess(install, geometry)
+        self.assertLess(geometry, ready)
+        self.assertLess(ready, legacy)
+        self.assertLess(text.index("disc mounted: %s"), legacy)
+        self.assertLess(legacy, mods)
+        self.assertIn("installed the imported Remastered models", text[install:geometry])
+
+    def test_pending_restart_is_not_reported_as_reloadable(self):
+        text = REMASTERED.read_text()
+        pending = text.index("modsOn && mod->pendingRestart")
+        reloadable = text.index('"Not loaded: reload the mods to apply."')
+        self.assertLess(pending, reloadable)
+        self.assertIn('"Not loaded: Restart the application to apply."', text[pending:reloadable])
+
     def test_one_mods_page_and_the_old_names_still_reach_it(self):
         search = SEARCH.read_text()
         self.assertEqual(search.count('{"Mods", DrawModsTab}'), 1)

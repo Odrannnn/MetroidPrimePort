@@ -254,7 +254,8 @@ void DrawBuiltinModToggle(const char* modName, const char* label, bool stale) {
     SetModsDisabled(PortMods::JoinDisabled(disabled));
   }
   ImGui::EndDisabled();
-  ItemHelp("Off unloads this mod alone; the other mods still load. Takes effect when the mods are reloaded.");
+  ItemHelp("Off unloads this mod alone; the other mods still load. Takes effect when the mods are reloaded. "
+           "A newly installed room geometry mod may need an application restart.");
   if (!modsOn) {
     SameLineAfterHelp();
     ImGui::TextDisabled(sModsEnabled ? "(Original experience is on: no mods load)" : "(mods are off)");
@@ -266,6 +267,8 @@ void DrawBuiltinModToggle(const char* modName, const char* label, bool stale) {
     ImGui::TextDisabled("Off, not loaded.");
   } else if (PortMods::Suspended()) {
     ImGui::TextDisabled("Not loaded while an import runs.");
+  } else if (modsOn && mod->pendingRestart) {
+    ImGui::TextColored(ThemeWarnColor(), "Not loaded: Restart the application to apply.");
   } else if (modsOn) {
     ImGui::TextColored(ThemeWarnColor(), "Not loaded: reload the mods to apply.");
   }
