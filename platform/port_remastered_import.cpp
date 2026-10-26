@@ -3026,6 +3026,23 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         first = last;
         continue;
       }
+      if (std::any_of(first, last, [](const RetailPlacement& p) { return p.animated; })) {
+        // Retail draws an animation set's character there, not this model, and that character's
+        // own model can be this one: Remastered's copy (a stand-in box in 8_courtyard's gate,
+        // whose look is the CHPR's) must not replace it.
+        ++statusCount["animated"];
+        char head[32];
+        std::snprintf(head, sizeof(head), "%08X\tanimated\t-\t-\t-\t-\t", first->retail);
+        report += head;
+        for (auto p = first; p != last; ++p) {
+          char text[48];
+          std::snprintf(text, sizeof(text), " %08X #%d", p->object, p->entity);
+          report += (p == first ? "" : "; ") + p->room + text;
+        }
+        report += '\n';
+        first = last;
+        continue;
+      }
       const auto ok = std::find_if(first, last, [](const RetailPlacement& p) { return p.ok; });
       const bool all = std::all_of(first, last, [](const RetailPlacement& p) { return p.ok; });
       const bool agree =

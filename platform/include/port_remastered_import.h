@@ -200,7 +200,8 @@ inline constexpr int kEffects = 112;   // exact GPSM primitive dispatch, transfo
 // 46: a script node's retail input passes unmatched Relays (the frigate hangar's intro hull counter).
 // 49: an ActorKeyframe's Play to a PlatformMP1 (its own action hash) plays its clip, and script
 // objects in a cycle match by a subset of their retail targets.
-inline constexpr int kRooms = 49;
+// 50: a retail model on an Actor or Platform that names an animation set stays retail.
+inline constexpr int kRooms = 50;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

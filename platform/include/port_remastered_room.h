@@ -83,6 +83,9 @@ struct RetailPlacement {
   double orient[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
   double offset[3] = {0, 0, 0};
   std::string room;
+  // The object (an Actor or Platform) names an animation set after the model: retail draws the
+  // set's character (ScriptLoader's LoadActor, LoadPlatform), so the model is not what it shows.
+  bool animated = false;
 };
 
 struct RoomIO {

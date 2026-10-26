@@ -3095,6 +3095,13 @@ void Writer::PairRetailModels(const RoomData& r, const Area& area) {
       out.mrea = area.mrea;
       out.object = o.id;
       out.room = r.name;
+      if (o.type == 0x00 || o.type == 0x08) {
+        const auto at = std::search(o.props.begin(), o.props.end(), be, be + 4);
+        if (o.props.end() - at >= 8) {
+          const uint32_t ancs = ReadBE32(&*(at + 4));
+          out.animated = ancs != 0 && ancs != 0xffffffffu;
+        }
+      }
       double basis[3][3], inverse[3][3];
       EditorBasis(o.rot, o.scale, basis);
       if (named.size() == placed.size() && Invert3(basis, inverse)) {
