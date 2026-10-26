@@ -360,12 +360,16 @@ bool IsTouchMouse(SDL_MouseID which) { return which == SDL_TOUCH_MOUSEID || whic
 // virtual pad, whose events would undo NoteTouchInput on the next pump; a touch
 // or pen also arrives as a mouse; and a stick resting a little off centre would
 // flip back to the pad every frame while the keyboard is in use, and each flip
-// re-registers textures and clears Aurora's texture cache.
+// re-registers textures and clears Aurora's texture cache. Mouse motion is not
+// deliberate either: aiming with the mouse while playing on a pad (or a Steam
+// Deck trackpad or gyro sent as a mouse) would swap the icons back and forth
+// (#215), so it never leaves the pad; it only turns keys into clicks once the
+// keyboard is already in use.
 bool SDLCALL active_input_watch(void*, SDL_Event* event) {
   switch (event->type) {
   case SDL_EVENT_MOUSE_MOTION:
-    if (!IsTouchMouse(event->motion.which)) {
-      sActiveInput.store(ActiveInput::Keyboard, std::memory_order_relaxed);
+    if (!IsTouchMouse(event->motion.which) &&
+        sActiveInput.load(std::memory_order_relaxed) == ActiveInput::Keyboard) {
       sKeyInput.store(false, std::memory_order_relaxed);
     }
     break;
