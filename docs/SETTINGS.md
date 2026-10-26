@@ -584,6 +584,11 @@
   On Windows this replaces asking for OpenGL ES: Dawn's Windows build has no GLES
   backend. Elsewhere the setting is ignored and Android's choice stays `opengles` /
   `MP_OPENGLES`.
+  `MP_GL_VERSION=3.3` runs desktop OpenGL as a 3.3 core context even when the
+  driver offers newer (Dawn's `gl_force_desktop_gl_33` adapter toggle): Dawn then
+  uses only 3.3 plus extensions, like a 3.3-only GPU would, and the adapter's
+  driver description in game.log ends in "(treated as 3.3)". For testing the 3.3
+  paths on a newer GPU; any other value is ignored.
 - Vulkan driver (Android, Video > Compatibility, persisted as `gpu_driver`: an
   installed driver's id, empty for the phone's own, the default): a custom Vulkan
   driver such as Mesa Turnip, installed from a driver zip with "Install driver

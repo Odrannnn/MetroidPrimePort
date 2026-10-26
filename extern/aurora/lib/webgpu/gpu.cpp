@@ -1035,7 +1035,25 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
     // MP_GPU_POWER=low asks for the integrated GPU on a machine that also has a discrete one.
     const char* power = std::getenv("MP_GPU_POWER");
     const bool lowPower = power != nullptr && std::string_view{power} == "low";
+#ifdef WEBGPU_DAWN
+    // MP_GL_VERSION=3.3 runs desktop OpenGL as 3.3 core even on a newer driver, to try the
+    // 3.3 paths (GLSL 330, no compute) on hardware that has more.
+    const char* glVersion = std::getenv("MP_GL_VERSION");
+    const bool forceGL33 = backend == wgpu::BackendType::OpenGL && glVersion != nullptr &&
+                           std::string_view{glVersion} == "3.3";
+    static constexpr std::array adapterToggles{"gl_force_desktop_gl_33"};
+    const wgpu::DawnTogglesDescriptor adapterTogglesDescriptor{wgpu::DawnTogglesDescriptor::Init{
+        .enabledToggleCount = adapterToggles.size(),
+        .enabledToggles = adapterToggles.data(),
+    }};
+    if (forceGL33) {
+      Log.info("MP_GL_VERSION=3.3: forcing an OpenGL 3.3 core context");
+    }
+#endif
     const wgpu::RequestAdapterOptions options{
+#ifdef WEBGPU_DAWN
+        .nextInChain = forceGL33 ? &adapterTogglesDescriptor : nullptr,
+#endif
         .featureLevel = wgpu::FeatureLevel::Compatibility,
         .powerPreference = lowPower ? wgpu::PowerPreference::LowPower : wgpu::PowerPreference::HighPerformance,
         .backendType = backend,
