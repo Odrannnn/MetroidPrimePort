@@ -430,6 +430,8 @@ float CPlayerVisor::PortWindowShapeY() {
 // The zoomed copy (sharp scan window), keyed apart from the spare buffer; valid for the frame
 // that made it, until DrawScanEffect takes it.
 static u8 sPortScanZoomCopy[32];
+// The whole-view copy that clears the EFB after the zoomed pass; never drawn.
+static u8 sPortScanZoomClear[32];
 static bool sPortScanZoomCopied = false;
 static int sPortScanZoomWidth = 0;
 static int sPortScanZoomHeight = 0;
@@ -467,12 +469,18 @@ void CPlayerVisor::PortCopyScanZoom(int width, int height, float zoom) {
   GXSetTexCopySrc(vpLeft + (vpWidth - zoomWidth) / 2, vpTop + (vpHeight - zoomHeight) / 2,
                   zoomWidth, zoomHeight);
   GXSetTexCopyDst(zoomWidth, zoomHeight, GX_TF_RGB565, GX_FALSE);
-  // A clearing copy clears the whole EFB on aurora (the next pass's load op), not only the
-  // copied rectangle as on the GameCube: the frame's world then draws on a clean EFB.
+  // A clearing copy clears only the rectangle it copies, as on the GameCube: a second one over
+  // the whole view clears the rest, so the frame's world draws on a clean EFB.
   CGX::SetZMode(true, GX_LEQUAL, true);
   GXSetColorUpdate(GX_TRUE);
   GXSetAlphaUpdate(GX_TRUE);
   GXCopyTex(sPortScanZoomCopy, GX_TRUE);
+  GXPixModeSync();
+  const int clearWidth = (vpWidth + 1) & ~1;
+  const int clearHeight = (vpHeight + 1) & ~1;
+  GXSetTexCopySrc(vpLeft, vpTop, clearWidth, clearHeight);
+  GXSetTexCopyDst(clearWidth, clearHeight, GX_TF_RGB565, GX_FALSE);
+  GXCopyTex(sPortScanZoomClear, GX_TRUE);
   GXPixModeSync();
   sPortScanZoomWidth = zoomWidth;
   sPortScanZoomHeight = zoomHeight;
