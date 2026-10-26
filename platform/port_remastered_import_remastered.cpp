@@ -88,6 +88,8 @@ bool Remastered::Open(const std::string& nspPath, const std::string& keysPath, s
         if (!m_collisions.emplace(assets[a].id, Where{m_paks.size(), a}).second) {
           m_collisionDuplicates.insert(assets[a].id);
         }
+      } else if (type == kDPSM) {
+        m_decals.emplace(assets[a].id, Where{m_paks.size(), a});
       } else if (type == kMATI) {
         m_materials.emplace(assets[a].id, Where{m_paks.size(), a});
       } else if (type == kVECF) {
@@ -213,6 +215,15 @@ bool Remastered::ReadText(const ModelUuid& id, std::vector<uint8_t>& out, std::s
   return Read(m_texts, id, out, error);
 }
 
+std::vector<ModelUuid> Remastered::Decals() const {
+  std::vector<ModelUuid> ids;
+  for (const auto& [id, where] : m_decals) {
+    ids.push_back(id);
+  }
+  std::sort(ids.begin(), ids.end());
+  return ids;
+}
+
 std::vector<ModelUuid> Remastered::Effects() const {
   std::vector<ModelUuid> ids;
   for (const auto& [id, where] : m_effects) {
@@ -291,6 +302,7 @@ bool Remastered::ReadEffectAsset(uint32_t type, const ModelUuid& id, std::vector
               : type == kELSM || type == kELC2 ? m_electrics
               : type == kMATI ? m_materials
               : type == kVECF ? m_vectorFields
+              : type == kDPSM ? m_decals
                               : m_textures,
               id, out, error);
 }
@@ -299,6 +311,7 @@ uint32_t Remastered::EffectAssetType(const ModelUuid& id) const {
   return m_textures.count(id) != 0    ? kTXTR
          : m_materials.count(id) != 0 ? kMATI
          : m_vectorFields.count(id) != 0 ? kVECF
+         : m_decals.count(id) != 0 ? kDPSM
          : m_effects.count(id) != 0   ? kGENP
          : m_swooshes.count(id) != 0  ? kSWSH
          : m_electrics.count(id) != 0 ? m_electricTypes.at(id)

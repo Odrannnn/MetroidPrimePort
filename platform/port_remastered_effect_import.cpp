@@ -1756,7 +1756,45 @@ public:
         Effect(id, pairing);
       }
     }
+    for (const EffectPairing& pairing : m_io.decals) {
+      Decal(pairing);
+    }
     return m_result;
+  }
+
+  // One paired DPSM over its disc DPSC, or the DPSC left as it is (logged).
+  void Decal(const EffectPairing& pairing) {
+    const std::string name = Hex8(pairing.retail) + ".DPSC";
+    std::vector<uint8_t> data;
+    std::vector<uint8_t> disc;
+    std::string error;
+    EffectNode decal;
+    if (!m_io.read(EffectFourCC("DPSM"), pairing.id, data, error) ||
+        !ParseEffect(data.data(), data.size(), decal, error)) {
+      error = "parse: " + error;
+    } else if (!m_io.retail || !m_io.retail(EffectFourCC("DPSC"), pairing.retail, disc)) {
+      error = "the disc has no DPSC";
+    } else {
+      std::vector<uint8_t> out;
+      std::vector<std::string> dropped;
+      const std::map<EffectGuid, Child> children;  // a DPSM embeds none
+      const std::map<EffectGuid, ExternalSwoosh> swooshes;
+      if (ConvertDecal(decal, data.data(), disc, ConvertIO(children, swooshes), out, dropped, error)) {
+        if (m_io.write(name, out)) {
+          ++m_result.decals;
+          std::string left;
+          for (const std::string& fourcc : dropped) {
+            left += " " + fourcc;
+          }
+          Log(name + ": decal " + EffectGuidString(Swap(pairing.id)) + " (" + pairing.method + ")" +
+              (left.empty() ? std::string() : ", not written:" + left));
+          return;
+        }
+        error = "could not write it";
+      }
+    }
+    ++m_result.decalsFailed;
+    Log(name + ": decal " + EffectGuidString(Swap(pairing.id)) + " left retail: " + error);
   }
 
 private:

@@ -63,9 +63,9 @@ bool Retail::Index(std::string& error) {
     for (const PortMods::PakResource& res : table.resources) {
       m_ids.insert(res.id);
       ++m_resourceCounts[Key(res.type, res.id)];
-      // The skeletons too (the Dread Samus import's), and the fonts (the HUD's text sizes), kept out
-      // of the fingerprint as the weapons are.
-      if (res.type == kWPSC || res.type == kCINF || res.type == kFONT) {
+      // The skeletons too (the Dread Samus import's), the fonts (the HUD's text sizes) and the decals,
+      // kept out of the fingerprint as the weapons are.
+      if (res.type == kWPSC || res.type == kCINF || res.type == kFONT || res.type == kDPSC) {
         m_wpsc.emplace(Key(res.type, res.id), Where{entry, res.offset, res.size, res.compressed != 0});
       }
       if (res.type == kCMDL || res.type == kCSKR || res.type == kANCS || res.type == kTXTR || res.type == kMLVL ||
@@ -90,6 +90,11 @@ bool Retail::HasUniqueResource(uint32_t type, uint32_t id) const {
 std::vector<uint32_t> Retail::Ids(uint32_t type) const {
   std::vector<uint32_t> ids;
   for (const auto& [key, where] : m_resources) {
+    if (uint32_t(key >> 32) == type) {
+      ids.push_back(uint32_t(key));
+    }
+  }
+  for (const auto& [key, where] : m_wpsc) {
     if (uint32_t(key >> 32) == type) {
       ids.push_back(uint32_t(key));
     }

@@ -123,6 +123,8 @@ constexpr uint32_t kCHPR = 0x43485052;  // a character (retail ANCS), id the ANC
 constexpr uint32_t kWPSC = 0x57505343;  // the disc's projectile weapon
 constexpr uint32_t kCRSC = 0x43525343;  // the disc's projectile collision response
 constexpr uint32_t kPART = 0x50415254;  // a disc particle effect
+constexpr uint32_t kDPSM = 0x4450534D;  // a projected decal (Remastered's DPSC)
+constexpr uint32_t kDPSC = 0x44505343;  // the disc's decal
 
 // The import's progress and its cancel flag (port_remastered_import.cpp), which the readers
 // report to.
@@ -183,7 +185,7 @@ private:
   std::map<int32_t, void*> m_handles;
   std::unordered_map<uint64_t, Where> m_resources;
   std::unordered_set<uint32_t> m_ids;
-  std::unordered_map<uint64_t, Where> m_wpsc;                 // the projectile weapons and skeletons, read on demand
+  std::unordered_map<uint64_t, Where> m_wpsc;                 // the projectile weapons, skeletons and decals, read on demand
   std::unordered_map<std::string, uint32_t> m_wpscNames;      // WPSC id by name
   std::unordered_set<std::string> m_ambiguousWpscNames;
   std::unordered_map<uint64_t, size_t> m_resourceCounts;      // typed ids, including PART/CRSC
@@ -262,6 +264,8 @@ public:
   bool ReadProjectile(const std::string& name, std::vector<uint8_t>& out, std::string& error) const;
   bool HasUniqueCollision(const ModelUuid& id) const;
   bool ReadCollision(const ModelUuid& id, std::vector<uint8_t>& out, std::string& error) const;
+  // The projected decals (DPSM), read with ReadEffectAsset.
+  std::vector<ModelUuid> Decals() const;
   bool HasUniqueEffect(const ModelUuid& id) const;
   // A GENP/SWSH's (lower-case) name; the first when it has several.
   bool EffectName(const ModelUuid& id, std::string& name) const;
@@ -308,6 +312,7 @@ private:
   Index m_vectorFields;
   Index m_collisions;
   std::unordered_set<ModelUuid, PakIdHash> m_collisionDuplicates;
+  Index m_decals;  // DPSM
   std::unordered_map<std::string, Where> m_projectiles;  // WPSM, by FrameKey
   std::unordered_set<std::string> m_ambiguousProjectiles;
   std::map<ModelUuid, std::string> m_effectIdNames;  // the first name of a GENP and SWSH

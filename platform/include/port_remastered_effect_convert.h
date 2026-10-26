@@ -130,6 +130,18 @@ uint32_t EffectRetailType(uint32_t form);
 // GENP the effect was parsed from (keyframe blocks are copied out of it).
 std::vector<ConvertedPart> ConvertEffect(const EffectNode& effect, const uint8_t* data, const EffectConvertIO& io);
 
+// A Remastered decal (DPSM) as the disc's DPSC `disc` extended with port-only fields
+// (CDecalDataFactory reads them): PRDC (CNST 1, the decal is Remastered's), MSTL (int: the
+// lifetime), MSTR, MSTW, MSTH, DUL1, DUL2 (reals: rotation in degrees, extents, the two
+// material slots' fades) and per MTIN a PMTI (CNST, slot, the retail id of the MATI's first
+// texture or 0, the MATI's 16-byte id as the DPSM stores it, its size and bytes). The disc's
+// quad fields are kept. False with `error` for a decal that is left retail (a model decal, an
+// element that does not convert, a missing MATI); `dropped` lists the DPSM properties that are
+// not written.
+bool ConvertDecal(const EffectNode& dpsm, const uint8_t* data, const std::vector<uint8_t>& disc,
+                  const EffectConvertIO& io, std::vector<uint8_t>& out, std::vector<std::string>& dropped,
+                  std::string& error);
+
 // One property of a retail PART: its FourCC and its value's bytes.
 struct RetailPartProperty {
   uint32_t fourcc = 0;

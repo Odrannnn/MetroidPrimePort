@@ -39,6 +39,9 @@ struct EffectImportIO {
   // Optional: pairings the image itself gives (a projectile's particles, from its WPSM and the
   // disc's WPSC), used after the importer's own table.
   std::vector<EffectPairing> pairings;
+  // Optional: Remastered decals (DPSM) paired with the disc's DPSCs (DecalPairings), each
+  // written over its DPSC as ConvertDecal makes it.
+  std::vector<EffectPairing> decals;
   // Optional: GENPs a room's effect actors use (RoomEffectGenps) that stand for no disc PART:
   // each is written under RoomEffectId(), for the rooms' .roomfx files to name.
   std::vector<EffectGuid> roomOnly;
@@ -98,6 +101,8 @@ struct EffectImportResult {
   int flipbooks = 0;   // of those, atlases of an array texture's layers
   int models = 0;      // Remastered-only models converted for the effects
   int dropped = 0;     // retail properties left out across the written PARTs
+  int decals = 0;      // DPSCs written from a paired DPSM
+  int decalsFailed = 0;  // paired DPSMs left retail
 };
 
 // Whether the next import converts effects: on, unless MP_REMASTERED_EFFECTS
