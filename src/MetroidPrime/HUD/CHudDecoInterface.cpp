@@ -19,7 +19,17 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/Factories/CScannableObjectInfo.hpp"
 #include "port_debug.h"
+#include "port_disc.h"
 #endif
+
+// The scan HUD's status text: STRG_Main idx on GC, STRG_Hud idx - 1 on Trilogy (fn_800E2864).
+static const wchar_t* ScanHudString(int idx) {
+#ifdef TARGET_PC
+  return CSamusHud::PortHudString(idx);
+#else
+  return gpStringTable->GetString(idx);
+#endif
+}
 
 static const char skDecoWidgetName[] = "basewidget_deco";
 static const char skBarDecoWidgetName[] = "basewidget_tickdeco0";
@@ -67,6 +77,18 @@ CHudDecoInterfaceCombat::CHudDecoInterfaceCombat(CGuiFrame& hud)
   x74_basewidget_deco = hud.FindWidget(skDecoWidgetName);
   x78_basewidget_tickdeco0 = hud.FindWidget(skBarDecoWidgetName);
   x7c_basewidget_frame = hud.FindWidget(skFrameNormalGroupWidgetName);
+#ifdef TARGET_PC
+  // @ fn_800E0F8C (800E10D4..800E1134): Trilogy labels the combat HUD's energy word, as the scan
+  // HUD does (fn_800E1AB0).
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    if (CGuiTextPane* pane = static_cast< CGuiTextPane* >(hud.FindWidget("textpane_energyword"))) {
+      pane->TextSupport().SetExtraCharacterSpace(2); // stw 2, 0x104(pane) = textSupport+0x30
+      // GetString(0x57) "ENERGY", in the port's 1.00 order (see the scan HUD).
+      pane->TextSupport().SetText(rstl::wstring_l(gpStringTable->GetString(0x57 + 6)));
+      pane->SetColor(gpTweakGuiColors->GetTickDecoColor()); // tweakGuiColors+0x88
+    }
+  }
+#endif
   x14_pivotPosition = x70_basewidget_pivot->GetIdleXform().GetTranslation();
   x78_basewidget_tickdeco0->SetColor(gpTweakGuiColors->GetTickDecoColor());
 #ifdef TARGET_PC
@@ -292,6 +314,19 @@ CHudDecoInterfaceScan::CHudDecoInterfaceScan(CGuiFrame& hud)
   if (CGuiWidget* widget = hud.FindWidget("basewidget_deco")) {
     widget->SetColor(gpTweakGuiColors->GetHudFrameColor());
   }
+#ifdef TARGET_PC
+  // @ fn_800E1AB0 (800E1CE8..800E1D38): Trilogy labels the scan HUD's energy word. The asm
+  // has no null check; GC's FRME_ScanHudFlat may lack the pane.
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    if (CGuiTextPane* pane = static_cast< CGuiTextPane* >(hud.FindWidget("textpane_energyword"))) {
+      pane->TextSupport().SetExtraCharacterSpace(2); // stw 2, 0x104(pane) = textSupport+0x30
+      // Trilogy's GetString(0x57) "ENERGY"; the port puts STRG_Main in 1.00 order
+      // (PortRemapPalTable: PAL i >= 57 is 1.00 i + 6).
+      pane->TextSupport().SetText(rstl::wstring_l(gpStringTable->GetString(0x57 + 6)));
+      pane->SetColor(gpTweakGuiColors->GetTickDecoColor()); // tweakGuiColors+0x88
+    }
+  }
+#endif
   x218_leftsidePosition = x24c_basewidget_leftside->GetO2PTransform().GetTranslation();
   x24c_basewidget_leftside->SetO2PTransform(
       CTransform4f(CMatrix3f::RotateZ(CRelAngle::FromRadians(gpTweakGui->GetScanSidesAngle())),
@@ -405,6 +440,12 @@ void CHudDecoInterfaceScan::InitializeFlatFrame() {
   x274_flat_model_dash =
       static_cast< CGuiModel* >(x10_loadedScanHudFlat->FindWidget(skScanDashName));
   x260_flat_basewidget_textgroup->SetVisibility(false, kTM_Children);
+#ifdef TARGET_PC
+  // @ fn_800E2280: Trilogy draws the status text without a depth test (800E23F0).
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    x254_flat_textpane_scanning->SetDepthTest(false);
+  }
+#endif
   x254_flat_textpane_scanning->SetIsVisible(false);
   x254_flat_textpane_scanning->TextSupport().SetFontColor(gpTweakGuiColors->GetHudMessageFill());
   x254_flat_textpane_scanning->TextSupport().SetOutlineColor(
@@ -503,13 +544,13 @@ void CHudDecoInterfaceScan::UpdateScanDisplay(const CStateManager& mgr, float dt
       if (scanState == CPlayer::kSS_ScanComplete) {
         if (x1d4_latestScanState == CPlayer::kSS_Scanning) {
           x254_flat_textpane_scanning->TextSupport().SetText(
-              rstl::wstring_l(gpStringTable->GetString(15)));
+              rstl::wstring_l(ScanHudString(15)));
           x254_flat_textpane_scanning->TextSupport().SetTypeWriteEffectOptions(false, 0.f, 40.f);
           x238_scanningTextAlpha = 2.f;
         }
       } else if (scanState == CPlayer::kSS_Scanning) {
         x254_flat_textpane_scanning->TextSupport().SetText(
-            rstl::wstring_l(gpStringTable->GetString(14)));
+            rstl::wstring_l(ScanHudString(14)));
         x254_flat_textpane_scanning->TextSupport().SetTypeWriteEffectOptions(false, 0.f, 40.f);
         x238_scanningTextAlpha = 1.f;
       }
@@ -525,7 +566,7 @@ void CHudDecoInterfaceScan::UpdateScanDisplay(const CStateManager& mgr, float dt
       if (!const_cast< CPlayer* >(mgr.GetPlayer())->ObjectInScanningRange(orbitTarget, mgr)) {
         x254_flat_textpane_scanning->TextSupport().SetText(rstl::wstring_l(L""));
         x254_flat_textpane_scanning->TextSupport().SetText(
-            rstl::wstring_l(gpStringTable->GetString(16)));
+            rstl::wstring_l(ScanHudString(16)));
         x254_flat_textpane_scanning->TextSupport().SetTypeWriteEffectOptions(true, 0.f, 40.f);
         x238_scanningTextAlpha = 1.f;
       }

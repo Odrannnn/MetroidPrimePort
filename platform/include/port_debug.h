@@ -524,6 +524,10 @@ void SetSpringBall(bool enabled);
 // layout), off by default.
 bool SwapScanXray();
 void SetSwapScanXray(bool enabled);
+// Trilogy discs only: holding Beam menu / Visor menu opens the Wii's radial menus
+// (CHudRadialSelect); the aim travel or C-stick picks. Off by default.
+bool RadialMenus();
+void SetRadialMenus(bool enabled);
 // The beam shift's bindings (read by PortInputDevices, which pairs each with the D-pad
 // into the beam chords): slots 0 and 1 are keys
 // or mouse buttons (scancode or PAD_KEY_MOUSE_*), slot 2 a controller button

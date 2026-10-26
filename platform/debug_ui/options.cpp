@@ -986,6 +986,13 @@ bool SwapScanXray() {
 
 void SetSwapScanXray(bool enabled) { StoreSetting(sInput.swapScanXray, enabled); }
 
+bool RadialMenus() {
+  EnsureInitialized();
+  return sInput.radialMenus && !sOriginalExperience;
+}
+
+void SetRadialMenus(bool enabled) { StoreSetting(sInput.radialMenus, enabled); }
+
 int TurboBinding(int slot) {
   EnsureInitialized();
   if (slot == 2 && TouchActive()) {

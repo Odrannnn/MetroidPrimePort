@@ -28,6 +28,9 @@ public:
   void AddFont(const TToken< CRasterFont >& font);
   void AddLineSpacing(float spacing);
   void AddLineExtraSpace(int space);
+#ifdef TARGET_PC
+  void AddCharacterExtraSpace(int space);
+#endif
   void AddJustification(EJustification just);
   void AddVerticalJustification(EVerticalJustification just);
   void AddWordWrapping(const bool wrap) { x18_state.SetWordWrapping(wrap); }

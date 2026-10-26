@@ -30,6 +30,10 @@ public:
   static rstl::pair< CVector3f, CVector3f > BallEnergyCoordFunc(float t);
   static rstl::pair< CVector3f, CVector3f > ThermalEnergyCoordFunc(float t);
   static rstl::pair< CVector3f, CVector3f > XRayEnergyCoordFunc(float t);
+#ifdef TARGET_PC
+  // Trilogy only: the HUD message fade, applied to the warning's alpha (fn_800E3D44 sets x8).
+  void SetAlpha(float alpha) { mMessageAlpha = alpha; }
+#endif
 
 private:
   EHudType x0_hudType;
@@ -57,6 +61,7 @@ private:
   // The warning's own fader sets its colour each frame; it takes the opacity directly unless it
   // is in one of mAlphaWidgets.
   bool mWarningFaded;
+  float mMessageAlpha;
 #endif
 };
 CHECK_SIZEOF(CHudEnergyInterface, 0x30)

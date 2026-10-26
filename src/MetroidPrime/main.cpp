@@ -738,6 +738,10 @@ void CGameGlobalObjects::AddPaksAndFactories() {
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:SamGunFx"), true, false);
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:MidiData"), false, false);
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:GGuiSys"), false, false);
+  // Trilogy's DOL also mounts RS5.pak: the Wii scan ring, bracket and cursor models.
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:RS5"), false, false);
+  }
 
   factory.GetFactoryMgr().AddFactory('STRG', FStringTableFactory);
   factory.GetFactoryMgr().AddFactory('CMDL', FModelFactory);

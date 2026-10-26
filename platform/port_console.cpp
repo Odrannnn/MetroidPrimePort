@@ -7,6 +7,7 @@
 #include "port_ap_world.h"
 #include "port_apclient.h"
 #include "port_beam_doors.h"
+#include "port_radial.h"
 #include "port_disc_replace.h"
 #include "port_disc_verify.h"
 #include "port_log.h"
@@ -723,6 +724,11 @@ void CmdStatus(CStateManager& mgr) {
   if (const CEntity* target = mgr.GetObjectById(player.GetOrbitTargetId())) {
     Out("orbit target u%u %08X %s", target->GetUniqueId().Value(), target->GetEditorId().Value(),
         target->GetDebugName().data());
+  }
+  Out("orbit nearby %d", static_cast< int >(player.GetOrbitObjectsOnScreenList().size()));
+  if (const CEntity* next = mgr.GetObjectById(player.GetOrbitNextTargetId())) {
+    Out("orbit next u%u %08X %s", next->GetUniqueId().Value(), next->GetEditorId().Value(),
+        next->GetDebugName().data());
   }
   Out("first person %d, cinematic %d", mgr.GetCameraManager()->IsInFPCamera() ? 1 : 0,
       mgr.GetCameraManager()->IsInCinematicCamera() ? 1 : 0);
@@ -2492,6 +2498,26 @@ void CmdStackBeams() {
   Finish();
 }
 
+void CmdRadial() {
+  const auto& a = sCmd.args;
+  if (a.size() == 2 && a[1] == "release") {
+    PortRadial::Force(-1, 0.f, 0.f);
+  } else if ((a.size() == 2 || a.size() == 4) && (a[1] == "beam" || a[1] == "visor")) {
+    const float x = a.size() == 4 ? float(std::atof(a[2].c_str())) : 0.f;
+    const float y = a.size() == 4 ? float(std::atof(a[3].c_str())) : 0.f;
+    PortRadial::Force(a[1] == "beam" ? PortRadial::kBeam : PortRadial::kVisor, x, y);
+  } else if (a.size() != 1) {
+    return Finish("usage: radial [beam|visor [x y] | release]");
+  }
+  float x = 0.f;
+  float y = 0.f;
+  PortRadial::GetSelection(x, y);
+  Out("radial setting %d held beam %d visor %d capturing %d selection %.2f %.2f",
+      PortDebug::RadialMenus() ? 1 : 0, PortRadial::Held(PortRadial::kBeam) ? 1 : 0,
+      PortRadial::Held(PortRadial::kVisor) ? 1 : 0, PortRadial::Capturing() ? 1 : 0, x, y);
+  Finish();
+}
+
 void CmdWalkSpeed() {
   if (sCmd.args.size() > 1) {
     const int value = std::atoi(sCmd.args[1].c_str());
@@ -4111,6 +4137,8 @@ const CommandSpec kCommands[] = {
      "mapui [0|1]                 the map's extra legend entries and the Mark room prompt"},
     {"stackbeams", CmdStackBeams, nullptr,
      "stackbeams [0|1]           every shot also fires the other owned beams' projectiles (stack_beams)"},
+    {"radial", CmdRadial, nullptr,
+     "radial [beam|visor [x y] | release]  holds a radial menu with its selection (x right, y up); radial_menus"},
     {"walkspeed", CmdWalkSpeed, nullptr,
      "walkspeed [50..200]        on-foot movement speed in percent (walk_speed); no argument prints it"},
     {"beamdoors", nullptr, CmdBeamDoors,

@@ -319,6 +319,11 @@
 - Swap the Scan and X-Ray visor buttons (Controls > Options, persisted as
   `swap_scan_xray`, off by default): each visor takes the other's D-pad
   direction, as in Remastered (D-pad right Scan, left X-Ray).
+- Radial beam and visor menus (Controls > Options, persisted as `radial_menus`,
+  off by default; Metroid Prime Trilogy discs only): holding the Beam menu or
+  Visor menu action (Remap, unbound by default) opens the Wii version's radial
+  menu. Mouse, stick, gyro or C-stick point at an entry, the view holds still,
+  and letting go picks it.
 - Button glyphs (Controls > Options, persisted as `prompt_glyphs`: `auto`, the
   default, `xbox`, `playstation`, `switch`, `gamecube` or `keyboard`): which
   buttons the game's prompts and tutorials show. Auto follows the keyboard,

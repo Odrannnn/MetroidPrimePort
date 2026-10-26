@@ -267,6 +267,7 @@ set(MP_PORT_SOURCES
     platform/port_third_person_body.cpp
     platform/port_world_holders.cpp
     platform/port_photo.cpp
+    platform/port_radial.cpp
     platform/port_console.cpp
     platform/port_log_file.cpp
     platform/port_crash.cpp

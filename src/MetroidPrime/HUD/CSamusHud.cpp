@@ -31,6 +31,7 @@
 #include "MetroidPrime/HUD/CHudDecoInterface.hpp"
 #include "MetroidPrime/HUD/CHudEnergyInterface.hpp"
 #include "MetroidPrime/HUD/CHudFreeLookInterface.hpp"
+#include "MetroidPrime/HUD/CHudRadialSelect.hpp"
 #include "MetroidPrime/HUD/CHudHelmetInterface.hpp"
 #include "MetroidPrime/HUD/CHudMissileInterface.hpp"
 #include "MetroidPrime/HUD/CHudRadarInterface.hpp"
@@ -51,6 +52,8 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/CActor.hpp"
 #include "port_debug.h"
+#include "port_disc.h"
+#include "port_radial.h"
 #endif
 
 #include <float.h>
@@ -479,6 +482,15 @@ CSamusHud::CSamusHud(const CStateManager& mgr)
 , x5a4_videoBands(4, SVideoBand())
 , x5d8_guiLights(4, nullptr)
 , x7ac_profileInfo(15, SProfileInfo()) {
+#ifdef TARGET_PC
+  // @ fn_801C5694: Trilogy's HUD panes read their text from STRG_Hud. It takes
+  // STRG_HudEngOnly instead when bit 4 of lbl_805C2768+0x20 is set (fn_800C9DEC). That flag is
+  // set outside the HUD and is not ported. Loaded before UpdateStateTransition builds the HUD.
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    xPortHudStrings = rs_new TLockedToken< CStringTable >(gpSimplePool->GetObj("STRG_Hud"));
+    sPortHudStrings = **xPortHudStrings;
+  }
+#endif
   UpdateStateTransition(1.f, mgr);
   spSamusHud = this;
   for (int i = 0; i < 16; ++i) {
@@ -541,7 +553,28 @@ CSamusHud::~CSamusHud() {
     CSfxManager::SfxStop(x50c_staticSfxLo);
   }
   spSamusHud = nullptr;
+#ifdef TARGET_PC
+  sPortHudStrings = nullptr;
+#endif
 }
+
+#ifdef TARGET_PC
+const CStringTable* CSamusHud::sPortHudStrings = nullptr;
+
+const wchar_t* CSamusHud::PortHudString(int mainIdx) {
+  if (sPortHudStrings != nullptr) {
+    return sPortHudStrings->GetString(mainIdx - 1);
+  }
+  return gpStringTable->GetString(mainIdx);
+}
+
+const wchar_t* CSamusHud::PortHudStringAt(int idx) {
+  if (sPortHudStrings != nullptr) {
+    return sPortHudStrings->GetString(idx);
+  }
+  return gpStringTable->GetString(idx);
+}
+#endif
 
 bool CSamusHud::CheckLoadComplete(const CStateManager& mgr) {
   switch (x4_loadPhase) {
@@ -753,7 +786,12 @@ void CSamusHud::UpdateEnergy(float dt, const CStateManager& mgr, bool init) {
         const float maxEnergy = mgr.GetTotalBossEnergy();
         const rstl::wstring name =
             rstl::wstring_l(gpStringTable->GetString(mgr.GetBossStringIdx()));
+#ifdef TARGET_PC
+        // @ fn_801C95A0: Trilogy hides the boss bar while a radial menu is open.
+        x2b4_bossEnergyIntf->SetBossParams(PortRadialOpen() <= 0.f, name, bossEnergy, maxEnergy);
+#else
         x2b4_bossEnergyIntf->SetBossParams(true, name, bossEnergy, maxEnergy);
+#endif
       } else {
         x2b4_bossEnergyIntf->SetBossParams(false, rstl::wstring_l(L""), 0.f, 0.f);
       }
@@ -1433,6 +1471,17 @@ void CSamusHud::Update(float dt, const CStateManager& mgr, uint helmetVis, bool 
   if (!x2b4_bossEnergyIntf.null()) {
     x2b4_bossEnergyIntf->SetAlpha(1.f - messageTextAlpha);
   }
+#ifdef TARGET_PC
+  // @ fn_801C95A0 801C9BA8..801C9CBC: Trilogy also fades the energy warning under a message,
+  // by min(1 - message alpha, deco text alpha - radial menu alpha), the radial alpha being the
+  // larger open fraction of the two menus.
+  if (!x28c_energyIntf.null()) {
+    x28c_energyIntf->SetAlpha(PortDisc::IsTrilogy(PortDisc::Current())
+                                  ? rstl::min_val(1.f - messageTextAlpha,
+                                                  rstl::max_val(0.f, allTextAlpha - PortRadialOpen()))
+                                  : 1.f);
+  }
+#endif
   if (!x550_hudMemoString.null() && x550_hudMemoString->IsLoaded()) {
     SetMessage(rstl::wstring((**x550_hudMemoString)->GetString(x554_hudMemoIdx)),
                x548_hudMemoParms);
@@ -1563,6 +1612,25 @@ void CSamusHud::Update(float dt, const CStateManager& mgr, uint helmetVis, bool 
                                       ? x2f0_visorBeamMenuAlpha
                                       : transitionFactor);
     x2a8_beamMenu->Update(dt, false);
+  }
+#endif
+#ifdef TARGET_PC
+  // Trilogy: the radial menus update after the other HUD parts, visor then beam (fn_801C95A0).
+  {
+    const bool radial = PortDisc::IsTrilogy(PortDisc::Current()) && PortDebug::RadialMenus();
+    if (radial) {
+      for (int i = 0; i < 2; ++i) {
+        if (xPortRadial[i].null()) {
+          xPortRadial[i] = rs_new CHudRadialSelect(static_cast< CHudRadialSelect::EType >(i));
+        }
+        xPortRadial[i]->Update(dt, mgr);
+      }
+    } else {
+      xPortRadial[0] = nullptr;
+      xPortRadial[1] = nullptr;
+    }
+    PortRadial::SetState(radial, radial && xPortRadial[0]->IsOpen(),
+                         radial && xPortRadial[1]->IsOpen());
   }
 #endif
   UpdateCameraDebugSettings();
@@ -1794,6 +1862,14 @@ void CSamusHud::Draw(const CStateManager& mgr, float alpha, uint helmetVis, bool
     }
     gpRender->SetDepthReadWrite(true, true);
   }
+#ifdef TARGET_PC
+  // Trilogy draws the radial menus last.
+  for (int i = 0; i < 2; ++i) {
+    if (!xPortRadial[i].null()) {
+      xPortRadial[i]->Draw();
+    }
+  }
+#endif
   x7ac_profileInfo[14].x8_drawUsec = timer.GetElapsedMicros();
 }
 
@@ -2151,3 +2227,15 @@ void CSamusHud::SetMessage(const rstl::wstring& text, const CHUDMemoParms& info)
     }
   }
 }
+
+#ifdef TARGET_PC
+float CSamusHud::PortRadialOpen() const {
+  float open = 0.f;
+  for (int i = 0; i < 2; ++i) {
+    if (!xPortRadial[i].null()) {
+      open = rstl::max_val(open, xPortRadial[i]->GetOpenFraction());
+    }
+  }
+  return open;
+}
+#endif

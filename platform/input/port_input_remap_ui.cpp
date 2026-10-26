@@ -914,11 +914,11 @@ const std::vector<SGroup>& Groups() {
         // Direct picks work in every scheme; the GameCube inputs behind them are listed above.
         {"Beams",
          {Action::BeamPower, Action::BeamWave, Action::BeamIce, Action::BeamPlasma, Action::BeamNext,
-          Action::BeamPrev},
+          Action::BeamPrev, Action::BeamMenu},
          true},
         {"Visors",
          {Action::VisorCombat, Action::VisorScan, Action::VisorThermal, Action::VisorXray, Action::VisorNext,
-          Action::VisorPrev},
+          Action::VisorPrev, Action::VisorMenu},
          true},
         // Issue #167: the ball's own buttons; an input on one does only that in the ball.
         {"Morph Ball",

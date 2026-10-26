@@ -28,6 +28,7 @@ class CGuiWidget;
 class CHudBallInterface;
 class CHudBossEnergyInterface;
 class CHudEnergyInterface;
+class CHudRadialSelect;
 class CHudHelmetInterface;
 class CHudMissileInterface;
 class CHudRadarInterface;
@@ -70,6 +71,12 @@ public:
   bool PortCompositeRadial(float c0[4], float c1[4], float c2[4]) const;
   // CMFGame sets it when the composite took the tint; Draw then skips the filter, once.
   static void PortSetTintFolded(bool folded);
+  // Trilogy's HUD text comes from STRG_Hud, and STRG_Main index mainIdx (1..16) is STRG_Hud's
+  // mainIdx - 1. Without it (GC) this is gpStringTable->GetString(mainIdx).
+  static const wchar_t* PortHudString(int mainIdx);
+  // STRG_Hud index idx on Trilogy, STRG_Main index idx otherwise (0..7, the visor and beam names,
+  // match in English).
+  static const wchar_t* PortHudStringAt(int idx);
 #endif
   void ProcessControllerInput(const CFinalInput& input);
   void UpdateStateTransition(float dt, const CStateManager& mgr);
@@ -256,6 +263,13 @@ private:
   uint xPortLagPrevGeneration = 0; // tick of xPortLag[0]
   bool xPortLagPresented = false;
   void PortApplyHudLag(const SPortHudLag& state);
+  // Trilogy: STRG_Hud, CSamusHud+0x494 (fn_801C5694); null on GC.
+  rstl::single_ptr< TLockedToken< CStringTable > > xPortHudStrings;
+  static const CStringTable* sPortHudStrings;
+  // Trilogy with the radial menus setting: the Wii's radial visor [0] and beam [1] menus,
+  // made on first use.
+  rstl::single_ptr< CHudRadialSelect > xPortRadial[2];
+  float PortRadialOpen() const;
 #endif
 
   rstl::reserved_vector< bool, 4 > BuildPlayerHasVisors(const CStateManager& mgr) const;

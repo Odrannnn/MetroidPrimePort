@@ -231,6 +231,8 @@ bool ApplySetting(std::string_view keyView, std::string_view valueView) {
     s.springBall = ParseBool(value);
   } else if (key == "swap_scan_xray") {
     s.swapScanXray = ParseBool(value);
+  } else if (key == "radial_menus") {
+    s.radialMenus = ParseBool(value);
   } else if (key == "shift_key" || key == "shift_key_alt" || key == "shift_pad") {
     const int slot = key == "shift_key" ? 0 : key == "shift_key_alt" ? 1 : 2;
     int code = 0;
@@ -310,6 +312,7 @@ void WriteControlSettings(std::ostream& out) {
   out << "touch_floating_stick=" << (s.touchFloatingStick ? 1 : 0) << '\n';
   out << "spring_ball=" << (s.springBall ? 1 : 0) << '\n';
   out << "swap_scan_xray=" << (s.swapScanXray ? 1 : 0) << '\n';
+  out << "radial_menus=" << (s.radialMenus ? 1 : 0) << '\n';
   out << "shift_key=" << s.shiftBindings[0] << '\n';
   out << "shift_key_alt=" << s.shiftBindings[1] << '\n';
   out << "shift_pad=" << s.shiftBindings[2] << '\n';
