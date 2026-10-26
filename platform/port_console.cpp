@@ -2873,6 +2873,10 @@ void CmdProbe() {
 }
 
 void CmdShadow() {
+  if (sCmd.args.size() > 2 && Lower(sCmd.args[1]) == "cull" &&
+      (Lower(sCmd.args[2]) == "on" || Lower(sCmd.args[2]) == "off")) {
+    GXPortSetShadowCascadeCulling(Lower(sCmd.args[2]) == "on");
+  }
   if (sCmd.args.size() > 2 && Lower(sCmd.args[1]) == "casters" &&
       (Lower(sCmd.args[2]) == "on" || Lower(sCmd.args[2]) == "off")) {
     PortRoomGeo::SetOffscreenCasters(Lower(sCmd.args[2]) == "on");
@@ -2891,6 +2895,10 @@ void CmdShadow() {
   }
   OutLines(PortRoomEnv::SunInfo());
   OutLines(PortRoomEnv::RoomLightInfo());
+  u32 submitted[4], rejected;
+  GXPortGetShadowLayerCounts(submitted, &rejected);
+  Out("cascade culling %s: layer draws %u/%u/%u/%u, %u irrelevant layer draws omitted",
+      GXPortShadowCascadeCulling() ? "on" : "off", submitted[0], submitted[1], submitted[2], submitted[3], rejected);
   Finish();
 }
 
@@ -3969,7 +3977,7 @@ const CommandSpec kCommands[] = {
      "roomgeo prepass on|off    depth-only pass first for cut-out room models (default off)\n"
      "roomgeo casters on|off    out-of-view room models cast the sun's shadow (default on)"},
     {"shadow", CmdShadow, nullptr,
-     "shadow [casters on|off]   the sun's shadow map last frame: direction, colour, box, casters, and the room's suns"},
+     "shadow [casters on|off | cull on|off]   sun map, caster counts, per-layer submissions; cull off is the reference"},
     {"roomgeo", nullptr, nullptr,
      "roomgeo costtest <n>      PBR shading cost test: 0 off, 1 flat, 2 no lights, 3 no volume, 4 no cube, 5 no normal maps, 6 no ORM/emissive, 7 maps only, 8 no aniso, 9 no aniso or mip blend, 10 no post-processing, 11 no screen copies"},
     {"gpuselftest", CmdGpuSelfTest, nullptr,

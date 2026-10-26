@@ -350,6 +350,8 @@ extern "C" {
 // Port extension: Remastered's silhouette shell (GXPortShell). Payload: u8 mode (0 end, 1 depth
 // prepass, 2 colour), then for 1 and 2 24 f32 (CCH0..CCH4, then time, depth shift, tex0 sRGB, 0).
 #define GX_AURORA_PORT_SHELL 0x0072
+// Per-draw sun-cascade membership, u8 mask. CPU draw metadata, independent of the pipeline.
+#define GX_AURORA_PORT_SHADOW_MASK 0x0073
 
 #define GX2_SET_POLYGON_OFFSET 0x1000
 

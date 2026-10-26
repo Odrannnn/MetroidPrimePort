@@ -352,14 +352,27 @@ GXBool GXPortFrameRadiance(f32 out[3], u32* serial);
 // and receive the previous frame's; GXPortRenderShadowMap draws the map after the frame's casters.
 // GXPortSetShadowCasterOnly makes the following draws (with the caster on) cast but not draw, for
 // what is outside the view; GXPortShadowBoxCasts says whether a world box reaches into the map of
-// the last GXPortSetShadowFrame (the FIFO's, so a frame behind the game thread).
+// the last GXPortSetShadowFrame on the game thread, fitted once when that frame is set.
 void GXPortSetShadowCaster(GXBool on);
 void GXPortSetShadowCasterOnly(GXBool on);
 // The caster mode last set on the game thread: 0 off, 1 casts and draws, 2 casts only.
 u8 GXPortGetShadowCasterMode();
 void GXPortSetShadowFrame(const f32 worldToView[3][4], const f32 frustum[6], const f32 sunDir[3], f32 distance,
                           const f32 color[3]);
+// Whether the current game-thread frame has an active sun shadow map. Callers can skip
+// per-model shadow preparation altogether when it does not.
+GXBool GXPortShadowFrameActive(void);
 GXBool GXPortShadowBoxCasts(const f32 min[3], const f32 max[3]);
+// Conservative membership in those four cascades; invalid bounds retain every layer.
+u8 GXPortShadowBoxMask(const f32 min[3], const f32 max[3]);
+// A scoped hint for the following sun casters, restored by the caller. Unknown geometry uses 0xf.
+void GXPortSetShadowCascadeMask(u8 mask);
+u8 GXPortGetShadowCascadeMask(void);
+// Diagnostic reference switch; no saved setting. Default on, MP_SHADOW_CASTER_CULL=0 off.
+void GXPortSetShadowCascadeCulling(GXBool on);
+GXBool GXPortShadowCascadeCulling(void);
+// Last encoded map's per-layer submitted draws and rejected layer/draw pairs (any thread).
+void GXPortGetShadowLayerCounts(u32 submitted[4], u32* rejected);
 // For the console: the last frame's sun direction, colour, shadow distance (0: no map) and the
 // centre of its last cascade in world space, and how many draws the last map drawn had.
 void GXPortGetShadowInfo(f32 sunDir[3], f32 color[3], f32* distance, f32 center[3], u32* casters);

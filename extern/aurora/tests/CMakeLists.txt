@@ -95,6 +95,7 @@ if (AURORA_ENABLE_GX)
     ../lib/gx/fifo.cpp
     ../lib/gx/command_processor.cpp
     ../lib/gx/regs.cpp
+    ../lib/gfx/shadow_cascade.cpp
     ../lib/gx/resident.cpp
     ../lib/thread.cpp
     # Display list reader/optimizer

@@ -16,6 +16,7 @@ struct DrawData {
   GXBindGroups bindGroups;
   uint32_t dstAlpha;
   bool shadowGroup; // bindGroups.textureBindGroup has the shadow receiver layout
+  uint8_t shadowCascadeMask = 0xf; // per-draw CPU metadata, outside shader/pipeline keys
 };
 
 constexpr uint32_t GXPipelineConfigVersion = 15;
