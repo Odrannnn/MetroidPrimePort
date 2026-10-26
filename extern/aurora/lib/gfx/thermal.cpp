@@ -93,9 +93,21 @@ fn lut(v: f32) -> vec3f {
 
 fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 
+// The opaque copy at the target's own resolution (CopyOpaqueColorBuffer flags 0, 0xf4a30): Remastered
+// renders the scene into the half-resolution target, so each texel holds one scene sample, never an
+// average of the full-resolution pixels it covers. The region maps over the whole frame.
+@fragment
+fn fs_copy(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+  let last = vec2i(textureDimensions(src)) - vec2i(1);
+  let p = min(vec2i(pos.xy * u.fb.xy / u.rt.xy), last);
+  return vec4f(textureLoad(src, p, 0).rgb, 1.0);
+}
+
+// Reads the copy at its texel centres: the hot pass draws into a target the copy's size, so the
+// bilinear clamp sampler returns exactly one texel.
 @fragment
 fn fs_hot(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-  let x = scene(pos.xy / u.rt.xy);
+  let x = scene(pos.xy / u.fb.zw);
   let l = luma(x);
   let heat = u.v.y;
   let lut1 = lut(heat * 1.0 + l);
@@ -159,6 +171,7 @@ static_assert(sizeof(Uniforms) == 28 * 4);
 struct State {
   EncoderTaskId task = InvalidEncoderTask;
   wgpu::RenderPipeline cold;
+  wgpu::RenderPipeline copy;
   wgpu::RenderPipeline hot;
   wgpu::RenderPipeline ghost;
   wgpu::RenderPipeline blurH;
@@ -176,6 +189,8 @@ struct State {
   wgpu::TextureView noiseView;
   std::array<wgpu::Texture, 3> targets;  // the two ping-pong targets and the blur scratch
   std::array<wgpu::TextureView, 3> targetViews;
+  wgpu::Texture opaqueCopy;  // the hot pass's input, the targets' size
+  wgpu::TextureView opaqueCopyView;
   uint32_t targetWidth = 0;
   uint32_t targetHeight = 0;
   uint32_t current = 0;    // the target the next hot pass draws
@@ -275,6 +290,7 @@ void ensure_pipelines(wgpu::TextureFormat format, uint32_t samples) {
     return g_device.CreateRenderPipeline(&descriptor);
   };
   g_state.cold = make("Thermal Cold", "fs_cold", &frameTarget, samples);
+  g_state.copy = make("Thermal Opaque Copy", "fs_copy", &levelTarget, 1);
   g_state.hot = make("Thermal Hot", "fs_hot", &levelTarget, 1);
   g_state.ghost = make("Thermal Ghost", "fs_ghost", &ghostTarget, 1);
   g_state.blurH = make("Thermal Blur H", "fs_blur_h", &levelTarget, 1);
@@ -366,6 +382,15 @@ void ensure_targets(uint32_t width, uint32_t height) {
     g_state.targets[i] = g_device.CreateTexture(&descriptor);
     g_state.targetViews[i] = g_state.targets[i].CreateView();
   }
+  const wgpu::TextureDescriptor copyDescriptor{
+      .label = "Thermal Opaque Copy",
+      .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding,
+      .size = {width, height, 1},
+      .format = TargetFormat,
+  };
+  AURORA_NOTE_TEXTURE(&copyDescriptor);
+  g_state.opaqueCopy = g_device.CreateTexture(&copyDescriptor);
+  g_state.opaqueCopyView = g_state.opaqueCopy.CreateView();
 }
 
 // The HDR targets a pass reads and writes, checked as one whole: the scene format throughout, and a
@@ -531,7 +556,30 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
     pass.Draw(3);
     pass.End();
   };
-  drawTarget("Thermal hot", g_state.hot, makeGroup("Thermal Hot", g_state.frameView, g_state.targetViews[prev]), true, cur);
+  // CopyOpaqueColorBuffer into the target's resolution, then the hot pass reads it texel for texel.
+  const auto copyGroup = makeGroup("Thermal Opaque Copy", g_state.frameView, g_state.targetViews[prev]);
+  {
+    const wgpu::RenderPassColorAttachment attachment{
+        .view = g_state.opaqueCopyView,
+        .loadOp = wgpu::LoadOp::Clear,
+        .storeOp = wgpu::StoreOp::Store,
+        .clearValue = {0.0, 0.0, 0.0, 0.0},
+    };
+    const wgpu::RenderPassDescriptor passDescriptor{
+        .label = "Thermal opaque copy",
+        .colorAttachmentCount = 1,
+        .colorAttachments = &attachment,
+        .timestampWrites = webgpu::gpu_prof::pass_writes("Thermal opaque copy"),
+    };
+    const auto pass = cmd.BeginRenderPass(&passDescriptor);
+    pass.SetViewport(0.f, 0.f, float(regionWidth), float(regionHeight), 0.f, 1.f);
+    pass.SetScissorRect(0, 0, regionWidth, regionHeight);
+    pass.SetPipeline(g_state.copy);
+    pass.SetBindGroup(0, copyGroup);
+    pass.Draw(3);
+    pass.End();
+  }
+  drawTarget("Thermal hot", g_state.hot, makeGroup("Thermal Hot", g_state.opaqueCopyView, g_state.targetViews[prev]), true, cur);
   // Blur mode 2 (LDTA +0x48 -> size index 1 -> blur mode 1, 0xfb1cf0): H into the scratch, V back.
   drawTarget("Thermal blur H", g_state.blurH, makeGroup("Thermal Blur H", g_state.targetViews[cur], g_state.targetViews[prev]), true, 2);
   drawTarget("Thermal blur V", g_state.blurV, makeGroup("Thermal Blur V", g_state.targetViews[2], g_state.targetViews[prev]), true, cur);
