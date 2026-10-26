@@ -1434,6 +1434,19 @@ void DrawShadowReceivers(const float lo[3], const float hi[3]) {
   }
 }
 
+void ForEachShadowReceiver(const float lo[3], const float hi[3],
+                           void (*fn)(void* ctx, const CModel& model, const CTransform4f& xf), void* ctx) {
+  for (const ShadowReceiver& r : sShadowReceivers) {
+    const CVector3f& a = r.bounds.GetMinPoint();
+    const CVector3f& b = r.bounds.GetMaxPoint();
+    if (b.GetX() < lo[0] || a.GetX() > hi[0] || b.GetY() < lo[1] || a.GetY() > hi[1] ||
+        b.GetZ() < lo[2] || a.GetZ() > hi[2]) {
+      continue;
+    }
+    fn(ctx, *r.model, *r.xf);
+  }
+}
+
 bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPlanes& frustum) {
   if (GetMode() == Mode::Off) {
     return false;

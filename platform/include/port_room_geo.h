@@ -290,6 +290,10 @@ void DrawSorted(const void* drawable);
 // the ones whose bounds meet the box in the caller's decal state.
 void ClearShadowReceivers();
 void DrawShadowReceivers(const float lo[3], const float hi[3]);
+// The same receivers whose bounds meet the box, each with its model-to-world transform: what a
+// projected decal clips (port_projected_decal.h).
+void ForEachShadowReceiver(const float lo[3], const float hi[3],
+                           void (*fn)(void* ctx, const CModel& model, const CTransform4f& xf), void* ctx);
 // Set around the renderer's sorted pass for an area Draw stood in for, so that pass
 // draws the actors and leaves the area's own surfaces out.
 extern bool sReplacingArea;

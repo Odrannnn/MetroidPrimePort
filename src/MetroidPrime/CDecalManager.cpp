@@ -8,6 +8,7 @@
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
 #include "port_log.h"
+#include "port_projected_decal.h"
 #endif
 
 rstl::reserved_vector< CDecalManager::SDecal, 64 > CDecalManager::mDecalPool;
@@ -37,6 +38,9 @@ void CDecalManager::Initialize() {
 }
 
 void CDecalManager::ShutDown() {
+#ifdef TARGET_PC
+  PortProjectedDecal::ReleaseAll();
+#endif
   mActiveIndexList.clear();
   mDecalPool.clear();
   mbPoolInitialized = false;
@@ -46,6 +50,9 @@ void CDecalManager::Reinitialize() {
   if (!mbPoolInitialized) {
     Initialize();
   }
+#ifdef TARGET_PC
+  PortProjectedDecal::ReleaseAll();
+#endif
 
   for (int i = 0; i < mDecalPool.capacity(); ++i) {
     mDecalPool[i] = SDecal(rstl::optional_object_null(), TAreaId(0), i - 1, false);
@@ -93,6 +100,7 @@ static void PortAddRemasteredDecal(const TToken< CDecalDescription >& desc, cons
   PortLog::Write("decal: %08X remastered spawn slot %d lifetime %d box %.3f x %.3f x %.3f angle %.4f\n",
                  uint(assetId), index, made.GetPortLifetime(), made.GetPortWidth(),
                  made.GetPortHeight(), made.GetPortBoxDepth(), made.GetPortAngle());
+  PortProjectedDecal::Spawn(index, made, uint(assetId));
 }
 #endif
 
@@ -132,6 +140,9 @@ void CDecalManager::AddDecal(const TToken< CDecalDescription >& desc, const CTra
 
 rstl::reserved_vector< int, 64 >::iterator
 CDecalManager::RemoveFromActiveList(rstl::reserved_vector< int, 64 >::iterator it, int idx) {
+#ifdef TARGET_PC
+  PortProjectedDecal::Release(idx);
+#endif
   AUTO(next, mActiveIndexList.erase(it));
   mDecalPool[idx].mNextFreeIndex = mFreeIndex;
   mFreeIndex = idx;
@@ -201,6 +212,10 @@ void CDecalManager::Update(float dt, CStateManager& mgr) {
 }
 
 void CDecalManager::AddToRenderer(const CFrustumPlanes&, const CStateManager& mgr) {
+#ifdef TARGET_PC
+  // GenerateDecalGeometry's place in RenderPrimaryPass: the opaque world (the receivers) is in.
+  PortProjectedDecal::Build();
+#endif
   AUTO(it, mActiveIndexList.begin());
   AUTO(end, mActiveIndexList.end());
   for (; it != end; ++it) {

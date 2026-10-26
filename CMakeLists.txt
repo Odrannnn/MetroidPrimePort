@@ -266,6 +266,7 @@ set(MP_PORT_SOURCES
     platform/port_map_pickups_index.cpp
     platform/port_viewmodel.cpp
     platform/port_actor_shadow.cpp
+    platform/port_projected_decal.cpp
     platform/port_freecam.cpp
     platform/port_third_person.cpp
     platform/port_third_person_body.cpp
@@ -1382,6 +1383,7 @@ if(MP_BUILD_TESTS)
         INCLUDES include extern/aurora/include
         DEFINITIONS TARGET_PC VERSION=0)
     mp_port_test(port_actor_shadow_tests SOURCES tests/port_actor_shadow.cpp INCLUDES platform/include)
+    mp_port_test(port_projected_decal_tests SOURCES tests/port_projected_decal.cpp INCLUDES platform/include)
     mp_port_test(port_visor_mesh_tests SOURCES tests/port_visor_mesh.cpp INCLUDES platform/include)
     mp_port_test(port_hold_toggle_tests SOURCES tests/port_hold_toggle.cpp INCLUDES platform/include)
     mp_port_test(port_pointer_tests SOURCES tests/port_pointer.cpp INCLUDES platform/include)

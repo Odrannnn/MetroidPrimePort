@@ -11,6 +11,10 @@
 #include "dolphin/gx/GXTev.h"
 #include "dolphin/gx/GXVert.h"
 
+#ifdef TARGET_PC
+#include "port_projected_decal.h"
+#endif
+
 CRandom16 CDecal::sDecalRandom(99);
 bool CDecal::sMoveRedToAlphaBuffer = false;
 
@@ -77,6 +81,15 @@ private:
   CGlobalRandom mRandom;
   bool mPrev;
 };
+// Explode 0x10121cc builds the decal's transform with Remastered's LookAt (forward is local Z, the
+// hit normal) where retail's has forward on Y: same normal, same position, Remastered's basis.
+CTransform4f PortRemasteredBase(const CTransform4f& xf) {
+  const CVector3f y = xf.GetColumn(kDY);
+  const PortProjectedDecal::Basis b = PortProjectedDecal::LookAt({y.GetX(), y.GetY(), y.GetZ()});
+  const CVector3f t = xf.GetTranslation();
+  return CTransform4f(b.x.x, b.y.x, b.z.x, t.GetX(), b.x.y, b.y.y, b.z.y, t.GetY(), b.x.z, b.y.z, b.z.z,
+                      t.GetZ());
+}
 } // namespace
 
 CDecal::CDecal(const TToken< CDecalDescription >& desc, uint seed, const CTransform4f& xf)
@@ -89,8 +102,8 @@ CDecal::CDecal(const TToken< CDecalDescription >& desc, uint seed, const CTransf
 , x6c_elapsedTime(0.f)
 , xPortRemastered(true)
 , xPortRandom(seed)
-, xPortBaseTransform(xf)
-, xPortTransform(xf)
+, xPortBaseTransform(PortRemasteredBase(xf))
+, xPortTransform(xPortBaseTransform)
 // Default extents (1, 1) (static init 0xb7df60 -> 0x459abf0) and the box height 0.5 (0x1d0e0b0).
 , xPortWidth(1.f)
 , xPortHeight(1.f)
