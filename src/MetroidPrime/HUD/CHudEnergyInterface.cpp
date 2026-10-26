@@ -30,7 +30,7 @@ static const wchar_t* EnergyLowString() {
 #ifdef TARGET_PC
   return CSamusHud::PortHudString(9);
 #else
-  return EnergyLowString();
+  return gpStringTable->GetString(9);
 #endif
 }
 

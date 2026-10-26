@@ -17,6 +17,21 @@
 #include <float.h>
 #include <stdio.h>
 
+#ifdef TARGET_PC
+#include "MetroidPrime/HUD/CSamusHud.hpp"
+#include "port_disc.h"
+#endif
+
+// @ fn_800E6414: Trilogy reads the missile warnings from STRG_Hud entries 11 and 12, GC from the
+// main table's entries 12 and 13.
+static const wchar_t* MissileHudString(int mainIdx) {
+#ifdef TARGET_PC
+  return CSamusHud::PortHudString(mainIdx);
+#else
+  return gpStringTable->GetString(mainIdx);
+#endif
+}
+
 static const char skMissileGroupWidgetName[] = "basewidget_missileicon";
 static const char skMissileDigitsWidgetName[] = "textpane_missiledigits";
 static const char skMissileBarWidgetName[] = "energybart01_missilebar";
@@ -104,6 +119,12 @@ CHudMissileInterface::CHudMissileInterface(CGuiFrame& hud, int capacity, int mis
   x60_textpane_missiledigits->TextSupport().SetFontColor(gpTweakGuiColors->GetMissileDigitsFont());
   x60_textpane_missiledigits->TextSupport().SetOutlineColor(
       gpTweakGuiColors->GetMissileDigitsOutline());
+#ifdef TARGET_PC
+  // @ fn_800E5780 800E5984..800E598C: Trilogy draws the digits without the depth test.
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    x60_textpane_missiledigits->SetDepthTest(false);
+  }
+#endif
   x74_basewidget_missileicon->SetColor(gpTweakGuiColors->GetMissileIconColorInactive());
   x64_energybart01_missilebar->SetEmptyColor(gpTweakGuiColors->GetMissileBarEmpty());
   x64_energybart01_missilebar->SetFilledColor(gpTweakGuiColors->GetMissileBarFilled());
@@ -131,9 +152,20 @@ CHudMissileInterface::CHudMissileInterface(CGuiFrame& hud, int capacity, int mis
 void CHudMissileInterface::SetMissileCapacity(int capacity) { x4_missileCapacity = capacity; }
 
 void CHudMissileInterface::SetNumMissiles(int missiles, const CStateManager& mgr) {
-  char digits[4];
-  sprintf(digits, "%3d", CMath::Clamp(0, missiles, 999));
-  x60_textpane_missiledigits->TextSupport().SetText(rstl::string(digits));
+#ifdef TARGET_PC
+  // @ fn_800E5B04: Trilogy shows the count over the capacity, "%03d/%03d" (lbl_80470E48).
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    char trilogyDigits[16];
+    sprintf(trilogyDigits, "%03d/%03d", CMath::Clamp(0, missiles, 999),
+            CMath::Clamp(0, x4_missileCapacity, 999));
+    x60_textpane_missiledigits->TextSupport().SetText(rstl::string(trilogyDigits));
+  } else
+#endif
+  {
+    char digits[4];
+    sprintf(digits, "%3d", CMath::Clamp(0, missiles, 999));
+    x60_textpane_missiledigits->TextSupport().SetText(rstl::string(digits));
+  }
   if (x8_numMissiles < missiles) {
     xc_arrowTimer = gpTweakGui->GetMissileArrowVisTime();
     x54_missileIconIncrement = -FLT_EPSILON;
@@ -242,8 +274,8 @@ void CHudMissileInterface::Update(float dt, const CStateManager& mgr) {
     const EInventoryStatus status = GetMissileInventoryStatus();
     if (status != x44_latestStatus) {
       const rstl::wstring text =
-          status == kIS_Warning    ? rstl::wstring_l(gpStringTable->GetString(12))
-          : status == kIS_Depleted ? rstl::wstring_l(gpStringTable->GetString(13))
+          status == kIS_Warning    ? rstl::wstring_l(MissileHudString(12))
+          : status == kIS_Depleted ? rstl::wstring_l(MissileHudString(13))
                                    : rstl::wstring_l(L"");
       x68_textpane_missilewarning->TextSupport().SetText(text);
       if (x44_latestStatus == kIS_Normal && status == kIS_Warning) {
