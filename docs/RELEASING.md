@@ -188,7 +188,7 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
 | Linux | `tools/make_flatpak.sh` | Flatpak | manifest installs a working tree and collects notices; builds (`tools/make_flatpak.sh` writes `build/flatpak/MetroidPrimePort.flatpak`). The app id is `io.github.odrannnn.metroidprimeport`, with AppStream metainfo shipped |
 | Windows | `.github/workflows/windows.yml` | zipped `dist/`, x64 and arm64 | weekly (Mondays) and manual trigger; green when run, artifact uploaded, packaged startup checked. arm64 builds natively on `windows-11-arm` with vcpkg's OpenSSL, never run on a real Windows on Arm machine |
 | macOS | `.github/workflows/macos.yml` | ad-hoc signed `.app` (arm64) + `licenses/` | experimental; weekly and manual trigger; builds, tests and packaged startup checked in CI, never run on a real Mac |
-| iOS | `.github/workflows/ios.yml` | unsigned `.ipa` (arm64, iOS 16+) | manual trigger; Simulator smoke test in CI, never run on a real iPhone or iPad (`docs/IOS.md`) |
+| iOS | `.github/workflows/ios.yml` | unsigned `.ipa` (arm64, iOS 16+) | manual trigger; device build only, never run on a real iPhone or iPad (`docs/IOS.md`) |
 | Android | `tools/android_apk.sh :app:assembleRelease` | APK | builds, signed with this project's own key; runs on-device (POCO F8 Ultra, 60 FPS), touch/Continue-load still unverified |
 
 The Linux binary is the only one with a test suite attached: 54 `port`-labelled

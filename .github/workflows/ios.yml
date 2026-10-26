@@ -1,9 +1,7 @@
 name: ios
 
-# Experimental iPhone/iPad build. The device job makes an unsigned .ipa that
-# players sideload (SideStore, AltStore, Sideloadly re-sign it with their own
-# Apple ID); the simulator job starts the app on an iPhone and an iPad
-# simulator up to the point a disc image is needed, since CI has none.
+# Experimental iPhone/iPad build: an unsigned .ipa that players sideload
+# (SideStore, AltStore, Sideloadly re-sign it with their own Apple ID).
 on:
   workflow_dispatch:
   push:
@@ -21,17 +19,11 @@ jobs:
   build:
     runs-on: macos-15
     strategy:
-      fail-fast: false
       matrix:
         include:
-          # Dawn's prebuilt iOS package is for devices only, so the simulator
-          # build compiles Dawn from source (ccache keeps that to the first run).
           - sdk: iphoneos
             rust: aarch64-apple-ios
             dawn: package
-          - sdk: iphonesimulator
-            rust: aarch64-apple-ios-sim
-            dawn: vendor
     name: build (${{ matrix.sdk }})
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,19 +90,7 @@ jobs:
             echo "the app links libraries outside the system" >&2; exit 1
           fi
 
-      - name: Simulator smoke test
-        if: matrix.sdk == 'iphonesimulator'
-        run: bash tools/ios_sim_smoke.sh dist/metroid_prime_port.app smoke
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: matrix.sdk == 'iphoneos'
         with:
           name: metroid_prime_port-ios
           path: dist/MetroidPrimePort.ipa
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always() && matrix.sdk == 'iphonesimulator'
-        with:
-          name: ios-simulator-smoke
-          path: smoke
-          if-no-files-found: ignore

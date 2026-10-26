@@ -3,8 +3,7 @@
 ## Status
 
 **Experimental, and untested on real hardware.** The build is made in CI on
-GitHub's macOS runners. Each run also starts the app in the iOS Simulator as a
-smoke test. Nobody working on the port owns an iPhone or iPad, so the first
+GitHub's macOS runners. Nobody working on the port owns an iPhone or iPad, so the first
 reports from testers are what will show whether it plays. Please open an issue
 and attach the log (see [Where things are](#where-things-are)).
 
@@ -73,6 +72,7 @@ Apple ID.
 ## Building
 
 CI builds it: `.github/workflows/ios.yml` runs CMake with the iOS toolchain
-for `iphoneos` and `iphonesimulator`, then `tools/ios_package.sh` packages the
-`.app`, and `tools/ios_sim_smoke.sh` runs the Simulator smoke test. A local
-build needs a Mac with Xcode; the configure flags are in the workflow.
+for `iphoneos`, then `tools/ios_package.sh` packages the `.app`. A local build
+needs a Mac with Xcode; the configure flags are in the workflow. On a Mac,
+`tools/ios_sim_smoke.sh` starts an `iphonesimulator` build on an iPhone and an
+iPad simulator up to the disc prompt; CI no longer runs it.
