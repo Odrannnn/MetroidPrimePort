@@ -17,6 +17,7 @@ constexpr float Lambda = 0.8f;
 constexpr float Padding = 2.5f;
 constexpr float DefaultDistance = 350.f;
 constexpr uint32_t DefaultSize = 1024;
+constexpr uint8_t All = (1u << Count) - 1u;
 
 // The camera's perspective: its extents on the near plane (view space, GX looks down -z) and its
 // near and far distances.
@@ -46,4 +47,8 @@ void splits(float znear, float zfar, float distance, float out[Count]);
 // Fits every cascade; viewToWorld is GX's view matrix inverted (3 rows of 4).
 void fit(const Basis& basis, const float viewToWorld[3][4], const Frustum& frustum, const float split[Count],
          uint32_t size, Fit out[Count]);
+// Conservative membership of a world-space box in the fitted maps. vs_shadow pancakes casters
+// toward the sun onto the near plane, so only the far z plane rejects them. Uncertain bounds
+// retain every cascade. Fit once per frame, then reuse the basis/fits for every box.
+uint8_t box_mask(const Basis& basis, const Fit (&fits)[Count], const float min[3], const float max[3]);
 } // namespace aurora::gfx::shadow::cascade

@@ -124,4 +124,43 @@ void fit(const Basis& basis, const float viewToWorld[3][4], const Frustum& frust
     cas.clip[3][3] = 1.f;
   }
 }
+uint8_t box_mask(const Basis& basis, const Fit (&fits)[Count], const float min[3], const float max[3]) {
+  for (int i = 0; i < 3; ++i) {
+    if (!std::isfinite(min[i]) || !std::isfinite(max[i]) || min[i] > max[i]) {
+      return All;
+    }
+    for (const auto& f : fits) {
+      if (!std::isfinite(f.lo[i]) || !std::isfinite(f.hi[i]) || f.lo[i] >= f.hi[i]) {
+        return All;
+      }
+    }
+  }
+  const float* axes[3] = {basis.x, basis.y, basis.z};
+  float lo[3], hi[3];
+  for (int a = 0; a < 3; ++a) {
+    float mid = 0.f, half = 0.f;
+    for (int i = 0; i < 3; ++i) {
+      if (!std::isfinite(axes[a][i])) {
+        return All;
+      }
+      mid += axes[a][i] * (min[i] * 0.5f + max[i] * 0.5f);
+      half += std::fabs(axes[a][i]) * (max[i] * 0.5f - min[i] * 0.5f);
+    }
+    // Allow for rounding in transformed model bounds and the shader's matrix arithmetic.
+    const float margin = 1e-4f + 1e-5f * (std::fabs(mid) + half);
+    lo[a] = mid - half - margin;
+    hi[a] = mid + half + margin;
+    if (!std::isfinite(lo[a]) || !std::isfinite(hi[a])) {
+      return All;
+    }
+  }
+  uint8_t mask = 0;
+  for (int c = 0; c < Count; ++c) {
+    const auto& f = fits[c];
+    if (hi[0] >= f.lo[0] && lo[0] <= f.hi[0] && hi[1] >= f.lo[1] && lo[1] <= f.hi[1] && lo[2] <= f.hi[2]) {
+      mask |= 1u << c;
+    }
+  }
+  return mask;
+}
 } // namespace aurora::gfx::shadow::cascade

@@ -6,6 +6,8 @@
 
 #include "gx_test_common.hpp"
 #include "__gx.h"
+#include "gx/pipeline.hpp"
+#include "gfx/shadow.hpp"
 #include <dolphin/gx/GXExtra.h>
 
 #include <algorithm>
@@ -86,6 +88,186 @@ static bool has_aurora_cmd(const std::vector<u8>& bytes, u16 cmd) {
 static u32 read_fifo_u32(const std::vector<u8>& bytes, size_t offset) {
   return (static_cast<u32>(bytes[offset]) << 24) | (static_cast<u32>(bytes[offset + 1]) << 16) |
          (static_cast<u32>(bytes[offset + 2]) << 8) | static_cast<u32>(bytes[offset + 3]);
+}
+
+namespace aurora::gfx {
+extern bool g_testMergeDraws;
+extern uint32_t g_testVertexEnd;
+extern gx::DrawData g_testLastDraw;
+namespace shadow {
+extern bool g_testShadowFrameActive;
+extern uint32_t g_testShadowFitCalls;
+extern std::vector<uint8_t> g_testCasterMasks;
+}
+namespace actor_shadow {
+extern std::vector<uint8_t> g_testCasterMasks;
+}
+} // namespace aurora::gfx
+namespace aurora::gx {
+extern bool g_testShadowCasters;
+}
+
+namespace {
+class GXShadowMaskFifoTest : public GXFifoTest {
+protected:
+  void SetUp() override {
+    GXFifoTest::SetUp();
+    GXPortSetShadowCascadeMask(0xf);
+    capture_fifo();
+    aurora::gfx::g_testDrawCount = 0;
+    aurora::gfx::g_testVertexEnd = 0;
+    aurora::gfx::g_testMergeDraws = false;
+    aurora::gx::g_testShadowCasters = false;
+    aurora::gfx::shadow::g_testShadowFrameActive = false;
+    aurora::gfx::shadow::g_testShadowFitCalls = 0;
+    aurora::gfx::shadow::g_testCasterMasks.clear();
+    aurora::gfx::actor_shadow::g_testCasterMasks.clear();
+  }
+  void TearDown() override {
+    GXPortSetShadowCascadeMask(0xf);
+    capture_fifo();
+    aurora::gfx::g_testMergeDraws = false;
+    aurora::gx::g_testShadowCasters = false;
+    aurora::gfx::shadow::g_testShadowFrameActive = false;
+    GXFifoTest::TearDown();
+  }
+  static void frame(float distance = 350.f) {
+    const f32 view[3][4] = {{1.f, 0.f, 0.f, 0.f}, {0.f, 1.f, 0.f, 0.f}, {0.f, 0.f, 1.f, 0.f}};
+    const f32 frustum[6] = {-1.f, 1.f, 1.f, -1.f, 1.f, 1000.f};
+    const f32 sun[3] = {0.f, 0.f, 1.f};
+    const f32 color[3] = {1.f, 1.f, 1.f};
+    GXPortSetShadowFrame(view, frustum, sun, distance, color);
+  }
+  static void triangle_format() {
+    GXClearVtxDesc();
+    GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_U8, 0);
+  }
+  static void triangle() {
+    GXBegin(GX_TRIANGLES, GX_VTXFMT0, 3);
+    GXPosition3u8(0, 1, 2);
+    GXPosition3u8(3, 4, 5);
+    GXPosition3u8(6, 7, 8);
+    GXEnd();
+  }
+};
+} // namespace
+
+TEST_F(GXShadowMaskFifoTest, MaskIsOrderedCpuStateAndMasksUnknownBits) {
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 0xf);
+  GXPortSetShadowCascadeMask(2);
+  auto bytes = capture_fifo();
+  EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_PORT_SHADOW_MASK));
+  decode_fifo(bytes);
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 2);
+  EXPECT_EQ(GXPortGetShadowCascadeMask(), 2);
+  GXPortSetShadowCascadeMask(2);
+  EXPECT_TRUE(capture_fifo().empty());
+  GXPortSetShadowCascadeMask(8);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 8);
+  GXPortSetShadowCascadeMask(0);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 0);
+  GXPortSetShadowCascadeMask(0xff);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 0xf);
+}
+
+TEST_F(GXShadowMaskFifoTest, ShadowFrameResetsProducerAndDecodedMembershipEvenWhenInactive) {
+  GXPortSetShadowCascadeMask(2);
+  decode_fifo(capture_fifo());
+  frame();
+  EXPECT_EQ(GXPortGetShadowCascadeMask(), 0xf);
+  // The frame command resets decoder state independently of the producer's redundant-write cache.
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 0xf);
+  g_gxState.shadowCascadeMask = 2;
+  frame(0.f);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 0xf);
+  EXPECT_FALSE(g_gxState.shadowActive);
+}
+
+TEST_F(GXShadowMaskFifoTest, BoxAndInfoQueriesReuseCurrentProducerFrameFits) {
+  frame(0.f);
+  EXPECT_FALSE(GXPortShadowFrameActive());
+  aurora::gfx::shadow::g_testShadowFitCalls = 0;
+  aurora::gfx::shadow::g_testShadowFrameActive = true;
+  frame();
+  EXPECT_TRUE(GXPortShadowFrameActive());
+  EXPECT_EQ(aurora::gfx::shadow::g_testShadowFitCalls, 1u);
+  const f32 lo[3] = {11.f, 0.f, -100.f}, hi[3] = {12.f, 1.f, -99.f};
+  for (int i = 0; i < 20; ++i) {
+    EXPECT_EQ(GXPortShadowBoxMask(lo, hi), 2);
+    EXPECT_TRUE(GXPortShadowBoxCasts(lo, hi));
+  }
+  f32 sun[3], color[3], distance, center[3];
+  u32 casters;
+  GXPortGetShadowInfo(sun, color, &distance, center, &casters);
+  EXPECT_EQ(distance, 350.f);
+  EXPECT_EQ(center[0], 30.f);
+  EXPECT_EQ(aurora::gfx::shadow::g_testShadowFitCalls, 1u);
+  frame(0.f);
+  EXPECT_FALSE(GXPortShadowFrameActive());
+  EXPECT_EQ(GXPortShadowBoxMask(lo, hi), 0);
+  GXPortGetShadowInfo(sun, color, &distance, center, &casters);
+  EXPECT_EQ(distance, 0.f);
+  EXPECT_EQ(aurora::gfx::shadow::g_testShadowFitCalls, 2u);
+  frame();
+  EXPECT_TRUE(GXPortShadowFrameActive());
+  EXPECT_EQ(aurora::gfx::shadow::g_testShadowFitCalls, 3u);
+}
+
+TEST_F(GXShadowMaskFifoTest, ColorDrawsMergeOnlyWithIdenticalMembership) {
+  aurora::gfx::g_testMergeDraws = true;
+  triangle_format();
+  triangle();
+  decode_fifo(flush_and_capture());
+  ASSERT_EQ(aurora::gfx::g_testDrawCount, 1u);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.shadowCascadeMask, 0xf);
+  GXPortSetShadowCascadeMask(2);
+  triangle();
+  decode_fifo(flush_and_capture());
+  ASSERT_EQ(aurora::gfx::g_testDrawCount, 2u);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.shadowCascadeMask, 2);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.vtxCount, 3u);
+  triangle();
+  decode_fifo(flush_and_capture());
+  EXPECT_EQ(aurora::gfx::g_testDrawCount, 2u);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.vtxCount, 6u);
+  GXPortSetShadowCascadeMask(0xf);
+  triangle();
+  decode_fifo(flush_and_capture());
+  EXPECT_EQ(aurora::gfx::g_testDrawCount, 3u);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.shadowCascadeMask, 0xf);
+}
+
+TEST_F(GXShadowMaskFifoTest, SunCastersKeepMembershipAndActorCastersRetainAllLayers) {
+  aurora::gx::g_testShadowCasters = true;
+  aurora::gfx::shadow::g_testShadowFrameActive = true;
+  frame();
+  GXPortSetShadowCaster(true);
+  GXPortSetShadowCascadeMask(2);
+  triangle_format();
+  triangle();
+  decode_fifo(flush_and_capture());
+  ASSERT_EQ(aurora::gfx::shadow::g_testCasterMasks.size(), 1u);
+  EXPECT_EQ(aurora::gfx::shadow::g_testCasterMasks.back(), 2);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.shadowCascadeMask, 2);
+  const f32 clip[16] = {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
+                        0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f};
+  GXPortActorShadowCasters(0, clip);
+  triangle();
+  GXPortActorShadowEnd();
+  decode_fifo(flush_and_capture());
+  ASSERT_EQ(aurora::gfx::actor_shadow::g_testCasterMasks.size(), 1u);
+  EXPECT_EQ(aurora::gfx::actor_shadow::g_testCasterMasks.back(), 0xf);
+  EXPECT_EQ(g_gxState.shadowCascadeMask, 2);
+  triangle();
+  decode_fifo(flush_and_capture());
+  ASSERT_EQ(aurora::gfx::shadow::g_testCasterMasks.size(), 2u);
+  EXPECT_EQ(aurora::gfx::shadow::g_testCasterMasks.back(), 2);
 }
 
 TEST_F(GXFifoTest, FifoPublishesOnlyAtExplicitBoundary) {

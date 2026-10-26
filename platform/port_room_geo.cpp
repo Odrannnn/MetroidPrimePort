@@ -1662,6 +1662,7 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     const float* lightmap;
     const Placed* driven; // its float driver's instance, or null
     const CModelFlags* flags;
+    bool rigidBounds;
   };
   static std::vector< Visible > visible;
   visible.clear();
@@ -1671,9 +1672,10 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
   static const CTransform4f kIdentity = CTransform4f::Identity();
   const auto add = [&](Model& model, const CModel& drawn, const CTransform4f& xf, CActorLights* lights,
                        const CAABox& bounds, const float* glow = nullptr, const float* lightmap = nullptr,
-                        bool inView = true, const Placed* driven = nullptr, const CModelFlags* flags = nullptr) {
+                       bool inView = true, const Placed* driven = nullptr, const CModelFlags* flags = nullptr,
+                       bool rigidBounds = true) {
     (inView ? visible : casters)
-        .push_back({cutout(model), distanceSq(bounds), &drawn, &xf, lights, &bounds, glow, lightmap, driven, flags});
+        .push_back({cutout(model), distanceSq(bounds), &drawn, &xf, lights, &bounds, glow, lightmap, driven, flags, rigidBounds});
     if (inView && !visible.back().cutout) {
       sShadowReceivers.push_back({&drawn, &xf, bounds});
     }
@@ -1740,8 +1742,10 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     item.level = pickLevel(model, model.levels.size(), item.bounds, item.scaleSq);
     const CModelData& data = item.level < 0 ? *model.data : *model.levels[item.level].data;
     const CModel& cmodel = **data.PickStaticModel(CModelData::kWM_Normal);
+    const bool rigidBounds = item.anim.empty() && item.platform == 0 && item.follow == 0 && !item.driven && !item.modulated;
     if (casts) {
-      add(model, cmodel, item.xf, item.lights.get(), item.bounds, nullptr, nullptr, false, item.driven ? &item : nullptr);
+      add(model, cmodel, item.xf, item.lights.get(), item.bounds, nullptr, nullptr, false,
+          item.driven ? &item : nullptr, nullptr, rigidBounds);
       continue;
     }
     if (item.level >= 0) {
@@ -1763,7 +1767,7 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
       continue;
     }
     add(model, cmodel, item.xf, item.lights.get(), item.bounds, item.glows ? item.glow : nullptr, item.lightmap, true,
-        item.driven ? &item : nullptr);
+        item.driven ? &item : nullptr, nullptr, rigidBounds);
     if (!cmodel.IsDefinitelyOpaque()) {
       area.sorted.push_back(&item);
     }
@@ -1776,7 +1780,45 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
       return a.cutout != b.cutout ? b.cutout : a.distanceSq < b.distanceSq;
     });
   }
+  const bool filterShadows = GXPortShadowFrameActive() && GXPortShadowCascadeCulling();
   const auto drawOne = [&](const Visible& draw) {
+    struct MaskScope {
+      bool enabled;
+      u8 prior;
+      explicit MaskScope(bool on) : enabled(on), prior(on ? GXPortGetShadowCascadeMask() : 0xf) {}
+      ~MaskScope() {
+        if (enabled) GXPortSetShadowCascadeMask(prior);
+      }
+    } maskScope(filterShadows);
+    // No material reads, bound transforms or mask commands when no sun map is active.
+    if (filterShadows) {
+      u8 mask = 0xf;
+      bool rigid = draw.rigidBounds && draw.flags == nullptr;
+      const CCubeModel* cube = draw.model->GetCubeModel();
+      rigid = rigid && cube != nullptr && cube->PortMaterialCount() != 0;
+      for (uint i = 0; rigid && i < cube->PortMaterialCount(); ++i) {
+        float values[19];
+        // Only ordinary rigid PBR surfaces have verified bounds. Procedural wind (32768),
+        // special materials and unknown records retain the reference all-layer path.
+        rigid = cube->PortReadPBRMaterial(i, values) != 0 && std::isfinite(values[13]) &&
+                std::fabs(values[13]) < 0.5f && std::isfinite(values[7]) && values[7] >= 0.f &&
+                values[7] < 16777216.f && (static_cast<uint32_t>(values[7] + 0.5f) & 32768u) == 0;
+      }
+      if (rigid) {
+        // Use the actual chosen LoD or merged model's box, transformed by its draw matrix.
+        // Merged clusters already contain world-space vertices and use the identity.
+        const CAABox bounds = draw.model->GetBoundingBox().GetTransformedAABox(*draw.xf);
+        const auto& lo = bounds.GetMinPoint();
+        const auto& hi = bounds.GetMaxPoint();
+        const float min[3] = {lo.GetX(), lo.GetY(), lo.GetZ()};
+        const float max[3] = {hi.GetX(), hi.GetY(), hi.GetZ()};
+        mask = GXPortShadowBoxMask(min, max);
+      }
+      GXPortSetShadowCascadeMask(mask);
+      if (mask == 0 && GXPortGetShadowCasterMode() == 2) {
+        return;
+      }
+    }
     if (bakes(draw.lightmap)) {
       const CVector3f centre = draw.bounds->GetCenterPoint();
       const float at[3] = {centre.GetX(), centre.GetY(), centre.GetZ()};

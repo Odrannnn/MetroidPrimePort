@@ -825,6 +825,7 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
       .bindGroups = cache.bindGroups,
       .dstAlpha = state.dstAlpha,
       .shadowGroup = cache.shaderInfo.shadowReceive,
+      .shadowCascadeMask = state.actorLayer >= 0 ? u8(0xf) : state.shadowCascadeMask,
   };
   if (!state.shadowCasterOnly) {
     gfx::push_draw_command(draw);
@@ -897,7 +898,8 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader& 
   const bool cleanState = g_gxState.dirty == 0 && !g_gxState.shadowCasterOnly && g_gxState.actorLayer < 0 && fmt == sDrawCache.lastDrawFmt && sDrawCache.lineMode == 0 &&
                           prim != GX_LINES && prim != GX_LINESTRIP && prim != GX_POINTS;
   auto* lastDraw = cleanState ? gfx::get_last_draw_command<DrawData>() : nullptr;
-  const bool canMerge = lastDraw != nullptr && lastDraw->instanceCount == 1;
+  const bool canMerge = lastDraw != nullptr && lastDraw->instanceCount == 1 &&
+                        lastDraw->shadowCascadeMask == g_gxState.shadowCascadeMask;
 
   // Push raw vertex data to buffer. Merged draws must remain contiguous with the previous range.
   const auto vertexData = reader.take(totalVtxBytes);
@@ -1698,7 +1700,10 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.shadowCaster = on;
       g_gxState.dirty |= DirtyPipeline;
     }
+  } else if (subCmd == GX_AURORA_PORT_SHADOW_MASK) {
+    g_gxState.shadowCascadeMask = reader.read<u8>() & gfx::shadow::cascade::All;
   } else if (subCmd == GX_AURORA_PORT_SHADOW_FRAME) {
+    g_gxState.shadowCascadeMask = gfx::shadow::cascade::All;
     f32 worldToView[3][4];
     for (auto& row : worldToView) {
       for (f32& v : row) {

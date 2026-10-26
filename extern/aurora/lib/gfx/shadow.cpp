@@ -24,10 +24,10 @@
 
 // The sun's cascaded shadow map. set_frame fits Remastered's four cascades (shadow_cascade.cpp) to
 // the camera, each snapped to whole texels so it does not swim as the camera moves. The casters (the
-// frame's opaque world draws, re-drawn depth only with a vs_shadow pipeline) are drawn into every
-// cascade once the frame's scene is, and the next frame's receivers read them through the matrices of
-// the frame they were drawn in, so a receiver lags the camera by one frame but never reads a map half
-// drawn.
+// frame's opaque world draws, re-drawn depth only with a vs_shadow pipeline) are drawn into their
+// relevant cascades once the frame's scene is, and the next frame's receivers use the matrices of
+// the frame they were drawn in, so a receiver lags the camera by one frame but never reads a map
+// half drawn.
 namespace aurora::gfx::shadow {
 namespace {
 Module Log("aurora::gfx::shadow");
@@ -60,6 +60,8 @@ std::array<std::vector<gx::DrawData>, 8> g_recorded;
 uint32_t g_nextSlot = 0;
 // Read by the console from the main thread.
 std::atomic<uint32_t> g_lastCasterCount{0};
+std::array<std::atomic<uint32_t>, cascade::Count> g_lastLayerCounts{};
+std::atomic<uint32_t> g_lastRejected{0};
 
 uint32_t map_size() {
   static const uint32_t size = [] {
@@ -149,8 +151,9 @@ void encode(const EncoderTaskContext&, const wgpu::CommandEncoder& cmd, const vo
   std::memcpy(&slot, payload, sizeof(slot));
   const auto& casters = g_recorded[slot % g_recorded.size()];
   const auto& resources = detail::resources();
-  // Every caster into every cascade (vs_shadow reads the cascade from the immediates' serial); the
-  // ones outside a cascade's box are clipped.
+  // Membership was computed against this frame's fits before recording. Unknown/deforming
+  // geometry retains every bit. vs_shadow selects its cascade using the immediates' serial.
+  uint32_t rejected = 0;
   for (uint32_t c = 0; c < cascade::Count; ++c) {
     const wgpu::RenderPassDepthStencilAttachment depth{
         .view = g_state.layerViews[c],
@@ -165,7 +168,12 @@ void encode(const EncoderTaskContext&, const wgpu::CommandEncoder& cmd, const vo
     };
     const auto pass = cmd.BeginRenderPass(&passDescriptor);
     pass.SetBindGroup(0, resources.staticBindGroup);
+    uint32_t submitted = 0;
     for (const auto& draw : casters) {
+      if ((draw.shadowCascadeMask & (1u << c)) == 0) {
+        ++rejected;
+        continue;
+      }
       wgpu::RenderPipeline pipeline;
       if (!get_pipeline(draw.pipeline, pipeline)) {
         continue;
@@ -185,9 +193,12 @@ void encode(const EncoderTaskContext&, const wgpu::CommandEncoder& cmd, const vo
       } else {
         pass.DrawIndexed(draw.indexCount, draw.instanceCount);
       }
+      ++submitted;
     }
     pass.End();
+    g_lastLayerCounts[c].store(submitted, std::memory_order_relaxed);
   }
+  g_lastRejected.store(rejected, std::memory_order_relaxed);
   forget_texture_group();
 }
 } // namespace
@@ -269,24 +280,7 @@ bool box_casts(const float worldToView[3][4], const cascade::Frustum& frustum, c
   if (!fit_frame(worldToView, frustum, sunDir, distance, fits) || !cascade::light_basis(sunDir, basis)) {
     return false;
   }
-  // The world box on each light axis.
-  const float* axes[3] = {basis.x, basis.y, basis.z};
-  float lo[3];
-  float hi[3];
-  for (int a = 0; a < 3; ++a) {
-    float mid = 0.f;
-    float half = 0.f;
-    for (int i = 0; i < 3; ++i) {
-      mid += axes[a][i] * (min[i] + max[i]) * 0.5f;
-      half += std::fabs(axes[a][i]) * (max[i] - min[i]) * 0.5f;
-    }
-    lo[a] = mid - half;
-    hi[a] = mid + half;
-  }
-  // Any distance toward the sun casts: vs_shadow pancakes it onto the map's near plane.
-  return std::any_of(fits, fits + cascade::Count, [&](const cascade::Fit& fit) {
-    return hi[0] >= fit.lo[0] && lo[0] <= fit.hi[0] && hi[1] >= fit.lo[1] && lo[1] <= fit.hi[1] && lo[2] <= fit.hi[2];
-  });
+  return cascade::box_mask(basis, fits, min, max) != 0;
 }
 
 void add_caster(const gx::DrawData& draw) {
@@ -296,6 +290,13 @@ void add_caster(const gx::DrawData& draw) {
 }
 
 uint32_t last_caster_count() { return g_lastCasterCount.load(std::memory_order_relaxed); }
+
+void last_layer_counts(uint32_t submitted[4], uint32_t& rejected) {
+  for (int c = 0; c < cascade::Count; ++c) {
+    submitted[c] = g_lastLayerCounts[c].load(std::memory_order_relaxed);
+  }
+  rejected = g_lastRejected.load(std::memory_order_relaxed);
+}
 
 bool record() {
   if (g_state.task == InvalidEncoderTask || !g_state.pendingActive || !g_state.mapView) {
@@ -345,6 +346,11 @@ void shutdown() {
   g_state = {};
   g_casters = {};
   g_recorded = {};
+  g_lastCasterCount.store(0, std::memory_order_relaxed);
+  for (auto& count : g_lastLayerCounts) {
+    count.store(0, std::memory_order_relaxed);
+  }
+  g_lastRejected.store(0, std::memory_order_relaxed);
   if (task != InvalidEncoderTask) {
     unregister_encoder_task_type(task);
   }

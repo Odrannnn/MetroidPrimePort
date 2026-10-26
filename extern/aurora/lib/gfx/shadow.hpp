@@ -47,6 +47,8 @@ bool box_casts(const float worldToView[3][4], const cascade::Frustum& frustum, c
                const float min[3], const float max[3]);
 // How many draws the last recorded map had (any thread).
 uint32_t last_caster_count();
+// Last encoded map: actual submissions per cascade and otherwise eligible layer draws omitted.
+void last_layer_counts(uint32_t submitted[4], uint32_t& rejected);
 // A draw that casts into this frame's map (FIFO processor).
 void add_caster(const gx::DrawData& draw);
 // Records the map's pass over the casters added since the last (FIFO processor).

@@ -21,6 +21,7 @@
 #include "internal.hpp"
 #include "webgpu/gpu.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <fmt/format.h>
@@ -138,9 +139,16 @@ bool scene_hdr_pass_active() noexcept;
 namespace aurora::gx {
 // How many times a draw rebuilt its pipeline config; the HDR bit is taken as the real one takes it.
 uint32_t g_testPopulateCount = 0;
+bool g_testShadowCasters = false;
 void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXVtxFmt fmt) noexcept {
   ++g_testPopulateCount;
   config.shaderConfig.sceneHdr = gfx::scene_hdr_pass_active();
+  if (g_testShadowCasters) {
+    config.depthCompare = true;
+    config.depthUpdate = true;
+    config.blendMode = GX_BM_NONE;
+    config.shaderConfig.alphaCompare = {};
+  }
 }
 bool per_pixel_lighting() noexcept { return false; }
 // The GPU self-test is not linked here; its blocking lookups stay off.
@@ -149,6 +157,7 @@ GXBindGroups build_bind_groups(const ShaderInfo& info) noexcept { return {}; }
 ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
   ShaderInfo info{};
   info.usesHdrTone = config.sceneHdr && !config.pbr;
+  info.usesShadow = g_testShadowCasters;
   return info;
 }
 uint32_t g_testUniformBuildCount = 0;
@@ -182,7 +191,20 @@ void aurora_get_pipeline_stats(AuroraPipelineStats* out) { *out = {}; }
 
 // --- Buffer push stubs ---
 namespace aurora::gfx {
-Range push_verts(const uint8_t* data, size_t length, size_t alignment) { return {}; }
+// Opt-in recording for merge tests; other tests retain the zero-range stubs.
+bool g_testMergeDraws = false;
+uint32_t g_testVertexEnd = 0;
+Range push_verts(const uint8_t* data, size_t length, size_t alignment) {
+  if (!g_testMergeDraws) {
+    return {};
+  }
+  const uint32_t offset = alignment == 0
+                              ? g_testVertexEnd
+                              : (g_testVertexEnd + static_cast<uint32_t>(alignment) - 1) &
+                                    ~(static_cast<uint32_t>(alignment) - 1);
+  g_testVertexEnd = offset + static_cast<uint32_t>(length);
+  return {.offset = offset, .size = static_cast<uint32_t>(length)};
+}
 Range push_indices(const uint8_t* data, size_t length, size_t alignment) { return {}; }
 Range push_uniform(const uint8_t* data, size_t length) { return {}; }
 // Tests set it to see draws dropped for want of storage room.
@@ -273,7 +295,7 @@ void push_draw_command<gx::DrawData>(gx::DrawData data) {
 }
 template <>
 gx::DrawData* get_last_draw_command() {
-  return nullptr;
+  return g_testMergeDraws && g_testDrawCount != 0 ? &g_testLastDraw : nullptr;
 }
 } // namespace aurora::gfx
 
@@ -400,21 +422,40 @@ void shutdown() {}
 } // namespace aurora::gfx::xray
 
 namespace aurora::gfx::shadow {
+bool g_testShadowFrameActive = false;
+uint32_t g_testShadowFitCalls = 0;
+std::vector<uint8_t> g_testCasterMasks;
 bool ensure_task() { return false; }
 bool set_frame(const float worldToView[3][4], const cascade::Frustum& frustum, const float sunDir[3], float distance,
                const float color[3], Uniform& out) {
-  return false;
+  return g_testShadowFrameActive;
 }
 bool fit_frame(const float worldToView[3][4], const cascade::Frustum& frustum, const float sunDir[3], float distance,
                cascade::Fit out[cascade::Count]) {
-  return false;
+  ++g_testShadowFitCalls;
+  if (!g_testShadowFrameActive || distance <= 0.f) {
+    return false;
+  }
+  for (int c = 0; c < cascade::Count; ++c) {
+    out[c] = {};
+    out[c].lo[0] = static_cast<float>(c * 10);
+    out[c].hi[0] = static_cast<float>(c * 10 + 5);
+    out[c].lo[1] = out[c].lo[2] = -5.f;
+    out[c].hi[1] = out[c].hi[2] = 5.f;
+    out[c].center[0] = static_cast<float>(c * 10);
+  }
+  return true;
 }
 bool box_casts(const float worldToView[3][4], const cascade::Frustum& frustum, const float sunDir[3], float distance,
                const float min[3], const float max[3]) {
   return false;
 }
 uint32_t last_caster_count() { return 0; }
-void add_caster(const gx::DrawData& draw) {}
+void last_layer_counts(uint32_t submitted[4], uint32_t& rejected) {
+  std::fill_n(submitted, 4, 0);
+  rejected = 0;
+}
+void add_caster(const gx::DrawData& draw) { g_testCasterMasks.push_back(draw.shadowCascadeMask); }
 bool record() { return false; }
 const wgpu::TextureView& map_view() {
   static const wgpu::TextureView view;
@@ -428,8 +469,9 @@ void shutdown() {}
 } // namespace aurora::gfx::shadow
 
 namespace aurora::gfx::actor_shadow {
+std::vector<uint8_t> g_testCasterMasks;
 bool ensure_task() { return false; }
-void add_caster(uint32_t layer, const gx::DrawData& draw) {}
+void add_caster(uint32_t layer, const gx::DrawData& draw) { g_testCasterMasks.push_back(draw.shadowCascadeMask); }
 bool record() { return false; }
 const wgpu::TextureView& map_view() {
   static const wgpu::TextureView view;

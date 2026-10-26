@@ -462,6 +462,7 @@ struct GXState {
   u8 particleFog = 0;
   bool shadowCaster = false;
   bool shadowCasterOnly = false; // they cast but aren't drawn (GXPortSetShadowCasterOnly)
+  u8 shadowCascadeMask = 0xf; // CPU-only sun membership; unknown geometry retains all layers
   bool shadowActive = false;
   std::array<Vec4<float>, 36> shadowUniform{};
   // GX_AURORA_PORT_ACTOR_SHADOW: actorLayer >= 0 while an actor's casters are recorded (into that
