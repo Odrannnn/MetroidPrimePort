@@ -469,6 +469,7 @@ set(MP_GAME_SOURCES
     src/MetroidPrime/HUD/CHudRadarInterface.cpp
     src/MetroidPrime/HUD/CHudThreatInterface.cpp
     src/MetroidPrime/HUD/CHudVisorBeamMenu.cpp
+    src/MetroidPrime/HUD/CHudRadialSelect.cpp
     src/MetroidPrime/HUD/CSamusHud.cpp
     src/MetroidPrime/PathFinding/CPathFindArea.cpp
     src/MetroidPrime/PathFinding/CPathFindRegion.cpp

@@ -66,6 +66,12 @@ void DrawControlsOptions() {
   }
   ImGui::SetItemTooltip("Swaps the two buttons' D-pad directions, as in Remastered's Dual Sticks "
                         "layout.\nThe controller presets (Remap > Presets...) set it.");
+  bool radialMenus = sInput.radialMenus;
+  if (ImGui::Checkbox("Radial beam and visor menus (Trilogy)", &radialMenus)) {
+    SetRadialMenus(radialMenus);
+  }
+  ItemHelp("With a Metroid Prime Trilogy disc: hold Beam menu or Visor menu (Remap) to open the "
+           "Wii's radial menu, point with the mouse, stick or C-stick, and let go to pick.");
 
   ImGui::SeparatorText("Aiming");
   if (ImGui::Checkbox("Auto-aim", &sAutoAim)) {

@@ -7,6 +7,7 @@
 #include "port_paths.h"
 #include "port_photo.h"
 #include "port_pointer.h"
+#include "port_radial.h"
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
@@ -653,10 +654,16 @@ void RouteDirectActions(const PortInput::Output& out) {
       PortDebug::RequestVisor(i);
     }
   }
+  // Trilogy's radial menus (CHudRadialSelect) pick on release, through the pending pick.
+  PortRadial::Tick(out.Held(Action::BeamMenu), out.Held(Action::VisorMenu),
+                   out.Value(Action::CRight) - out.Value(Action::CLeft),
+                   out.Value(Action::CUp) - out.Value(Action::CDown));
   const int beamDir = out.Pressed(Action::BeamNext) ? 1 : out.Pressed(Action::BeamPrev) ? -1 : 0;
-  PushCyclePick(true, beamDir != 0 ? CycleTarget(true, beamDir) : -1);
+  const int beamPick = PortRadial::TakePick(PortRadial::kBeam);
+  PushCyclePick(true, beamDir != 0 ? CycleTarget(true, beamDir) : beamPick);
   const int visorDir = out.Pressed(Action::VisorNext) ? 1 : out.Pressed(Action::VisorPrev) ? -1 : 0;
-  PushCyclePick(false, visorDir != 0 ? CycleTarget(false, visorDir) : -1);
+  const int visorPick = PortRadial::TakePick(PortRadial::kVisor);
+  PushCyclePick(false, visorDir != 0 ? CycleTarget(false, visorDir) : visorPick);
   if (out.Pressed(Action::SpringBall)) PortDebug::RequestSpringBall();
 }
 
@@ -1157,6 +1164,8 @@ PADStatus Synthesize(const PortInput::Output& out) {
   s.stickY = StickY(out.Value(Action::MainDown), out.Value(Action::MainUp));
   s.substickX = StickX(out.Value(Action::CRight), out.Value(Action::CLeft));
   s.substickY = StickY(out.Value(Action::CDown), out.Value(Action::CUp));
+  // An open radial menu takes the C-stick (PortRadial::Tick), so it doesn't swap beams too.
+  if (PortRadial::Capturing()) s.substickX = s.substickY = 0;
   s.triggerLeft = Trigger(std::max(out.Value(Action::LAnalog), out.Value(Action::MenuLAnalog)), (s.button & PAD_TRIGGER_L) != 0);
   s.triggerRight = Trigger(std::max(out.Value(Action::RAnalog), out.Value(Action::MenuRAnalog)), (s.button & PAD_TRIGGER_R) != 0);
   const bool any = s.button != 0 || s.stickX != 0 || s.stickY != 0 || s.substickX != 0 || s.substickY != 0 ||

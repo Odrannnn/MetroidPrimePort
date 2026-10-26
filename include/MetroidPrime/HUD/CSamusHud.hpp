@@ -28,6 +28,7 @@ class CGuiWidget;
 class CHudBallInterface;
 class CHudBossEnergyInterface;
 class CHudEnergyInterface;
+class CHudRadialSelect;
 class CHudHelmetInterface;
 class CHudMissileInterface;
 class CHudRadarInterface;
@@ -265,6 +266,10 @@ private:
   // Trilogy: STRG_Hud, CSamusHud+0x494 (fn_801C5694); null on GC.
   rstl::single_ptr< TLockedToken< CStringTable > > xPortHudStrings;
   static const CStringTable* sPortHudStrings;
+  // Trilogy with the radial menus setting: the Wii's radial visor [0] and beam [1] menus,
+  // made on first use.
+  rstl::single_ptr< CHudRadialSelect > xPortRadial[2];
+  float PortRadialOpen() const;
 #endif
 
   rstl::reserved_vector< bool, 4 > BuildPlayerHasVisors(const CStateManager& mgr) const;

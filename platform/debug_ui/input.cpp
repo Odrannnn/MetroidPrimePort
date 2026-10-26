@@ -8,6 +8,7 @@
 #include "port_gyro_motion.h"
 #include "port_photo.h"
 #include "port_pointer.h"
+#include "port_radial.h"
 #include "port_log.h"
 #include "port_paths.h"
 #include "port_config_reset.h"
@@ -637,6 +638,14 @@ bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool po
       sMouseAimState.pitch = 0.f;
       sMouseAimState.lagPitch = 0.f;
     }
+  }
+  // An open Trilogy radial menu takes the aim travel as its selection (the Wii pointed at
+  // it), and the view holds still meanwhile.
+  if (PortRadial::Capturing()) {
+    PortRadial::AddTravel(sMouseFrameX + sStickFrameX + sGyroCameraFrameX,
+                          sMouseFrameY + sStickFrameY + sGyroCameraFrameY);
+    sMouseFrameX = sMouseFrameY = sStickFrameX = sStickFrameY = 0.f;
+    sGyroCameraFrameX = sGyroCameraFrameY = 0.f;
   }
   // Under pointer aim the stick moves the pointer, unless the gyro does: then the
   // stick (and the keyboard look keys) turn the camera as they do without

@@ -177,7 +177,9 @@ enum class ActionKind : uint8_t {
   X(BallPowerBomb, Digital, "ball_power_bomb", "Power Bomb")                                       \
   X(BallBoost, Digital, "ball_boost", "Boost Ball")                                                \
   X(BallSpider, Digital, "ball_spider", "Spider Ball")                                             \
-  X(BallUnmorph, Digital, "ball_unmorph", "Unmorph")
+  X(BallUnmorph, Digital, "ball_unmorph", "Unmorph")                                              \
+  X(BeamMenu, Digital, "beam_menu", "Beam menu (hold)")                                            \
+  X(VisorMenu, Digital, "visor_menu", "Visor menu (hold)")
 
 enum class Action : uint16_t {
 #define PORT_INPUT_ACTION_ENUM(id, kind, key, label) id,

@@ -32,7 +32,7 @@ Beam damage, so bosses run their death scripts), `phazongun [off]` (lets the arm
 `hurt [n]` (hits the player for n, default 10, with the HUD flash and damage sound), `die` (empties the health),
 `hint show` (shows the hint the game would show next, as F1 > Game > Show current hint), `memo <text>` (shows the text as a HUD message), `strg <id> [index]` (a string table, or one string of it, as the game loads it, mods included),
 `language [en|<code>]` (the text language, switched while the game runs; no argument prints it),
-`visor [combat|xray|scan|thermal|0-3]` and `beam [power|ice|wave|plasma|0-3]` (switch as the touch wheels do, so the game's own rules apply: owned items only, not in the ball; no argument prints the current one), `press <a+b> [frames]`
+`visor [combat|xray|scan|thermal|0-3]` and `beam [power|ice|wave|plasma|0-3]` (switch as the touch wheels do, so the game's own rules apply: owned items only, not in the ball; no argument prints the current one), `radial [beam|visor [x y] | release]` (Trilogy discs with `radial_menus` on: holds the Wii radial beam or visor menu open with its selection at x right, y up, -1..1; `release` lets go, picking the selection as letting go of the action does; no argument prints the state), `press <a+b> [frames]`
 (`sx:<n>`, `sy:<n>`, `cx:<n>`, `cy:<n>` tokens hold stick axes along with
 the buttons, e.g. `press x+sy:127 30`; `lt:<n>`, `rt:<n>` hold a trigger's
 analog travel, 0..255, without its click),
