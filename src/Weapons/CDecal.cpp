@@ -23,7 +23,22 @@ CDecal::CDecal(const TToken< CDecalDescription >& desc, const CTransform4f& xf)
 , x58_frameIdx(0)
 , x5c_flags(0)
 , x60_rotation(CVector3f::Zero())
-, x6c_elapsedTime(0.f) {
+, x6c_elapsedTime(0.f)
+#ifdef TARGET_PC
+, xPortRemastered(false)
+, xPortBaseTransform(xf)
+, xPortTransform(xf)
+, xPortWidth(1.f)
+, xPortHeight(1.f)
+, xPortBoxDepth(0.5f)
+, xPortLifetime(0)
+, xPortModelLifetime(0)
+, xPortFrame(0)
+, xPortTime(0.0)
+, xPortAngle(0.f)
+, xPortFlags(0)
+#endif
+{
   CGlobalRandom gr(sDecalRandom);
 
   InitQuad(x3c_quad1, x0_description->x0_quad1, 1);
@@ -43,6 +58,144 @@ CDecal::CDecal(const TToken< CDecalDescription >& desc, const CTransform4f& xf)
     x5c_flags |= 4;
   }
 }
+
+#ifdef TARGET_PC
+namespace {
+// Remastered's degrees-to-radians factor in CDecal (0xb7ca04 / 0xb7ce44).
+const float kPortDegToRad = 0.017453292f;
+
+// Remastered evaluates a decal's elements in a CVarContext on the decal's own random; its IRND
+// draws PortFloat28 at frame 0 and writes nothing at later frames.
+class CPortDecalEval {
+public:
+  explicit CPortDecalEval(CRandom16& random) : mRandom(random), mPrev(CParticleGlobals::xPortIrnd28) {
+    CParticleGlobals::xPortIrnd28 = true;
+  }
+  ~CPortDecalEval() { CParticleGlobals::xPortIrnd28 = mPrev; }
+
+private:
+  CGlobalRandom mRandom;
+  bool mPrev;
+};
+} // namespace
+
+CDecal::CDecal(const TToken< CDecalDescription >& desc, uint seed, const CTransform4f& xf)
+: x0_description(desc)
+, xc_transform(xf)
+, x54_modelLifetime(0)
+, x58_frameIdx(0)
+, x5c_flags(0)
+, x60_rotation(CVector3f::Zero())
+, x6c_elapsedTime(0.f)
+, xPortRemastered(true)
+, xPortRandom(seed)
+, xPortBaseTransform(xf)
+, xPortTransform(xf)
+// Default extents (1, 1) (static init 0xb7df60 -> 0x459abf0) and the box height 0.5 (0x1d0e0b0).
+, xPortWidth(1.f)
+, xPortHeight(1.f)
+, xPortBoxDepth(0.5f)
+, xPortLifetime(0)
+, xPortModelLifetime(0)
+, xPortFrame(0)
+, xPortTime(0.0)
+, xPortAngle(0.f)
+, xPortFlags(0) {
+  // TODO(chunk3): the retail quads only stand in for the projected draw until it exists; they
+  // keep their own lifetimes and random, as retail's.
+  {
+    CGlobalRandom gr(sDecalRandom);
+    InitQuad(x3c_quad1, x0_description->x0_quad1, 1);
+    InitQuad(x48_quad2, x0_description->x1c_quad2, 2);
+  }
+  // No Remastered decal has a model (the importer rejects DMDL), so the model bit is preset.
+  x5c_flags |= 4;
+
+  CPortDecalEval eval(xPortRandom);
+  const CDecalDescription& d = *x0_description.operator->();
+  if (CIntElement* mstl = d.xPortMSTL.get()) {
+    mstl->GetValue(0, xPortLifetime);
+  }
+  CParticleGlobals::SetEmitterTime(0);
+  CParticleGlobals::SetParticleLifetime(xPortLifetime);
+  CParticleGlobals::UpdateParticleLifetimeTweenValues(0);
+  if (CRealElement* mstr = d.xPortMSTR.get()) {
+    float angle = 0.f;
+    mstr->GetValue(0, angle);
+    xPortAngle = angle * kPortDegToRad;
+    xPortTransform = xPortBaseTransform * CTransform4f::RotateZ(CRelAngle::FromRadians(xPortAngle));
+  }
+  if (CRealElement* mstw = d.xPortMSTW.get()) {
+    mstw->GetValue(0, xPortWidth);
+  }
+  if (CRealElement* msth = d.xPortMSTH.get()) {
+    msth->GetValue(0, xPortHeight);
+  } else {
+    xPortHeight = xPortWidth;
+  }
+  // No model: model life stays 0 and bit 0 is preset.
+  xPortFlags |= 1;
+}
+
+// CDecal::Update 0xb7ce44: dt in 1/256-frame ticks, stepped one whole frame at a time.
+void CDecal::PortRemasteredUpdate(float dt) {
+  double frames = 0.00390625 * static_cast< double >(static_cast< long long >(15360.0 * dt + 0.5));
+  if (!(0.0 < frames)) {
+    return;
+  }
+  double counted = static_cast< double >(xPortFrame);
+  double time = xPortTime;
+  do {
+    const double step = frames > 1.0 ? 1.0 : frames;
+    if (1.0 <= (time - counted) + step) {
+      const int frame = xPortFrame;
+      if (frame < xPortModelLifetime) {
+        if (xPortLifetime <= frame) {
+          xPortFlags |= 2;
+        }
+      } else {
+        xPortFlags |= 1;
+        if (frame >= xPortLifetime) {
+          xPortFlags |= 2;
+        }
+      }
+      xPortFrame = frame + 1;
+      if (xPortFlags == 3) {
+        return;
+      }
+      CPortDecalEval eval(xPortRandom);
+      CParticleGlobals::SetEmitterTime(xPortFrame);
+      CParticleGlobals::SetParticleLifetime(xPortLifetime);
+      CParticleGlobals::UpdateParticleLifetimeTweenValues(xPortFrame);
+      if (CRealElement* mstr = x0_description->xPortMSTR.get()) {
+        // An IRND rotation writes nothing past frame 0, so the transform loses its rotation here
+        // while xPortAngle keeps the frame-0 angle (as Remastered does).
+        float angle = 0.f;
+        mstr->GetValue(xPortFrame, angle);
+        xPortTransform =
+            xPortBaseTransform * CTransform4f::RotateZ(CRelAngle::FromRadians(angle * kPortDegToRad));
+      }
+      counted += 1.0;
+      time = xPortTime;
+    }
+    frames -= step;
+    time += step;
+    xPortTime = time;
+  } while (0.0 < frames);
+}
+
+float CDecal::GetPortFade(int slot) const {
+  float alpha = 1.f;
+  if (CRealElement* dul = x0_description->xPortDUL[slot].get()) {
+    CPortDecalEval eval(const_cast< CRandom16& >(xPortRandom));
+    CParticleGlobals::SetEmitterTime(xPortFrame);
+    CParticleGlobals::SetParticleLifetime(xPortLifetime);
+    CParticleGlobals::UpdateParticleLifetimeTweenValues(xPortFrame);
+    dul->GetValue(xPortFrame, alpha);
+  }
+  return alpha;
+}
+#endif
 
 void CDecal::RenderQuad(CQuadDecal& decal, const CDecalDescription::SQuadDescr& desc) const {
   CColor color = CColor::White();
@@ -246,6 +399,8 @@ void CDecal::Render() const {
   if (IsDone()) {
     return;
   }
+  // TODO(chunk3): a Remastered decal (xPortRemastered) still draws retail's flat quads here, at its
+  // Remastered frame; chunk 3 replaces this with the clipped mesh (port_projected_decal.h).
 
   CGraphics::DisableAllLights();
   CParticleGlobals::SetEmitterTime(x58_frameIdx);
@@ -260,6 +415,20 @@ void CDecal::Render() const {
 }
 
 void CDecal::Update(float dt) {
+#ifdef TARGET_PC
+  if (xPortRemastered) {
+    PortRemasteredUpdate(dt);
+    // TODO(chunk3): drives the stand-in retail quads (ProcessQuad) until the projected draw.
+    x58_frameIdx = xPortFrame;
+    if (x58_frameIdx >= x3c_quad1.GetLifetime()) {
+      x5c_flags |= 1;
+    }
+    if (x58_frameIdx >= x48_quad2.GetLifetime()) {
+      x5c_flags |= 2;
+    }
+    return;
+  }
+#endif
   // Age by real time and map onto the 60 Hz frame units the tables use.
   x6c_elapsedTime += dt;
   x58_frameIdx = static_cast< int >(x6c_elapsedTime * 60.f);

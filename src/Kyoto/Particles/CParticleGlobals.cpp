@@ -45,6 +45,7 @@ CParticleGlobals::SParticleSystem* CParticleGlobals::mCurrentParticleSystem = nu
 #ifdef TARGET_PC
 CElementGen::CParticle* CParticleGlobals::xPortUVParticle = nullptr;
 const CElementGen::CParticle* CParticleGlobals::xPortIrndParticle = nullptr;
+bool CParticleGlobals::xPortIrnd28 = false;
 const CParticleGlobals::SPortSwooshEval* CParticleGlobals::xPortSwooshEval = nullptr;
 float CParticleGlobals::xPortSystemTween = 0.f;
 int CParticleGlobals::xPortSlot2Percentage = 0;

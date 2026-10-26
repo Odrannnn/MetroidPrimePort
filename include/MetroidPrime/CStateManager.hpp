@@ -248,6 +248,10 @@ public:
   void SetGameState(EGameState state);
 
   CRandom16* Random() const { return x900_random; }
+#ifdef TARGET_PC
+  // The manager's own random (Remastered stateMgr +0x379c), whether or not Random() is available.
+  CRandom16& PortRandom16() { return x8fc_random; }
+#endif
   rstl::list< TUniqueId >& ActiveParasites() { return xf54_activeParasites; }
   void SetRandomAvailable(bool available) { x900_random = available ? &x8fc_random : nullptr; }
   uint GetUpdateFrameIndex() const { return static_cast< uint >(x8d8_updateFrameIdx); }

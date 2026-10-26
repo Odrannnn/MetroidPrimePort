@@ -5,6 +5,10 @@
 #include "Kyoto/TToken.hpp"
 #include "rstl/optional_object.hpp"
 
+#ifdef TARGET_PC
+#include <vector>
+#endif
+
 class CDecalDescription {
 public:
   struct SQuadDescr {
@@ -31,6 +35,24 @@ public:
   rstl::single_ptr< CColorElement > x58_DMCL;
   bool x5c_24_DMAB : 1;
   bool x5c_25_DMOO : 1;
+#ifdef TARGET_PC
+  // port-only: a Remastered decal (DPSM) the importer wrote over its paired DPSC (PRDC). The
+  // fields are Remastered's CDecalDescription: MSTL lifetime, MSTR rotation (degrees), MSTW/MSTH
+  // the box's width/height, DUL1/DUL2 each material slot's fade, and the slots' MATIs (PMTI).
+  struct SPortMaterial {
+    uint xSlot;
+    uint xTexture;
+    unsigned char xGuid[16];
+    std::vector< unsigned char > xMati;
+  };
+  bool xPortRemastered = false;
+  rstl::single_ptr< CIntElement > xPortMSTL;
+  rstl::single_ptr< CRealElement > xPortMSTR;
+  rstl::single_ptr< CRealElement > xPortMSTW;
+  rstl::single_ptr< CRealElement > xPortMSTH;
+  rstl::single_ptr< CRealElement > xPortDUL[2];
+  std::vector< SPortMaterial > xPortMaterials;
+#endif
 };
 
 CHECK_SIZEOF(CDecalDescription, 0x60);

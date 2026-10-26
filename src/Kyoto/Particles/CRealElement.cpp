@@ -152,6 +152,12 @@ bool CREInitialRandom::GetValue(int frame, float& valOut) const {
     float min, max;
     x4_min->GetValue(frame, min);
     x8_max->GetValue(frame, max);
+#ifdef TARGET_PC
+    if (CParticleGlobals::xPortIrnd28) {
+      valOut = (max - min) * CRandom16::GetRandomNumber()->PortFloat28() + min;
+      return false;
+    }
+#endif
     valOut = (max - min) * CRandom16::GetRandomNumber()->Float() + min;
   }
   return false;

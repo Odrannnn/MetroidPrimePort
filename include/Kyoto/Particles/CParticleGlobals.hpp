@@ -93,6 +93,9 @@ public:
   // PIRN is evaluating per-particle elements (null otherwise). IRND elements then give a value
   // fixed per (particle, element) instead of relying on being read at frame 0.
   static const CElementGen::CParticle* xPortIrndParticle;
+  // port-only: set while a Remastered decal evaluates its elements. IRND keeps retail's
+  // frame-0-only write but draws Remastered's PortFloat28 (IRND 0x2959d8) from the global random.
+  static bool xPortIrnd28;
   // port-only: what Remastered's DFCS/DFCP (0x299134 / 0x299064) read from a swoosh's context: the
   // swoosh's local->world transform (T(global) * R(global orientation) * S(global scale), the
   // BuildTransform4f of its registers), the swoosh's local translation (DFCS) and the position of

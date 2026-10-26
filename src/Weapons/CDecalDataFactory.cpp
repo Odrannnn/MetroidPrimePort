@@ -114,6 +114,51 @@ bool CDecalDataFactory::CreateDPSM(CDecalDescription* desc, CInputStream& in, CS
     case 'DMOO':
       desc->x5c_25_DMOO = CParticleDataFactory::GetBool(in);
       break;
+#ifdef TARGET_PC
+    // The port-only Remastered fields (port_remastered_effect_convert.cpp, ConvertDecal).
+    case 'PRDC':
+      if (CParticleDataFactory::GetClassID(in) != 'CNST') {
+        return false;
+      }
+      desc->xPortRemastered = CParticleDataFactory::GetInt(in) != 0;
+      break;
+    case 'MSTL':
+      desc->xPortMSTL = CParticleDataFactory::GetIntElement(in);
+      break;
+    case 'MSTR':
+      desc->xPortMSTR = CParticleDataFactory::GetRealElement(in);
+      break;
+    case 'MSTW':
+      desc->xPortMSTW = CParticleDataFactory::GetRealElement(in);
+      break;
+    case 'MSTH':
+      desc->xPortMSTH = CParticleDataFactory::GetRealElement(in);
+      break;
+    case 'DUL1':
+      desc->xPortDUL[0] = CParticleDataFactory::GetRealElement(in);
+      break;
+    case 'DUL2':
+      desc->xPortDUL[1] = CParticleDataFactory::GetRealElement(in);
+      break;
+    case 'PMTI': {
+      if (CParticleDataFactory::GetClassID(in) != 'CNST') {
+        return false;
+      }
+      CDecalDescription::SPortMaterial material;
+      material.xSlot = in.ReadLong();
+      material.xTexture = in.ReadLong();
+      in.ReadBytes(material.xGuid, sizeof(material.xGuid));
+      const uint size = in.ReadLong();
+      if (material.xSlot > 1 || size > (1u << 20)) {
+        return false;
+      }
+      material.xMati.resize(size);
+      if (size != 0) {
+        in.ReadBytes(material.xMati.data(), size);
+      }
+      desc->xPortMaterials.push_back(material);
+    } break;
+#endif
     case '_END':
       done = true;
       break;

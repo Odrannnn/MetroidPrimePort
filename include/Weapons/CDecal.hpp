@@ -39,6 +39,28 @@ public:
   static void SetGlobalSeed(ushort seed);
   static void SetMoveRedToAlphaBuffer(const bool move) { sMoveRedToAlphaBuffer = move; }
   CDecal(const TToken< CDecalDescription >& desc, const CTransform4f& xf);
+#ifdef TARGET_PC
+  // Remastered's CDecal (ctor 0xb7ca04) for a description with xPortRemastered: its own random
+  // seeded by the manager, MSTL lifetime, MSTR rotation and the MSTW/MSTH box.
+  CDecal(const TToken< CDecalDescription >& desc, uint seed, const CTransform4f& xf);
+  bool IsPortRemastered() const { return xPortRemastered; }
+  // Remastered's done state: lifetime and model life both over (flags == 3).
+  bool IsPortRemasteredDone() const { return xPortFlags == 3; }
+  int GetPortFrame() const { return xPortFrame; }
+  int GetPortLifetime() const { return xPortLifetime; }
+  float GetPortAngle() const { return xPortAngle; }
+  // The projection box: half-extents along the decal's local X and Z (MSTW, MSTH) and its depth
+  // along local Y (skDecalBoxHeight).
+  float GetPortWidth() const { return xPortWidth; }
+  float GetPortHeight() const { return xPortHeight; }
+  float GetPortBoxDepth() const { return xPortBoxDepth; }
+  // Remastered's decal transform (+0x4c): the spawn transform times RotateZ(MSTR).
+  const CTransform4f& GetPortTransform() const { return xPortTransform; }
+  // A material slot's fade (UpdateMaterialData 0xb7d07c): DUL1/DUL2 at the current frame, 1
+  // without one. A fade <= 0 skips the slot's draw.
+  float GetPortFade(int slot) const;
+  const CDecalDescription& GetDescription() const { return *x0_description.operator->(); }
+#endif
 
   void RenderQuad(CQuadDecal& quad, const CDecalDescription::SQuadDescr& quadDesc) const;
   void RenderMdl() const;
@@ -61,6 +83,23 @@ private:
   // frame, so x58_frameIdx is derived from this rather than incremented per
   // tick; at a raised simulation rate the decal keeps its authored duration.
   float x6c_elapsedTime;
+#ifdef TARGET_PC
+  bool xPortRemastered;
+  CRandom16 xPortRandom;
+  CTransform4f xPortBaseTransform;
+  CTransform4f xPortTransform;
+  float xPortWidth;
+  float xPortHeight;
+  float xPortBoxDepth;
+  int xPortLifetime;
+  int xPortModelLifetime;
+  int xPortFrame;
+  double xPortTime;
+  float xPortAngle;
+  uint xPortFlags;
+
+  void PortRemasteredUpdate(float dt);
+#endif
 
   void InitQuad(CQuadDecal& quad, const CDecalDescription::SQuadDescr& desc, int flag) {
     if (!desc.x14_TEX.null()) {
