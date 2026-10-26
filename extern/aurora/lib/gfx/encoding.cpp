@@ -242,12 +242,15 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
   }
   const auto label = passInfo.label.empty() ? fmt::format("Render pass {}", passIndex)
                                             : fmt::format("{} {}", passInfo.label, passIndex);
+  // Timed per pass index, so gputimes splits a frame's EFB passes (not by size: dynamic
+  // resolution would intern a name per size).
+  const auto profName = fmt::format("EFB pass {}", passIndex);
   const wgpu::RenderPassDescriptor renderPassDescriptor{
       .label = label.c_str(),
       .colorAttachmentCount = passInfo.colorAttachmentCount,
       .colorAttachments = attachments.data(),
       .depthStencilAttachment = depthStencilAttachmentPtr,
-      .timestampWrites = webgpu::gpu_prof::pass_writes(passIndex == 0 ? "EFB pass (first)" : "EFB pass (later)"),
+      .timestampWrites = webgpu::gpu_prof::pass_writes(profName),
   };
 
   auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
