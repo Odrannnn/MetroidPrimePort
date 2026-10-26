@@ -2377,6 +2377,7 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPlayer >() {
       {"x314_orbitPoint", "CVector3f", PortSchemaKind::math, 0, kPortSchemaPrivate, sizeof(CPlayer::x314_orbitPoint), PES_ADDR(CPlayer, x314_orbitPoint), nullptr, nullptr},
       {"x320_orbitVector", "CVector3f", PortSchemaKind::math, 0, kPortSchemaPrivate, sizeof(CPlayer::x320_orbitVector), PES_ADDR(CPlayer, x320_orbitVector), nullptr, nullptr},
       {"x32c_orbitModeTimer", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::x32c_orbitModeTimer), PES_ADDR(CPlayer, x32c_orbitModeTimer), nullptr, nullptr},
+      {"m_triOrbitFadeTimer", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::m_triOrbitFadeTimer), PES_ADDR(CPlayer, m_triOrbitFadeTimer), nullptr, nullptr},
       {"x330_orbitZoneMode", "CPlayer::EPlayerZoneInfo", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPlayer::x330_orbitZoneMode), PES_ADDR(CPlayer, x330_orbitZoneMode), PES_GETI(CPlayer, x330_orbitZoneMode), PES_SETI(CPlayer, x330_orbitZoneMode)},
       {"x334_orbitType", "CPlayer::EPlayerZoneType", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPlayer::x334_orbitType), PES_ADDR(CPlayer, x334_orbitType), PES_GETI(CPlayer, x334_orbitType), PES_SETI(CPlayer, x334_orbitType)},
       {"x338_", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPlayer::x338_), PES_ADDR(CPlayer, x338_), PES_GETI(CPlayer, x338_), PES_SETI(CPlayer, x338_)},
@@ -2553,7 +2554,7 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPlayer >() {
       {"xa54_deferredCarry", "SPortDeferredCarry[4]", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CPlayer::xa54_deferredCarry), PES_ADDR(CPlayer, xa54_deferredCarry), nullptr, nullptr},
       {"xad4_carriedYaw", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::xad4_carriedYaw), PES_ADDR(CPlayer, xad4_carriedYaw), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CPlayer", "CPhysicsActor", fields, 207, 0x04344BC9E05D5A10ull};
+  static const PortSchemaClass desc = {"CPlayer", "CPhysicsActor", fields, 208, 0x32CDBDA599755FE2ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CPoisonProjectile >() {
@@ -4666,4 +4667,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3392;
+const int PortEntitySchema::kFieldCount = 3393;
