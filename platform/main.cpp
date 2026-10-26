@@ -377,7 +377,7 @@ bool OpenDiscImage(const char* path) {
     if (!aurora_dvd_open(path)) {
         return false;
     }
-    if (PortDisc::Current() == PortDisc::Version::Trilogy && !aurora_dvd_set_root("MP1", "rs5mp1_p.dol")) {
+    if (PortDisc::IsTrilogy(PortDisc::Current()) && !aurora_dvd_set_root("MP1", "rs5mp1_p.dol")) {
         PortLog::Write("metroid_prime_port: the Trilogy disc has no MP1 directory or rs5mp1_p.dol\n");
         aurora_dvd_close();
         return false;
@@ -1431,9 +1431,10 @@ int main(int argc, char** argv) {
     // Saves are the disc's region's (a PAL save's worlds are laid out
     // differently): its game code and Dolphin's card for that region. Trilogy's
     // are PAL-sized but its own, so neither disc loads the other's.
-    PortGci::SetGameCode(discVersion == PortDisc::Version::Trilogy ? "R3ME"
-                         : discVersion == PortDisc::Version::Pal   ? "GM8P"
-                                                                   : "GM8E");
+    PortGci::SetGameCode(discVersion == PortDisc::Version::Trilogy      ? "R3ME"
+                         : discVersion == PortDisc::Version::TrilogyPal ? "R3MP"
+                         : discVersion == PortDisc::Version::Pal        ? "GM8P"
+                                                                        : "GM8E");
     s_mountedDisc = discImage;
     aurora_dvd_set_read_error_callback(NoteDiscReadFailure);
     // A Remastered import finished in the last session becomes the mod now,

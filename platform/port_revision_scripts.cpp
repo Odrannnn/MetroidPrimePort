@@ -20,7 +20,7 @@ const uint32_t kHiveTotem = 0xC8309DF6;
 const uint32_t kCentralDynamo = 0xFEA372E2;
 
 // Trilogy's MP1 rooms are PAL's, except Main Quarry: it has no extra door lock.
-bool PalScripts(Version version) { return version == Version::Pal || version == Version::Trilogy; }
+bool PalScripts(Version version) { return version == Version::Pal || PortDisc::IsTrilogy(version); }
 
 // Op codes and conn state/message codes (port_skip_cutscenes_ops.cpp).
 enum : uint8_t { kEdit = 2, kRemConn = 3, kAddConn = 4, kDelete = 6 };

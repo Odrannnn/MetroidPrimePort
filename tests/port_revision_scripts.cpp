@@ -145,7 +145,7 @@ float Float(const Obj& o, size_t off) {
 uint8_t Byte(const Obj& o, size_t off) { return o.props[5 + off]; }
 
 const Version kAll[] = {Version::Unknown, Version::Usa100, Version::Usa101, Version::Usa102,
-                        Version::Pal, Version::Trilogy};
+                        Version::Pal, Version::Trilogy, Version::TrilogyPal};
 const uint32_t kRooms[] = {kGeothermal, kQuarry, kOre, kCourtyard, kElite, kArboretum, kHive, kDynamo};
 
 } // namespace
@@ -161,7 +161,7 @@ int main() {
         expect = room == kArboretum;
       else if (v == Version::Pal)
         expect = room == kGeothermal || room == kOre || room == kQuarry || room == kDynamo;
-      else if (v == Version::Trilogy) // PAL's, but its Main Quarry has no extra lock
+      else if (PortDisc::IsTrilogy(v)) // PAL's, but its Main Quarry has no extra lock
         expect = room == kGeothermal || room == kOre || room == kDynamo;
       CHECK_MSG(PortRevisionScripts::OpsFor(v, room).empty() != expect, "version/room gate");
     }

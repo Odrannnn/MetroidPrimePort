@@ -58,7 +58,7 @@ void DrawRemasteredWarning() {
 
 // The PAL disc's languages for a USA one (port_pal_languages.h).
 void DrawPalLanguages() {
-  if (PortDisc::Current() == PortDisc::Version::Trilogy) {
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
     ImGui::TextDisabled("Trilogy disc: support is experimental.");
     ItemHelp("The port runs the USA 1.00 code on the Trilogy disc's Metroid Prime data, which "
              "already has its languages.");

@@ -156,6 +156,10 @@ int main() {
   CHECK_MSG(PortSkipCutscenes::SkipStreamFor(Version::Trilogy, kChapel, trilogy) &&
                 trilogy.ops == pal.ops && trilogy.size == pal.size,
             "Trilogy uses the PAL stream");
+  SkipStream trilogyPal;
+  CHECK_MSG(PortSkipCutscenes::SkipStreamFor(Version::TrilogyPal, kChapel, trilogyPal) &&
+                trilogyPal.ops == pal.ops && trilogyPal.size == pal.size,
+            "PAL Trilogy uses the PAL stream");
   CHECK_MSG(usa101.ops == usa.ops && usa101.size == usa.size, "1.01 uses the generic stream");
   CHECK_MSG(rev2.ops != usa.ops && rev2.size != usa.size, "1.02 has its own Chapel stream");
 

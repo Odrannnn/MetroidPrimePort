@@ -117,11 +117,13 @@ remembers the answer as `disc_path` in the settings file. There is no prompt
 when the port has no window to show one on, or with `MP_NO_DISC_DIALOG=1`
 (for scripted runs that do have a window, as on a build runner). The disc must
 identify as **GM8E01, disc 0, revision 0, 1 or 2** (USA 1.00, 1.01 or 1.02), **GM8P01** (PAL) or
-**R3ME01** (Metroid Prime Trilogy, USA; experimental). A Trilogy disc runs its Metroid Prime: the
+**R3ME01** or **R3MP01** (Metroid Prime Trilogy, USA or PAL; experimental). A Trilogy disc runs its Metroid Prime: the
 `MP1` directory is the disc's root (with the rest of the disc still visible) and `rs5mp1_p.dol` its
 DOL. That data is the PAL revision's, so it runs like a PAL disc (PAL skips and script fixes, except
 PAL's extra Main Quarry lock, which Trilogy lacks). The front end plays Trilogy's own Metroid Prime
-menu movies from `fe/Video/mp1`. Saves are a PAL-layout `R3ME` file, apart from the GameCube ones.
+menu movies from `fe/Video/mp1`. Saves are a PAL-layout `R3ME` (USA) or `R3MP` (PAL) file, apart from the GameCube ones. The two
+Trilogy discs have the same Metroid Prime world data; the PAL one differs in its DOL build, its
+`Strings.pak` and some movies.
 PAL support is experimental: a PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port
 feature (Remastered import, randomizer, Archipelago, cutscene skips) and its
 languages; its saves are kept apart from USA ones. USA 1.01 runs the same

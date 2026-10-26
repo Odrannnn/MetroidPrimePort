@@ -29,7 +29,7 @@ bool SkipStreamFor(PortDisc::Version version, uint32_t mreaId, SkipStream& out) 
   // the USA one doesn't do the same there. Trilogy's rooms are PAL's.
   const SkipRoom* room = nullptr;
   const uint8_t* ops = kSkipOps;
-  if (version == PortDisc::Version::Pal || version == PortDisc::Version::Trilogy) {
+  if (version == PortDisc::Version::Pal || PortDisc::IsTrilogy(version)) {
     room = FindRoom(kSkipRoomsPal, mreaId);
     ops = kSkipOpsPal;
   } else if (version == PortDisc::Version::Usa102) {
