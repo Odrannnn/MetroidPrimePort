@@ -365,6 +365,13 @@ CIOWin::EMessageReturn CSaveGameScreen::Update(float dt) {
   x6c_cardDriver->Update();
 
 #ifdef TARGET_PC
+  // Port: sharing the emulator's card on a Trilogy disc mirrors the port's own
+  // card and the emulator's Trilogy save.bin (port_gci.h SyncTrilogyShare): a
+  // save made here goes out once written, and in the front end a newer one
+  // made in the emulator comes in (remounted below).
+  if (CMemoryCardSys::PortOnDefaultCard() && !CMemoryCardDriver::IsCardBusy(x6c_cardDriver->GetState())) {
+    PortGci::SyncTrilogyShare(x0_saveCtx == kSC_FrontEnd);
+  }
   // Port: each Archipelago game has a card of its own. The front end moves to
   // the one the client wants, or back to the default card, whenever the card is
   // idle. In game the card never changes: the game would take it for another.

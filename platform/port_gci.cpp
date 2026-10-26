@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -992,6 +993,20 @@ fs::path SharedCardBase(std::string* why) {
     }
     return {};
   }
+  // The emulator's GameCube card isn't Trilogy's (its saves live in a Wii
+  // save.bin): a Trilogy disc keeps the port's own card and mirrors it
+  // (SyncTrilogyShare).
+  if (std::memcmp(sGameCode, "R3M", 3) == 0) {
+    if (why != nullptr) {
+      *why = TrilogyShareBin().empty()
+                 ? std::string("No Trilogy save in the emulator (Wii/title/00010000/") +
+                       (OnPalDisc() ? "52334d50" : "52334d45") +
+                       "/data/save.bin): start Trilogy there once."
+                 : "On Trilogy the port keeps its own card and mirrors it with the emulator's "
+                   "Trilogy save: the newer one wins, the other is kept (_replaced, save.bin.bak).";
+    }
+    return {};
+  }
   std::error_code ec;
   const std::vector<fs::path> roots = DolphinRoots();
   for (const fs::path& root : roots) {
@@ -1036,11 +1051,12 @@ DolphinCard FindDolphinCard(const char* region) {
   return card;
 }
 
-fs::path FindDolphinTrilogy() {
-  // The Trilogy's title ids: R3ME (USA) and R3MP (PAL).
+namespace {
+
+fs::path FindTrilogyBin(std::initializer_list<const char*> titles) {
   std::error_code ec;
   for (const fs::path& root : DolphinRoots()) {
-    for (const char* title : {"52334d45", "52334d50"}) {
+    for (const char* title : titles) {
       const fs::path bin = root / "Wii/title/00010000" / title / "data/save.bin";
       if (fs::is_regular_file(bin, ec)) {
         return bin;
@@ -1048,6 +1064,69 @@ fs::path FindDolphinTrilogy() {
     }
   }
   return {};
+}
+
+} // namespace
+
+fs::path FindDolphinTrilogy() {
+  // The Trilogy's title ids: R3ME (USA) and R3MP (PAL).
+  return FindTrilogyBin({"52334d45", "52334d50"});
+}
+
+fs::path TrilogyShareBin() {
+  if (!ShareEmulatorCard() || std::memcmp(sGameCode, "R3M", 3) != 0) {
+    return {};
+  }
+  return FindTrilogyBin({OnPalDisc() ? "52334d50" : "52334d45"});
+}
+
+bool SyncTrilogy(const fs::path& folder, const fs::path& bin, bool pull) {
+  // What a sync failed on, so a save it cannot take is not retried every check.
+  static fs::file_time_type sFailedCard{};
+  static fs::file_time_type sFailedBin{};
+  std::error_code ec;
+  const fs::file_time_type binTime = fs::last_write_time(bin, ec);
+  if (ec) {
+    return false;
+  }
+  const std::vector<fs::path> files = GameFiles(folder);
+  fs::file_time_type cardTime = fs::file_time_type::min();
+  for (const fs::path& file : files) {
+    cardTime = std::max(cardTime, fs::last_write_time(file, ec));
+  }
+  if (!files.empty() && cardTime > binTime && cardTime != sFailedCard) {
+    if (ExportTrilogy(folder, bin).copied == 0) {
+      sFailedCard = cardTime;
+      return false;
+    }
+    // Equal times mean in step.
+    fs::last_write_time(bin, cardTime, ec);
+    return false;
+  }
+  if (!pull || binTime <= cardTime || binTime == sFailedBin) {
+    return false;
+  }
+  if (ImportFile(bin, folder, folder).copied == 0) {
+    sFailedBin = binTime;
+    return false;
+  }
+  for (const fs::path& file : GameFiles(folder)) {
+    fs::last_write_time(file, binTime, ec);
+  }
+  MarkCardChanged();
+  return true;
+}
+
+bool SyncTrilogyShare(bool pull) {
+  static std::chrono::steady_clock::time_point sNext{};
+  const auto now = std::chrono::steady_clock::now();
+  if (now < sNext) {
+    return false;
+  }
+  sNext = now + std::chrono::milliseconds(500);
+  const fs::path bin = TrilogyShareBin();
+  const fs::path folder = bin.empty() ? fs::path() : MountedCardFolder();
+  return !folder.empty() && SyncTrilogy(folder, bin, pull);
 }
 
 fs::path MountedCardFolder() {

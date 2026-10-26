@@ -130,6 +130,8 @@ public:
   // back to the default card for "". Only safe while no card operation runs.
   // True when the card changed.
   static bool PortSwitchCard(const char* directory);
+  // Port: true while the port's own (default) card is mounted.
+  static bool PortOnDefaultCard();
   // Port: the mounted card's identity, for the map side files (port_map_side.h).
   // The directory the card's channel actually resolves to (aurora_card_get_path:
   // <base>/<region>/<Card A|B>, or the raw image), the game id and maker its

@@ -238,6 +238,11 @@ int main() {
     CHECK_MSG(PortGci::SharedCardBase() == emu / "GC", "sharing on: <emu>/GC");
     CHECK_MSG(PortGci::CardTargetDirectory("") == PortGci::PathString(emu / "GC"), "shared card is the target");
     CHECK_MSG(PortGci::CardTargetDirectory("/ap") == "/ap", "Archipelago card wins");
+    PortGci::SetGameCode("R3ME");
+    CHECK_MSG(PortGci::SharedCardBase(&why).empty() && why.find("Trilogy") != std::string::npos,
+              "Trilogy disc: no shared card");
+    CHECK_MSG(PortGci::CardTargetDirectory("").empty(), "Trilogy disc: own card");
+    PortGci::SetGameCode("GM8E");
     fs::remove_all(card, ec);
     CHECK_MSG(PortGci::SharedCardBase(&why).empty() && why.find("GCI Folder") != std::string::npos,
               "no Card A: reason names the GCI folder");

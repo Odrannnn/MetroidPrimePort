@@ -432,6 +432,10 @@ bool CMemoryCardSys::PortSwitchCard(const char* directory) {
   return true;
 }
 
+bool CMemoryCardSys::PortOnDefaultCard() {
+  return mIsInitialized && !sDefaultCardBase.empty() && sCardBase == sDefaultCardBase;
+}
+
 CMemoryCardSys::~CMemoryCardSys() {
   mIsCardSysExists = false;
   FreeCardWorkArea(kCS_SlotA);

@@ -582,16 +582,20 @@ void DrawEmulatorCard() {
     SaveSettings();
   }
   ImGui::EndDisabled();
-  ItemHelp("The port and the emulator share the same saves: never run both at once. GameCube "
-           "Metroid Prime only; Randomizer and Archipelago keep their own cards. Takes effect at "
-           "the title screen.");
+  ItemHelp("The port and the emulator share the same saves: never run both at once. On a Trilogy "
+           "disc the port's card is mirrored with the emulator's Trilogy save instead. Randomizer "
+           "and Archipelago keep their own cards. Takes effect at the title screen.");
   if (!share) {
     return;
   }
   std::string why;
   const std::filesystem::path base = PortGci::SharedCardBase(&why);
   if (base.empty()) {
-    ImGui::TextColored(ThemeWarnColor(), "%s", why.c_str());
+    if (PortGci::TrilogyShareBin().empty()) {
+      ImGui::TextColored(ThemeWarnColor(), "%s", why.c_str());
+    } else {
+      ImGui::TextWrapped("%s", why.c_str());
+    }
     return;
   }
   ImGui::BeginDisabled(inGame || sCardDialogOpen);
