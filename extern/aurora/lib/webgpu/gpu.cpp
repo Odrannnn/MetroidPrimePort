@@ -1379,13 +1379,17 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
     addToggles("driver workaround off", g_config.dawnDisableToggles, false, true);
     addToggles("MP_DAWN_ENABLE", std::getenv("MP_DAWN_ENABLE"), true, false);
     addToggles("MP_DAWN_DISABLE", std::getenv("MP_DAWN_DISABLE"), false, false);
-    // GL is only the fallback for drivers that draw wrong on Vulkan, so it runs without
-    // Dawn's blob cache: cached program binaries crashed Mesa in glProgramBinary.
+    // GL runs without Dawn's blob cache where Mesa drives it: cached program binaries crashed
+    // Mesa in glProgramBinary. Windows desktop GL (vendor drivers) keeps it, or every launch
+    // recompiles every pipeline (about 40 ms each there).
+#if _WIN32
+    const bool glWithoutCache = g_backendType == wgpu::BackendType::OpenGLES;
+#else
+    const bool glWithoutCache =
+        g_backendType == wgpu::BackendType::OpenGLES || g_backendType == wgpu::BackendType::OpenGL;
+#endif
     wgpu::DawnTogglesDescriptor togglesDescriptor(wgpu::DawnTogglesDescriptor::Init{
-        .nextInChain = g_backendType == wgpu::BackendType::OpenGLES ||
-                               g_backendType == wgpu::BackendType::OpenGL
-                           ? nullptr
-                           : &cacheDescriptor,
+        .nextInChain = glWithoutCache ? nullptr : &cacheDescriptor,
         .enabledToggleCount = enableToggles.size(),
         .enabledToggles = enableToggles.data(),
         .disabledToggleCount = disableToggles.size(),
