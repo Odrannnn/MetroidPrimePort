@@ -2178,8 +2178,22 @@ void CCubeRenderer::DoThermalModelDraw(const CCubeModel& model, const CColor& mu
       (flags.GetOtherFlags() & CModelFlags::kF_DepthUpdate) == CModelFlags::kF_DepthUpdate);
 
   const ushort drawFlags = flags.GetOtherFlags();
+#ifdef TARGET_PC
+  // A hot model's converted surfaces take Remastered's thermal override in the HDR scene
+  // (CCubeModel::PortDrawThermalOverride); the rest keep this ramp.
+  const ESurfaceSelection which =
+      (drawFlags & CModelFlags::kF_ThermalUnsortedOnly) != 0 ? kSS_Unsorted : kSS_All;
+  const bool portOverride = CCubeModel::PortThermalOverrideActive() && model.TryLockTextures();
+  CCubeModel::sPortThermalSplit = portOverride;
+  model.DrawFlat(pos, nrm, which);
+  CCubeModel::sPortThermalSplit = false;
+  if (portOverride) {
+    model.PortDrawThermalOverride(pos, nrm, flags, which);
+  }
+#else
   model.DrawFlat(pos, nrm,
                  (drawFlags & CModelFlags::kF_ThermalUnsortedOnly) != 0 ? kSS_Unsorted : kSS_All);
+#endif
 }
 
 void CCubeRenderer::DrawThermalModel(const CModel& model, const CColor& mulCol,

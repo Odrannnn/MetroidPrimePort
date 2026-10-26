@@ -9,6 +9,7 @@
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "Kyoto/CFrameDelayedKiller.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
+#include "Kyoto/Graphics/CCubeMaterial.hpp"
 #include "MetroidPrime/CArchitectureQueue.hpp"
 #include "MetroidPrime/CDecalManager.hpp"
 #include "MetroidPrime/CInGameGuiManager.hpp"
@@ -270,6 +271,7 @@ void CMFGame::Draw() const {
 #ifdef TARGET_PC
   // Do not let a request survive a non-game draw (or an early return) into another frame.
   CStateManager::sPortSceneHdrRequest = false;
+  CCubeMaterial::sPortSceneHdr = false;
   CSamusHud::PortSetTintFolded(false);
 #endif
   if (!mInitialized) {
@@ -381,6 +383,7 @@ void CMFGame::Draw() const {
         }
         // The frame is measured at the opaque/sorted boundary (CStateManager::DrawWorld).
         GXPortPostProcessScene(bloom, threshold, tints, tone, gradeA, gradeB, gradeWeight, 0.f);
+        CCubeMaterial::sPortSceneHdr = false;
         // Remastered RenderAfterPostFX (0xf9fa6c): priority-2 camera filters
         // (0xc6273c), including the underwater multiply, follow tone/grade.
         // These GX filters replace the perspective with an ortho projection.

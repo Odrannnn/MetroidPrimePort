@@ -161,6 +161,61 @@ TEST_F(GxUniformLimitTest, PbrModelModulationIsPackedAfterRoomLights) {
   }
 }
 
+// The thermal override's vec4 follows pbr_model_coverage, and only a config with the bit has it.
+TEST_F(GxUniformLimitTest, PbrThermalIsPackedAfterModelCoverage) {
+  ShaderConfig config;
+  config.pbr = 1;
+  config.sceneHdr = 1;
+  config.pbrThermal = 1;
+  config.attrs[GX_VA_POS].attrType = GX_DIRECT;
+  config.attrs[GX_VA_POS].cnt = GX_POS_XYZ;
+  config.attrs[GX_VA_POS].compType = GX_F32;
+  config.tevStageCount = 1;
+  EXPECT_NE(build_shader_source(config).find("pbr_model_coverage: vec4f,\n    pbr_thermal: vec4f,"), std::string::npos);
+  ShaderConfig plainConfig = config;
+  plainConfig.pbrThermal = 0;
+  EXPECT_EQ(build_shader_source(plainConfig).find("pbr_thermal"), std::string::npos);
+  EXPECT_FALSE(build_shader_info(plainConfig).usesPbrThermal);
+
+  const auto info = build_shader_info(config);
+  ASSERT_TRUE(info.usesPbrThermal);
+
+  gfx::detail::testing::StagingPool staging;
+  gfx::detail::FramePacket frame;
+  staging.attach(frame);
+  gfx::detail::begin_recording(frame, 0);
+  struct Cleanup {
+    Vec4<float> coverage = g_gxState.pbrModelCoverage;
+    Vec4<float> thermal = g_gxState.pbrThermal;
+    ~Cleanup() {
+      g_gxState.pbrModelCoverage = coverage;
+      g_gxState.pbrThermal = thermal;
+      gfx::detail::shutdown_recording();
+    }
+  } cleanup;
+  g_gxState.pbrModelCoverage = {4321.5f, 0.f, 0.f, 0.f};
+  g_gxState.pbrThermal = {0.4f, 0.6f, 1.f, 1.f};
+  const auto range = build_uniform(info);
+  const auto& bytes = frame.uniforms;
+  ASSERT_GE(bytes.size(), range.offset + range.size);
+  const float sentinel[4] = {4321.5f, 0.f, 0.f, 0.f};
+  size_t at = range.offset;
+  bool found = false;
+  for (; at + sizeof(sentinel) + 16 <= range.offset + range.size; at += 4) {
+    if (std::memcmp(bytes.data() + at, sentinel, sizeof(sentinel)) == 0) {
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found);
+  float tail[4];
+  std::memcpy(tail, bytes.data() + at + sizeof(sentinel), sizeof(tail));
+  const float expected[4] = {0.4f, 0.6f, 1.f, 1.f};
+  for (u32 i = 0; i < 4; ++i) {
+    EXPECT_EQ(tail[i], expected[i]) << i;
+  }
+}
+
 TEST_F(GxUniformLimitTest, MaximalConfigFitsAtEveryAlignment) {
   // Adapters report minUniformBufferOffsetAlignment of 64 or 256, and the
   // uniform is padded up to it, so the limit has to hold for both.

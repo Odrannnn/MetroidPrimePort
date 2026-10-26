@@ -1922,6 +1922,16 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.pbrModelCoverage = coverage;
       g_gxState.dirty |= DirtyUniform;
     }
+  } else if (subCmd == GX_AURORA_SET_PBR_THERMAL) {
+    const f32 x = reader.read<f32>();
+    const f32 y = reader.read<f32>();
+    const f32 blended = reader.read<f32>();
+    const bool on = reader.read<u32>() != 0;
+    const Vec4<float> value = on ? Vec4<float>{x, y, blended, 1.f} : Vec4<float>{};
+    if (g_gxState.pbrThermal != value) {
+      g_gxState.pbrThermal = value;
+      g_gxState.dirty |= DirtyUniform;
+    }
   } else if (subCmd == GX_AURORA_SET_PBR_MATERIAL) {
     for (Vec4<float>* v :
          {&g_gxState.pbrEmissive, &g_gxState.pbrBacklight, &g_gxState.pbrLayer, &g_gxState.pbrLayerHeight,

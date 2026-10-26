@@ -1772,6 +1772,36 @@ TEST_F(GXFifoTest, PBRModelModulation_PropagatesDedupsAndResets) {
   EXPECT_EQ(g_gxState.pbrModelCoverage, (aurora::Vec4<float>{1.f, 0.f, 0.f, 0.f}));
 }
 
+// The thermal override (GXSetPBRThermal) carries c.x, c.y and the blended flag with w = 1 while on;
+// a repeat is dropped, and off is all zero whatever was passed.
+TEST_F(GXFifoTest, PBRThermal_PropagatesDedupsAndResets) {
+  EXPECT_EQ(g_gxState.pbrThermal, (aurora::Vec4<float>{}));
+
+  GXSetPBRThermal(GX_TRUE, 0.4f, 0.6f, GX_TRUE);
+  auto bytes = capture_fifo();
+  EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_SET_PBR_THERMAL));
+  reset_gx_state();
+  decode_fifo(bytes);
+  EXPECT_EQ(g_gxState.pbrThermal, (aurora::Vec4<float>{0.4f, 0.6f, 1.f, 1.f}));
+
+  GXSetPBRThermal(GX_TRUE, 0.4f, 0.6f, GX_TRUE);
+  EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_PBR_THERMAL));
+
+  // Only the blend changes: still a command.
+  GXSetPBRThermal(GX_TRUE, 0.4f, 0.6f, GX_FALSE);
+  bytes = capture_fifo();
+  EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_SET_PBR_THERMAL));
+  decode_fifo(bytes);
+  EXPECT_EQ(g_gxState.pbrThermal, (aurora::Vec4<float>{0.4f, 0.6f, 0.f, 1.f}));
+
+  GXSetPBRThermal(GX_FALSE, 0.2f, 0.3f, GX_TRUE);
+  decode_fifo(capture_fifo());
+  EXPECT_EQ(g_gxState.pbrThermal, (aurora::Vec4<float>{}));
+  // Off again with other values is the same write.
+  GXSetPBRThermal(GX_FALSE, 0.5f, 0.5f, GX_FALSE);
+  EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_PBR_THERMAL));
+}
+
 // The character backlight's plane, back direction and strengths propagate, a repeat is
 // dropped, and null turns it off (zero strengths).
 TEST_F(GXFifoTest, PBRBacklight_PropagatesAndTurnsOff) {

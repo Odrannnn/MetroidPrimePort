@@ -287,5 +287,32 @@ TEST(GxModelTint, InventoryKindsNotDoubleApplied) {
   }
 }
 
+// Model_ThermalOverride replaces the shading only in the HDR scene and only with the bit; its grey is
+// emitted after the HDR output, and it takes no GX fog.
+TEST(GxPbrThermal, OverrideOnlyInHdrSceneWithTheBit) {
+  ShaderConfig config = inventoryConfig(0, false);
+  config.sceneHdr = 1;
+  config.pbrThermal = 1;
+  config.fogType = GX_FOG_PERSP_LIN;
+  const std::string src = build_shader_source(config);
+  const size_t hdr = pos(src, "prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);");
+  const size_t thm = pos(src, "let thm_g = (thm_l * 3.75 + 0.25) * abs(dot(pbr_n, pbr_v)) * ubuf.pbr_thermal.x +");
+  ASSERT_NE(hdr, std::string::npos);
+  ASSERT_NE(thm, std::string::npos);
+  EXPECT_LT(hdr, thm);
+  EXPECT_NE(pos(src, "ubuf.pbr_thermal.z > 0.5 && !pbr_cut"), std::string::npos);
+  EXPECT_EQ(pos(src, "mix(prev.rgb, hdr_exposed(ubuf.fog.color.rgb"), std::string::npos);
+
+  ShaderConfig off = config;
+  off.pbrThermal = 0;
+  const std::string offSrc = build_shader_source(off);
+  EXPECT_EQ(pos(offSrc, "thm_g"), std::string::npos);
+  EXPECT_NE(pos(offSrc, "mix(prev.rgb, hdr_exposed(ubuf.fog.color.rgb"), std::string::npos);
+
+  ShaderConfig ldr = config;
+  ldr.sceneHdr = 0;
+  EXPECT_EQ(pos(build_shader_source(ldr), "thm_g"), std::string::npos);
+}
+
 } // namespace
 } // namespace aurora::gx

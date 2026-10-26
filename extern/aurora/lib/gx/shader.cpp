@@ -3222,6 +3222,23 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
          "let pbr_xw = select(pbr_xbase, vec3f(1.0), pbr_kind > 29.5) * pbr_xv3.w;\n"
          "          pbr_keep = pbr_xw * pbr_xscene;\n"
          "          pbr_vfw = vec3f(1.0) - pbr_xw;\n          pbr_vfk = true;");
+    if (config.pbrThermal && !layered) {
+      // The thermal visor's hot pass (GXSetPBRThermal): Remastered draws a mesh whose shader has no
+      // thermal technique with 02c254b6 Model_ThermalOverride (kb topic/thermal-model-render.md),
+      // which binds the mesh's own BCLR (no DIFC) and rebuilds the normal from its normal map:
+      //   g = (clamp(luma(BCLR), 0, 1) * 3.75 + 0.25) * |N.V| * c.x + c.y, unlit, unfogged.
+      // Alpha: 1 on the opaque and alpha-test perms (the cut above has discarded), else base.a^2 *
+      // vertex alpha. c is (0.4 a, 0.4 b + 0.6) times the inverse exposure, which the HDR scene's
+      // exposure cancels, so it comes without it.
+      put("prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);",
+          fmt::format("prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);\n"
+                      "      let thm_l = clamp(dot(max({0}.rgb, vec3f(0.0)), vec3f(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\n"
+                      "      let thm_g = (thm_l * 3.75 + 0.25) * abs(dot(pbr_n, pbr_v)) * ubuf.pbr_thermal.x +\n"
+                      "                  ubuf.pbr_thermal.y;\n"
+                      "      prev = vec4f(vec3f(thm_g),\n"
+                      "                   select(1.0, {0}.a * {0}.a * pbr_vraw.a, ubuf.pbr_thermal.z > 0.5 && !pbr_cut));",
+                      base));
+    }
   }
   return source;
 }
@@ -4269,6 +4286,7 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
   // take on the in-scatter; additive ones are only dimmed.
   bool pbrVolFog = false;
   bool pbrEmitted = false; // pbr_func wrote prev: in the HDR scene it is exposed light already
+  bool pbrThermalEmitted = false; // pbr_func wrote Model_ThermalOverride's grey (GXSetPBRThermal)
   std::string volFogSample;
   const auto volFogWeight = [&](std::string_view alpha) -> std::string {
     switch (config.volFog) {
@@ -4354,6 +4372,9 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
     uniBufAttrs += "\n    pbr_model_diffuse: vec4f,";
     uniBufAttrs += "\n    pbr_model_incan: vec4f,";
     uniBufAttrs += "\n    pbr_model_coverage: vec4f,";
+    if (config.pbrThermal) {
+      uniBufAttrs += "\n    pbr_thermal: vec4f,";
+    }
     auto pbr = pbr_func(config, info, vtxOutAttrs, vtxXfrAttrs, vtxOutIdx, vidxAttr);
     // An unlit surface (baked room light: pbr_func drops its light loop) has no room light to
     // shadow, but takes the sun's own colour.
@@ -4456,6 +4477,7 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
     }
     if (!pbr.empty()) {
       pbrEmitted = true;
+      pbrThermalEmitted = pbr.find("let thm_g") != std::string::npos;
       fragmentFn += pbr;
       texBindings += fmt::format("\n@group(2) @binding({})\n"
                                  "var pbr_cube: texture_cube<f32>;\n"
@@ -4563,7 +4585,9 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
           "\n    var fogZ = exp2(-8.0 * fogF * fogF);";
       break;
     }
-    if (config.sceneHdr && pbrEmitted) {
+    if (pbrThermalEmitted) {
+      // Model_ThermalOverride has no fog.
+    } else if (config.sceneHdr && pbrEmitted) {
       // The PBR light is exposed linear here: the display fog colour goes back through the curve
       // (an approximation of fogging before the tone; the display-domain mix is not reproduced).
       fragmentFn += fmt::format(

@@ -532,6 +532,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
         g_gxState.vtxDesc[lightmapAttr] != GX_NONE) {
       config.shaderConfig.pbrLightmapAttr = lightmapAttr;
     }
+    config.shaderConfig.pbrThermal = config.shaderConfig.sceneHdr && g_gxState.pbrThermal.w() > 0.5f;
   }
   if (bind_pos_active()) {
     config.shaderConfig.pbrBindPos = true;
@@ -645,6 +646,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     sc.pbr = 0;
     sc.pbrKind = 0;
     sc.pbrCut = 0;
+    sc.pbrThermal = 0;
     sc.pbrBindPos = false;
     sc.pbrBindLe = false;
     sc.pbrLightmapAttr = GX_VA_NULL;
@@ -676,6 +678,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     sc.pbr = 0;
     sc.pbrKind = 0;
     sc.pbrCut = 0;
+    sc.pbrThermal = 0;
     sc.pbrBindPos = false;
     sc.pbrBindLe = false;
     sc.pbrLightmapAttr = GX_VA_NULL;

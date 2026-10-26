@@ -446,6 +446,8 @@ struct GXState {
   Vec4<float> pbrModelDiffuse{1.f, 1.f, 1.f, 1.f};
   Vec4<float> pbrModelIncan{0.f, 0.f, 0.f, 1.f};
   Vec4<float> pbrModelCoverage{1.f, 0.f, 0.f, 0.f};
+  // GX_AURORA_SET_PBR_THERMAL: x, y, blended (1 / 0), w 1 while on (all zero when off)
+  Vec4<float> pbrThermal{};
   std::array<Vec4<float>, 8> pbrShield{}; // GX_AURORA_SET_PBR_SHIELD: CCH0..6, then AUVI xyz + DIFC.w
   // GX_AURORA_SET_PBR_LIGHT_HDR, per light: colour (rgb, falloff + 1; w 0 = off), then
   // (view position, r0), then (r1, -, -, -).
@@ -650,7 +652,11 @@ struct ShaderConfig {
   // With pbr, the mode's cut bit (512, pbr_backlight.w): only a cutout's shader has the cut
   // discards (a discard forces late depth on every pixel of the draw).
   u8 pbrCut : 1 = 0;
-  u8 padding0 : 3 = 0;
+  // GX_AURORA_SET_PBR_THERMAL on a PBR draw into the HDR scene: the pbr_thermal uniform and
+  // Model_ThermalOverride's grey in place of the shading. A bit of the same byte, so a config with
+  // it off keeps its bytes and cache keys.
+  u8 pbrThermal : 1 = 0;
+  u8 padding0 : 2 = 0;
   // GX_AURORA_PORT_ACTOR_SHADOW decal: the draw is a receiver redrawn as Remastered's actor shadow
   // decal (multiplies the frame by the shadow, shadowUniform holds its view-space planes). The old
   // padding byte, so other configs keep their bytes and cache keys.
@@ -707,6 +713,7 @@ struct ShaderInfo {
   bool usesHdrTone : 1 = false;   // sceneHdr without pbr: hdr_tone (pbrTone) and hdr_tev_blend
   bool usesClipPlane : 1 = false; // ShaderConfig::clipPlane: the clip_plane uniform
   bool usesShell : 1 = false;
+  bool usesPbrThermal : 1 = false; // ShaderConfig::pbrThermal: the pbr_thermal uniform
   bool shellScene : 1 = false; // the shell's colour pass: texture slot 2 holds the scene copy     // ShaderConfig::shell: the shell uniforms; colour: the scene copy on slot 2
 };
 struct BindGroupRanges {

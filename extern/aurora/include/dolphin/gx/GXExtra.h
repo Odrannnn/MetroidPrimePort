@@ -241,6 +241,12 @@ void GXSetPBRLightScale(f32 diffuse, f32 f0, f32 alpha, GXBool alphaReplaces);
 // Null `diffuse` is (1, 1, 1, 1), null `incan` is (0, 0, 0, 1), each independently; 1 is the
 // neutral coverage.
 void GXSetPBRModelModulation(const f32 diffuse[4], const f32 incan[4], f32 coverage);
+// Aurora extension: Remastered's Model_ThermalOverride, the thermal visor's hot pass, in place of the
+// shading of the following PBR draws into the HDR scene (GXPortSceneHdr; elsewhere and on layered
+// materials it does nothing): grey g = (clamp(luma(base), 0, 1) * 3.75 + 0.25) * |N.V| * x + y. The
+// alpha is 1, or base.a^2 * vertex alpha where `blended` (a material drawn with a blend, not alpha
+// tested). Stays in effect until turned off; off is neutral.
+void GXSetPBRThermal(GXBool on, f32 x, f32 y, GXBool blended);
 
 // Port extension: Remastered's bloom and colour grade at the end of the HDR scene (GXPortSceneHdr;
 // see lib/gfx/bloom.cpp). Light above `threshold` (exposed luminance) blooms, tints 0 to 3 weight

@@ -371,6 +371,10 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
     // linear light colours, then 3 HDR rows per light, then shield 8, the lightmap 4, the room lights and the model
     // modulation (diffuse, incandescence, coverage)
     info.uniformSize += sizeof(Mat3x4<float>) + sizeof(Vec4<float>) * (27 + GX::MaxLights * 4 + 8 + 4 + 1 + 3);
+    if (config.pbrThermal) {
+      info.usesPbrThermal = true;
+      info.uniformSize += sizeof(Vec4<float>);
+    }
   } else if (config.sceneHdr) {
     // The TEV inverse tone curve and actual-blend compatibility flag (PBR reads pbr_tone).
     info.usesHdrTone = true;
@@ -565,6 +569,9 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
     buf.append(g_gxState.pbrModelDiffuse);
     buf.append(g_gxState.pbrModelIncan);
     buf.append(g_gxState.pbrModelCoverage);
+    if (info.usesPbrThermal) {
+      buf.append(g_gxState.pbrThermal);
+    }
   }
   if (info.usesHdrTone) {
     for (const auto& v : g_gxState.pbrTone) {

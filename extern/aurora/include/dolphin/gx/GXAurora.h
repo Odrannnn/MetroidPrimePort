@@ -351,6 +351,11 @@ extern "C" {
 // prepass, 2 colour), then for 1 and 2 24 f32 (CCH0..CCH4, then time, depth shift, tex0 sRGB, 0).
 #define GX_AURORA_PORT_SHELL 0x0072
 
+// Remastered's Model_ThermalOverride on the following PBR draws in the HDR scene (see GXSetPBRThermal).
+// Payload:
+//   f32 x, f32 y, f32 blended, u32 on
+#define GX_AURORA_SET_PBR_THERMAL 0x0073
+
 #define GX2_SET_POLYGON_OFFSET 0x1000
 
 

@@ -812,7 +812,13 @@ void CCubeMaterial::SetCurrent(const CModelFlags& flags, const CCubeSurface& sur
   texMapTexCoordFlags.bytes += matTevCount * 20;
   bool usesTevReg2 = false;
 
+#ifdef TARGET_PC
+  // The thermal override shades with the material's own maps (its normal map included).
+  const bool thermal =
+      CCubeRenderer::That()->GetThermal() && sPortPBRThermal != kPT_Override;
+#else
   const bool thermal = CCubeRenderer::That()->GetThermal();
+#endif
   if (thermal) {
     scanner_t savedTexMapTexCoordFlags;
     savedTexMapTexCoordFlags = texMapTexCoordFlags;
@@ -1066,6 +1072,7 @@ float CCubeMaterial::sPortHudDyin[2] = {0.f, 0.f};
 uint CCubeMaterial::sPortPBRProbeDraws = 0;
 bool CCubeMaterial::sPortCapturingProbe = false;
 CCubeMaterial::EPortPBRThermal CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_None;
+bool CCubeMaterial::sPortSceneHdr = false;
 uint CCubeMaterial::sPortAreaLights = 0;
 uint CCubeMaterial::sPortTevLightSkip = 0;
 

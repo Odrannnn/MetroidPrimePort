@@ -76,9 +76,13 @@ public:
   static uint sPortPBRProbeDraws;
   static bool sPortCapturingProbe;
   // Port: a draw that keeps PBR under the thermal visor, as the fluid planes keep their own
-  // shader there (port_room_liquid.cpp); additive is the hot pass's blend.
-  enum EPortPBRThermal { kPT_None, kPT_Cold, kPT_Additive };
+  // shader there (port_room_liquid.cpp); additive is the hot pass's blend. Override is
+  // Remastered's Model_ThermalOverride for a hot model's converted surfaces
+  // (CCubeModel::PortDrawThermalOverride): the material's full stages, not the thermal cut.
+  enum EPortPBRThermal { kPT_None, kPT_Cold, kPT_Additive, kPT_Override };
   static EPortPBRThermal sPortPBRThermal;
+  // Port: the world's draws go to the HDR scene (CStateManager::DrawWorld, until the post).
+  static bool sPortSceneHdr;
   // Port: the light slots holding area lights (CActorLights::ActivateLights; CGraphics::
   // LoadLight clears a slot it loads). A PBR draw lit by a room's baked light leaves them
   // out, as Remastered lights actors by the bake and runtime lights alone.

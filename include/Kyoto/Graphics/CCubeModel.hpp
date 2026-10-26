@@ -300,6 +300,25 @@ public:
   void DrawSurface(const CCubeSurface& surface, const CModelFlags& modelFlags) const;
   void DrawSurfaceWireframe(const CCubeSurface& surface) const;
   void DrawFlat(const float* positions, const float* normals, ESurfaceSelection which) const;
+#ifdef TARGET_PC
+  // Port: Remastered's Model_ThermalOverride (02c254b6; kb topic/thermal-model-render.md), the
+  // hot pass's shader for a converted model's surfaces: grey (clamp(luma(BCLR)) * 3.75 + 0.25) *
+  // |N.V| * x + y in the HDR scene, with the material's blend. The caller of a hot
+  // RenderThermal sets (a, b) for the next draws (x = 0.4a, y = 0.4b + 0.6) and clears them.
+  static void PortSetThermalOverride(float a, float b);
+  static void PortClearThermalOverride();
+  // Whether the hot draws take the override now: one is set, the visor is thermal and the
+  // scene is HDR (without HDR they stay retail).
+  static bool PortThermalOverrideActive();
+  // Whether `surface` takes it: a converted material outside the kinds and modes whose
+  // Remastered shader does not use it (kb topic/thermal-model-render.md).
+  bool PortThermalOverrideSurface(const CCubeSurface& surface) const;
+  // Draws the surfaces PortThermalOverrideSurface picks (DrawFlat then skips them while
+  // sPortThermalSplit is set), with `flags`' depth.
+  void PortDrawThermalOverride(const float* positions, const float* normals, const CModelFlags& flags,
+                               ESurfaceSelection which) const;
+  static bool sPortThermalSplit;
+#endif
   bool TryLockTextures() const;
   void Draw(const CModelFlags& flags) const;
   void Draw(const float* positions, const float* normals, const CModelFlags& flags) const;

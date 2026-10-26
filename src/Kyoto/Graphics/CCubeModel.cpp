@@ -258,6 +258,13 @@ f32 sPortKindValue = 0.f;
 bool sPortSky = false;
 f32 sPortSkyGain[3];
 f32 sPortChargeShell = 0.f;
+// The hot pass's thermal override (PortSetThermalOverride): its x and y.
+struct SPortThermalOverride {
+  bool on;
+  f32 x;
+  f32 y;
+};
+SPortThermalOverride sPortThermalOverride = {false, 0.f, 0.f};
 f32 sPortIceShellIint = 10.f;
 f32 sPortDisintegration = 0.f;
 int sPortActiveVisor = 0;
@@ -1133,6 +1140,13 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
     GXSetPBR(GX_TRUE);
     ++CCubeMaterial::sPortPBRDraws;
   }
+  if (CCubeMaterial::sPortPBRThermal == CCubeMaterial::kPT_Override && pbr) {
+    // Alpha: 1 unless the material blends (and does not alpha test), as 02c254b6 reads it.
+    const bool blended = (material.GetCompressedBlend() >> 16) != GX_BL_ZERO &&
+                         !material.IsFlagSet(kStateFlag_AlphaTest);
+    GXSetPBRThermal(GX_TRUE, sPortThermalOverride.x, sPortThermalOverride.y,
+                    blended ? GX_TRUE : GX_FALSE);
+  }
   if (CCubeMaterial::sPortPBRThermal == CCubeMaterial::kPT_Additive) {
     // As CFluidPlaneCPU::RenderSetup in the thermal visor's hot pass (a TEV fallback too).
     CGX::SetBlendMode(GX_BM_BLEND, GX_BL_ONE, GX_BL_ONE, GX_LO_CLEAR);
@@ -1365,7 +1379,7 @@ void CCubeModel::DrawFlat(const float* positions, const float* normals,
          surface = surface.GetNextSurface()) {
 #ifdef TARGET_PC
       SPortVisorGuard visorGuard;
-      if (visorGuard.Skip(surface)) {
+      if (visorGuard.Skip(surface) || (sPortThermalSplit && PortThermalOverrideSurface(surface))) {
         continue;
       }
 #endif
@@ -1380,7 +1394,7 @@ void CCubeModel::DrawFlat(const float* positions, const float* normals,
          surface = surface.GetNextSurface()) {
 #ifdef TARGET_PC
       SPortVisorGuard visorGuard;
-      if (visorGuard.Skip(surface)) {
+      if (visorGuard.Skip(surface) || (sPortThermalSplit && PortThermalOverrideSurface(surface))) {
         continue;
       }
 #endif
@@ -1390,6 +1404,66 @@ void CCubeModel::DrawFlat(const float* positions, const float* normals,
     }
   }
 }
+
+#ifdef TARGET_PC
+bool CCubeModel::sPortThermalSplit = false;
+
+void CCubeModel::PortSetThermalOverride(const float a, const float b) {
+  sPortThermalOverride.on = true;
+  sPortThermalOverride.x = 0.4f * a;
+  sPortThermalOverride.y = 0.4f * b + 0.6f;
+}
+
+void CCubeModel::PortClearThermalOverride() { sPortThermalOverride.on = false; }
+
+bool CCubeModel::PortThermalOverrideActive() {
+  return sPortThermalOverride.on && CCubeMaterial::sPortSceneHdr && CCubeRenderer::That()->GetThermal();
+}
+
+bool CCubeModel::PortThermalOverrideSurface(const CCubeSurface& surface) const {
+  const CCubeMaterial material = GetMaterialByIndex(surface.GetMaterialIndex());
+  // Layered materials (more than four maps) draw their layers past it; a retail-material
+  // model has no PBR record and keeps the retail hot pass.
+  if (!material.IsFlagSet(kStateFlag_PortPBR) || material.GetTextureCount() > 4) {
+    return false;
+  }
+  f32 values[19];
+  PortReadPBRMaterial(static_cast< int >(surface.GetMaterialIndex()), values, nullptr, nullptr, nullptr);
+  const int kind = int(values[13] + 0.5f);
+  // Kinds 6, 21, 32 and 35 and the unlit colour mode (8) keep the retail draw in Remastered too.
+  return kind != 6 && kind != 21 && kind != 32 && kind != 35 && (int(values[7] + 0.5f) & 8) == 0;
+}
+
+void CCubeModel::PortDrawThermalOverride(const float* positions, const float* normals,
+                                         const CModelFlags& flags, ESurfaceSelection which) const {
+  // The material's own stages, blend and depth replace the thermal ones; the cached
+  // material state is the thermal cut's before and the override's after.
+  CCubeMaterial::KillCachedViewDepState();
+  CCubeMaterial::ResetCachedMaterials();
+  if (positions != nullptr) {
+    SetSkinningArraysCurrent(positions, normals);
+  } else {
+    SetArraysCurrent();
+  }
+  const CModelFlags opaque(CModelFlags::kT_Opaque, static_cast< uchar >(flags.GetShaderSet()),
+                           static_cast< CModelFlags::EFlags >(flags.GetOtherFlags()), CColor::White());
+  CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_Override;
+  for (int pass = 0; pass < 2; ++pass) {
+    if ((pass == 0 && which == kSS_Sorted) || (pass == 1 && which == kSS_Unsorted)) {
+      continue;
+    }
+    for (CCubeSurface surface = pass == 0 ? x38_firstUnsorted : x3c_firstSorted; surface.IsValid();
+         surface = surface.GetNextSurface()) {
+      if (PortThermalOverrideSurface(surface)) {
+        DrawSurface(surface, opaque);
+      }
+    }
+  }
+  CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_None;
+  GXSetPBRThermal(GX_FALSE, 0.f, 0.f, GX_FALSE);
+  CCubeMaterial::ResetCachedMaterials();
+}
+#endif
 
 void CCubeModel::Draw(const CModelFlags& flags) const {
   CCubeMaterial::KillCachedViewDepState();
