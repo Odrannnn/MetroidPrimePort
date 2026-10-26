@@ -45,6 +45,10 @@ namespace aurora::dvd::impl {
   bool s_overlayCallbacksSet = false;
   AuroraOverlayCallbacks s_overlayCallbacks;
   std::mutex s_fstLock;
+  std::string s_rootDir;
+  std::string s_dolFile;
+  s32 s_dolFileEntryNum = k_invalidFstEntry;
+  std::vector<u8> s_dolFileData;
 }
 
 namespace {
@@ -124,6 +128,10 @@ void clearState() {
   s_currentDir = 0;
   s_currentPath = "/";
   s_diskID = {};
+  s_rootDir.clear();
+  s_dolFile.clear();
+  s_dolFileEntryNum = k_invalidFstEntry;
+  s_dolFileData.clear();
   s_initialized = false;
 }
 
@@ -740,6 +748,34 @@ bool aurora_dvd_open(const char* disc_path) {
   return true;
 }
 
+bool aurora_dvd_set_root(const char* root_dir, const char* dol_file) {
+  if (s_partition == nullptr) {
+    return false;
+  }
+  const std::string oldRoot = s_rootDir;
+  const std::string oldDol = s_dolFile;
+  {
+    std::lock_guard lock(s_fstLock);
+    s_rootDir = root_dir != nullptr ? root_dir : "";
+    s_dolFile = dol_file != nullptr ? dol_file : "";
+    s_dolFileEntryNum = k_invalidFstEntry;
+    s_dolFileData.clear();
+  }
+  if (!rebuildFST() || (!s_dolFile.empty() && s_dolFileEntryNum == k_invalidFstEntry)) {
+    Log.error("Disc has no root directory {} or DOL {}", s_rootDir, s_dolFile);
+    {
+      std::lock_guard lock(s_fstLock);
+      s_rootDir = oldRoot;
+      s_dolFile = oldDol;
+    }
+    rebuildFST();
+    return false;
+  }
+  s_currentDir = 0;
+  s_currentPath = "/";
+  return true;
+}
+
 void aurora_dvd_close(void) {
   s_worker.stop();
   clearState();
@@ -751,6 +787,34 @@ const u8* DVDGetDOLLocation(s32* out_size) {
   if (s_partition == nullptr) {
     *out_size = 0;
     return nullptr;
+  }
+
+  if (!s_dolFile.empty()) {
+    std::lock_guard lock(s_fstLock);
+    if (s_dolFileData.empty() && s_dolFileEntryNum > 0) {
+      NodHandle* handle = nullptr;
+      if (nod_partition_open_file(s_partition, s_dolFileEntryNum, &handle) == NOD_RESULT_OK && handle != nullptr) {
+        const int64_t size = nod_seek(handle, 0, SEEK_END);
+        if (size > 0 && nod_seek(handle, 0, SEEK_SET) == 0) {
+          s_dolFileData.resize(static_cast<size_t>(size));
+          size_t done = 0;
+          while (done < s_dolFileData.size()) {
+            const int64_t got = nod_read(handle, s_dolFileData.data() + done, s_dolFileData.size() - done);
+            if (got <= 0) {
+              break;
+            }
+            done += static_cast<size_t>(got);
+          }
+          if (done != s_dolFileData.size()) {
+            Log.error("Could not read DOL {}", s_dolFile);
+            s_dolFileData.clear();
+          }
+        }
+        nod_free(handle);
+      }
+    }
+    *out_size = static_cast<s32>(s_dolFileData.size());
+    return s_dolFileData.empty() ? nullptr : s_dolFileData.data();
   }
 
   NodPartitionMeta meta{};

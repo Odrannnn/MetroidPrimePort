@@ -67,6 +67,12 @@ extern bool s_initialized;
 extern bool s_overlayCallbacksSet;
 extern AuroraOverlayCallbacks s_overlayCallbacks;
 extern std::mutex s_fstLock;
+// aurora_dvd_set_root: the directory shown as the root ("" for the disc's own root), and the
+// file whose bytes DVDGetDOLLocation returns instead of the partition's DOL (read on demand).
+extern std::string s_rootDir;
+extern std::string s_dolFile;
+extern s32 s_dolFileEntryNum;
+extern std::vector<u8> s_dolFileData;
 
 bool rebuildFST();
 bool nameEqualsIgnoreCase(std::string_view lhs, std::string_view rhs);

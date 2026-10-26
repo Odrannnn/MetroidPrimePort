@@ -266,7 +266,31 @@ bool rebuildFST() {
   ctx.dirStack.emplace_back(ctx.root, std::numeric_limits<u32>::max());
 
   nod_partition_iterate_fst(s_partition, fstCallback, &ctx);
+  // Counted before the root moves, so overlay entries never take a base entry's number.
   s_baseEntryCount = calcEntryCount(*ctx.root);
+
+  bool rootFound = true;
+  if (!s_dolFile.empty()) {
+    const IterateNode* dol = findNode(*ctx.root, s_dolFile);
+    s_dolFileEntryNum = dol != nullptr && !dol->isDir ? dol->originalEntryNum : k_invalidFstEntry;
+  }
+  if (!s_rootDir.empty()) {
+    // The directory's files keep their entry numbers. The old root's other entries stay
+    // reachable at the top level unless the directory has one of the same name.
+    const IterateNode* dir = findNode(*ctx.root, s_rootDir);
+    if (dir != nullptr && dir->isDir) {
+      auto children = dir->children;
+      for (const auto& child : ctx.root->children) {
+        if (child.get() != dir && findNode(*dir, child->name) == nullptr) {
+          children.push_back(child);
+        }
+      }
+      ctx.root->children = std::move(children);
+    } else {
+      rootFound = false;
+    }
+  }
+
   syncOverlayEntryAllocator();
   mergeOverlayFilesIntoContext(ctx);
   makeFstFromContext(ctx);
@@ -276,7 +300,7 @@ bool rebuildFST() {
     if (currentDir >= 0 && static_cast<size_t>(currentDir) < s_fstEntries.size() && s_fstEntries[currentDir].isDir) {
       s_currentDir = currentDir;
       s_currentPath = currentPath;
-      return true;
+      return rootFound;
     }
   }
 
@@ -287,7 +311,7 @@ bool rebuildFST() {
 
   s_currentDir = 0;
   s_currentPath = "/";
-  return true;
+  return rootFound;
 }
 
 bool nameEqualsIgnoreCase(const std::string_view lhs, const std::string_view rhs) {

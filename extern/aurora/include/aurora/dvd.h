@@ -21,6 +21,16 @@ bool aurora_dvd_open(const char* disc_path);
 void aurora_dvd_close(void);
 
 /**
+ * For a disc holding several games (Metroid Prime Trilogy): show the open disc's directory
+ * root_dir as the root, its files keeping their EntryNums (the old root's other entries stay at
+ * the top level where root_dir has none of that name), and have DVDGetDOLLocation return the
+ * root-level file dol_file instead of the partition's DOL. Null or empty leaves either unchanged
+ * from the disc's own. Returns false, changing nothing, if the disc lacks either.
+ * aurora_dvd_open resets both.
+ */
+bool aurora_dvd_set_root(const char* root_dir, const char* dol_file);
+
+/**
  * OVERLAY FILES!
  *
  * Overlay files allow you to replace and add ("overlay") files that are present in the loaded DVD.
