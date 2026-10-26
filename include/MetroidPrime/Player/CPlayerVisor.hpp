@@ -64,6 +64,8 @@ public:
   // the width x height screen copy) and clears the EFB for the frame's own world.
   static void PortCopyScanZoom(int width, int height, float zoom);
   static void PortDropScanZoom();
+  // How far the scan window is open (ScanWindowCopySize's t; Trilogy's +0x654).
+  float PortScanWindowOpen() const;
   // What DrawScanEffect draws before its copy (scan shield, icons, target reticle).
   void PortDrawScanOverlay(const CStateManager& mgr, const CTargetingManager* tgtMgr) const;
   // The scan window's width and height factors: narrower and taller under pointer aim, where
