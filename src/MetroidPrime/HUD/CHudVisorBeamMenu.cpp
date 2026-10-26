@@ -195,11 +195,12 @@ void CHudVisorBeamMenu::Update(float dt, const bool init) {
   const CColor* lozColor = &guiColors.GetVisorBeamMenuLozColor();
 #ifdef TARGET_PC
   // @ fn_800E84DC (800E8630..800E867C): Trilogy takes the inactive and lozenge colours with alpha
-  // 0, so only the selected icon shows once the menu settles.
+  // 0, so only the selected icon shows once the menu settles. Keep the full
+  // corner menus available when the port's optional radial menus are disabled.
   const bool trilogy = PortDisc::IsTrilogy(PortDisc::Current());
   const CColor triInactive = inactiveColor->WithAlphaOf(0.f);
   const CColor triLoz = lozColor->WithAlphaOf(0.f);
-  if (trilogy) {
+  if (trilogy && PortDebug::RadialMenus()) {
     inactiveColor = &triInactive;
     lozColor = &triLoz;
   }
