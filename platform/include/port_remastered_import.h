@@ -103,7 +103,8 @@ namespace ImportStage {
 // 80: 81B8E136 (Thardus) draws as a978d507, its verbatim subset; a two-tangent model writes the second
 //     frame when the buffers its two-tangent surfaces draw have it, not only when all of them do.
 // 81: C78982B4 door frames and its twin family 131ED7F0 read their bake from coord 3 (TEXCOORD_1.zw).
-inline constexpr int kConverter = 81;
+// 82: the surface's visor word keeps mesh bits 19 and 22 (the thermal visor's hot and cold passes).
+inline constexpr int kConverter = 82;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.

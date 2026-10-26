@@ -273,6 +273,9 @@ void Prefetch(uint32_t mrea);
 // Draws the area's room geometry. True when it stands in for the area's own, which is
 // when the area has a file, the mode says so and every model of it has loaded.
 bool Draw(const CStateManager& mgr, const CGameArea& area, const CFrustumPlanes& frustum);
+// The thermal visor's hot world for an area Draw drew this frame (in the HDR scene): the
+// bit-19 meshes of what it drew, through the thermal override.
+void DrawThermalHot(const CStateManager& mgr, const CGameArea& area, const CFrustumPlanes& frustum);
 // Queues the blended surfaces of what Draw drew for the area this frame in the renderer's
 // sorted pass; the renderer hands each back to DrawSorted through the state manager's
 // drawable callback, as type kDrawableType.

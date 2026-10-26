@@ -411,6 +411,7 @@ bool DrawLava(Placed& item, const CStateManager& mgr, const CGameArea& gameArea,
   // passes take the fluid plane's whole shader too (the hot one adds it), so the surface
   // keeps its own; the X-Ray visor draws it as it is.
   const EThermalDrawFlag thermal = mgr.GetThermalDrawFlag();
+  const CCubeMaterial::EPortPBRThermal outerThermal = CCubeMaterial::sPortPBRThermal;
   CCubeMaterial::sPortPBRThermal = thermal == kTD_Hot    ? CCubeMaterial::kPT_Additive
                                    : thermal == kTD_Cold ? CCubeMaterial::kPT_Cold
                                                          : CCubeMaterial::kPT_None;
@@ -423,7 +424,7 @@ bool DrawLava(Placed& item, const CStateManager& mgr, const CGameArea& gameArea,
     // The blend was set past the material cache.
     CCubeMaterial::ResetCachedMaterials();
   }
-  CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_None;
+  CCubeMaterial::sPortPBRThermal = outerThermal;
   gpRender->SetAmbientColor(CColor::White());
   CGraphics::DisableAllLights();
   if (baked) {

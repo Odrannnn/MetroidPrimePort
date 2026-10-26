@@ -22,6 +22,7 @@
 #include "port_shell.h"
 #include "port_skip_cutscenes.h"
 #include "port_viewmodel.h"
+#include "port_visor_mesh.h"
 #include "port_world_holders.h"
 #include "port_console.h"
 #include "port_room_effects.h"
@@ -3434,6 +3435,14 @@ void CStateManager::DrawWorld() const {
                        gpTweakGui->GetThermalVisorColor());
   gpRender->SetThermalColdScale(xf28_thermColdScale2 + xf24_thermColdScale1);
 #ifdef TARGET_PC
+  // Remastered's thermal cold pass (RenderPrimaryPass) draws the world and models as the other
+  // visors do, into the visor's target, with the cold mesh filter (bit 22); the HDR scene
+  // does so here, room geometry included. Without HDR the retail thermal draw stays.
+  const bool portThermalScene = thermal && CCubeMaterial::sPortSceneHdr;
+  if (portThermalScene) {
+    CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_Scene;
+    CCubeModel::PortSetThermalPass(PortVisorMesh::kTP_Cold);
+  }
   bool portRoomGeo[10] = {};
   // The draw token each area's sorted pass ran with (pass B).
   uint portDrawToken[10] = {};
@@ -3466,7 +3475,8 @@ void CStateManager::DrawWorld() const {
       continue;
     }
     // A mod's room geometry stands in for the area's own (port_room_geo.h).
-    portRoomGeo[i] = !thermal && visor != CPlayerState::kPV_XRay && PortRoomGeo::Draw(*this, area, frustum);
+    portRoomGeo[i] = (!thermal || portThermalScene) && visor != CPlayerState::kPV_XRay &&
+                     PortRoomGeo::Draw(*this, area, frustum);
     if (portRoomGeo[i]) {
       continue;
     }
@@ -3713,10 +3723,14 @@ void CStateManager::DrawWorld() const {
   static const bool sVisorMeshLog = port::EnvFlag("MP_VISORMESH_LOG");
   if (sVisorMeshLog && !portZoomed && CGraphics::GetFrameCounter() % 60 == 0) {
     unsigned visorSkipped = 0, shadowSkipped = 0;
+    unsigned thermalCold = 0, thermalHotDropped = 0;
     CCubeModel::PortTakeVisorSkipCounts(visorSkipped, shadowSkipped);
-    fprintf(stderr, "visor-mesh: frame %u visor %d skipped surfaces: visor bit %u, shadow bit %u\n",
+    CCubeModel::PortTakeThermalSkipCounts(thermalCold, thermalHotDropped);
+    fprintf(stderr,
+            "visor-mesh: frame %u visor %d skipped surfaces: visor bit %u, shadow bit %u, "
+            "thermal cold %u, hot without override %u\n",
             static_cast< uint >(CGraphics::GetFrameCounter()), static_cast< int >(visor), visorSkipped,
-            shadowSkipped);
+            shadowSkipped, thermalCold, thermalHotDropped);
   }
   if (portShadow) {
     GXPortSetShadowCaster(false);
@@ -3756,6 +3770,10 @@ void CStateManager::DrawWorld() const {
       CGraphics::SetDepthRange(0.125f, 1.f);
     }
 #ifdef TARGET_PC
+    if (portThermalScene) {
+      CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_None;
+      CCubeModel::PortSetThermalPass(PortVisorMesh::kTP_None);
+    }
     if (!PortRoomEnv::ThermalPass(false, xf28_thermColdScale2 + xf24_thermColdScale1))
 #endif
     gpRender->DoThermalBlendCold();
@@ -3774,6 +3792,14 @@ void CStateManager::DrawWorld() const {
     for (int i = areas.size() - 1; i >= 0; --i) {
       const TAreaId id = areas[i]->GetId();
       gpRender->EnablePVS(&visibility[i], id.Value());
+#ifdef TARGET_PC
+      // A room the cold pass drew from its room geometry takes Remastered's hot world: its
+      // bit-19 meshes through the thermal override, in place of the retail hot surfaces.
+      if (portRoomGeo[i]) {
+        PortRoomGeo::DrawThermalHot(*this, *areas[i], frustum);
+        continue;
+      }
+#endif
       gpRender->DrawUnsortedGeometry(id.Value(), mask, 0x20);
       gpRender->DrawAreaGeometry(id.Value(), mask, 0x10);
     }

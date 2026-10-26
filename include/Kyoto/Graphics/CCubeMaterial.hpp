@@ -79,7 +79,9 @@ public:
   // shader there (port_room_liquid.cpp); additive is the hot pass's blend. Override is
   // Remastered's Model_ThermalOverride for a hot model's converted surfaces
   // (CCubeModel::PortDrawThermalOverride): the material's full stages, not the thermal cut.
-  enum EPortPBRThermal { kPT_None, kPT_Cold, kPT_Additive, kPT_Override };
+  // Scene is the HDR thermal cold pass, which draws converted materials as in the other
+  // visors (Remastered's RenderPrimaryPass; kb topic/thermal-model-render.md), full stages too.
+  enum EPortPBRThermal { kPT_None, kPT_Cold, kPT_Additive, kPT_Override, kPT_Scene };
   static EPortPBRThermal sPortPBRThermal;
   // Port: the world's draws go to the HDR scene (CStateManager::DrawWorld, until the post).
   static bool sPortSceneHdr;

@@ -126,6 +126,7 @@ Model BuildModel(const ModelMaterial& material, size_t uvSets) {
   ModelMesh mesh;
   mesh.material = 0;
   mesh.vertexBuffer = 0;
+  mesh.unkE = 0x40;  // bit 22, as nearly every mesh has: the plain surface header
   mesh.indices = {0, 1, 2};
   model.meshes.push_back(mesh);
   return model;
@@ -415,6 +416,7 @@ Model LightmapModel(std::vector<ModelMaterial> materials, std::vector<ModelVerte
     ModelMesh mesh;
     mesh.material = material;
     mesh.vertexBuffer = buffer;
+    mesh.unkE = 0x40;  // bit 22, as nearly every mesh has: the plain surface header
     mesh.indices = {0, 1, 2};
     model.meshes.push_back(std::move(mesh));
   }

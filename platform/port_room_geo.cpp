@@ -12,6 +12,7 @@
 #include "port_log.h"
 #include "port_mods.h"
 #include "port_room_env.h"
+#include "port_visor_mesh.h"
 
 #include "Kyoto/Alloc/CMemory.hpp"
 #include "Kyoto/CResFactory.hpp"
@@ -236,6 +237,9 @@ struct Area {
   std::vector< Model > models;
   std::vector< Placed > items;
   std::vector< const Placed* > sorted; // this frame's, with blended surfaces still to draw
+  // This frame's drawn models and where (DrawThermalHot): an item's transform, a cluster's
+  // identity.
+  std::vector< std::pair< const CModel*, const CTransform4f* > > hot;
   // The items grouped by model, the order Draw goes in: a model's instances one after another
   // keep its pipelines and textures bound, which is most of the cost of a draw on a phone.
   std::vector< size_t > drawOrder;
@@ -1441,6 +1445,7 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
   }
   Area& area = found->second;
   area.sorted.clear();
+  area.hot.clear();
   if (!area.placed) {
     for (Placed& item : area.items) {
       item.xf = gameArea.GetTM() * item.xf;
@@ -1778,6 +1783,9 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
       return a.cutout != b.cutout ? b.cutout : a.distanceSq < b.distanceSq;
     });
   }
+  for (const Visible& draw : visible) {
+    area.hot.emplace_back(draw.model, draw.xf);
+  }
   const auto drawOne = [&](const Visible& draw) {
     const PortRoomGeometryHandedness::CullScope cull(PortRoomGeometryHandedness::Mirrored(*draw.xf));
     if (bakes(draw.lightmap)) {
@@ -1837,6 +1845,29 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     PortRoomEnv::ClearVolumeHint();
   }
   return GetMode() == Mode::Replace;
+}
+
+void DrawThermalHot(const CStateManager&, const CGameArea& gameArea, const CFrustumPlanes&) {
+  const auto found = Areas().find(gameArea.GetAreaAssetId());
+  if (found == Areas().end()) {
+    return;
+  }
+  // Remastered's hot pass (RenderPrimaryPass, 0xfb11f0): the meshes with bit 19 and without
+  // 22, unsorted and depth-sorted, through the thermal override at the world's global
+  // (1.0, 0.2509804), taken as they are (no actor data to scale them).
+  CCubeModel::PortSetThermalPass(PortVisorMesh::kTP_Hot);
+  CCubeModel::PortSetThermalOverrideConstants(1.f, 0.2509804f);
+  CGraphics::DisableAllLights();
+  for (const auto& [model, xf] : found->second.hot) {
+    const CCubeModel* const cube = model->GetCubeModel();
+    if (cube == nullptr || !cube->TryLockTextures()) {
+      continue;
+    }
+    gpRender->SetModelMatrix(*xf);
+    cube->PortDrawThermalOverride(nullptr, nullptr, CModelFlags::Normal(), kSS_All);
+  }
+  CCubeModel::PortClearThermalOverride();
+  CCubeModel::PortSetThermalPass(PortVisorMesh::kTP_None);
 }
 
 void AddSorted(const CGameArea& gameArea) {

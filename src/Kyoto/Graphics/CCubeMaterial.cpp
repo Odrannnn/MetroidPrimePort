@@ -813,9 +813,10 @@ void CCubeMaterial::SetCurrent(const CModelFlags& flags, const CCubeSurface& sur
   bool usesTevReg2 = false;
 
 #ifdef TARGET_PC
-  // The thermal override shades with the material's own maps (its normal map included).
-  const bool thermal =
-      CCubeRenderer::That()->GetThermal() && sPortPBRThermal != kPT_Override;
+  // The thermal override and the HDR cold pass's converted materials shade with the material's
+  // own maps (its normal map included).
+  const bool thermal = CCubeRenderer::That()->GetThermal() && sPortPBRThermal != kPT_Override &&
+                       !(sPortPBRThermal == kPT_Scene && IsFlagSet(kStateFlag_PortPBR));
 #else
   const bool thermal = CCubeRenderer::That()->GetThermal();
 #endif

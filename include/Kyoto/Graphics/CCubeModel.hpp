@@ -173,6 +173,10 @@ public:
   static void PortSetActiveVisor(int visor);
   // Surfaces the filter skipped since the last call (visor bits, shadow bit), for the log.
   static void PortTakeVisorSkipCounts(unsigned& visor, unsigned& shadow);
+  // The thermal visor's pass whose mesh filter applies too (PortVisorMesh::ThermalPass: none,
+  // cold, hot), and the surfaces it skipped since the last call.
+  static void PortSetThermalPass(int pass);
+  static void PortTakeThermalSkipCounts(unsigned& cold, unsigned& hotDropped);
   // The Remastered Phazon Beam's DisintegrationAmount, 0 to 1 (CPhazonBeamMP1::Update), which
   // the veins material (kind 35) eats its mask with. Reset to 0 when the beam unloads.
   static void PortSetDisintegration(float amount);
@@ -306,6 +310,8 @@ public:
   // |N.V| * x + y in the HDR scene, with the material's blend. The caller of a hot
   // RenderThermal sets (a, b) for the next draws (x = 0.4a, y = 0.4b + 0.6) and clears them.
   static void PortSetThermalOverride(float a, float b);
+  // The override's x and y as they are: the hot world's global (1.0, 0.2509804).
+  static void PortSetThermalOverrideConstants(float x, float y);
   static void PortClearThermalOverride();
   // Whether the hot draws take the override now: one is set, the visor is thermal and the
   // scene is HDR (without HDR they stay retail).

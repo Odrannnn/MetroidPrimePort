@@ -268,6 +268,9 @@ SPortThermalOverride sPortThermalOverride = {false, 0.f, 0.f};
 f32 sPortIceShellIint = 10.f;
 f32 sPortDisintegration = 0.f;
 int sPortActiveVisor = 0;
+int sPortThermalPass = PortVisorMesh::kTP_None;
+unsigned sPortThermalSkipped = 0;
+unsigned sPortThermalHotDropped = 0;
 unsigned sPortVisorSkipped = 0;
 unsigned sPortShadowSkipped = 0;
 
@@ -278,6 +281,13 @@ struct SPortVisorGuard {
   bool restore = false;
   bool Skip(const CCubeSurface& surface) {
     const uint word = surface.PortVisorWord();
+    if (PortVisorMesh::SkipsThermal(word, sPortThermalPass)) {
+      // Counted for the cold pass only: the hot pass skips nearly every surface by design.
+      if (sPortThermalPass == PortVisorMesh::kTP_Cold) {
+        ++sPortThermalSkipped;
+      }
+      return true;
+    }
     if (word == 0) {
       return false;
     }
@@ -309,11 +319,20 @@ struct SPortVisorGuard {
 
 void CCubeModel::PortSetActiveVisor(const int visor) { sPortActiveVisor = visor; }
 
+void CCubeModel::PortSetThermalPass(const int pass) { sPortThermalPass = pass; }
+
 void CCubeModel::PortTakeVisorSkipCounts(unsigned& visor, unsigned& shadow) {
   visor = sPortVisorSkipped;
   shadow = sPortShadowSkipped;
   sPortVisorSkipped = 0;
   sPortShadowSkipped = 0;
+}
+
+void CCubeModel::PortTakeThermalSkipCounts(unsigned& cold, unsigned& hotDropped) {
+  cold = sPortThermalSkipped;
+  hotDropped = sPortThermalHotDropped;
+  sPortThermalSkipped = 0;
+  sPortThermalHotDropped = 0;
 }
 
 void CCubeModel::PortSetChargeShell(const f32 amount) { sPortChargeShell = amount; }
@@ -792,7 +811,8 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
                         (portKind > 7.5f && portKind < 8.5f) ||
                         (portKind == 45.f && (trans == CModelFlags::kT_One || trans == CModelFlags::kT_Blend ||
                                               trans == CModelFlags::kT_Additive));
-  const bool tintable = pbrOutside && tintKind && !CCubeRenderer::That()->GetThermal();
+  const bool tintable = pbrOutside && tintKind &&
+                        (!CCubeRenderer::That()->GetThermal() || CCubeMaterial::sPortPBRThermal == CCubeMaterial::kPT_Scene);
   const bool tintOpaque =
       tintable && (trans == CModelFlags::kT_One || trans == CModelFlags::kT_Two || trans == CModelFlags::kT_Three);
   const bool pbrBlend = (pbrOutside && trans == CModelFlags::kT_Blend && tintWhite) ||
@@ -1414,6 +1434,12 @@ void CCubeModel::PortSetThermalOverride(const float a, const float b) {
   sPortThermalOverride.y = 0.4f * b + 0.6f;
 }
 
+void CCubeModel::PortSetThermalOverrideConstants(const float x, const float y) {
+  sPortThermalOverride.on = true;
+  sPortThermalOverride.x = x;
+  sPortThermalOverride.y = y;
+}
+
 void CCubeModel::PortClearThermalOverride() { sPortThermalOverride.on = false; }
 
 bool CCubeModel::PortThermalOverrideActive() {
@@ -1447,6 +1473,7 @@ void CCubeModel::PortDrawThermalOverride(const float* positions, const float* no
   }
   const CModelFlags opaque(CModelFlags::kT_Opaque, static_cast< uchar >(flags.GetShaderSet()),
                            static_cast< CModelFlags::EFlags >(flags.GetOtherFlags()), CColor::White());
+  const CCubeMaterial::EPortPBRThermal outerThermal = CCubeMaterial::sPortPBRThermal;
   CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_Override;
   for (int pass = 0; pass < 2; ++pass) {
     if ((pass == 0 && which == kSS_Sorted) || (pass == 1 && which == kSS_Unsorted)) {
@@ -1456,10 +1483,15 @@ void CCubeModel::PortDrawThermalOverride(const float* positions, const float* no
          surface = surface.GetNextSurface()) {
       if (PortThermalOverrideSurface(surface)) {
         DrawSurface(surface, opaque);
+      } else if (sPortThermalPass == PortVisorMesh::kTP_Hot &&
+                 !PortVisorMesh::SkipsThermal(surface.PortVisorWord(), PortVisorMesh::kTP_Hot)) {
+        // The hot world is the override alone: a bit-19 surface whose material doesn't take
+        // it is counted (visor-mesh log) and not drawn.
+        ++sPortThermalHotDropped;
       }
     }
   }
-  CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_None;
+  CCubeMaterial::sPortPBRThermal = outerThermal;
   GXSetPBRThermal(GX_FALSE, 0.f, 0.f, GX_FALSE);
   CCubeMaterial::ResetCachedMaterials();
 }
