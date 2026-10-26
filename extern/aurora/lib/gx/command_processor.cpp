@@ -40,20 +40,22 @@ constexpr Module Log{"aurora::gx::fifo"};
 
 u16 prepare_idx_buffer(ByteBuffer& buf, GXPrimitive prim, u16 vtxStart, u16 vtxCount) noexcept {
   // Sized once and written directly: this runs for nearly every draw.
+  // Whole triangles only, as GX draws them: a merged draw's indices follow the last draw's, so a
+  // part triangle would shift every triangle after it onto the wrong vertices.
   u32 numIndices = 0;
   if (prim == GX_QUADS) {
-    numIndices = (u32(vtxCount) + 3) / 4 * 6;
+    numIndices = u32(vtxCount) / 4 * 6;
   } else if (prim == GX_TRIANGLES) {
-    numIndices = vtxCount;
+    numIndices = u32(vtxCount) / 3 * 3;
   } else if (prim == GX_TRIANGLEFAN || prim == GX_TRIANGLESTRIP) {
-    numIndices = vtxCount <= 3 ? vtxCount : 3 + (u32(vtxCount) - 3) * 3;
+    numIndices = vtxCount < 3 ? 0 : (u32(vtxCount) - 2) * 3;
   } else if (prim == GX_LINES || prim == GX_LINESTRIP || prim == GX_POINTS) {
     numIndices = 6;
   } else
     UNLIKELY FATAL("unsupported primitive type {}", static_cast<u32>(prim));
   u16* out = reinterpret_cast<u16*>(buf.append_uninit(numIndices * sizeof(u16)));
   if (prim == GX_QUADS) {
-    for (u32 v = 0; v < vtxCount; v += 4) {
+    for (u32 v = 0; v + 4 <= vtxCount; v += 4) {
       const u16 idx0 = vtxStart + v;
       *out++ = idx0;
       *out++ = idx0 + 1;
@@ -63,9 +65,11 @@ u16 prepare_idx_buffer(ByteBuffer& buf, GXPrimitive prim, u16 vtxStart, u16 vtxC
       *out++ = idx0;
     }
   } else if (prim == GX_TRIANGLES) {
-    for (u32 v = 0; v < vtxCount; ++v) {
+    for (u32 v = 0; v < numIndices; ++v) {
       *out++ = vtxStart + v;
     }
+  } else if (numIndices == 0) {
+    // A strip or fan under 3 vertices: no triangle.
   } else if (prim == GX_TRIANGLEFAN) {
     for (u32 v = 0; v < vtxCount; ++v) {
       const u16 idx = vtxStart + v;
@@ -908,6 +912,15 @@ static void draw_prim(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, ByteReader& 
   // A draw whose indices read past its arrays reads garbage, or crashes where nothing bounds the
   // read (807013b1e): dropped instead. Checked before a merge, whose vertices it would otherwise add.
   if (check_indexed_arrays(reader.data() + reader.offset(), fmt, prim, vtxCount, vtxSize)) UNLIKELY {
+    reader.skip(totalVtxBytes);
+    return;
+  }
+
+  // One that makes no whole triangle draws nothing on GX (a 2-vertex strip, as Trilogy's scan
+  // lens draws for a one-degree run); kept, it would be a draw without indices that a following
+  // merge extends as if its vertices were triangles.
+  const bool trianglePrim = prim != GX_LINES && prim != GX_LINESTRIP && prim != GX_POINTS;
+  if (trianglePrim && vtxCount < (prim == GX_QUADS ? 4 : 3)) UNLIKELY {
     reader.skip(totalVtxBytes);
     return;
   }

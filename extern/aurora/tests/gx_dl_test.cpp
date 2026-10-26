@@ -338,6 +338,35 @@ TEST_F(GXFifoTest, BeginIndexed_RoundTripsThroughProcessor) {
   EXPECT_EQ(aurora::gfx::g_testLastDraw.indexCount, 6u);
 }
 
+// A strip under 3 vertices draws nothing, as on GX; its 2 indices, merged into the next draw,
+// shifted every triangle after it.
+TEST_F(GXFifoTest, TwoVertexStrip_DrawsNothing) {
+  GXClearVtxDesc();
+  GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+  GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_U8, 0);
+  const auto state = flush_and_capture();
+
+  GXBegin(GX_TRIANGLESTRIP, GX_VTXFMT0, 2);
+  GXPosition3u8(0, 1, 2);
+  GXPosition3u8(3, 4, 5);
+  GXEnd();
+  GXBegin(GX_TRIANGLESTRIP, GX_VTXFMT0, 4);
+  GXPosition3u8(0, 1, 2);
+  GXPosition3u8(3, 4, 5);
+  GXPosition3u8(6, 7, 8);
+  GXPosition3u8(9, 10, 11);
+  GXEnd();
+  const auto draws = capture_fifo();
+
+  reset_gx_state();
+  decode_fifo(state);
+  aurora::gfx::g_testDrawCount = 0;
+  decode_fifo(draws);
+  EXPECT_EQ(aurora::gfx::g_testDrawCount, 1u);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.vtxCount, 4u);
+  EXPECT_EQ(aurora::gfx::g_testLastDraw.indexCount, 6u);
+}
+
 TEST_F(GXFifoTest, BeginIndexed_RecordsDisplayList) {
   GXClearVtxDesc();
   GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
