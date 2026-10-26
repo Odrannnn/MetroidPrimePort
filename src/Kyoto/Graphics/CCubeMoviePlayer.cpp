@@ -18,6 +18,7 @@
 
 #ifdef TARGET_PC
 #include "port_debug.h"
+#include "port_disc.h"
 #endif
 
 #include "dolphin/gx/GXGeometry.h"
@@ -692,7 +693,11 @@ void CMoviePlayer::PortGetMargins(int vpWidth, int vpHeight, int& xMargin, int& 
   const float view = PortDebug::AspectMode() == PortDebug::kAspect_4_3
                          ? 4.f / 3.f
                          : static_cast< float >(vpWidth) / static_cast< float >(vpHeight);
-  const float movie = static_cast< float >(width) / static_cast< float >(height);
+  // Trilogy's 640x448 movies are anamorphic 16:9 (the Wii front end's and its re-encoded
+  // endings); drawn with square pixels they come out squeezed.
+  const bool anamorphic = width == 640 && height == 448 && PortDisc::IsTrilogy(PortDisc::Current());
+  const float movie =
+      anamorphic ? 16.f / 9.f : static_cast< float >(width) / static_cast< float >(height);
   int drawnWidth = vpWidth;
   int drawnHeight = vpHeight;
   if (movie > view) {
