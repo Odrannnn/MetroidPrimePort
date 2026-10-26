@@ -268,6 +268,8 @@ final class TouchControlsView extends View {
     private static final float MAP_PINCH_MIN_DP = 20f;
     // Travel, in dp, past which a touch is a drag and not a tap (minimap, wheel, A).
     private static final float MAP_TAP_SLOP_DP = 12f;
+    // How far a Beam/Visor menu button's finger slides to reach a radial icon.
+    private static final float RADIAL_DRAG_DP = 72f;
 
     // Tells the game a finger is still down on the map, so it doesn't drift back.
     private static final long MAP_PAN_KEEPALIVE_MS = 100;
@@ -595,6 +597,7 @@ final class TouchControlsView extends View {
     // Every control's press and release (touch: bindings), and whether a binding
     // takes the control over, so the overlay doesn't send its own button too.
     private static native void nativeTouchControl(int control, boolean down);
+    private static native void nativeRadialPoint(float x, float y);
     private static native boolean nativeTouchControlBound(int control);
     // The control's Morph Ball row label in the ball: "" for a ball button with
     // none, null for a control that does its usual button there.
@@ -1216,6 +1219,10 @@ final class TouchControlsView extends View {
                     updateStick(target, event.getX(i), event.getY(i));
                 } else if (target.type == AIM || target.aiming) {
                     updateAim(target, event, i);
+                } else if (pointsRadial(target)) {
+                    final float r = dp(RADIAL_DRAG_DP);
+                    nativeRadialPoint((event.getX(i) - target.startX) / r,
+                                      (target.startY - event.getY(i)) / r);
                 } else if (target.type == BUTTON && aimsWhileHeld(target) && aim &&
                            aimPointer == -1) {
                     startButtonAim(event.getPointerId(i), target, event, i);
@@ -1651,6 +1658,16 @@ final class TouchControlsView extends View {
         final float right = rightStickX(width, height) + rightStickRadius(height) * 1.6f;
         return x >= right - (baseRight - baseLeft) * scale && x < right &&
                y > cy - (baseCy - baseTop) * scale && y <= cy + (height - baseCy) * scale;
+    }
+
+    // An added Beam menu or Visor menu button: its finger's slide from the press
+    // point is the radial menu's selection (RADIAL_DRAG_DP = an icon's full reach).
+    private boolean pointsRadial(TouchTarget target) {
+        if (target.type != BUTTON || target.touchControl < C_CUSTOM) {
+            return false;
+        }
+        final String key = customAction[target.touchControl - C_CUSTOM];
+        return "beam_menu".equals(key) || "visor_menu".equals(key);
     }
 
     // Fire, Jump and Turbo face buttons aim when slid (see startButtonAim). Pills

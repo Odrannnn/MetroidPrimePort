@@ -32,6 +32,7 @@
 #include "port_photo.h"
 #include "port_pointer.h"
 #include "port_prompts.h"
+#include "port_radial.h"
 #include "port_savestate.h"
 #include "touch_pad.h"
 
@@ -137,6 +138,8 @@ constexpr Uint64 kSwipeUpMs = 150;
 constexpr float kMapPinchMinDp = 20.f;
 // Travel, in dp, past which a touch is a drag and not a tap (minimap, wheel, A).
 constexpr float kMapTapSlopDp = 12.f;
+// How far a Beam/Visor menu button's finger slides to reach a radial icon.
+constexpr float kRadialDragDp = 72.f;
 // Tells the game a finger is still down on the map, so it doesn't drift back.
 constexpr Uint64 kMapPanKeepAliveMs = 100;
 constexpr Uint64 kMapButtonPollMs = 200;
@@ -2158,6 +2161,16 @@ bool OnLeftStick(float x, float y, float width, float height) {
   return dx * dx + dy * dy <= reach * reach;
 }
 
+// An added Beam menu or Visor menu button: its finger's slide from the press point is the radial
+// menu's selection (kRadialDragDp = an icon's full reach).
+bool PointsRadial(const TouchTarget& target) {
+  if (target.type != kButton || target.touchControl < kCCustom) {
+    return false;
+  }
+  const std::string& key = sCustomAction[target.touchControl - kCCustom];
+  return key == "beam_menu" || key == "visor_menu";
+}
+
 // Fire, Jump and Turbo face buttons aim when slid. Pills and the D-pad don't.
 bool AimsWhileHeld(const TouchTarget& target) {
   return target.faceButton != nullptr &&
@@ -3898,6 +3911,9 @@ bool TouchMove(SDL_FingerID id, float x, float y) {
     UpdateStick(target, x, y, width, height);
   } else if (target.type == kAim || target.aiming) {
     UpdateAim(target, x, y);
+  } else if (PointsRadial(target)) {
+    const float r = Dp(kRadialDragDp);
+    PortRadial::SetPoint((x - target.startX) / r, (target.startY - y) / r);
   } else if (target.type == kButton && AimsWhileHeld(target) && sAim && !sAnyAim) {
     StartButtonAim(target, id, x, y);
   } else if (target.type == kMapPan || target.type == kMapPan2) {

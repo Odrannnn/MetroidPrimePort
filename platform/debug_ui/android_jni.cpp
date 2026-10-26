@@ -11,6 +11,7 @@
 #include "port_input_bindings.h"
 #include "port_input_devices.h"
 #include "port_prompts.h"
+#include "port_radial.h"
 #include "port_savestate.h"
 #include "port_textures.h"
 
@@ -87,6 +88,12 @@ extern "C" JNIEXPORT void JNICALL
 Java_org_metroidprime_port_TouchControlsView_nativeTouchControl(JNIEnv*, jclass, jint control,
                                                                 jboolean down) {
   PortInputDevices::SetTouchControl(static_cast< int >(control), down == JNI_TRUE);
+}
+
+// A Beam menu or Visor menu button's drag from its press point, as the radial selection.
+extern "C" JNIEXPORT void JNICALL
+Java_org_metroidprime_port_TouchControlsView_nativeRadialPoint(JNIEnv*, jclass, jfloat x, jfloat y) {
+  PortRadial::SetPoint(x, y);
 }
 
 // Whether a binding takes over the control, so the overlay skips its own button.

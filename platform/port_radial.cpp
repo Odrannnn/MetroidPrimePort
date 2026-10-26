@@ -21,6 +21,10 @@ float sSelY = 0.f;
 std::atomic<int> sForced{-1};
 std::atomic<float> sForcedX{0.f};
 std::atomic<float> sForcedY{0.f};
+// SetPoint's latest, until Tick takes it.
+std::atomic<bool> sPointSet{false};
+std::atomic<float> sPointX{0.f};
+std::atomic<float> sPointY{0.f};
 
 void Clamp() {
   const float len = std::sqrt(sSelX * sSelX + sSelY * sSelY);
@@ -43,6 +47,12 @@ void Tick(bool beamHeld, bool visorHeld, float cx, float cy) {
   }
   sHeld[kBeam] = beamHeld;
   sHeld[kVisor] = visorHeld;
+  // A touch menu button's drag; taken here, before the release this poll may bring is picked.
+  if (sPointSet.exchange(false) && Capturing()) {
+    sSelX = sPointX;
+    sSelY = sPointY;
+    Clamp();
+  }
   if (Capturing() && cx * cx + cy * cy > kStickPoint * kStickPoint) {
     sSelX = cx;
     sSelY = cy;
@@ -76,6 +86,12 @@ void AddTravel(float dx, float dy) {
   sSelX += dx / kTravelFull;
   sSelY -= dy / kTravelFull;
   Clamp();
+}
+
+void SetPoint(float x, float y) {
+  sPointX = x;
+  sPointY = y;
+  sPointSet = true;
 }
 
 void GetSelection(float& x, float& y) {

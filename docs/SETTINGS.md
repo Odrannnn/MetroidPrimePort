@@ -323,7 +323,9 @@
   off by default; Metroid Prime Trilogy discs only): holding the Beam menu or
   Visor menu action (Remap, unbound by default) opens the Wii version's radial
   menu. Mouse, stick, gyro or C-stick point at an entry, the view holds still,
-  and letting go picks it.
+  and letting go picks it. On touch, add a Beam menu or Visor menu button in the
+  layout editor: slide the finger from where it pressed toward an entry (about
+  72 dp reaches one) and lift to pick; a look drag points the menu too.
 - Button glyphs (Controls > Options, persisted as `prompt_glyphs`: `auto`, the
   default, `xbox`, `playstation`, `switch`, `gamecube` or `keyboard`): which
   buttons the game's prompts and tutorials show. Auto follows the keyboard,

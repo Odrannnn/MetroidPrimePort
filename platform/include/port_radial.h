@@ -21,6 +21,9 @@ void SetState(bool available, bool visorOpen, bool beamOpen);
 bool Capturing();
 // Pointer travel in mouse counts (y down).
 void AddTravel(float dx, float dy);
+// A touch menu button's finger: the selection itself (x right, y up, 1 = full radius), taken at
+// the next Tick while a menu captures input. Any thread.
+void SetPoint(float x, float y);
 // The selection, x right, y up, length at most 1; reset to the centre when a menu opens.
 void GetSelection(float& x, float& y);
 // The HUD picked `id` (EBeamId or EPlayerVisor) on release; the input poll sends it.

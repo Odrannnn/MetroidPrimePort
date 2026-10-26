@@ -1073,8 +1073,9 @@ void BeginFrameMouse() {
   }
   // On the direct aim path (mouse aim, twin stick, or the modern touch layout) the
   // touch travel joins the mouse's; in the classic GameCube scheme
-  // CPlayer::UpdateTouchLook takes it instead (TakeTouchLook).
-  const bool directAim = DirectAim();
+  // CPlayer::UpdateTouchLook takes it instead (TakeTouchLook). While a radial menu
+  // captures input it joins the mouse's either way, so a look drag points the menu.
+  const bool directAim = DirectAim() || PortRadial::Capturing();
   sTouchLookFrameX = directAim ? 0.f : touchX;
   sTouchLookFrameY = directAim ? 0.f : touchY;
   sMouseFrameX = sMousePendingX + sGyroPendingX + (directAim ? touchX : 0.f);
