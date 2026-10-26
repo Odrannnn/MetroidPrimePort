@@ -56,7 +56,9 @@ void MigrateLegacyPalSave() {
 // Port: each release keeps its own saves, so after switching discs (USA to
 // PAL, GameCube to Trilogy) the card looks empty. Offer, once, to copy the
 // newest other release's save over, converted. The overlay's Memory card
-// section has the same choice for later (and for the older releases).
+// section has the same choice for later (and for the older releases). Asked
+// for the default card at boot and for each seed's card as it mounts; seeds
+// are version-neutral, so their saves convert like any other.
 void OfferRestoreFromOtherRelease() {
   if (port::EnvFlag("MP_NO_DISC_DIALOG") || std::getenv("MP_CONSOLE") != nullptr) {
     return; // scripted runs: nobody to answer
@@ -73,7 +75,7 @@ void OfferRestoreFromOtherRelease() {
     return;
   }
   const PortGci::OtherRelease& newest = others.front();
-  const std::string message = "This disc has no saves yet, but there are saves from\n" + newest.label +
+  const std::string message = "This card has no saves for this disc yet, but there are\nsaves from " + newest.label +
                               ".\n\nCopy them over? They are converted for this disc;\nthe originals stay "
                               "where they are.\n\nYou can also do it later: overlay, System tab,\nMemory card.";
   enum { kSkip, kCopy };
@@ -485,8 +487,11 @@ bool CMemoryCardSys::PortSwitchCard(const char* directory) {
   sCardBase = target;
   PortLog::Write("memory card: switched to %s%s\n", target.c_str(),
                  mounted ? "" : " (no card could be mounted there)");
-  if (mounted)
+  if (mounted) {
     MigrateLegacyPalSave();
+    // A randomizer or Archipelago seed's card has its own per-release saves.
+    OfferRestoreFromOtherRelease();
+  }
   return true;
 }
 
