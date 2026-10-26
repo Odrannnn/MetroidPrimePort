@@ -111,6 +111,31 @@ private:
   float xPortXhairArmScale = 1.f;
   float xPortXhairCentreScale = 1.f;
   float xPortXhairTargetT = 0.f;
+
+  // Trilogy (R3ME01) scan visor ring and target brackets; port_trilogy_scan in
+  // CTargetReticles.cpp. Members keep the Trilogy offsets of CCompoundTargetReticle.
+  void PortTriUpdateScanPointer(const CStateManager& mgr);
+  void PortTriUpdateScan(float dt, const CStateManager& mgr);
+  void PortTriUpdateScanBounds(const CStateManager& mgr);
+  static TUniqueId PortTriResolveScanTarget(TUniqueId id, const CStateManager& mgr);
+  void PortTriDrawScan(const CMatrix3f& rot, const CStateManager& mgr) const;
+  bool xPortTri = false;
+  TCachedToken< CModel > x3e0_scanRing;
+  TCachedToken< CModel > x3ec_scanBracket;
+  TCachedToken< CModel > x3f8_scanProgress;
+  float x404_scanFade = 0.f;
+  float x408_scanLerp = 0.f;
+  float x40c_scanning = 0.f;
+  CVector3f x410_scanPrevCentre = CVector3f::Zero();
+  CVector3f x41c_scanCentre = CVector3f::Zero();
+  CVector3f x428_scanPrevSize = CVector3f::Zero();
+  CVector3f x434_scanSize = CVector3f::Zero();
+  int x440_scanTargetCount = 0;
+  TUniqueId x444_scanTargets[1];
+  TUniqueId x454_lastNextTargetId = kInvalidUniqueId;
+  TUniqueId x456_scanTargetId = kInvalidUniqueId;
+  // The Wii pointer's world position (player +0xEB8 +0x7C); the port aims it at screen centre.
+  CVector3f xPortTriPointerPos = CVector3f::Zero();
 #endif
   CQuaternion x0_leadingOrientation;
   CQuaternion x10_laggingOrientation;

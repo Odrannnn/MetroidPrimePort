@@ -32,6 +32,13 @@ CObjOwnerDerivedFromIObjUntyped* CToken::GetObj() {
 }
 
 void CToken::RemoveRef() {
+#ifdef TARGET_PC
+  // A default-constructed token holds no reference (the Trilogy scan tokens stay empty on
+  // other discs), so assigning over it or destroying it has nothing to release.
+  if (x0_objRef == NULL) {
+    return;
+  }
+#endif
   if (x0_objRef->RemoveReference() == 0) {
     delete x0_objRef;
   }
