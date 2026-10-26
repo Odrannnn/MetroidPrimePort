@@ -77,6 +77,18 @@ CHudDecoInterfaceCombat::CHudDecoInterfaceCombat(CGuiFrame& hud)
   x74_basewidget_deco = hud.FindWidget(skDecoWidgetName);
   x78_basewidget_tickdeco0 = hud.FindWidget(skBarDecoWidgetName);
   x7c_basewidget_frame = hud.FindWidget(skFrameNormalGroupWidgetName);
+#ifdef TARGET_PC
+  // @ fn_800E0F8C (800E10D4..800E1134): Trilogy labels the combat HUD's energy word, as the scan
+  // HUD does (fn_800E1AB0).
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    if (CGuiTextPane* pane = static_cast< CGuiTextPane* >(hud.FindWidget("textpane_energyword"))) {
+      pane->TextSupport().SetExtraCharacterSpace(2); // stw 2, 0x104(pane) = textSupport+0x30
+      // GetString(0x57) "ENERGY", in the port's 1.00 order (see the scan HUD).
+      pane->TextSupport().SetText(rstl::wstring_l(gpStringTable->GetString(0x57 + 6)));
+      pane->SetColor(gpTweakGuiColors->GetTickDecoColor()); // tweakGuiColors+0x88
+    }
+  }
+#endif
   x14_pivotPosition = x70_basewidget_pivot->GetIdleXform().GetTranslation();
   x78_basewidget_tickdeco0->SetColor(gpTweakGuiColors->GetTickDecoColor());
 #ifdef TARGET_PC
