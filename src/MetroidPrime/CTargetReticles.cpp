@@ -1960,8 +1960,8 @@ static uchar PortTriAlphaU8(float a) {
 static float PortTriScanRingDistance(const CStateManager& mgr) {
   const CGameCamera& cam = mgr.GetCameraManager()->GetCurrentCamera(mgr);
   // Trilogy's GetOrbitZoneHeight (fn_80254158) scales the tweak value by 0.65 (lbl_805C6EE0)
-  // and truncates (fctiwz): 180 -> 117, so the ring sits farther out and draws smaller than
-  // the raw tweak value would put it.
+  // and truncates (fctiwz): 180 -> 116 (0.65f * 180 is 116.99999 in single precision), so the
+  // ring sits farther out and draws smaller than the raw tweak value would put it.
   const int height = static_cast< int >(0.65f * CCast::LtoF(gpTweakPlayer->GetOrbitZoneHeight(0)));
   float dist = 224.f /* lbl_805C6CF0 */ / CCast::LtoF(height);
   return dist / CMath::SlowTangentR(cam.GetRenderFov() * 0.5f /* lbl_805C6C80 */ *
@@ -2013,11 +2013,12 @@ void CCompoundTargetReticle::PortTriDrawScan(const CMatrix3f& rot, const CStateM
   }
 
   // 0x80238F9C: Wii pointer intensity (fn_80015D2C, pointer +0x94) while not scanning. The
-  // port's pointer is always on screen, so it is 1. player +0x11A4 (0x80238FAC) only ramps
-  // while player +0x300 is set (fn_8019BDFC), which normal play never does: 0.
+  // port's pointer is always on screen, so it is 1. player +0x11A4 (0x80238FAC) is the orbit
+  // lock fade (fn_8019BDFC): the ring and brackets fade out as the lock settles.
   const bool scanning = mgr.GetPlayer()->GetScanningObjectId() != kInvalidUniqueId;
   const float pointerIntensity = 1.f;
-  const float intensity = (scanning ? 1.f : pointerIntensity) * (1.f - 0.f);
+  const float intensity =
+      (scanning ? 1.f : pointerIntensity) * (1.f - mgr.GetPlayer()->PortTriOrbitFade());
 
   // fn_80239B84: the ring sits on the pointer ray at the orbit-ring distance. The port takes
   // the pointer as drawn, so the ring stays on the scan window that follows it between ticks.

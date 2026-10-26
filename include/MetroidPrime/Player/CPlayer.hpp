@@ -390,6 +390,10 @@ public:
   void UpdateAimTarget(CStateManager& mgr);
   void UpdateAimTargetTimer(float dt);
   void UpdateOrbitModeTimer(float dt);
+#ifdef TARGET_PC
+  // Trilogy's lock fade in [0, 1] (player +0x11A4): 0 free, 1 fully locked.
+  float PortTriOrbitFade() const;
+#endif
   void UpdateOrbitPreventionTimer(float dt);
   void UpdateGunAlpha();
   void UpdateVisorTransition(float dt, CStateManager& mgr);
@@ -654,6 +658,11 @@ private:
   CVector3f x314_orbitPoint;
   CVector3f x320_orbitVector;
   float x32c_orbitModeTimer;
+#ifdef TARGET_PC
+  // Port: Trilogy's lock fade timer (player +0x328, fn_8019BDFC). Not x32c, which is retail's
+  // decay-only cooldown.
+  float m_triOrbitFadeTimer;
+#endif
   EPlayerZoneInfo x330_orbitZoneMode;
   EPlayerZoneType x334_orbitType;
   uint x338_;

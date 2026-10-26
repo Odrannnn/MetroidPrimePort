@@ -265,6 +265,9 @@ CPlayer::CPlayer(TUniqueId uid, const CTransform4f& xf, const CAABox& aabb, CAss
 , x314_orbitPoint(0.f, 0.f, 0.f)
 , x320_orbitVector(0.f, 0.f, 0.f)
 , x32c_orbitModeTimer(0.f)
+#ifdef TARGET_PC
+, m_triOrbitFadeTimer(0.f)
+#endif
 , x330_orbitZoneMode(kZI_Targeting)
 , x334_orbitType(kZT_Ellipse)
 , x338_(1)

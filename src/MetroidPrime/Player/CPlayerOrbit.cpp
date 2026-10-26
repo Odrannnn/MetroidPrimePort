@@ -35,6 +35,10 @@
 #include "math.h"
 #include "port_debug.h"
 #include "port_third_person.h"
+#ifdef TARGET_PC
+#include "port_disc.h"
+#include "port_tri_orbit.h"
+#endif
 
 static const CMaterialList kLineOfSightIncludeList = CMaterialList(kMT_Solid);
 static const CMaterialList kLineOfSightExcludeList =
@@ -513,7 +517,25 @@ void CPlayer::UpdateOrbitZone(CStateManager& mgr) {
   }
 }
 
+#ifdef TARGET_PC
+// @ fn_8019BDFC
+float CPlayer::PortTriOrbitFade() const {
+  if (!PortDisc::IsTrilogy(PortDisc::Current())) {
+    return 0.f;
+  }
+  return PortTriOrbit::FadeRatio(m_triOrbitFadeTimer, x304_orbitState != kOS_NoOrbit,
+                                 gpTweakPlayer->GetOrbitModeTimer());
+}
+#endif
+
 void CPlayer::UpdateOrbitModeTimer(float dt) {
+#ifdef TARGET_PC
+  m_triOrbitFadeTimer = PortDisc::IsTrilogy(PortDisc::Current())
+                            ? PortTriOrbit::FadeTimerStep(m_triOrbitFadeTimer,
+                                                          x304_orbitState != kOS_NoOrbit, dt,
+                                                          gpTweakPlayer->GetOrbitModeTimer())
+                            : 0.f;
+#endif
   if (x304_orbitState == kOS_NoOrbit && x32c_orbitModeTimer > 0.f) {
     x32c_orbitModeTimer -= dt;
     return;
@@ -606,10 +628,54 @@ static bool PortScanPointerNdc(CPlayer::EPlayerZoneInfo zone, float& x, float& y
 }
 #endif
 
+#ifdef TARGET_PC
+// Trilogy's zone: pointer-centred half extents (fn_80254104/fn_80254158), truncated in the port's
+// 640x448 coordinate basis (kOrbitZoneAuthored*; that height is the port's convention, not
+// verified against the Wii viewport), then scaled to the live viewport. The pointer sits at the viewport centre when it is not steering.
+struct PortTriZone {
+  float cx, cy, halfX, halfY;
+  bool pointer;
+};
+static PortTriZone PortTriOrbitZone(CPlayer::EPlayerZoneInfo zone) {
+  const float vpW = CCast::LtoF(CGraphics::GetViewportWidth());
+  const float vpH = CCast::LtoF(CGraphics::GetViewportHeight());
+  float px = 0.f;
+  float py = 0.f;
+  PortTriZone z;
+  z.pointer = PortDebug::PointerAimPosition(px, py);
+  if (!z.pointer) {
+    px = 0.f;
+    py = 0.f;
+  }
+  py = -py; // the pointer is +y down; screen coordinates are +y up
+  z.cx = static_cast< float >(PortTriOrbit::PointerCentre(px, vpW));
+  z.cy = static_cast< float >(PortTriOrbit::PointerCentre(py, vpH));
+  const float k = PortTriOrbit::AspectK(vpH > 0.f ? vpW / vpH : 4.f / 3.f);
+  z.halfX = static_cast< float >(PortTriOrbit::HalfWidth(
+                CCast::LtoF(gpTweakPlayer->GetOrbitZoneWidth(zone)), k)) *
+            OrbitZoneScaleX();
+  z.halfY = static_cast< float >(PortTriOrbit::HalfHeight(
+                CCast::LtoF(gpTweakPlayer->GetOrbitZoneHeight(zone)))) *
+            OrbitZoneScaleY();
+  return z;
+}
+#endif
+
 bool CPlayer::WithinOrbitScreenEllipse(const CVector3f& screenCoords, EPlayerZoneInfo zone) const {
   if (screenCoords.GetZ() >= 1.f) {
     return false;
   }
+#ifdef TARGET_PC
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    const PortTriZone z = PortTriOrbitZone(zone);
+    const float x = CMath::AbsF(screenCoords.GetX() - z.cx);
+    const float y = CMath::AbsF(screenCoords.GetY() - z.cy);
+    if (!(z.halfX > 0.f) || !(z.halfY > 0.f)) {
+      return false; // degenerate zone: nothing is inside
+    }
+    return x * x <= (1.f - y * y / (z.halfY * z.halfY)) * (z.halfX * z.halfX);
+  }
+#endif
   const float sx = OrbitZoneScaleX();
   const float sy = OrbitZoneScaleY();
   const float cx = CCast::LtoF(gpTweakPlayer->GetOrbitZoneCentreX(zone)) * sx;
@@ -633,6 +699,20 @@ bool CPlayer::WithinOrbitScreenBox(const CVector3f& screenCoords, EPlayerZoneInf
     const float sx = OrbitZoneScaleX();
     const float sy = OrbitZoneScaleY();
 #ifdef TARGET_PC
+    if (PortDisc::IsTrilogy(PortDisc::Current())) {
+      const PortTriZone z = PortTriOrbitZone(zone);
+      if (z.pointer && zone == kZI_Scan) {
+        // Only what is on screen can be picked through the pointer.
+        const float width = CCast::LtoF(CGraphics::GetViewportWidth());
+        const float height = CCast::LtoF(CGraphics::GetViewportHeight());
+        if (screenCoords.GetX() < 0.f || screenCoords.GetX() > width || screenCoords.GetY() < 0.f ||
+            screenCoords.GetY() > height) {
+          return false;
+        }
+      }
+      return CMath::AbsF(screenCoords.GetX() - z.cx) <= z.halfX &&
+             CMath::AbsF(screenCoords.GetY() - z.cy) <= z.halfY;
+    }
     float cx = CCast::LtoF(gpTweakPlayer->GetOrbitZoneCentreX(zone)) * sx;
     float cy = CCast::LtoF(gpTweakPlayer->GetOrbitZoneCentreY(zone)) * sy;
     float pointerX = 0.f;
