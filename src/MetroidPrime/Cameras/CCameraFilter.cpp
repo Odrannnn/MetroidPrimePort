@@ -956,7 +956,16 @@ void CCameraBlurPass::GetFbCopy(GXTexFmt fmt, uchar* buf) const {
 
 void CCameraBlurPass::AllocatePersistentFbTexture() {
   GXGetTexBufferSize(320, 224, GX_TF_RGB565, GX_FALSE, 0);
+#ifdef TARGET_PC
+  // Its own address: copies resolve by address to the latest one there, and the
+  // Remastered glass copies the scene into the spare buffer each frame (helmet
+  // included), so the pause screen's held copy would load that one, at another
+  // size, and read black (#208).
+  static uchar sPersistentBuf[640 * 448] ATTRIBUTE_ALIGN(32);
+  x30_persistentBuf = sPersistentBuf;
+#else
   x30_persistentBuf = CGraphics::GetDolphinSpareBuffer();
+#endif
 }
 
 void CCameraBlurPass::FreePersistentFbTexture() { x2d_noPersistentCopy = false; }

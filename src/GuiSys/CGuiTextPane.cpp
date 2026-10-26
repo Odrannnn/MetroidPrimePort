@@ -210,6 +210,13 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
     const TextViewState state;
     PortPauseLighting::TextPass::Queue([state, render]() {
       const TextViewState restore;
+      // The helmet drew in between: redo CGuiFrame::Draw's state setup, or its
+      // lights and fog leave the glyphs black on the black backdrop.
+      CGraphics::SetCullMode(kCM_None);
+      CGraphics::ResetGfxStates();
+      CGraphics::SetAmbientColor(CColor::White());
+      CGraphics::DisableAllLights();
+      CGraphics::SetTevOp(kTS_Stage0, CGraphics::kEnvModulate);
       state.Apply();
       render();
       restore.Apply();
