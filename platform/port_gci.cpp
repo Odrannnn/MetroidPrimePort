@@ -364,11 +364,17 @@ namespace {
 // newer, so an imported A beside a newer B would be ignored. A save therefore
 // moves as a set: every game file already there is moved aside first. If any
 // file of the set fails, the ones written are removed and the old set is put
-// back, so the card keeps a save it can load.
-void InstallSet(Report& report, const fs::path& folder, const std::vector<std::vector<uint8_t>>& set,
+// back, so the card keeps a save it can load. The files take code as their
+// game code: a Trilogy disc's card holds GameCube PAL files under R3ME/R3MP.
+void InstallSet(Report& report, const fs::path& folder, std::vector<std::vector<uint8_t>> set,
                 const std::string& code = sGameCode) {
   if (set.empty()) {
     return;
+  }
+  for (auto& gci : set) {
+    if (gci.size() >= kHeaderSize && code.size() == 4) {
+      std::memcpy(gci.data(), code.data(), 4);
+    }
   }
   Moved moved;
   for (const fs::path& old : FilesOf(folder, code)) {
@@ -464,14 +470,14 @@ bool Convert(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& art,
 }
 
 bool IsNative(const std::vector<uint8_t>& bytes) {
-  return PortSaveConvert::Detect(bytes.data(), bytes.size()) == PortSaveConvert::NativeFormat(OnPalDisc());
+  return PortSaveConvert::Detect(bytes.data(), bytes.size()) == NativeExport();
 }
 
 // Installs a set of candidate files: when some already are the disc's format
 // only those count; otherwise the newest is converted (the converted names
-// would collide, and the game loads one save).
+// would collide, and the game loads one save). They are installed as code's.
 void InstallCandidates(Report& report, const fs::path& folder, const std::string& name,
-                       const std::vector<std::vector<uint8_t>>& found) {
+                       const std::vector<std::vector<uint8_t>>& found, const std::string& code = sGameCode) {
   std::vector<std::vector<uint8_t>> native;
   for (const auto& bytes : found) {
     if (IsNative(bytes)) {
@@ -479,7 +485,7 @@ void InstallCandidates(Report& report, const fs::path& folder, const std::string
     }
   }
   if (!native.empty()) {
-    InstallSet(report, folder, native);
+    InstallSet(report, folder, native, code);
     return;
   }
   const std::vector<uint8_t> art = ExistingArt(folder);
@@ -500,7 +506,7 @@ void InstallCandidates(Report& report, const fs::path& folder, const std::string
   if (!have) {
     return;
   }
-  InstallSet(report, folder, {best.gci});
+  InstallSet(report, folder, {best.gci}, code);
   report.note = report.note.empty() ? best.note : report.note + "; " + best.note;
 }
 
@@ -649,9 +655,22 @@ Report ImportFile(const fs::path& source, const fs::path& folder, const fs::path
 
 std::vector<fs::path> GameFiles(const fs::path& folder) { return FilesOf(folder, sGameCode); }
 
-Report ImportFolder(const fs::path& source, const fs::path& folder) {
+std::vector<fs::path> ImportableFiles(const fs::path& source) {
+  for (const char* code : {static_cast< const char* >(sGameCode), "GM8E", "GM8P", "R3ME", "R3MP"}) {
+    auto files = FilesOf(source, code);
+    if (!files.empty()) {
+      return files;
+    }
+  }
+  return {};
+}
+
+namespace {
+
+// Copies a save set into folder as code's, converted if it is another release's.
+Report CopyFiles(const fs::path& source, const std::vector<fs::path>& files, const fs::path& folder,
+                 const std::string& code) {
   Report report;
-  const auto files = GameFiles(source);
   if (files.empty()) {
     AddError(report, "no Metroid Prime save in " + PathString(source));
   }
@@ -665,8 +684,15 @@ Report ImportFolder(const fs::path& source, const fs::path& folder) {
     }
     set.push_back(std::move(bytes));
   }
-  InstallSet(report, folder, set);
+  if (!set.empty()) {
+    InstallCandidates(report, folder, PathString(source.filename()), set, code);
+  }
   return report;
+}
+} // namespace
+
+Report ImportFolder(const fs::path& source, const fs::path& folder) {
+  return CopyFiles(source, ImportableFiles(source), folder, sGameCode);
 }
 
 bool ExportBytes(const fs::path& folder, ExportFormat format, std::vector<uint8_t>& gci, std::string& note,
@@ -717,7 +743,7 @@ Report ExportFolder(const fs::path& folder, const fs::path& dest, ExportFormat f
     return report;
   }
   if (format == NativeExport()) {
-    return ImportFolder(folder, dest);
+    return CopyFiles(folder, GameFiles(folder), dest, GameCodeOf(format));
   }
   std::vector<uint8_t> gci;
   std::string error;
@@ -739,6 +765,7 @@ Report ExportRaw(const fs::path& folder, const fs::path& image, ExportFormat for
   std::vector<std::vector<uint8_t>> set;
   std::vector<std::string> names;
   std::string converted;
+  const char* code = GameCodeOf(format);
   if (format != NativeExport()) {
     std::vector<uint8_t> gci;
     std::string error;
@@ -760,6 +787,7 @@ Report ExportRaw(const fs::path& folder, const fs::path& image, ExportFormat for
         return report;
       }
       names.push_back(header.fileName);
+      std::memcpy(bytes.data(), code, 4); // a Trilogy disc's files go out as GameCube ones
       set.push_back(std::move(bytes));
     }
   }
@@ -778,7 +806,6 @@ Report ExportRaw(const fs::path& folder, const fs::path& image, ExportFormat for
     report.note = report.note.empty() ? converted : converted + "; " + report.note;
   }
   const std::string imagePath = PathString(image);
-  const char* code = GameCodeOf(format);
   // As for folders: the other of A/B, if the image has it, would win when newer.
   std::vector<std::string> existing;
   if (fs::exists(image, ec)) {

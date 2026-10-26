@@ -182,6 +182,40 @@ int main() {
               "stale B dropped from the raw card");
   }
 
+  // A Trilogy disc's card holds GameCube PAL saves under its own code: a PAL
+  // save (or a Dolphin folder of them) goes in as R3ME's, beside the GameCube
+  // disc's files, and goes out again as GM8P's.
+  {
+    PortGci::SetGameCode("R3ME");
+    const fs::path tri = root / "tri";
+    fs::create_directories(tri);
+    const auto gc = MakeGci("GM8E", "MetroidPrime A", 2, 0x12);
+    Write(tri / "01-GM8E-MetroidPrime A.gci", gc);
+    const auto pal = MakeGci("GM8P", "MetroidPrime", 3, 0x34);
+    Write(root / "pal.gci", pal);
+    auto report = PortGci::ImportFile(root / "pal.gci", tri, root / "scratch");
+    CHECK_MSG(report.copied == 1 && report.replaced == 0 && report.skipped == 0, "PAL save into a Trilogy card");
+    const auto in = Read(tri / "01-R3ME-MetroidPrime.gci");
+    CHECK_MSG(in.size() == pal.size() && std::memcmp(in.data(), "R3ME", 4) == 0 &&
+                  std::memcmp(in.data() + 4, pal.data() + 4, pal.size() - 4) == 0,
+              "stored under the Trilogy's code");
+    CHECK_MSG(Read(tri / "01-GM8E-MetroidPrime A.gci") == gc, "the GameCube disc's save untouched");
+    CHECK_MSG(PortGci::GameFiles(tri).size() == 1, "one Trilogy file");
+
+    const fs::path out = root / "tri-out";
+    report = PortGci::ExportFolder(tri, out);
+    CHECK_MSG(report.copied == 1 && Read(out / "01-GM8P-MetroidPrime.gci") == pal, "exported as GM8P");
+
+    const fs::path emu = root / "tri-emu";
+    fs::create_directories(emu);
+    Write(emu / "01-GM8P-MetroidPrime.gci", MakeGci("GM8P", "MetroidPrime", 3, 0x56));
+    CHECK_MSG(PortGci::ImportableFiles(emu).size() == 1, "an emulator's GameCube files are importable");
+    report = PortGci::ImportFolder(emu, tri);
+    CHECK_MSG(report.copied == 1 && report.replaced == 1 && Read(tri / "01-R3ME-MetroidPrime.gci")[0x40] == 0x56,
+              "folder import replaces the Trilogy save");
+    PortGci::SetGameCode("GM8E");
+  }
+
   // Emulator folder normalisation and the shared card base.
   {
     const fs::path emu = root / "emu";

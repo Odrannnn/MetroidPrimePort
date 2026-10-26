@@ -79,11 +79,15 @@ Report MigrateLegacyPal(const std::filesystem::path& folder);
 // The same, reading the file first.
 Report ImportFile(const std::filesystem::path& source, const std::filesystem::path& folder,
                   const std::filesystem::path& scratch);
-// Imports every Metroid Prime file from another GCI folder (a Dolphin card).
+// Imports the Metroid Prime save from another GCI folder (a Dolphin card),
+// converted to the disc's release if it is another one's.
 Report ImportFolder(const std::filesystem::path& source, const std::filesystem::path& folder);
 
-// Metroid Prime's .gci files in a GCI folder, sorted by disk name.
+// The disc's .gci files in a GCI folder, sorted by disk name.
 std::vector<std::filesystem::path> GameFiles(const std::filesystem::path& folder);
+// What ImportFolder takes from a folder: the disc's own files if there are
+// any, else one other release's (a Trilogy disc imports GameCube saves).
+std::vector<std::filesystem::path> ImportableFiles(const std::filesystem::path& folder);
 
 // What an export writes: the card's own files as they are (the disc's native
 // format), or the newest save converted to the other GameCube release.

@@ -962,6 +962,9 @@ Format Detect(const uint8_t* d, size_t size) {
       return size >= kHeader + 3 * kBlock ? Format::PalGci : Format::Unknown;
     }
   }
+  // The port's card files for a Trilogy disc (R3ME/R3MP) hold PAL's layout.
+  if (size >= kHeader + 3 * kBlock && d[0] == 'R' && d[1] == '3' && d[2] == 'M' && (d[3] == 'E' || d[3] == 'P'))
+    return Format::PalGci;
   return Format::Unknown;
 }
 

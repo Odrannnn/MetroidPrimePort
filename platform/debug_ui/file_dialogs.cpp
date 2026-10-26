@@ -34,6 +34,7 @@
 #include <atomic>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -210,7 +211,7 @@ std::string CardImportDolphin() {
   // Dolphin uses one or the other, per its settings: try the one written last.
   std::error_code ec;
   std::filesystem::file_time_type folderTime = std::filesystem::file_time_type::min();
-  for (const std::filesystem::path& file : PortGci::GameFiles(dolphin.gciFolder)) {
+  for (const std::filesystem::path& file : PortGci::ImportableFiles(dolphin.gciFolder)) {
     folderTime = std::max(folderTime, std::filesystem::last_write_time(file, ec));
   }
   const auto rawTime = dolphin.rawImage.empty() ? std::filesystem::file_time_type::min()
@@ -401,7 +402,16 @@ std::string CardQueueExport(const std::filesystem::path& folder, const std::stri
         sCardExportQueue.clear();
         return "Could not read " + PortGci::PathString(file.filename()) + ".";
       }
-      sCardExportQueue.push_back({PortGci::PathString(file.filename()), std::move(bytes), {}});
+      // A Trilogy disc's files go out as the GameCube release's.
+      PortGci::Header header;
+      std::string error;
+      if (!PortGci::ParseHeader(bytes.data(), bytes.size(), header, error)) {
+        sCardExportQueue.clear();
+        return "Could not read " + PortGci::PathString(file.filename()) + ": " + error;
+      }
+      std::memcpy(bytes.data(), PortGci::GameCodeOf(to), 4);
+      header.game = PortGci::GameCodeOf(to);
+      sCardExportQueue.push_back({PortGci::DiskName(header), std::move(bytes), {}});
     }
     return {};
   }
