@@ -565,6 +565,13 @@ const wchar_t* CSamusHud::PortHudString(int mainIdx) {
   }
   return gpStringTable->GetString(mainIdx);
 }
+
+const wchar_t* CSamusHud::PortHudStringAt(int idx) {
+  if (sPortHudStrings != nullptr) {
+    return sPortHudStrings->GetString(idx);
+  }
+  return gpStringTable->GetString(idx);
+}
 #endif
 
 bool CSamusHud::CheckLoadComplete(const CStateManager& mgr) {

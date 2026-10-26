@@ -15,7 +15,9 @@
 #include <float.h>
 
 #ifdef TARGET_PC
+#include "MetroidPrime/HUD/CSamusHud.hpp"
 #include "port_debug.h"
+#include "port_disc.h"
 #endif
 
 static const char* const skBaseWidgetNames[] = {"BaseWidget_VisorMenu", "BaseWidget_BeamMenu"};
@@ -31,6 +33,16 @@ static const char skVisorWidgetIndices[] = "1032";
 static const char skBeamWidgetIndices[] = "3210";
 static const ushort skSelectionSounds[] = {0x573, 0x576};
 static const int skMenuStringIndices[2][4] = {{0, 2, 1, 3}, {4, 5, 6, 7}};
+
+#ifdef TARGET_PC
+// @ fn_800E7DC0 / fn_800E8264: Trilogy reads the menu titles from STRG_Hud (CSamusHud+0x494).
+static const wchar_t* MenuString(int idx) {
+  return PortDisc::IsTrilogy(PortDisc::Current()) ? CSamusHud::PortHudStringAt(idx)
+                                                   : gpStringTable->GetString(idx);
+}
+#else
+static const wchar_t* MenuString(int idx) { return gpStringTable->GetString(idx); }
+#endif
 
 CHudVisorBeamMenu::CHudVisorBeamMenu(CGuiFrame& frame, EVisorBeamMenu type,
                                      const rstl::reserved_vector< bool, 4 >& enables)
@@ -75,10 +87,16 @@ CHudVisorBeamMenu::CHudVisorBeamMenu(CGuiFrame& frame, EVisorBeamMenu type,
     x20_textpane_menu->TextSupport().SetFontColor(gpTweakGuiColors->GetBeamMenuTextFont());
     x20_textpane_menu->TextSupport().SetOutlineColor(gpTweakGuiColors->GetBeamMenuTextOutline());
   }
+#ifdef TARGET_PC
+  // @ fn_800E7DC0: Trilogy turns the title pane's depth test off (+0xB6 &= ~1).
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    x20_textpane_menu->SetDepthTest(false);
+  }
+#endif
   PortGroupSpread();
   x1c_basewidget_menutitle->SetColor(CColor::White().WithAlphaOf(0.f));
   x20_textpane_menu->TextSupport().SetText(
-      rstl::wstring_l(gpStringTable->GetString(skMenuStringIndices[x4_type][x8_selectedItem])));
+      rstl::wstring_l(MenuString(skMenuStringIndices[x4_type][x8_selectedItem])));
   for (int i = 0; i < 4; ++i) {
     x28_menuItems[i].x0_model_loz->SetColor(gpTweakGuiColors->GetVisorBeamMenuLozColor());
     UpdateMenuWidgetTransform(i, *x28_menuItems[i].x0_model_loz, 1.f);
@@ -110,7 +128,7 @@ void CHudVisorBeamMenu::SetSelection(int selection, int pending, float interp) {
   } else if (interp < 1.f) {
     x6c_animPhase = kAP_Animate;
     x20_textpane_menu->TextSupport().SetText(
-        rstl::wstring_l(gpStringTable->GetString(skMenuStringIndices[x4_type][x8_selectedItem])));
+        rstl::wstring_l(MenuString(skMenuStringIndices[x4_type][x8_selectedItem])));
     x20_textpane_menu->TextSupport().SetTypeWriteEffectOptions(true, 0.1f, 16.f);
   } else {
     if (x6c_animPhase != kAP_Steady) {
@@ -173,8 +191,19 @@ void CHudVisorBeamMenu::Update(float dt, const bool init) {
   }
   const CTweakGuiColors& guiColors = *gpTweakGuiColors;
   const CColor* const activeColor = &guiColors.GetVisorBeamMenuItemActive();
-  const CColor* const inactiveColor = &guiColors.GetVisorBeamMenuItemInactive();
-  const CColor* const lozColor = &guiColors.GetVisorBeamMenuLozColor();
+  const CColor* inactiveColor = &guiColors.GetVisorBeamMenuItemInactive();
+  const CColor* lozColor = &guiColors.GetVisorBeamMenuLozColor();
+#ifdef TARGET_PC
+  // @ fn_800E84DC (800E8630..800E867C): Trilogy takes the inactive and lozenge colours with alpha
+  // 0, so only the selected icon shows once the menu settles.
+  const bool trilogy = PortDisc::IsTrilogy(PortDisc::Current());
+  const CColor triInactive = inactiveColor->WithAlphaOf(0.f);
+  const CColor triLoz = lozColor->WithAlphaOf(0.f);
+  if (trilogy) {
+    inactiveColor = &triInactive;
+    lozColor = &triLoz;
+  }
+#endif
   rstl::reserved_vector< CColor, 4 > colors;
   for (int i = 0; i < 4; ++i) {
     SMenuItem& item = x28_menuItems[i];
@@ -203,7 +232,14 @@ void CHudVisorBeamMenu::Update(float dt, const bool init) {
   }
   case kAP_SelectFlash: {
     x1c_basewidget_menutitle->SetColor(CColor::White().WithAlphaOf(0.f));
+#ifdef TARGET_PC
+    // @ fn_800E84DC (800E884C..800E8894): Trilogy does not blink; the pending item takes the
+    // inactive colour.
+    const CColor& flashBase = !trilogy && CMath::ModF(x10_interp, 0.1f) > 0.05f ? *activeColor
+                                                                                : *inactiveColor;
+#else
     const CColor& flashBase = CMath::ModF(x10_interp, 0.1f) > 0.05f ? *activeColor : *inactiveColor;
+#endif
     const CColor flash = CColor::Add(flashBase, colors[xc_pendingSelection]);
     x28_menuItems[xc_pendingSelection].x4_model_icon->SetColor(flash);
     x28_menuItems[xc_pendingSelection].x0_model_loz->SetColor(flash);
@@ -282,6 +318,14 @@ void CHudVisorBeamMenu::UpdateMenuWidgetTransform(int idx, CGuiWidget& widget, f
   const float translate = t * gpTweakGui->GetVisorBeamMenuItemTranslate();
   const float scale = t * gpTweakGui->GetVisorBeamMenuItemInactiveScale() +
                       (1.f - t) * gpTweakGui->GetVisorBeamMenuItemActiveScale();
+#ifdef TARGET_PC
+  // @ fn_800E8CCC: Trilogy places the items by its own tables, lbl_80471080 (visor) and
+  // lbl_80471090 (beam).
+  static const int skTrilogyItemSlots[2][4] = {{2, 1, 0, 3}, {2, 3, 0, 1}};
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    idx = skTrilogyItemSlots[x4_type][idx];
+  } else
+#endif
   if (x4_type == kVBM_Visor) {
     if (idx == 2) {
       idx = 3;
