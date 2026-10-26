@@ -5,6 +5,7 @@
 
 #include "port_collision_view.h"
 #include "port_debug.h"
+#include "port_discord.h"
 #include "port_freecam.h"
 #include "port_pointer.h"
 #include "port_room_geo.h"
@@ -258,13 +259,7 @@ void DrawCheats() {
     const rstl::vector< CMemoryCard::MemoryWorld >& worlds = gpMemoryCard->GetMemoryWorlds();
     for (int i = 0; i < worlds.size(); ++i) {
       const uint32_t id = static_cast< uint32_t >(worlds[i].first);
-      std::string name;
-      const wchar_t* wide = worlds[i].second.GetFrontEndName();
-      if (wide != nullptr) {
-        for (const wchar_t* p = wide; *p != 0; ++p) {
-          name.push_back(static_cast< char >(*p));
-        }
-      }
+      std::string name = PortDiscord::GameTextToUtf8(worlds[i].second.GetFrontEndName());
       if (name.empty()) {
         char buf[32];
         std::snprintf(buf, sizeof(buf), "MLVL %08X", static_cast< unsigned >(id));

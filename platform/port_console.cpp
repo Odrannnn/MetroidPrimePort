@@ -494,12 +494,7 @@ const char* NameOr(const char* const* names, int count, int index) {
 }
 
 std::string WorldName(int index) {
-  std::string name;
-  const wchar_t* wide = gpMemoryCard->GetMemoryWorlds()[index].second.GetFrontEndName();
-  for (const wchar_t* p = wide; p != nullptr && *p != 0; ++p) {
-    name.push_back(static_cast< char >(*p));
-  }
-  return name;
+  return PortDiscord::GameTextToUtf8(gpMemoryCard->GetMemoryWorlds()[index].second.GetFrontEndName());
 }
 
 // An object by editor id (hex, as in the level data), by unique id (`u` +
