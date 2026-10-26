@@ -19,6 +19,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/Factories/CScannableObjectInfo.hpp"
 #include "port_debug.h"
+#include "port_disc.h"
 #endif
 
 static const char skDecoWidgetName[] = "basewidget_deco";
@@ -292,6 +293,19 @@ CHudDecoInterfaceScan::CHudDecoInterfaceScan(CGuiFrame& hud)
   if (CGuiWidget* widget = hud.FindWidget("basewidget_deco")) {
     widget->SetColor(gpTweakGuiColors->GetHudFrameColor());
   }
+#ifdef TARGET_PC
+  // @ fn_800E1AB0 (800E1CE8..800E1D38): Trilogy labels the scan HUD's energy word. The asm
+  // has no null check; GC's FRME_ScanHudFlat may lack the pane.
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    if (CGuiTextPane* pane = static_cast< CGuiTextPane* >(hud.FindWidget("textpane_energyword"))) {
+      pane->TextSupport().SetExtraCharacterSpace(2); // stw 2, 0x104(pane) = textSupport+0x30
+      // Trilogy's GetString(0x57) "ENERGY"; the port puts STRG_Main in 1.00 order
+      // (PortRemapPalTable: PAL i >= 57 is 1.00 i + 6).
+      pane->TextSupport().SetText(rstl::wstring_l(gpStringTable->GetString(0x57 + 6)));
+      pane->SetColor(gpTweakGuiColors->GetTickDecoColor()); // tweakGuiColors+0x88
+    }
+  }
+#endif
   x218_leftsidePosition = x24c_basewidget_leftside->GetO2PTransform().GetTranslation();
   x24c_basewidget_leftside->SetO2PTransform(
       CTransform4f(CMatrix3f::RotateZ(CRelAngle::FromRadians(gpTweakGui->GetScanSidesAngle())),

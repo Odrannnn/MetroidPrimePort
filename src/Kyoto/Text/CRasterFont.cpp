@@ -176,6 +176,9 @@ void CRasterFont::GetSize(const CDrawStringOptions& options, int& width, int& he
       int kerning =
           prevGlyph != nullptr ? KernLookup(x1c_kerning, prevGlyph->GetKernStart(), *ptr) : 0;
       int newWidth = curWidth + glyph->GetA() + glyph->GetB() + glyph->GetC() + kerning;
+#ifdef TARGET_PC
+      newWidth += options.GetExtraCharacterSpacing(); // @ fn_8032750C (opts+0x48)
+#endif
       int newHeight = x8_monoHeight - glyph->GetBaseLine() + glyph->GetCellHeight();
       if (options.GetTextDirection() == kTD_Horizontal) {
         width = newWidth;
@@ -268,6 +271,9 @@ void CRasterFont::SinglePassDrawString(const CDrawStringOptions& options, const 
 
         if (options.GetTextDirection() == kTD_Horizontal) {
           curX += curGlyph->GetB() + curGlyph->GetC();
+#ifdef TARGET_PC
+          curX += options.GetExtraCharacterSpacing(); // @ fn_803277F0 (opts+0x48)
+#endif
         }
       }
       prevGlyph = curGlyph;

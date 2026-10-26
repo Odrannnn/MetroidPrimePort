@@ -143,6 +143,16 @@ private:
   mutable rstl::list< CTextRenderBuffer > x2ec_renderBufferPages;
   int x304_pageCounter;
   bool x308_multipageFlag;
+#ifdef TARGET_PC
+  // Trilogy textSupport+0x30 (PAL x34_extraCharacterSpace); 0 unless a Trilogy caller sets it.
+  int xPortExtraCharacterSpace = 0;
+
+public:
+  void SetExtraCharacterSpace(int space) {
+    xPortExtraCharacterSpace = space;
+    ClearRenderBuffer();
+  }
+#endif
 };
 
 CHECK_SIZEOF(CGuiTextProperties, 0x10)

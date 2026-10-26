@@ -142,6 +142,15 @@ void CTextExecuteBuffer::AddLineExtraSpace(int space) {
   x18_state.SetLineExtraSpace(space);
 }
 
+#ifdef TARGET_PC
+// @ fn_803404DC
+void CTextExecuteBuffer::AddCharacterExtraSpace(int space) {
+  const rstl::ncrc_ptr< CInstruction > instruction = rs_new CExtraCharacterSpaceInstruction(space);
+  Add(instruction);
+  x18_state.GetOptions().SetExtraCharacterSpacing(space);
+}
+#endif
+
 void CTextExecuteBuffer::AddJustification(EJustification just) {
   x18_state.SetJustification(just);
   if (xa4_curLine && xa4_curLine->GetWidth() == 0) {

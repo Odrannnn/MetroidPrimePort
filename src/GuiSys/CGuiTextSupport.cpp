@@ -172,6 +172,13 @@ void CGuiTextSupport::CheckAndRebuildTextBuffer() const {
                       x24_fontColor.GetBlue(), x24_fontColor.GetAlpha());
   gpExecBuf->AddColor(kCT_Outline, x28_outlineColor.GetRed(), x28_outlineColor.GetGreen(),
                       x28_outlineColor.GetBlue(), x28_outlineColor.GetAlpha());
+#ifdef TARGET_PC
+  // @ fn_8037E000 (8037E16C): AddCharacterExtraSpace(+0x30). Skipped at 0 so GC buffers keep
+  // their instruction list.
+  if (xPortExtraCharacterSpace != 0) {
+    gpExecBuf->AddCharacterExtraSpace(xPortExtraCharacterSpace);
+  }
+#endif
   rstl::wstring str;
   if (x5c_fontId != kInvalidAssetId) {
     str = rstl::wstring(CStringExtras::ConvertToUNICODE(
