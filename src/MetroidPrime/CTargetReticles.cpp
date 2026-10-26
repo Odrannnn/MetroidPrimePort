@@ -1959,7 +1959,11 @@ static uchar PortTriAlphaU8(float a) {
 // @ fn_80239C84
 static float PortTriScanRingDistance(const CStateManager& mgr) {
   const CGameCamera& cam = mgr.GetCameraManager()->GetCurrentCamera(mgr);
-  float dist = 224.f /* lbl_805C6CF0 */ / CCast::LtoF(gpTweakPlayer->GetOrbitZoneHeight(0));
+  // Trilogy's GetOrbitZoneHeight (fn_80254158) scales the tweak value by 0.65 (lbl_805C6EE0)
+  // and truncates (fctiwz): 180 -> 117, so the ring sits farther out and draws smaller than
+  // the raw tweak value would put it.
+  const int height = static_cast< int >(0.65f * CCast::LtoF(gpTweakPlayer->GetOrbitZoneHeight(0)));
+  float dist = 224.f /* lbl_805C6CF0 */ / CCast::LtoF(height);
   return dist / CMath::SlowTangentR(cam.GetRenderFov() * 0.5f /* lbl_805C6C80 */ *
                                     (1.f / 360.f) /* lbl_805C6CF4 */ * (2.f * M_PIF) /* lbl_805C6C94 */);
 }
