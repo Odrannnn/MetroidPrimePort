@@ -1308,6 +1308,12 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
           }
           g_hasCoreFeatures = true;
         } else if (feature == wgpu::FeatureName::TextureCompressionBC) {
+          // AURORA_NO_BC=1 leaves it out, so CMPR is decoded to RGBA8 on the CPU (to tell a driver's
+          // broken compressed uploads apart from other texture faults).
+          if (const char* noBc = std::getenv("AURORA_NO_BC"); noBc != nullptr && noBc[0] == '1') {
+            Log.info("AURORA_NO_BC=1: not requesting TextureCompressionBC");
+            continue;
+          }
           g_bcTexturesSupported = true;
         } else if (feature == wgpu::FeatureName::TextureCompressionASTC) {
           g_astcTexturesSupported = true;
