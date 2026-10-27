@@ -862,6 +862,9 @@ constexpr MatchedEffect kMatchedEffects[] = {
     {"c4409b28-4503-45ba-b63f-f05ac2d80ced", 0x38C0B9C6},  // PhazonHealingNodule (9 of 9)
     {"b204de64-5633-4f81-8b98-06cabda8ef04", 0x1EB570E1},  // IceSheegoth x1ac (5 of 5)
     {"c9c4d688-74fc-4464-aab7-fec950f28147", 0x6A6957FB},  // MetroidPrimeStage2 (1 of 1)
+    // Ridley x3f0 (CRidleyDataMP1 copies SLdr x3c0 ahead of x3f4's float and
+    // x3f8's sfx); its x370 ELC2 is a field Remastered appended after x3fc.
+    {"b7166799-c8b0-4af3-8252-94d911e59691", 0x29EA0B24},
     // Puffer: all 71 retail placements put C9D453A3 in both the CPatternedInfo
     // particle slot and LoadPuffer's cloudEffect; all 69 Remastered ones put
     // 813f0267 in the PatternedInfo slot and 78aa5da7 in the cloud slot. The
