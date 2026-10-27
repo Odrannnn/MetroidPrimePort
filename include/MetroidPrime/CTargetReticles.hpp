@@ -9,6 +9,9 @@
 #include "Kyoto/Math/CQuaternion.hpp"
 #include "Kyoto/Math/CVector3f.hpp"
 #include "Kyoto/TToken.hpp"
+#ifdef TARGET_PC
+#include "Kyoto/Graphics/CColor.hpp"
+#endif
 
 #include "rstl/vector.hpp"
 
@@ -136,6 +139,38 @@ private:
   TUniqueId x456_scanTargetId = kInvalidUniqueId;
   // The Wii pointer's world position (player +0xEB8 +0x7C); the port aims it at screen centre.
   CVector3f xPortTriPointerPos = CVector3f::Zero();
+  // Trilogy fn_80234EA8/80236A98/8023AC48/8023B228: new combat group state.
+  // This HUD class is not a CEntity; it is not part of the entity save-state schema.
+  void PortTriUpdateCombat(float dt, const CStateManager& mgr);
+  void PortTriDrawNext(const CMatrix3f& rot) const;
+  void PortTriDrawLocked(const CMatrix3f& rot) const;
+  void PortTriDrawAiming(const CMatrix3f& rot, const CStateManager& mgr) const;
+  void PortTriDrawOffScreen(const CMatrix3f& rot, const CStateManager& mgr) const;
+  void PortTriDrawCrosshairs(const CMatrix3f& rot) const;
+  static bool PortTriOffScreen(const CStateManager& mgr);
+  TCachedToken< CModel > x38c_aimCenter, x398_aimArm, x3a4_lockArm, x3b0_lockTech,
+      x3bc_lockBrackets, x3c8_lockBase, x3d4_offScreen;
+  TUniqueId xPortTriPointerTarget = kInvalidUniqueId;
+  float x274_aimArmScale = 1.f, x278_aimCenterScale = 1.f, x264_aimTarget = 0.f;
+  CColor x254_aimArmColor, x25c_aimCenterColor;
+  float x258_aimArmAlpha = 0.f, x260_aimCenterAlpha = 0.f;
+  TUniqueId x27c_triNext = kInvalidUniqueId, x2f0_triLocked = kInvalidUniqueId;
+  CVector3f x280_triNextPos = CVector3f::Zero();
+  float x28c_triNextAngle = 0.f, x2a0_triNextAlpha = 0.f;
+  CVector3f x2c0_triNextWorld = CVector3f::Zero(), x2e4_triNextFrom = CVector3f::Zero();
+  bool x2cc_triNextMoving = false;
+  float x2d4_triNextTime = 0.f;
+  CVector3f x2f4_triLockPos = CVector3f::Zero();
+  CColor x300_triLockColor;
+  float x304_triLockAlpha = 0.f, x324_triLockTime = 0.f, x328_triBaseScale = 3.f;
+  float x334_triBracketAlpha = 0.f, x338_triBracketAngle = 0.f, x33c_triPrevYaw = 0.f;
+  float x340_triTechTime = 0.f, x344_triTechAngle = 0.f, x348_triYaw = 0.f;
+  float x350_triReleaseAlpha = 0.f, x37c_triLockFade = 0.f, x380_triReleaseFade = 0.f;
+  CColor x36c_triFadeColor;
+  float x370_triFadeAlpha = 0.f, x374_triFadeScale = 0.f, x378_triFade = 0.f;
+  bool x34c_triRelease = false;
+  float x384_triOffScreenTime = 0.f;
+  unsigned x388_triOffScreenTicks = 0;
 #endif
   CQuaternion x0_leadingOrientation;
   CQuaternion x10_laggingOrientation;

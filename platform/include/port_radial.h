@@ -8,15 +8,21 @@ namespace PortRadial {
 
 enum Kind { kVisor = 0, kBeam = 1 };
 
-// Once per input poll: whether each menu's action is held, and the C-stick (x right,
+// Once per game tick: whether each menu's action is held, and the C-stick (x right,
 // y up), which points the selection while a menu captures input.
 void Tick(bool beamHeld, bool visorHeld, float cx, float cy);
 bool Held(Kind kind);
+// fn_80075BE0: Held means latched after >0.175 seconds, not the raw button.
+// fn_80235C98 tests the latch regardless of which menu owns it.
+bool LatchActive();
 // The console's `radial`: hold menu `kind` (-1 releases) with the selection at x, y.
 void Force(int kind, float x, float y);
 // From CSamusHud each update: whether the menus exist (a Trilogy disc, the setting on)
 // and whether each is open (drawn).
 void SetState(bool available, bool visorOpen, bool beamOpen);
+// fn_80075B58 per menu, from the game update: whether a held menu may latch (and stay latched).
+void SetEligible(bool visor, bool beam);
+bool Eligible(Kind kind);
 // A menu is held or still open: the pointer travel and the C-stick go to the selection.
 bool Capturing();
 // Pointer travel in mouse counts (y down).

@@ -770,6 +770,14 @@ CTransform4f CPlayerGun::PortGunView(const CStateManager& mgr,
 #endif
 
 #ifdef TARGET_PC
+// Trilogy fn_801878D4, gun terms: +6a0 morph state, +2f8 flag 8, +398 damage timer and the
+// CGunMotion controller (+744 -> +98) not striking.
+bool CPlayerGun::PortTriRadialReady() const {
+  const EGunState state = x73c_gunMotion->GunController().GetGunState();
+  return x678_morph.GetGunState() == CGunMorph::kGS_OutWipeDone && (x2f8_stateFlags & 0x8) == 0 &&
+         !(x394_damageTimer > 0.f) && state != kGS_Strike && state != kGS_BigStrike;
+}
+
 bool CPlayerGun::PortRenderDepth(const CStateManager& mgr, const CVector3f& pos) const {
   // Render's kGS_OutWipeDone placement of the gun; the grapple arm, the phazon beam and
   // its morph keep only their own draw.

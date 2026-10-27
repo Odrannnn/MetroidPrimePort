@@ -121,6 +121,8 @@ public:
   // Port (performance mode): draws the settled gun's opaque depth, as Render places it, under
   // the depth prepass; false when its state isn't one this covers (Render draws it as before).
   bool PortRenderDepth(const CStateManager&, const CVector3f& pos) const;
+  // Port: Trilogy fn_801878D4's gun terms for a radial menu latch.
+  bool PortTriRadialReady() const;
   // Port: the world point pointer aim is on (valid only while pointer aim steers the gun).
   void PortSetPointerAimPoint(bool valid, const CVector3f& point) {
     mPortPointerAimValid = valid;

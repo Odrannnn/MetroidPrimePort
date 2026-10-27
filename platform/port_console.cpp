@@ -2507,9 +2507,12 @@ void CmdRadial() {
   float x = 0.f;
   float y = 0.f;
   PortRadial::GetSelection(x, y);
-  Out("radial setting %d held beam %d visor %d capturing %d selection %.2f %.2f",
+  Out("radial setting %d held beam %d visor %d capturing %d selection %.2f %.2f eligible beam %d "
+      "visor %d",
       PortDebug::RadialMenus() ? 1 : 0, PortRadial::Held(PortRadial::kBeam) ? 1 : 0,
-      PortRadial::Held(PortRadial::kVisor) ? 1 : 0, PortRadial::Capturing() ? 1 : 0, x, y);
+      PortRadial::Held(PortRadial::kVisor) ? 1 : 0, PortRadial::Capturing() ? 1 : 0, x, y,
+      PortRadial::Eligible(PortRadial::kBeam) ? 1 : 0,
+      PortRadial::Eligible(PortRadial::kVisor) ? 1 : 0);
   Finish();
 }
 

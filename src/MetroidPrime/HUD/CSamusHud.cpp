@@ -39,6 +39,8 @@
 #include "MetroidPrime/HUD/CHudVisorBeamMenu.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
+#include "MetroidPrime/Player/CPlayerGun.hpp"
+#include "MetroidPrime/Player/CPlayerState.hpp"
 #include "MetroidPrime/Player/CPlayerCameraBob.hpp"
 #include "MetroidPrime/SFX/UI.h"
 #include "MetroidPrime/ScriptObjects/CScriptTrigger.hpp"
@@ -1631,6 +1633,15 @@ void CSamusHud::Update(float dt, const CStateManager& mgr, uint helmetVis, bool 
     }
     PortRadial::SetState(radial, radial && xPortRadial[0]->IsOpen(),
                          radial && xPortRadial[1]->IsOpen());
+    // fn_80075B58 (running, first-person camera) + fn_801878D4. The input tick reads this one
+    // HUD update late; the retail check runs in the same frame.
+    const CPlayer& player = *mgr.GetPlayer();
+    const bool ready = radial && mgr.GetGameState() == CStateManager::kGS_Running &&
+                       mgr.GetCameraManager()->IsInFPCamera() &&
+                       player.GetMorphballTransitionState() == CPlayer::kMS_Unmorphed &&
+                       player.GetPlayerGun()->PortTriRadialReady();
+    PortRadial::SetEligible(ready, ready && mgr.GetPlayerState()->GetActiveVisor(mgr) !=
+                                                CPlayerState::kPV_Scan);
   }
 #endif
   UpdateCameraDebugSettings();

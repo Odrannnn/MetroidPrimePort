@@ -1437,6 +1437,9 @@ if(MP_BUILD_TESTS)
     mp_port_test(port_tri_orbit_tests
         SOURCES tests/port_tri_orbit.cpp
         INCLUDES platform/include)
+    mp_port_test(port_tri_reticle_tests
+        SOURCES tests/port_tri_reticle.cpp
+        INCLUDES platform/include)
     mp_port_test(port_charge_locator_tests
         SOURCES tests/port_charge_locator.cpp
         INCLUDES include extern/aurora/include
