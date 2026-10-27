@@ -4,6 +4,7 @@
 #include "debug_ui_internal.h"
 
 #include "port_debug.h"
+#include "port_custom_actions.h"
 #include "port_photo.h"
 #include "port_pointer.h"
 #include "port_log.h"
@@ -128,6 +129,15 @@ Java_org_metroidprime_port_TouchControlsView_nativeTouchButtonActions(JNIEnv* en
     const PortInput::ActionInfo& info = PortInput::Info(a);
     items.emplace_back(info.key);
     items.emplace_back(info.label);
+  }
+  // The player's own actions (controls.toml [[custom_action]]), named as the Remap page does.
+  for (const PortInput::CustomActionDef& def : PortInputDevices::UserBindings()->customActions) {
+    const PortInput::Action a = PortInput::CustomAction(def.id);
+    if (!PortInput::TouchButtonAction(a)) {
+      continue;
+    }
+    items.emplace_back(PortInput::ActionKey(a));
+    items.emplace_back(PortCustomActions::DisplayName(def));
   }
   jclass stringClass = env->FindClass("java/lang/String");
   if (stringClass == nullptr) {

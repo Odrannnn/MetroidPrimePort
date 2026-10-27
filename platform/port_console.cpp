@@ -138,6 +138,11 @@ int sClient = -1;
 unsigned sGeneration = 0;
 bool sStarted = false;
 bool sEnabled = false;
+// PortConsoleRun's lines: no client generation is ever this, so replies go to the log.
+constexpr unsigned kLocalGeneration = ~0u;
+constexpr size_t kMaxLocalQueued = 64;
+// PortConsoleRun has queued something: commands run without MP_CONSOLE from then on.
+bool sLocalUsed = false;
 
 #ifndef _WIN32
 // Replies are sent from the game thread, so a client that stops reading must
@@ -391,7 +396,11 @@ void Finish(const char* error = nullptr) {
     text += error;
     text += '\n';
   }
-  SendRaw(sCmd.generation, text);
+  if (sCmd.generation == kLocalGeneration) {
+    PortLog::Write("[console] %s: %s", sCmd.args.empty() ? "" : sCmd.args[0].c_str(), text.c_str());
+  } else {
+    SendRaw(sCmd.generation, text);
+  }
   sHasCommand = false;
 }
 
@@ -474,6 +483,25 @@ const char* const kItemNames[] = {
     "Warrior", "Chozo", "Nature", "Sun", "World", "Spirit", "Newborn",
 };
 constexpr int kItemCount = sizeof(kItemNames) / sizeof(kItemNames[0]);
+
+// The items a player gives or takes, and their player-facing names; each key is
+// one of kItemNames, which is what the console's LookupName matches.
+constexpr PortConsoleItem kPlayerItems[] = {
+    {"PowerBeam", "Power Beam"},       {"ChargeBeam", "Charge Beam"},
+    {"IceBeam", "Ice Beam"},           {"WaveBeam", "Wave Beam"},
+    {"PlasmaBeam", "Plasma Beam"},     {"Missiles", "Missile Launcher"},
+    {"PowerBombs", "Power Bomb"},      {"EnergyTanks", "Energy Tank"},
+    {"SuperMissile", "Super Missile"}, {"IceSpreader", "Ice Spreader"},
+    {"Wavebuster", "Wavebuster"},      {"Flamethrower", "Flamethrower"},
+    {"CombatVisor", "Combat Visor"},   {"ScanVisor", "Scan Visor"},
+    {"ThermalVisor", "Thermal Visor"}, {"XRayVisor", "X-Ray Visor"},
+    {"MorphBall", "Morph Ball"},       {"MorphBallBombs", "Morph Ball Bombs"},
+    {"BoostBall", "Boost Ball"},       {"SpiderBall", "Spider Ball"},
+    {"SpaceJumpBoots", "Space Jump Boots"},
+    {"GrappleBeam", "Grapple Beam"},   {"PowerSuit", "Power Suit"},
+    {"VariaSuit", "Varia Suit"},       {"GravitySuit", "Gravity Suit"},
+    {"PhazonSuit", "Phazon Suit"},
+};
 
 int LookupName(const std::string& arg, const char* const* names, int count) {
   unsigned number;
@@ -1239,11 +1267,23 @@ void CmdLook(CStateManager& mgr) {
 
 // Deals an actor its remaining health as Power Beam damage, past its
 // vulnerability, so it dies as from a last shot (bosses run their death scripts).
+// `target` is what the player is locked on to.
 void CmdKill(CStateManager& mgr) {
   if (sCmd.args.size() < 2) {
-    return Finish("usage: kill <id> [damage]");
+    return Finish("usage: kill <id>|target [damage]");
   }
-  CActor* actor = TCastToPtr< CActor >(FindObject(mgr, sCmd.args[1]));
+  CEntity* ent = nullptr;
+  if (Lower(sCmd.args[1]) == "target") {
+    const CPlayer* player = mgr.GetPlayer();
+    const TUniqueId target = player != nullptr ? player->GetOrbitTargetId() : kInvalidUniqueId;
+    if (target == kInvalidUniqueId) {
+      return Finish("nothing is locked on");
+    }
+    ent = const_cast< CEntity* >(mgr.GetObjectById(target));
+  } else {
+    ent = FindObject(mgr, sCmd.args[1]);
+  }
+  CActor* actor = TCastToPtr< CActor >(ent);
   if (actor == nullptr) {
     return Finish("no such actor");
   }
@@ -1263,6 +1303,28 @@ void CmdKill(CStateManager& mgr) {
 void CmdHeal(CStateManager& mgr) {
   CPlayerState& ps = *mgr.PlayerState();
   ps.HealthInfo()->SetHP(ps.CalculateHealth());
+  Finish();
+}
+
+// Tops up what the player already has, without giving any capacity: health (the
+// tanks' worth), then the ammo the arm cannon's items hold.
+void CmdRefill(CStateManager& mgr) {
+  const std::string what = sCmd.args.size() > 1 ? Lower(sCmd.args[1]) : "all";
+  if (what != "energy" && what != "ammo" && what != "all") {
+    return Finish("usage: refill [energy|ammo|all]");
+  }
+  CPlayerState& ps = *mgr.PlayerState();
+  if (what != "ammo") {
+    ps.HealthInfo()->SetHP(ps.CalculateHealth());
+  }
+  if (what != "energy") {
+    ps.SetPickup(CPlayerState::kIT_Missiles, ps.GetItemCapacity(CPlayerState::kIT_Missiles));
+    ps.SetPickup(CPlayerState::kIT_PowerBombs, ps.GetItemCapacity(CPlayerState::kIT_PowerBombs));
+  }
+  Out("health %.0f/%.0f, missiles %d/%d, power bombs %d/%d", ps.HealthInfo()->GetHP(),
+      ps.CalculateHealth(), ps.GetItemAmount(CPlayerState::kIT_Missiles),
+      ps.GetItemCapacity(CPlayerState::kIT_Missiles), ps.GetItemAmount(CPlayerState::kIT_PowerBombs),
+      ps.GetItemCapacity(CPlayerState::kIT_PowerBombs));
   Finish();
 }
 
@@ -3995,8 +4057,11 @@ const CommandSpec kCommands[] = {
      "visor <combat|xray|scan|thermal|0-3>, beam <power|ice|wave|plasma|0-3>  switch like the touch wheels"},
     {"beam", nullptr, CmdBeam, ""},
     {"heal", nullptr, CmdHeal, "heal                       refill health"},
+    {"refill", nullptr, CmdRefill,
+     "refill [energy|ammo|all]   top up health, missiles and power bombs to what they hold (default all)"},
     {"kill", nullptr, CmdKill,
-     "kill <id> [damage]         kill an actor as with a last Power Beam shot (bosses too)"},
+     "kill <id>|target [damage]  kill an actor as with a last Power Beam shot (bosses too);\n"
+     "                           target: the enemy the player is locked on to"},
     {"phazongun", CmdPhazonGun, nullptr,
      "phazongun [off]            let the arm cannon fire the Phazon Beam (off: stop)"},
     {"hurt", nullptr, [](CStateManager&) { CmdHurt(sCmd.args.size() > 1 ? sCmd.args[1] : std::string()); },
@@ -4278,6 +4343,8 @@ void Tokenize(const std::string& line, std::vector< std::string >& args) {
 
 } // namespace
 
+std::span<const PortConsoleItem> PortConsoleItems() { return kPlayerItems; }
+
 bool PortConsoleEnabled() {
   if (!sStarted) {
     Start();
@@ -4289,11 +4356,13 @@ bool PortConsoleFrame(unsigned frame) {
   if (!sStarted) {
     Start();
   }
-  if (!sEnabled) {
+  if (!sEnabled && !sLocalUsed) {
     return false;
   }
   sFrame = frame;
-  PortFx::FrameBoundary();
+  if (sEnabled) {
+    PortFx::FrameBoundary();
+  }
   while (!sHasCommand) {
     Incoming next;
     {
@@ -4338,8 +4407,25 @@ void PortConsoleTick(CStateManager& mgr) {
   if (sEnabled && sFxLoop.on) {
     TickFxLoop(mgr);
   }
-  if (!sEnabled || !sHasCommand || !IsTickCommand(sCmd.args[0])) {
+  if (!sHasCommand || !IsTickCommand(sCmd.args[0])) {
     return;
   }
   RunTick(mgr);
+}
+
+bool PortConsoleRun(std::string_view line) {
+  if (!sStarted) {
+    Start();
+  }
+  std::lock_guard< std::mutex > lock(sQueueMutex);
+  size_t local = 0;
+  for (const Incoming& in : sQueue) {
+    local += in.generation == kLocalGeneration;
+  }
+  if (local >= kMaxLocalQueued) {
+    return false;
+  }
+  sQueue.push_back({std::string(line), kLocalGeneration});
+  sLocalUsed = true;
+  return true;
 }

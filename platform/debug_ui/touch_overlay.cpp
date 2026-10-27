@@ -25,6 +25,7 @@
 
 #if defined(PORT_TOUCH_OVERLAY)
 
+#include "port_custom_actions.h"
 #include "port_input_bindings.h"
 #include "port_input_devices.h"
 #include "port_input_engine.h"
@@ -531,21 +532,36 @@ int TouchCode(int control) {
                              : control;
 }
 
-// The actions an added button can take, key then label, in the action list's order.
+// The actions an added button can take, key then label, in the action list's order,
+// then the player's own actions (controls.toml); rebuilt when that file changes.
 const std::vector< std::string >& ButtonActions() {
-  static const std::vector< std::string > list = [] {
-    std::vector< std::string > out;
-    for (int i = 0; i < PortInput::kActionCount; ++i) {
-      const auto a = static_cast< PortInput::Action >(i);
-      if (!PortInput::TouchButtonAction(a)) {
-        continue;
-      }
-      const PortInput::ActionInfo& info = PortInput::Info(a);
-      out.emplace_back(info.key);
-      out.emplace_back(info.label);
+  static std::vector< std::string > list;
+  static uint64_t version = 0;
+  static bool loaded = false;
+  const uint64_t now = PortInputDevices::UserBindingsVersion();
+  if (loaded && version == now) {
+    return list;
+  }
+  loaded = true;
+  version = now;
+  list.clear();
+  for (int i = 0; i < PortInput::kActionCount; ++i) {
+    const auto a = static_cast< PortInput::Action >(i);
+    if (!PortInput::TouchButtonAction(a)) {
+      continue;
     }
-    return out;
-  }();
+    const PortInput::ActionInfo& info = PortInput::Info(a);
+    list.emplace_back(info.key);
+    list.emplace_back(info.label);
+  }
+  for (const PortInput::CustomActionDef& def : PortInputDevices::UserBindings()->customActions) {
+    const PortInput::Action a = PortInput::CustomAction(def.id);
+    if (!PortInput::TouchButtonAction(a)) {
+      continue;
+    }
+    list.emplace_back(PortInput::ActionKey(a));
+    list.emplace_back(PortCustomActions::DisplayName(def));
+  }
   return list;
 }
 

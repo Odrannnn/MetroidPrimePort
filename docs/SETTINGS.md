@@ -454,6 +454,23 @@
   its own button wherever its binding works. The overlay hides while F1 is open, so Record can't see touch
   controls: the editor's "Add a touch control..." list picks them instead.
   The D-pad, the sticks and the menu button can't be remapped.
+  "Custom actions (advanced)" (issue #218) holds actions the player makes, as many as
+  wanted: "+ Add action" picks what one does from a searchable list, then it binds like any
+  row (chords, layers, triggers and touch buttons included); Edit and Delete are on its row,
+  and Delete drops its bindings in every profile too. The list: Settings (turn any on/off
+  setting of the port menu on, off or toggle it), Cheats (Invincibility, Phazon Beam, free
+  camera, freeze the game, show Samus in free camera, refill energy, refill missiles and
+  power bombs, give or take an item, kill the locked-on enemy), Travel (warp to a room picked
+  by its in-game name, or to where a world starts; another world or a room not loaded yet
+  reloads the world, a loaded room of this world is instant), Save states (save to or load
+  from a given slot; the F5/F9 slot stays), Display (show a message on the HUD, text language)
+  and Advanced (any debug console command line, `docs/CONSOLE.md`; it must be given a name).
+  The on/off ones take Toggle, Turn on or Turn off. Its name is made from what it does
+  ("Phazon Beam (on/off)", "Warp to Ice Ruins West (Phendrana Drifts)") unless one is typed.
+  A press shows what it did as a note at the top of the screen; Cheats, Travel and console
+  commands refuse in the Original experience and with Archipelago connected. Saved in `controls.toml` as `[[custom_action]]` tables (`id`, `name`,
+  `preset`, `arg`, `mode`, `command`) and bound as action `custom:<id>`; a preset or setting
+  this build doesn't know is kept and does nothing.
 - `MP_CINEMA_BARS=0|1` (Video > Display "Cutscene black bars", persisted as `cinema_bars`,
   default off): the scripted 16:9 cutscene letterbox. Off, cutscenes narrower than 16:9
   show the cinematic camera's full shot (Vert+); elevator rides and credits keep theirs.

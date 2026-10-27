@@ -1,6 +1,7 @@
 #include "port_input_devices.h"
 
 #include "port_debug.h"
+#include "port_custom_actions.h"
 #include "port_input_map.h"
 #include "port_input_remap_ui.h"
 #include "port_log.h"
@@ -1241,7 +1242,9 @@ void PollPortActions() {
   if (!sInit || next != sFull) {
     sFull = std::move(next);
     sProfile = sFull;
-    std::erase_if(sProfile.bindings, [](const Binding& b) { return !IsPortAction(b.action); });
+    std::erase_if(sProfile.bindings, [](const Binding& b) {
+      return !IsPortAction(b.action) && !PortInput::IsCustom(b.action);
+    });
     sRuntime.SetProfile(&sProfile);
     sInit = true;
   }
@@ -1273,6 +1276,19 @@ void PollPortActions() {
   if (out.Pressed(Action::PhotoMode)) PortPhoto::RequestToggle();
   if (out.Pressed(Action::ToggleOriginal)) PortDebug::SetOriginalExperience(!PortDebug::OriginalExperience());
   if (out.Pressed(Action::ToggleRemastered)) PortDebug::ToggleRemastered();
+  // The player's own actions (controls.toml [[custom_action]]): each one runs as
+  // its binding is pressed, and the note it returns is the toast.
+  out.ForEachCustomPressed([](Action action) {
+    const std::shared_ptr<const PortInput::UserBindings> user = UserBindings();
+    const uint16_t id = PortInput::CustomId(action);
+    for (const PortInput::CustomActionDef& def : user->customActions) {
+      if (def.id == id) {
+        const std::string note = PortCustomActions::Run(def);
+        if (!note.empty()) PortDebug::ShowNote(note);
+        return;
+      }
+    }
+  });
 }
 
 } // namespace PortInputDevices

@@ -328,10 +328,62 @@ int main() {
     REQUIRE(r.Step().Held(Action::PadA));
   }
 
+  // Custom actions: values past the fixed enum, held, pressed and released like a
+  // Digital action, beside a fixed one, one id each.
+  {
+    Rig r;
+    r.profile.bindings = {Bind(CustomAction(3), {Btn(kA)}), Bind(CustomAction(7), {Btn(kB)}),
+                          Bind(Action::PadB, {Btn(kX)})};
+    r.Start();
+    REQUIRE(!r.Step().Held(CustomAction(3)));
+    r.Set(kA, true);
+    const Output& a = r.Step();
+    REQUIRE(a.Held(CustomAction(3)) && a.Pressed(CustomAction(3)) && Near(a.Value(CustomAction(3)), 1.f));
+    REQUIRE(!a.Held(CustomAction(7)) && !a.Pressed(CustomAction(7)) && !a.Held(Action::PadB));
+    int pressedCustom = 0;
+    a.ForEachCustomPressed([&](Action act) {
+      ++pressedCustom;
+      REQUIRE(act == CustomAction(3));
+    });
+    REQUIRE(pressedCustom == 1);
+    REQUIRE(r.Step().Held(CustomAction(3)) && !r.runtime.Last().Pressed(CustomAction(3)));
+    r.Set(kB, true);
+    const Output& b = r.Step();
+    REQUIRE(b.Pressed(CustomAction(7)) && b.Held(CustomAction(3)) && !b.Pressed(CustomAction(3)));
+    r.Set(kA, false);
+    const Output& rel = r.Step();
+    REQUIRE(rel.Released(CustomAction(3)) && !rel.Held(CustomAction(3)) && rel.Held(CustomAction(7)));
+    REQUIRE(!rel.Released(CustomAction(7)));
+    // The fixed action next to them is unaffected.
+    r.Set(kX, true);
+    const Output& fixed = r.Step();
+    REQUIRE(fixed.Pressed(Action::PadB) && fixed.Held(CustomAction(7)) && !fixed.Pressed(CustomAction(7)));
+    r.Set(kX, false);
+    r.Set(kB, false);
+    const Output& done = r.Step();
+    REQUIRE(done.Released(CustomAction(7)) && done.Released(Action::PadB) && !done.Held(CustomAction(3)));
+    REQUIRE(!done.Released(CustomAction(3)) && !done.Pressed(CustomAction(7)));
+  }
+
+  // A null profile reports nothing held or pressed, the customs as the fixed ones.
+  {
+    Rig r;
+    r.profile.bindings = {Bind(CustomAction(3), {Btn(kA)}), Bind(Action::PadA, {Btn(kA)})};
+    r.Start();
+    r.Set(kA, true);
+    REQUIRE(r.Step().Held(CustomAction(3)) && r.runtime.Last().Held(Action::PadA));
+    r.runtime.SetProfile(nullptr);
+    const Output& none = r.Step();
+    REQUIRE(!none.Held(CustomAction(3)) && !none.Pressed(CustomAction(3)) && !none.Held(Action::PadA));
+    // The customs report exactly what the fixed actions do here.
+    REQUIRE(none.Released(CustomAction(3)) == none.Released(Action::PadA));
+  }
+
   // Action keys round-trip.
   REQUIRE(ActionFromKey("visor_scan") == Action::VisorScan);
   REQUIRE(ActionFromKey("nope") == Action::None);
   REQUIRE(Info(Action::LookX).kind == ActionKind::Delta);
+  REQUIRE(IsCustom(CustomAction(1)) && !IsCustom(Action::PadA) && CustomId(Action::PadA) == 0);
 
   std::puts("port_input_engine: all checks passed");
   return 0;

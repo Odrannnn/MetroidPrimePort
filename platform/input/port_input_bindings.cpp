@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <iterator>
 #include <type_traits>
+#include <unordered_set>
 
 namespace PortInput {
 
@@ -329,7 +330,7 @@ std::string FloatText(float f) {
 }
 
 std::string UnbindText(const Unbind& u) {
-  return std::string(Info(u.action).key) + "@" + std::string(kFamilyNames[int(u.family)]);
+  return ActionKey(u.action) + "@" + std::string(kFamilyNames[int(u.family)]);
 }
 
 bool UnbindFromText(std::string_view s, Unbind& out) {
@@ -532,13 +533,16 @@ bool ContextFromText(std::string_view text, uint16_t& out) {
 
 bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* error, int* dropped) {
   UserBindings result;
-  enum class Table { None, Profile, Bind } table = Table::None;
+  enum class Table { None, Profile, Bind, Custom } table = Table::None;
   // Per bind: whether inputs was given (required).
   bool bindHasInputs = false;
   bool bindHasAction = false;
   bool bindLegacy = false; // beam_shift: dropped when the bind closes
   int legacyDropped = 0;
   int bindLine = 0;
+  // Per custom action: whether id was given (required).
+  bool customHasId = false;
+  int customLine = 0;
   int lineNo = 0;
   std::string err;
 
@@ -561,6 +565,13 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
       return fail(bindLine, "bind without inputs");
     return true;
   };
+  auto closeCustom = [&]() {
+    if (table != Table::Custom)
+      return true;
+    if (!customHasId)
+      return fail(customLine, "custom_action without an id");
+    return true;
+  };
 
   if (StartsWith(text, "\xEF\xBB\xBF")) // a UTF-8 BOM (Windows editors)
     text.remove_prefix(3);
@@ -581,7 +592,14 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
           header = Trim(header.substr(0, hash));
         if (!closeBind())
           return false;
-        if (header == "[[profile]]") {
+        if (!closeCustom())
+          return false;
+        if (header == "[[custom_action]]") {
+          result.customActions.emplace_back();
+          table = Table::Custom;
+          customHasId = false;
+          customLine = lineNo;
+        } else if (header == "[[profile]]") {
           result.profiles.emplace_back();
           table = Table::Profile;
         } else if (header == "[[profile.bind]]") {
@@ -605,7 +623,7 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
       if (!ParseValue(line.substr(eq + 1), v))
         return fail(lineNo, "bad value for " + key);
       if (table == Table::None)
-        return fail(lineNo, key + " outside a [[profile]]");
+        return fail(lineNo, key + " outside a table");
 
       auto wantKind = [&](Value::Kind k) {
         if (v.kind == k)
@@ -625,6 +643,50 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
         field = static_cast<std::remove_reference_t<decltype(field)>>(v.i);
         return true;
       };
+
+      if (table == Table::Custom) {
+        CustomActionDef& c = result.customActions.back();
+        if (key == "id") {
+          if (!wantKind(Value::Int))
+            return false;
+          if (v.i < 1 || v.i > kMaxCustomId)
+            return fail(lineNo, "id out of range");
+          const uint16_t id = uint16_t(v.i);
+          for (const CustomActionDef& other : result.customActions) {
+            if (other.id == id)
+              return fail(lineNo, "duplicate custom action id " + std::to_string(id));
+          }
+          c.id = id;
+          customHasId = true;
+        } else if (key == "name") {
+          if (!wantKind(Value::String))
+            return false;
+          c.name = v.str;
+        } else if (key == "renamed") {
+          if (!wantKind(Value::Bool))
+            return false;
+          c.renamed = v.b;
+        } else if (key == "preset") {
+          if (!wantKind(Value::String))
+            return false;
+          c.preset = v.str;
+        } else if (key == "arg") {
+          if (!wantKind(Value::String))
+            return false;
+          c.arg = v.str;
+        } else if (key == "mode") {
+          if (!wantKind(Value::String))
+            return false;
+          c.mode = v.str;
+        } else if (key == "command") {
+          if (!wantKind(Value::String))
+            return false;
+          c.command = v.str;
+        } else {
+          return fail(lineNo, "unknown custom_action field " + key);
+        }
+        continue;
+      }
 
       if (table == Table::Profile) {
         UserProfile& p = result.profiles.back();
@@ -741,7 +803,7 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
         return fail(lineNo, "unknown bind field " + key);
       }
     }
-    return closeBind();
+    return closeBind() && closeCustom();
   };
 
   if (!run()) {
@@ -758,6 +820,21 @@ bool ParseUserBindings(std::string_view text, UserBindings& out, std::string* er
 std::string SerializeUserBindings(const UserBindings& bindings) {
   std::string s = "# Metroid Prime Port controls (F1 > Controls > Remap). See docs/NATIVE_PORT.md.\n";
   const Binding def;
+  for (const CustomActionDef& c : bindings.customActions) {
+    s += "\n[[custom_action]]\n";
+    s += "id = " + std::to_string(c.id) + "\n";
+    s += "name = " + Quote(c.name) + "\n";
+    if (c.renamed)
+      s += "renamed = true\n";
+    if (!c.preset.empty())
+      s += "preset = " + Quote(c.preset) + "\n";
+    if (!c.arg.empty())
+      s += "arg = " + Quote(c.arg) + "\n";
+    if (!c.mode.empty())
+      s += "mode = " + Quote(c.mode) + "\n";
+    if (!c.command.empty())
+      s += "command = " + Quote(c.command) + "\n";
+  }
   for (const UserProfile& p : bindings.profiles) {
     s += "\n[[profile]]\n";
     s += "name = " + Quote(p.name) + "\n";
@@ -774,7 +851,7 @@ std::string SerializeUserBindings(const UserBindings& bindings) {
     }
     for (const Binding& b : p.bindings) {
       s += "\n[[profile.bind]]\n";
-      s += "action = " + Quote(Info(b.action).key) + "\n";
+      s += "action = " + Quote(ActionKey(b.action)) + "\n";
       s += "inputs = [";
       for (int i = 0; i < b.count; ++i)
         s += (i ? ", " : "") + Quote(InputToText(b.inputs[i]));
@@ -811,6 +888,24 @@ std::string SerializeUserBindings(const UserBindings& bindings) {
   return s;
 }
 
+uint16_t NextCustomId(const UserBindings& bindings) {
+  uint16_t max = 0;
+  for (const CustomActionDef& c : bindings.customActions) {
+    max = std::max(max, c.id);
+  }
+  // At least 1; never past the last id a custom action can have.
+  return max < kMaxCustomId ? uint16_t(max + 1) : uint16_t(kMaxCustomId);
+}
+
+void RemoveCustomAction(UserBindings& bindings, uint16_t id) {
+  const Action action = CustomAction(id);
+  std::erase_if(bindings.customActions, [id](const CustomActionDef& def) { return def.id == id; });
+  for (UserProfile& profile : bindings.profiles) {
+    std::erase_if(profile.bindings, [action](const Binding& b) { return b.action == action; });
+    std::erase_if(profile.unbind, [action](const Unbind& u) { return u.action == action; });
+  }
+}
+
 Selection Select(const UserBindings& bindings, std::string_view guid, std::string_view type) {
   Selection sel;
   const UserProfile* byType = nullptr;
@@ -837,16 +932,16 @@ void Overlay(Profile& profile, const UserProfile& user) {
     profile.bindings.clear();
   if (user.chordWindowMs != 0)
     profile.chordWindowMs = user.chordWindowMs;
-  constexpr int kFamilies = int(std::size(kFamilyNames));
-  std::vector<bool> drop(size_t(kActionCount) * kFamilies, false);
-  auto slot = [](Action a, Family f) { return size_t(a) * kFamilies + size_t(f); };
+  // (action, family) pairs: a custom action's value doesn't index a kActionCount row.
+  std::unordered_set<uint32_t> drop;
+  auto slot = [](Action a, Family f) { return (uint32_t(uint16_t(a)) << 8) | uint32_t(f); };
   for (const Binding& b : user.bindings)
     if (b.count > 0)
-      drop[slot(b.action, FamilyOf(b.inputs[b.count - 1].device))] = true;
+      drop.insert(slot(b.action, FamilyOf(b.inputs[b.count - 1].device)));
   for (const Unbind& u : user.unbind)
-    drop[slot(u.action, u.family)] = true;
+    drop.insert(slot(u.action, u.family));
   std::erase_if(profile.bindings, [&](const Binding& b) {
-    return b.count > 0 && drop[slot(b.action, FamilyOf(b.inputs[b.count - 1].device))];
+    return b.count > 0 && drop.contains(slot(b.action, FamilyOf(b.inputs[b.count - 1].device)));
   });
   profile.bindings.insert(profile.bindings.end(), user.bindings.begin(), user.bindings.end());
 }
@@ -1006,6 +1101,7 @@ void ApplyBallButtons(Profile& profile) {
 }
 
 bool TouchButtonAction(Action a) {
+  // A custom action is Digital, so a button can take it like any other.
   if (a == Action::None || Info(a).kind != ActionKind::Digital)
     return false;
   if (a >= Action::Layer1 && a <= Action::Layer4)

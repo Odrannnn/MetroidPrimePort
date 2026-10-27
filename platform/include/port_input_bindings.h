@@ -10,6 +10,15 @@
 // strings. Comments (#) and blank lines are ignored; anything else the parser
 // doesn't know is an error with its line number.
 //
+//   [[custom_action]]                # the player's own actions, before the profiles
+//   id = 1                           # stable; bindings name it custom:<id>
+//   name = "Look back"               # shown to the player
+//   renamed = true                   # the player set the name: keep it
+//   preset = "setting"               # what it does (a catalogue key)
+//   arg = "invert_y"                 # the preset's option
+//   mode = "toggle"                  # toggle, on, off, or "" for no mode
+//   command = ""                     # "command" preset: the console line
+//
 //   [[profile]]
 //   name = "Default"
 //   match = ""                     # "", "guid:<32 hex>" or "type:<SDL gamepad type>"
@@ -18,7 +27,7 @@
 //   unbind = ["pad_z@pad"]         # action@family: drop the base's bindings
 //
 //   [[profile.bind]]
-//   action = "beam_wave"           # an ActionInfo key
+//   action = "beam_wave"           # an ActionInfo key, or "custom:<id>"
 //   inputs = ["pad:leftshoulder", "pad:dpright"]
 //   any_order = false
 //   trigger = "press"              # press, tap, hold, double_tap, toggle
@@ -85,6 +94,19 @@ struct Unbind {
   bool operator==(const Unbind&) const = default;
 };
 
+// One of the player's own actions: an Action value kCustomBase + id, and what it
+// does. The catalogue of presets lives with the overlay that runs them.
+struct CustomActionDef {
+  uint16_t id = 0;          // stable; bindings name it custom:<id>
+  std::string name;         // shown to the player
+  bool renamed = false;     // the player set the name; keep it when the options change
+  std::string preset;       // catalogue key, e.g. "setting", "phazon_beam", "warp", "command"
+  std::string arg;          // the preset's option (setting key, item, "MLVL:MREA", slot, ...)
+  std::string mode;         // "toggle", "on", "off" or "" (presets that have no mode)
+  std::string command;      // "command" preset: the console line
+  bool operator==(const CustomActionDef&) const = default;
+};
+
 struct UserProfile {
   std::string name;
   std::string match; // "", "guid:<hex>", "type:<name>"
@@ -96,9 +118,16 @@ struct UserProfile {
 };
 
 struct UserBindings {
+  std::vector<CustomActionDef> customActions;
   std::vector<UserProfile> profiles;
   bool operator==(const UserBindings&) const = default;
 };
+
+// The id a new custom action gets: the highest in use plus one, at least 1.
+uint16_t NextCustomId(const UserBindings& bindings);
+// Deletes a custom action and everything that names it: its definition, and every
+// binding and unbind of it in every profile.
+void RemoveCustomAction(UserBindings& bindings, uint16_t id);
 
 // Key names: name(scancode) returns "" for none; parse(name) returns -1 for an
 // unknown name. Without them (tests), keys are written and read as numbers.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace PortInput {
 
@@ -29,6 +30,10 @@ bool Bit(uint64_t bits, uint16_t code, int count) { return code < count && ((bit
 } // namespace
 
 const ActionInfo& Info(Action a) {
+  static constexpr ActionInfo kCustom{ActionKind::Digital, "custom", "Custom action"};
+  if (IsCustom(a)) {
+    return kCustom;
+  }
   const auto i = size_t(a);
   return kActions[i < size_t(kActionCount) ? i : 0];
 }
@@ -39,7 +44,33 @@ Action ActionFromKey(std::string_view key) {
       return Action(i);
     }
   }
+  // A custom action: "custom:<decimal id>".
+  constexpr std::string_view kCustomPrefix = "custom:";
+  if (key.size() > kCustomPrefix.size() && key.substr(0, kCustomPrefix.size()) == kCustomPrefix) {
+    std::string_view digits = key.substr(kCustomPrefix.size());
+    if (digits.size() > 5) {
+      return Action::None;
+    }
+    long id = 0;
+    for (char c : digits) {
+      if (c < '0' || c > '9') {
+        return Action::None;
+      }
+      id = id * 10 + (c - '0');
+    }
+    if (id < 1 || id > kMaxCustomId) {
+      return Action::None;
+    }
+    return CustomAction(uint16_t(id));
+  }
   return Action::None;
+}
+
+std::string ActionKey(Action a) {
+  if (IsCustom(a)) {
+    return "custom:" + std::to_string(CustomId(a));
+  }
+  return std::string(Info(a).key);
 }
 
 bool Input::Analog() const {
@@ -121,6 +152,18 @@ void Runtime::Rebuild() {
     return;
   }
   const auto& bindings = mProfile->bindings;
+  // The output's custom vectors cover the ids the profile binds.
+  uint16_t maxCustom = 0;
+  for (const Binding& b : bindings) {
+    if (IsCustom(b.action)) {
+      maxCustom = std::max(maxCustom, CustomId(b.action));
+    }
+  }
+  if (maxCustom != 0) {
+    mOut.customHeld.assign(size_t(maxCustom) + 1, 0);
+    mOut.customPressed.assign(size_t(maxCustom) + 1, 0);
+    mOut.customReleased.assign(size_t(maxCustom) + 1, 0);
+  }
   mBindings.resize(bindings.size());
   mSupersets.resize(bindings.size());
   for (size_t bi = 0; bi < bindings.size(); ++bi) {
@@ -390,23 +433,33 @@ float Runtime::RunTrigger(int bi, bool expr, const RawState& raw, double nowMs) 
 
 void Runtime::ConsumeChangedOnContextSwitch(uint16_t before, uint16_t after) {
   const auto& bindings = mProfile->bindings;
+  // The action values that apply in each context: sorted, unique, so a custom
+  // action's value compares like a fixed one's.
+  std::vector<uint16_t> was, now;
   for (size_t i = 0; i < mInputs.size(); ++i) {
     InputState& in = mInputs[i];
     if (!in.down || in.edge || in.consumedBy != -1) {
       continue;
     }
-    std::bitset<kActionCount> was, now;
+    was.clear();
+    now.clear();
     for (const Binding& b : bindings) {
       if (!b.Uses(in.input)) {
         continue;
       }
       if (InContext(b, before)) {
-        was.set(size_t(b.action));
+        was.push_back(uint16_t(b.action));
       }
       if (InContext(b, after)) {
-        now.set(size_t(b.action));
+        now.push_back(uint16_t(b.action));
       }
     }
+    const auto sortUnique = [](std::vector<uint16_t>& v) {
+      std::sort(v.begin(), v.end());
+      v.erase(std::unique(v.begin(), v.end()), v.end());
+    };
+    sortUnique(was);
+    sortUnique(now);
     if (was != now) {
       in.consumedBy = kConsumedAll;
     }
@@ -415,11 +468,15 @@ void Runtime::ConsumeChangedOnContextSwitch(uint16_t before, uint16_t after) {
 
 const Output& Runtime::Poll(const RawState& raw, uint16_t contexts, double nowMs, uint16_t quiet) {
   const auto prevHeld = mOut.held;
+  const auto prevCustom = mOut.customHeld; // this poll's edges compare against it
   mOut.value.fill(0.f);
   mOut.held.reset();
+  std::fill(mOut.customHeld.begin(), mOut.customHeld.end(), uint8_t(0));
   if (mProfile == nullptr) {
     mOut.pressed.reset();
     mOut.released = prevHeld;
+    mOut.customPressed.assign(prevCustom.size(), 0);
+    mOut.customReleased = prevCustom;
     return mOut;
   }
   const auto& bindings = mProfile->bindings;
@@ -450,6 +507,17 @@ const Output& Runtime::Poll(const RawState& raw, uint16_t contexts, double nowMs
 
   auto apply = [&](int bi, float v) {
     const Binding& b = bindings[bi];
+    if (IsCustom(b.action)) {
+      // Custom actions are Digital: held while the trigger's output is on.
+      if (v != 0.f) {
+        const uint16_t id = CustomId(b.action);
+        if (id >= mOut.customHeld.size()) {
+          mOut.customHeld.resize(size_t(id) + 1, 0);
+        }
+        mOut.customHeld[id] = 1;
+      }
+      return;
+    }
     const auto a = size_t(b.action);
     if (Info(b.action).kind == ActionKind::Delta) {
       mOut.value[a] += v;
@@ -513,6 +581,17 @@ const Output& Runtime::Poll(const RawState& raw, uint16_t contexts, double nowMs
 
   mOut.pressed = mOut.held & ~prevHeld;
   mOut.released = prevHeld & ~mOut.held;
+  // Custom actions: the same edges, from the custom ids held last poll.
+  const size_t customCount = std::max(prevCustom.size(), mOut.customHeld.size());
+  mOut.customHeld.resize(customCount, 0);
+  mOut.customPressed.assign(customCount, 0);
+  mOut.customReleased.assign(customCount, 0);
+  for (size_t id = 0; id < customCount; ++id) {
+    const bool was = id < prevCustom.size() && prevCustom[id] != 0;
+    const bool now = mOut.customHeld[id] != 0;
+    mOut.customPressed[id] = uint8_t(!was && now);
+    mOut.customReleased[id] = uint8_t(was && !now);
+  }
   return mOut;
 }
 

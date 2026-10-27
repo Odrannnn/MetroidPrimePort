@@ -27,6 +27,7 @@
 #include <array>
 #include <bitset>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -190,13 +191,27 @@ enum class Action : uint16_t {
 };
 constexpr int kActionCount = int(Action::Count);
 
+// Custom actions are Action values kCustomBase + id (id >= 1), defined by the
+// player in controls.toml ([[custom_action]]); they are always Digital. The
+// value range works everywhere an Action does: bindings, unbind, the overlay
+// rule and the touch buttons.
+constexpr uint16_t kCustomBase = 0x1000;
+constexpr int kMaxCustomId = 0xffff - kCustomBase;
+
+inline bool IsCustom(Action a) { return uint16_t(a) > kCustomBase; }
+inline Action CustomAction(uint16_t id) { return Action(uint16_t(kCustomBase + id)); }
+inline uint16_t CustomId(Action a) { return IsCustom(a) ? uint16_t(uint16_t(a) - kCustomBase) : 0; }
+
 struct ActionInfo {
   ActionKind kind;
   std::string_view key;   // controls.toml name
   std::string_view label; // UI name
 };
+// A custom action's Info is the generic Digital one; Info(a).key is "custom".
 const ActionInfo& Info(Action a);
 Action ActionFromKey(std::string_view key); // Action::None if unknown
+// The controls.toml name: Info(a).key, or "custom:<id>" for a custom action.
+std::string ActionKey(Action a);
 
 enum class Trigger : uint8_t {
   Press,     // while held (analog values pass through)
@@ -241,11 +256,34 @@ struct Profile {
 struct Output {
   std::array<float, kActionCount> value{};
   std::bitset<kActionCount> held, pressed, released;
+  // Custom actions, by custom id (CustomId), sized to the profile's ids: a read
+  // past the end is false. A caller that wants every custom press walks
+  // customPressed, or uses ForEachCustomPressed.
+  std::vector<uint8_t> customHeld, customPressed, customReleased;
 
-  float Value(Action a) const { return value[size_t(a)]; }
-  bool Held(Action a) const { return held[size_t(a)]; }
-  bool Pressed(Action a) const { return pressed[size_t(a)]; }
-  bool Released(Action a) const { return released[size_t(a)]; }
+  static bool CustomBit(const std::vector<uint8_t>& bits, uint16_t id) {
+    return id < bits.size() && bits[id] != 0;
+  }
+  float Value(Action a) const {
+    return IsCustom(a) ? (CustomBit(customHeld, CustomId(a)) ? 1.f : 0.f) : value[size_t(a)];
+  }
+  bool Held(Action a) const {
+    return IsCustom(a) ? CustomBit(customHeld, CustomId(a)) : held[size_t(a)];
+  }
+  bool Pressed(Action a) const {
+    return IsCustom(a) ? CustomBit(customPressed, CustomId(a)) : pressed[size_t(a)];
+  }
+  bool Released(Action a) const {
+    return IsCustom(a) ? CustomBit(customReleased, CustomId(a)) : released[size_t(a)];
+  }
+  // f(custom action) for each custom action pressed this poll.
+  template <typename F> void ForEachCustomPressed(F f) const {
+    for (size_t id = 0; id < customPressed.size(); ++id) {
+      if (customPressed[id] != 0) {
+        f(CustomAction(uint16_t(id)));
+      }
+    }
+  }
   // Positive minus negative half, -1..1.
   float Axis(Action neg, Action pos) const;
 };
