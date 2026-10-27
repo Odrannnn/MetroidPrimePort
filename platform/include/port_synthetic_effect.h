@@ -74,9 +74,17 @@ inline constexpr const char* kBabygothFrozenFx = "c23f13f7-8be3-4e93-be16-e12942
 // collision child.
 inline constexpr const char* kIceSheegothFlame = "34c9a820-9bc9-47a3-a165-204021391714";
 inline constexpr const char* kIceSheegothFlameCollision = "d8d8782e-82dc-4f83-9fde-213fbf225f89";
+// The Parasite Queen's beam electric (an ELC2): SLdrIntroBossMP1 489464dd, f476917e, 37f2e9d1
+// (+0x378, +0x388, +0x398; the same ELC2 in each), one per beam CNewIntroBossMP1 creates.
+inline constexpr const char* kIntroBossBeamElectric = "cda45b99-2cd5-4ea4-858e-0c64fd88bae2";
+// Its GPSM and EPSM, Remastered-only GENPs the ELC2 names.
+inline constexpr const char* kIntroBossBeamElectricGpsm = "744cc8aa-27a0-42ed-8519-502dcfa64790";
+inline constexpr const char* kIntroBossBeamElectricEpsm = "cee620b1-bb30-47c8-81d7-af64cea7eb1e";
 inline constexpr const char* kActorEffectGuids[] = {kRidleyBeamElectric, kRidleyBeamElectricGpsm,
                                                     kRidleyBeamElectricEpsm, kBabygothFlame,
                                                     kBabygothFlameCollision, kBabygothFrozenFx,
-                                                    kIceSheegothFlame, kIceSheegothFlameCollision};
+                                                    kIceSheegothFlame, kIceSheegothFlameCollision,
+                                                    kIntroBossBeamElectric, kIntroBossBeamElectricGpsm,
+                                                    kIntroBossBeamElectricEpsm};
 
 }  // namespace PortRemastered

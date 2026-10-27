@@ -189,7 +189,8 @@ inline constexpr int kModels = 22;
 // 125: its GPSM/EPSM GENPs, resolved under their own ids.
 // 127: a standalone GENP another embeds: one id for both (Babygoth's flame collision).
 // 129: Babygoth's frozen VFX (VFX_FrameBuffer_Color_Erosion_Unlit, a HUD billboard).
-inline constexpr int kEffects = 130;   // the Ice Sheegoth's breath
+// 130: the Ice Sheegoth's breath.
+inline constexpr int kEffects = 131;   // the Parasite Queen's beam electric
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

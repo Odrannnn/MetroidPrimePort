@@ -17,6 +17,11 @@
 #include "MetroidPrime/BodyState/CBodyController.hpp"
 #include "MetroidPrime/CCollisionActor.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#include "port_synthetic_effect.h"
+#endif
+
 struct SOBBJointInfo {
   const char* from;
   const char* to;
@@ -420,6 +425,18 @@ void CNewIntroBoss::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid, CSt
           CTransform4f::Identity(), kMT_Character, stage3Damage, x5d8_stage3Projectile,
           GetCurrentAreaId(), GetUniqueId(), CWeaponAssetInfo(), true,
           CWeapon::kPA_KeepInCinematic);
+#ifdef TARGET_PC
+      // Remastered's CIntroBossMP1GOC::Create 0xee8800 passes SLdrIntroBossMP1 +0x378/+0x388/
+      // +0x398 to CNewIntroBossMP1 (+0x910/+0x920/+0x930), and AcceptScriptMsg 0xe13c38 gives
+      // one to each beam's CreatePlasmaProjectileGameObject: the same ELC2 run along all three.
+      const SObjectTag electricTag(
+          'ELSC', PortRemastered::SyntheticEffectId(PortRemastered::kIntroBossBeamElectric));
+      if (gpResourceFactory->CanBuild(electricTag)) {
+        stage1->PortSetBeamElectric(electricTag.GetId());
+        stage2->PortSetBeamElectric(electricTag.GetId());
+        stage3->PortSetBeamElectric(electricTag.GetId());
+      }
+#endif
       mgr.AddObject(*stage1);
       mgr.AddObject(*stage2);
       mgr.AddObject(*stage3);
