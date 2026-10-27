@@ -1427,8 +1427,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CIceAttackProject
       {"x191_explosionSoundStarted", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CIceAttackProjectile::x191_explosionSoundStarted), PES_ADDR(CIceAttackProjectile, x191_explosionSoundStarted), PES_GETI(CIceAttackProjectile, x191_explosionSoundStarted), PES_SETI(CIceAttackProjectile, x191_explosionSoundStarted)},
       {"x192_useWorldRay", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CIceAttackProjectile::x192_useWorldRay), PES_ADDR(CIceAttackProjectile, x192_useWorldRay), PES_GETI(CIceAttackProjectile, x192_useWorldRay), PES_SETI(CIceAttackProjectile, x192_useWorldRay)},
       {"x194_explosionSfxHandle", "CSfxHandle", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CIceAttackProjectile::x194_explosionSfxHandle), PES_ADDR(CIceAttackProjectile, x194_explosionSfxHandle), nullptr, nullptr},
+      {"xPortFrozenFxId", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CIceAttackProjectile::xPortFrozenFxId), PES_ADDR(CIceAttackProjectile, xPortFrozenFxId), PES_GETI(CIceAttackProjectile, xPortFrozenFxId), PES_SETI(CIceAttackProjectile, xPortFrozenFxId)},
   };
-  static const PortSchemaClass desc = {"CIceAttackProjectile", "CActor", fields, 22, 0x1E60103935DC0B17ull};
+  static const PortSchemaClass desc = {"CIceAttackProjectile", "CActor", fields, 23, 0xDB08311BCB0CF578ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CIceImpact >() {
@@ -4677,4 +4678,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3403;
+const int PortEntitySchema::kFieldCount = 3404;

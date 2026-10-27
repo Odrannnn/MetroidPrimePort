@@ -60,7 +60,12 @@ CIceAttackProjectile::~CIceAttackProjectile() {}
 void CIceAttackProjectile::Touch(CActor& actor, CStateManager& mgr) {
   if (actor.GetUniqueId() == x118_owner && !mgr.GetPlayer()->GetFrozenState()) {
     const ushort sfx = x188_freezeSfx;
-    mgr.Player()->SetFrozenState(mgr, x184_steamTexture, sfx, x18c_iceTexture);
+    mgr.Player()->SetFrozenState(mgr, x184_steamTexture, sfx, x18c_iceTexture
+#ifdef TARGET_PC
+                                 ,
+                                 xPortFrozenFxId
+#endif
+    );
     mgr.ApplyDamage(GetUniqueId(), actor.GetUniqueId(), GetUniqueId(), x11c_damage,
                     CMaterialFilter::MakeIncludeExclude(CMaterialList(kMT_Solid), CMaterialList()),
                     CVector3f::Zero());

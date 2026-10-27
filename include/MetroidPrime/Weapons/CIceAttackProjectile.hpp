@@ -35,6 +35,10 @@ public:
                        ushort explosionSfx, CAssetId iceTexture);
 
   void SetUseWorldRay(bool use) { x192_useWorldRay = use; }
+#ifdef TARGET_PC
+  // The frozen VFX Touch 0x10196b4 passes in its SPlayerFrozenStateDataShip1 (+0x304, id +0x10).
+  void PortSetFrozenFx(CAssetId id) { xPortFrozenFxId = id; }
+#endif
 
 private:
   class CTrailObject {
@@ -87,6 +91,9 @@ private:
   bool x191_explosionSoundStarted;
   bool x192_useWorldRay;
   CSfxHandle x194_explosionSfxHandle;
+#ifdef TARGET_PC
+  CAssetId xPortFrozenFxId = kInvalidAssetId;
+#endif
 };
 CHECK_SIZEOF(CIceAttackProjectile, (VERSION >= VERSION_GM8P_00 ? 0x1a8 : 0x198))
 

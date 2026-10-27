@@ -35,6 +35,10 @@
 #include "MetroidPrime/ScriptObjects/CRepulsor.hpp"
 #include "rstl/StringExtras.hpp"
 #include <float.h>
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#include "port_synthetic_effect.h"
+#endif
 
 const char* const CThardus::skHeadRockNameStr = "Neck_1";
 static const float skMinAttackTime = 0.75f;
@@ -614,14 +618,24 @@ void CThardus::DoUserAnimEvent(CStateManager& mgr, const CInt32POINode& node, EU
         CTransform4f::LookAt(result.GetPoint() + CVector3f(0.f, 0.f, 2.f),
                              mgr.GetPlayer()->GetTranslation(), CVector3f::Up());
     transform.RotateLocalZ(CRelAngle::FromDegrees(mgr.Random()->Range(-5.f, 5.f)));
-    mgr.AddObject(rs_new CIceAttackProjectile(
+    CIceAttackProjectile* projectile = rs_new CIceAttackProjectile(
         gpSimplePool->GetObj(SObjectTag('PART', x600_)),
         gpSimplePool->GetObj(SObjectTag('PART', x604_)),
         gpSimplePool->GetObj(SObjectTag('PART', x608_)), mgr.AllocateUniqueId(), GetCurrentAreaId(),
         mgr.GetPlayer()->GetUniqueId(), true, transform,
         CDamageInfo(CWeaponMode::Ice(), 6.f, 0.f, 0.f),
         CAABox(CVector3f(-1.f, -1.f, -1.f), CVector3f(1.f, 1.f, 1.f)), x6ac_, CMath::Deg2Rad(42.f),
-        x6e8_, x6ec_, 0xaad, x6f0_));
+        x6e8_, x6ec_, 0xaad, x6f0_);
+#ifdef TARGET_PC
+    // SLdrThardusMP1 4cd8330b (+0x490) is the frozen VFX of the SPlayerFrozenStateDataShip1
+    // CThardusMP1GOC::Create 0xe25924 builds; the same GENP as Babygoth's.
+    const SObjectTag frozenFx('PART',
+                              PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFrozenFx));
+    if (gpResourceFactory->CanBuild(frozenFx)) {
+      projectile->PortSetFrozenFx(frozenFx.GetId());
+    }
+#endif
+    mgr.AddObject(projectile);
     break;
   }
   case kUE_ScreenShake:
