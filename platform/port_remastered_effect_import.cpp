@@ -846,6 +846,12 @@ constexpr MatchedEffect kMatchedEffects[] = {
     // are not effects. part2 (18B11B28, intro) has no Remastered effect.
     {"de057194-ef63-4abf-9ed7-b6ddad9486fb", 0x0A621238},  // 00a_Crater_connect part1
     {"f17e87e4-91ca-4893-b601-1cf5822b8e36", 0x7DFF579C},  // 00F_intro_begin part1 (7 rooms)
+    // MetroidBeta: 8e1a4b01 sits in the slot before the three electric effects
+    // already paired by script slot, as xf4_electricParticleId precedes them in
+    // CMetroidBetaData (CMetroidBeta.cpp); all 10 placements agree. Exo's
+    // CMetroidPrimeData xa1c_particle2 is the same PART and MetroidPrimeRelayMP1
+    // names no counterpart, so Exo takes this effect too.
+    {"8e1a4b01-b461-4968-951e-6aab5fbbd6e3", 0x9AEBBD85},  // MetroidBeta electricParticle
     {"#loose-chpr", 0},  // method of the entries below
     // No ROOM, CHPR-set or script reference reaches these, or the counts are not
     // 1:1 (kb topic/unpaired-retail-particles.md). The missile pickup: CHPR a9b8e446 has one
