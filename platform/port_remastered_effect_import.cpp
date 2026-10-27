@@ -1691,7 +1691,8 @@ public:
   EffectImportResult Run() {
     for (const EffectGuid& id : m_io.effects) {
       std::vector<Pairing> pairings = RetailEffects(id, m_io.pairings);
-      if (pairings.empty() && m_io.typeOf && m_io.typeOf(id) == EffectFourCC("GENP") &&
+      if (pairings.empty() && m_io.typeOf &&
+          (m_io.typeOf(id) == EffectFourCC("GENP") || m_io.typeOf(id) == EffectFourCC("ELC2")) &&
           std::find(m_io.roomOnly.begin(), m_io.roomOnly.end(), id) != m_io.roomOnly.end()) {
         pairings.push_back({RoomEffectId(id), "room"});
       }

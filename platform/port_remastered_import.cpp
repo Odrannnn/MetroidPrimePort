@@ -2791,12 +2791,13 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       io.piece = pieceId;
       io.liquid = liquidId;
       io.water = waterSurface;
-      // A room effect actor's PART: the one the effects step wrote for its GENP, else the disc's
-      // it carries the id of.
+      // A room effect actor's PART: the one the effects step wrote for its GENP (or the ELSC for
+      // an ELC2 slot), else the disc's it carries the id of.
       io.effect = [&](const std::array<uint8_t, 16>& genp) -> uint32_t {
         std::error_code ec;
         const uint32_t own = RoomEffectId(genp);
-        if (fs::exists(staging / PathFromString(Hex8(own) + ".PART"), ec)) {
+        if (fs::exists(staging / PathFromString(Hex8(own) + ".PART"), ec) ||
+            fs::exists(staging / PathFromString(Hex8(own) + ".ELSC"), ec)) {
           return own;
         }
         std::array<uint8_t, 16> property = genp;

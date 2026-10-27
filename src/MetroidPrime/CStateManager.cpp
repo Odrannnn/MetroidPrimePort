@@ -2404,7 +2404,8 @@ CStateManager::LoadScriptObject(TAreaId aid, EScriptObjectType type, unsigned in
       std::vector< uint8_t > props(bytesLeft);
       in.ReadBytes(props.data(), bytesLeft);
       PortRoomEffects::ApplyPatches(eid.value, props.data(), bytesLeft, [](uint32_t part) {
-        return gpResourceFactory->CanBuild(SObjectTag('PART', part));
+        return gpResourceFactory->CanBuild(SObjectTag('PART', part)) ||
+               gpResourceFactory->CanBuild(SObjectTag('ELSC', part));
       });
       CMemoryInStream patched(props.data(), bytesLeft);
       ent = loader(*this, patched, propCount, info);

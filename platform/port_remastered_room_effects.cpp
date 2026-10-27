@@ -822,6 +822,9 @@ constexpr PartSlot kPartSlots[] = {
     {0xf4326a02, {0xe32acfab}, 0x26, 703},
     {0x7f2845c7, {0x63903958}, 0x86, 659},
     {0x7f2845c7, {0x50025ca7}, 0x86, 703},
+    // AtomicBetaMP1: the electric effect (ELC2 -> ELSC, LoadAtomicBeta's electricId), ahead
+    // of weaponId and the paired particleId. Two different ELC2s take the one retail ELSC by placement.
+    {0x87412090, {0xb460f7fc}, 0x77, 482},
     // MetroidPrimeRelayMP1's CMetroidPrimeData (CMetroidPrimeRelay.cpp), by the
     // CMetroidPrimeDataMP1 ctor and the SLdr typedef converters: ice attack particles 1-3,
     // x460_particle1, beam 0's contact and pulse effects, beam 2's fourth weapon asset, beam
