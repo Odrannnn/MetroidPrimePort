@@ -40,6 +40,11 @@
 #include "dolphin/gx/GXStruct.h"
 #include "dolphin/types.h"
 
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#include "port_room_effects.h"
+#endif
+
 const float CPatterned::skDamageHitTime = 0.33f;
 const float CPatterned::skActorApproachDistance = 3.f;
 
@@ -182,8 +187,24 @@ CPatterned::CPatterned(const EPatternedAI character, const TUniqueId uid, const 
 , x540_iceDeathExplosionOffset(pinfo.x124_particle2Scale)
 , x54c_iceDeathExplosionParticle()
 , x55c_moveScale(1.f, 1.f, 1.f) {
-  if (pinfo.x11c_particle1 != kInvalidAssetId) {
-    x520_deathExplosionParticle = gpSimplePool->GetObj(SObjectTag('PART', pinfo.x11c_particle1));
+  CAssetId particle1 = pinfo.x11c_particle1;
+  CAssetId particle2 = pinfo.x130_particle2;
+#ifdef TARGET_PC
+  // PORT: a retail enemy the script matcher paired with a Remastered one takes the death
+  // particles (and their offsets) the mod has for it (port_room_effects.h PatternedEffect).
+  for (uint32_t slot = 0; slot < PortRoomEffects::kPatternedSlots; ++slot) {
+    const PortRoomEffects::PatternedEffect* const fx =
+        PortRoomEffects::FindPatternedEffect(info.GetEditorId().value, slot);
+    if (fx == nullptr || !gpResourceFactory->CanBuild(SObjectTag('PART', fx->part)))
+      continue;
+    (slot == 0 ? particle1 : particle2) = fx->part;
+    if (fx->hasOffset)
+      (slot == 0 ? x514_deathExplosionOffset : x540_iceDeathExplosionOffset) =
+          CVector3f(fx->offset[0], fx->offset[1], fx->offset[2]);
+  }
+#endif
+  if (particle1 != kInvalidAssetId) {
+    x520_deathExplosionParticle = gpSimplePool->GetObj(SObjectTag('PART', particle1));
     x520_deathExplosionParticle->Lock();
   }
 
@@ -192,8 +213,8 @@ CPatterned::CPatterned(const EPatternedAI character, const TUniqueId uid, const 
     x530_deathExplosionElectric->Lock();
   }
 
-  if (pinfo.x130_particle2 != kInvalidAssetId) {
-    x54c_iceDeathExplosionParticle = gpSimplePool->GetObj(SObjectTag('PART', pinfo.x130_particle2));
+  if (particle2 != kInvalidAssetId) {
+    x54c_iceDeathExplosionParticle = gpSimplePool->GetObj(SObjectTag('PART', particle2));
     x54c_iceDeathExplosionParticle->Lock();
   }
 

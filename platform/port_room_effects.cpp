@@ -86,6 +86,18 @@ const Override* FindOverride(uint32_t eid) {
   return nullptr;
 }
 
+const PatternedEffect* FindPatternedEffect(uint32_t eid, uint32_t slot) {
+  if (!sLoading) {
+    return nullptr;
+  }
+  for (const PatternedEffect& p : sFile.patterned) {
+    if (p.slot == slot && (p.id & 0x3FFFFFF) == (eid & 0x3FFFFFF)) {
+      return &p;
+    }
+  }
+  return nullptr;
+}
+
 std::vector< SPortExternalVar > ExternalVars(const std::vector< Variable >& vars) {
   std::vector< SPortExternalVar > out(vars.size());
   for (size_t k = 0; k < vars.size(); ++k) {

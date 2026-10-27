@@ -341,7 +341,8 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  PutLE32(out, placements ? kFileVersion : 4);
+  const bool patterned = !file.patterned.empty();
+  PutLE32(out, patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -391,13 +392,25 @@ std::vector<uint8_t> Write(const File& file) {
       }
     }
   }
-  if (placements) {
+  if (placements || patterned) {
     for (const Override& over : file.overrides) {
       PutLE32(out, over.hasPlacement ? 1 : 0);
       if (over.hasPlacement) {
         for (const float* v : {over.pos, over.rot, over.scale}) {
           for (int i = 0; i < 3; ++i) PutLEFloat(out, v[i]);
         }
+      }
+    }
+  }
+  if (patterned) {
+    PutLE32(out, uint32_t(file.patterned.size()));
+    for (const PatternedEffect& p : file.patterned) {
+      PutLE32(out, p.id);
+      PutLE32(out, p.slot);
+      PutLE32(out, p.part);
+      PutLE32(out, p.hasOffset ? 1 : 0);
+      if (p.hasOffset) {
+        for (float f : p.offset) PutLEFloat(out, f);
       }
     }
   }
@@ -560,6 +573,40 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
           }
         }
       }
+    }
+  }
+  if (version >= 6) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 16) {
+      error = "truncated patterned list";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      PatternedEffect p;
+      uint32_t flag = 0;
+      if (!ReadLE32(data, at, p.id) || !ReadLE32(data, at, p.slot) || !ReadLE32(data, at, p.part) ||
+          !ReadLE32(data, at, flag)) {
+        error = "truncated patterned record " + std::to_string(i);
+        return false;
+      }
+      if (p.slot >= kPatternedSlots || flag > 1) {
+        error = "invalid patterned record " + std::to_string(i);
+        return false;
+      }
+      p.hasOffset = flag != 0;
+      for (int k = 0; p.hasOffset && k < 3; ++k) {
+        uint32_t bits = 0;
+        if (!ReadLE32(data, at, bits)) {
+          error = "truncated patterned record " + std::to_string(i);
+          return false;
+        }
+        std::memcpy(&p.offset[k], &bits, 4);
+        if (!std::isfinite(p.offset[k])) {
+          error = "non-finite patterned offset";
+          return false;
+        }
+      }
+      file.patterned.push_back(p);
     }
   }
   if (at != data.size()) {

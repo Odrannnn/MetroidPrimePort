@@ -734,15 +734,82 @@ BarrierStage StageBarrier(const Room& room, const Area& area, const RoomIO& io, 
   return stage;
 }
 
+// PatternedInfo (SLdrPatterned_MP1Typedef::Load; NTypedefToMP1Type converts it at 0xd1c2a0 in
+// CPatternedInfo's order). Each enemy nests it under a property of its own type, so it is found
+// by what it holds: the death particle and the health info.
+constexpr uint32_t kPatternedParticle1 = 0x88df29de;       // x11c_particle1
+constexpr uint32_t kPatternedParticle1Scale = 0xd1de58ff;  // x110_particle1Scale
+constexpr uint32_t kPatternedParticle2 = 0x5f145600;       // x130_particle2
+constexpr uint32_t kPatternedParticle2Scale = 0x558c7e4b;  // x124_particle2Scale
+constexpr uint32_t kPatternedHealth = 0x7cee8c14;
+struct PatternedSlotProps {
+  uint32_t particle;
+  uint32_t offset;
+};
+constexpr PatternedSlotProps kPatternedSlotProps[PortRoomEffects::kPatternedSlots] = {
+    {kPatternedParticle1, kPatternedParticle1Scale}, {kPatternedParticle2, kPatternedParticle2Scale}};
+
+// The component's PatternedInfo property list (absolute spans), or false.
+bool PatternedInfoOf(const Room& room, const Component& c, std::map<uint32_t, Span>& out) {
+  std::vector<Prop> props;
+  if (!PropList(room.Bytes(c.raw), c.raw.size, &props)) {
+    return false;
+  }
+  for (const Prop& p : props) {
+    const Span at{c.raw.start + p.data.start, p.data.size};
+    std::vector<Prop> sub;
+    if (!PropList(room.Bytes(at), at.size, &sub)) {
+      continue;
+    }
+    bool particle = false, health = false;
+    for (const Prop& s : sub) {
+      particle = particle || s.id == kPatternedParticle1;
+      health = health || s.id == kPatternedHealth;
+    }
+    if (particle && health) {
+      out.clear();
+      for (const Prop& s : sub) {
+        out[s.id] = {at.start + s.data.start, s.data.size};
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+// The PatternedInfo slot's GENP in pak order; false when it is absent or names none.
+bool PatternedGenp(const Room& room, const std::map<uint32_t, Span>& info, uint32_t slot, Id16& out) {
+  Id16 raw{};
+  if (!Property16(room, info, kPatternedSlotProps[slot].particle, raw) || raw == Id16{}) {
+    return false;
+  }
+  out = SwapUuid(raw.data());
+  return true;
+}
+
 }  // namespace
 
 std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t mrea, const Area& area,
                              const SceneryScripts& scripts, const RoomIO& io) {
   const std::vector<const Component*> effects = room.Of(kEffectMP1);
-  if (!io.effect || !io.write || effects.empty()) {
+  if (!io.effect || !io.write) {
     return {};
   }
-  char line[384];
+  // Script objects with a PatternedInfo the matcher paired with a retail object: their death
+  // particles.
+  std::vector<std::pair<const ScriptObject*, std::map<uint32_t, Span>>> enemies;
+  for (const Component& c : room.Components()) {
+    std::map<uint32_t, Span> info;
+    const auto matched = c.entity >= 0 ? scripts.retail.find(c.entity) : scripts.retail.end();
+    if (matched != scripts.retail.end() && matched->second < area.objects.size() &&
+        PatternedInfoOf(room, c, info)) {
+      enemies.emplace_back(&area.objects[matched->second], std::move(info));
+    }
+  }
+  if (effects.empty() && enemies.empty()) {
+    return {};
+  }
+  char line[512];
   const std::vector<ScriptObject>& objects = area.objects;
   if (objects.empty()) {
     return "  " + name + ": no retail objects, its effect actors left out";
@@ -945,14 +1012,61 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                     barrier.why.empty() ? "not the barrier's room" : barrier.why.c_str());
     }
   }
+  // A paired enemy's death particles: the PART the mod has for each slot's GENP, and the slot's
+  // offset. A slot Remastered leaves empty keeps retail's particle.
+  std::vector<PortRoomEffects::PatternedEffect> patterned;
+  std::set<std::pair<uint32_t, uint32_t>> patternedSeen;
+  size_t patternedNoPart = 0;
+  for (const auto& [o, info] : enemies) {
+    for (uint32_t slot = 0; slot < PortRoomEffects::kPatternedSlots; ++slot) {
+      Id16 genp{};
+      if (!PatternedGenp(room, info, slot, genp) || !patternedSeen.insert({o->id, slot}).second) {
+        continue;
+      }
+      uint32_t part = io.effect(genp);
+      if (part == 0 && io.matched != nullptr) {
+        const std::vector<uint32_t> paired = io.matched(genp);
+        part = paired.size() == 1 ? paired[0] : 0;
+      }
+      if (part == 0) {
+        ++patternedNoPart;
+        continue;
+      }
+      PortRoomEffects::PatternedEffect p;
+      p.id = o->id;
+      p.slot = slot;
+      p.part = part;
+      // The offset is Remastered's too: SLdrVector_MP1Typedef's constructor (0xd1e970) zeroes
+      // one the PatternedInfo leaves out.
+      p.hasOffset = true;
+      const auto offset = info.find(kPatternedSlotProps[slot].offset);
+      if (offset != info.end() && offset->second.size == 12) {
+        const uint8_t* b = room.Bytes(offset->second);
+        const Vec3 g = MulR2G({ReadLEFloat(b), ReadLEFloat(b + 4), ReadLEFloat(b + 8)});
+        if (!std::isfinite(g[0]) || !std::isfinite(g[1]) || !std::isfinite(g[2])) {
+          ++patternedNoPart;
+          continue;
+        }
+        for (int i = 0; i < 3; ++i) {
+          p.offset[i] = float(g[size_t(i)]);
+        }
+      }
+      patterned.push_back(p);
+    }
+  }
+  char patternedNote[96] = "";
+  if (!patterned.empty() || patternedNoPart != 0) {
+    std::snprintf(patternedNote, sizeof patternedNote, ", %zu enemy death particle(s) (%zu without a PART)",
+                  patterned.size(), patternedNoPart);
+  }
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
                 "Remastered's effect, %zu connected and left out, %zu matched a retail object (%zu of them still on "
-                "the retail PART), %zu without a PART, %zu on an unknown layer%s%s%s",
+                "the retail PART), %zu without a PART, %zu on an unknown layer%s%s%s%s",
                 name.c_str(), added.size(), replacedNear, overridden, connectedCount, kept + keptOwn + overridden,
                 keptOwn, noPart, noLayer, full != 0 ? ", the id range is full" : "",
-                badVars != 0 ? ", unreadable particle variables" : "", barrierNote);
-  if (added.empty() && overrides.empty() && skips.empty() && !group) {
+                badVars != 0 ? ", unreadable particle variables" : "", barrierNote, patternedNote);
+  if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty()) {
     return line;
   }
   PortRoomEffects::File file;
@@ -962,6 +1076,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     file.layers.push_back(std::move(layer));
   }
   file.overrides = std::move(overrides);
+  file.patterned = std::move(patterned);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;
@@ -987,7 +1102,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     for (size_t r = 0; r < barrierGroup.rings.size(); ++r) {
       for (uint32_t member : {barrierGroup.controller, barrierGroup.rings[r].platform}) {
         listed = listed || skips.count(member) != 0;
-        for (const PortRoomEffects::Override& over : overrides) {
+        for (const PortRoomEffects::Override& over : file.overrides) {
           listed = listed || over.id == member;
         }
       }
@@ -1015,6 +1130,19 @@ std::vector<std::array<uint8_t, 16>> RoomEffectGenpsOf(const Room& room) {
     const auto genp = f.find(kPropGenp);
     if (genp != f.end() && genp->second.size == 16) {
       out.push_back(SwapUuid(room.Bytes(genp->second)));
+    }
+  }
+  // Every enemy's death particles (WriteRoomEffects gives them to the retail enemies matched).
+  for (const Component& c : room.Components()) {
+    std::map<uint32_t, Span> info;
+    if (c.entity < 0 || !PatternedInfoOf(room, c, info)) {
+      continue;
+    }
+    for (uint32_t slot = 0; slot < PortRoomEffects::kPatternedSlots; ++slot) {
+      Id16 genp{};
+      if (PatternedGenp(room, info, slot, genp)) {
+        out.push_back(genp);
+      }
     }
   }
   // The barrier's ten effects, once its whole graph validates: the only connected actors the

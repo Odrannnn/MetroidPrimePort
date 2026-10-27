@@ -178,7 +178,8 @@ inline constexpr int kModels = 22;
 // 113: early PIRN (old late-marker PARTs need reimport) and Ice model back culling.
 // 114: WallCrawlerSwarm part1 paired (0A621238, 7DFF579C; #by-hand).
 // 115: MetroidBeta electricParticle 9AEBBD85 paired (#by-hand).
-inline constexpr int kEffects = 116;   // Puffer particle C9D453A3 and synthetic puffercloud (#by-hand)
+// 116: Puffer particle C9D453A3 and synthetic puffercloud (#by-hand).
+inline constexpr int kEffects = 117;   // enemies' PatternedInfo death particle GENPs (room-only)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -204,7 +205,8 @@ inline constexpr int kEffects = 116;   // Puffer particle C9D453A3 and synthetic
 // 49: an ActorKeyframe's Play to a PlatformMP1 (its own action hash) plays its clip, and script
 // objects in a cycle match by a subset of their retail targets.
 // 50: a retail model on an Actor or Platform that names an animation set stays retail.
-inline constexpr int kRooms = 50;
+// 51: .roomfx v6, a matched enemy's PatternedInfo death particles and offsets.
+inline constexpr int kRooms = 51;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).
