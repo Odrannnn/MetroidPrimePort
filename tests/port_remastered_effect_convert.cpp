@@ -5047,6 +5047,65 @@ void TestVmatVisorRainRecipe() {
             "VPRM carries the effect's CCH0 (1, .12, .2, 4)");
 }
 
+// VFX_VisorSteam (53eceaa4, the SteamMP1 billboard's model particle, MATI f4970293; vfx/53eceaa4.md): TCH0
+// the colour slot, TCH1 the second raw sample slot (the Indirect role: the shader's own reads), CCH0..4
+// whole in VPRM v1, and Unfogged without a DFOG (the visor composite pass has no fog).
+void TestVmatVisorSteamRecipe() {
+  constexpr uint32_t kVisorSteam = 1u << 19, kUnfogged = 1u << 22;
+  // The MATI's own CCH0..4.
+  const std::vector<std::array<float, 4>> cch = {
+      {8.f, 10.f, 10.f, 10.f}, {0.f, 0.f, 0.f, 0.25f}, {0.4f, 0.6f, 0.8f, 0.05f}, {1.f, 5.f, 0.25f, 0.15f}, {}};
+  const std::vector<uint8_t> data = VmatEffect(true);
+  const std::vector<uint8_t> mati = MatiCchN(0x53eceaa4, {{"TCH0", Fresh(8)}, {"TCH1", Fresh(8)}}, cch);
+  EffectNode node;
+  std::string error;
+  CHECK_MSG(ParseEffect(data.data(), data.size(), node, error), "the visor steam effect parses");
+  EffectConvertIO io;
+  io.materialTexture = [](const EffectGuid&) { return 0x5EED0007u; };
+  io.materialData = [&mati](const EffectGuid&) { return mati; };
+  io.vfxTexture = [](const EffectGuid& texture) {
+    FlipbookAtlas atlas;
+    if (texture == Fresh(8)) {
+      atlas.id = 0x5EED0008;
+    }
+    return atlas;
+  };
+  io.modelMesh = [](uint32_t) { return std::vector<uint8_t>{0, 0, 0, 2}; };
+  std::vector<ConvertedPart> parts = ConvertEffect(node, data.data(), io);
+  std::vector<RetailPartProperty> properties;
+  if (parts.size() == 1) {
+    SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error);
+  }
+  const auto value = [](const std::vector<RetailPartProperty>& properties, uint32_t fourcc) {
+    for (const RetailPartProperty& property : properties) {
+      if (property.fourcc == fourcc) {
+        return property.value;
+      }
+    }
+    return std::vector<uint8_t>();
+  };
+  const std::vector<uint8_t> vmat = value(properties, EffectFourCC("VMAT"));
+  CHECK_MSG(parts.size() == 1 && !vmat.empty() && parts[0].approximated.empty(),
+            "53eceaa4 writes an exact VMAT");
+  CHECK_MSG(VmatWord(vmat, 12) == (kVisorSteam | kUnfogged) && VmatWord(vmat, 20) == 2,
+            "53eceaa4 VMAT: VisorSteam, Unfogged, two textures");
+  CHECK_MSG(VmatWord(vmat, 112) == 0 && VmatWord(vmat, 116) == ~0u && VmatWord(vmat, 132) == 1 &&
+                VmatWord(vmat, 136) == ~0u,
+            "53eceaa4: TCH0 is the colour slot and TCH1 the indirect sample slot");
+  // VPRM v1: version, the NMAP slot (-1), five rows, then CCH0..4 whole.
+  const std::vector<uint8_t> vprm = value(properties, EffectFourCC("VPRM"));
+  CHECK_MSG(vprm.size() == 8 + 12 + 16 * 5 && VmatWord(vprm, 8) == 1 && VmatWord(vprm, 12) == ~0u &&
+                VmatWord(vprm, 16) == 5,
+            "VPRM v1: no NMAP slot and five CCH rows");
+  bool rows = vprm.size() == 8 + 12 + 16 * 5;
+  for (size_t r = 0; rows && r < cch.size(); ++r) {
+    for (size_t c = 0; c < 4; ++c) {
+      rows = rows && VmatWord(vprm, 20 + r * 16 + c * 4) == Bits(cch[r][c]);
+    }
+  }
+  CHECK_MSG(rows, "VPRM carries the MATI's CCH0..4");
+}
+
 // A MATI with the header's material-flag list appended after its parameters: a LE u32 count then that
 // many four-byte tags (the tags the material enables), as every shipped MATI header carries.
 std::vector<uint8_t> MatiFlags(std::vector<uint8_t> mati, const std::vector<const char*>& flags) {
@@ -5711,6 +5770,7 @@ int main() {
   TestVmatDisintegrationRecipe();
   TestVmatVisorRunOffRecipes();
   TestVmatVisorRainRecipe();
+  TestVmatVisorSteamRecipe();
   TestVmatBarrierShieldRecipe();
   TestVmatBarrierGlowRecipe();
   TestVmatVisorSplatRecipe();

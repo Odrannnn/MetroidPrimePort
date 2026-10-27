@@ -64,6 +64,8 @@ private:
   static constexpr float kPortHUDDepth = 2.2311f;
   static constexpr float kPortHUDAspect = 16.f / 9.f;
   static constexpr float kPortHUDTanHalfFov = 0.637070f;
+  // The HUD camera's near plane (CGuiCamera ctor 0xbd4e60, hard-coded).
+  static constexpr float kPortHUDNear = 1.f;
   bool PortIsRemasteredHUD() const;
   void PortUpdateSpawnSpread(const CStateManager& mgr);
   void PortApplySpawnSpread(const CVector3f& spread);

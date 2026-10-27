@@ -77,7 +77,7 @@ struct Uniform {
   float soft[4];    // DepthSoften: the viewport's depth range (min, max) and whether the scene depth is bound
   float scene[4];   // SceneWarp: 1 / the copied target's size (x, y), the camera's near plane, whether the colour is bound
   // IceCharge*: CCH0..6 (IceChargeBeam: 0..2) and, at [7], the modular simulation time; VisorRunOff:
-  // CCH0..4; BarrierShield and BarrierGlow: CCH0. Rows past the recipe's stay zero.
+  // CCH0..4; VisorSteam: CCH0..4; BarrierShield and BarrierGlow: CCH0. Rows past the recipe's stay zero.
   float ice[8][4];
   // IceChargeCollisionLit: AMBS (ambient), the probe's mean, its lobe, then (view-space direction,
   // 1 + 2 * sharpness) per colour channel, and BLCM. These are the 7 vec4f of padding the uniform
@@ -773,6 +773,44 @@ R"(  } else if ((FEAT & 536870912u) != 0u) {
           vc.rgb * M;
     // The alpha is the instance alpha alone: the tail multiplies vc.w in and discards it at 0.
     x = 1.0;
+)"
+R"(  } else if ((FEAT & 524288u) != 0u) {
+    // VFX_VisorSteam (53eceaa4, FS perm 000_0, VS 000_1; vfx/53eceaa4.md). No scene copy and no fog: the
+    // steam is a tinted cloud alpha-blended over the visor. TCH1 (the macro map Mt) at the uv offsets the
+    // TCH0 repeat read R, scaled by CCH0.x and scrolled by the VS's o2.yz; o2 depends on the CCH rows
+    // only, so it is computed here. The cloud's radial mask t70 grows with CCH0.z (the amount) and o2.x
+    // (the CCH0.w triangle wave x CCH3.w); CCH0.z past 1 (t42) brings in the Mt.w breakup. R.zw, blended
+    // by the triangle wave of R.x + Mt.z + CCH0.w, shade the colour CCH2.rgb. x leaves vc.w to the tail.
+    let c0 = u.ice0;
+    let c1 = u.ice1;
+    let c2 = u.ice2;
+    let c3 = u.ice3;
+    let c4 = u.ice4;
+    let ox = c3.w * (1.0 - abs(1.0 - 2.0 * fract(c0.w * 0.25)));
+    let t60 = c2.w * (1.0 - (clamp(c0.z, -1.0, 1.0) * 0.5 + 0.5)) - abs(c0.w) * abs(c2.w);
+    let oy = t60 * c4.x;
+    let oz = -t60 * c4.y;
+    let uvs = uv_of(in, u.uvSets[max(S_COLOR, 0)]);
+    let mt = sample_raw(S_INDIRECT, uvs.xy, 0);
+    let d9 = mt.x - 0.5;
+    let d10 = mt.y - 0.5;
+    let R = sample_raw(S_COLOR, vec2f(uvs.x * c0.x - oy + d9 * c3.z, uvs.y * c0.x - oz + d10 * c3.z), 0);
+    let r29 = R.x - 0.5;
+    let r30 = R.y - 0.5;
+    let t28 = ox + 0.1;
+    let t38 = -0.5 * c1.x + r29 * t28 + d9 * 0.25 + uvs.x - 0.5;
+    let t39 = 0.5 * c1.y + r30 * t28 + d10 * 0.25 + uvs.y - 0.5;
+    let t42 = sat(c0.z - 1.0);
+    let t47 = sat(t42 * 10.0);
+    let t56 = sqrt(t38 * t38 + t39 * t39);
+    let t70 = 1.0 - sat(-min(max(c0.z, -1.0), 0.1) + ox * t56 + t56);
+    x = t70 * sat(1.0 - t42 + ((d9 + d10) * ((r29 + r30) * 0.5 + 0.5) * 0.25 + mt.w) * t47 - t47) *
+        max(1.0 - mt.w - c1.w, c3.x * 0.25) * c3.x;
+    let t78 = R.x + mt.z + c0.w;
+    let t86 = (R.z - 0.5) * 2.0 * c3.y;
+    let t92 = (R.w - 0.5) * c3.y * 2.0 - t86;
+    let t101 = max(min((t86 + t92 * (1.0 - abs(1.0 - 2.0 * fract(t78)))) * (mt.z * t70), 1.0), -0.25);
+    rgb = (vec3f(t101) + c2.rgb) * vc.rgb * M;
   } else if ((FEAT & 16384u) != 0u) {
     // VFX_Disintegration (d749057f, perm 000_0): the mask's x squared, PMTR rows 0..2 as the colours at
     // s = 0 and 1 and the edge colour, row 3 as (threshold, edge width, alpha lo, alpha hi). ceil(e)
@@ -1717,13 +1755,13 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   const std::pair<uint32_t, int8_t> reads[] = {
       {ColorTex | ColorIndexing | Pyro | Disintegration | VisorSplat | IceChargeBeam | IceChargeCollision |
            IceChargeCollisionLit | VisorRunOff | VisorRunOffLit | VisorRain | BarrierShield | BarrierGlow |
-           FrameBufferColorErosion,
+           FrameBufferColorErosion | VisorSteam,
        desc.colorSlot},
       {OpacityTex, desc.opacitySlot},
       {Ramp | Pyro, desc.rampSlot},
       {Ramp | DualMod, desc.ramp2Slot},
       {Thresholding, desc.thresholdSlot},
-      {Indirect | SceneWarp | VisorSplat | BarrierShield, desc.indirectSlot},
+      {Indirect | SceneWarp | VisorSplat | BarrierShield | VisorSteam, desc.indirectSlot},
       {ColorIndexing, desc.paletteSlot},
       {IceChargeBeam | IceChargeCollision | IceChargeCollisionLit, desc.normalSlot},
       {IceChargeCollision | IceChargeCollisionLit, desc.envSlot},
@@ -1812,13 +1850,13 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     u.scene[3] = 1.f;
   }
   if ((features & (IceChargeBeam | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit |
-                   VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0) {
-    // The recipe's CCH rows: IceChargeCollision 0..6, VisorRunOff 0..4, IceChargeBeam 0..2, VisorRain,
-    // BarrierShield, BarrierGlow and FrameBufferColorErosion 0 only.
+                   VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion | VisorSteam)) != 0) {
+    // The recipe's CCH rows: IceChargeCollision 0..6, VisorRunOff and VisorSteam 0..4, IceChargeBeam 0..2,
+    // VisorRain, BarrierShield, BarrierGlow and FrameBufferColorErosion 0 only.
     uint32_t rows = 3;
     if ((features & (IceChargeCollision | IceChargeCollisionLit)) != 0) {
       rows = 7;
-    } else if ((features & (VisorRunOff | VisorRunOffLit)) != 0) {
+    } else if ((features & (VisorRunOff | VisorRunOffLit | VisorSteam)) != 0) {
       rows = 5;
     } else if ((features & (VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0) {
       rows = 1;

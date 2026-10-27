@@ -129,6 +129,13 @@ void CHUDBillboardEffect::PreRender(CStateManager& mgr, const CFrustumPlanes& fr
         const float hudUnit = unit / (kPortHUDDepth * kPortHUDTanHalfFov);
         xe8_generator->SetLocalScale(CVector3f(hudUnit, d / kPortHUDDepth, hudUnit));
       }
+      // The HUD camera clips at kPortHUDNear (CGuiCamera ctor 0xbd4e60), nearer than the visor
+      // plane the port puts on its own near plane: a 3D model (VisorSteam) would lose its part
+      // in between, so the generator draws models that much farther out from the eye.
+      if (x104_26_isElementGen) {
+        static_cast< CElementGen& >(*xe8_generator)
+            .PortSetHudScene(cam.GetNearClipDistance() * kPortHUDDepth / (d * kPortHUDNear));
+      }
     } else
 #endif
     {

@@ -51,6 +51,12 @@ enum Feature : uint32_t {
   // added to it: rgb = (t.rgb + scene) x vc.rgb, a = t.w (Erosion then subtracts PMTR row 0's x).
   // params = CCH0 (SMTR-animated). The depth is the HUD billboard's, as VisorRain's. No copy: t alone.
   FrameBufferColorErosion = 1u << 18,
+  // VFX_VisorSteam (53eceaa4, FS perm 000_0, VS 000_1; the SteamMP1 HUD billboard's model particle, MATI
+  // f4970293): colorSlot = TCH0 (the repeat noise, wrap repeat), indirectSlot = TCH1 (the macro map), both at
+  // the TRSS uv; params = CCH0..4 (SMTR-animated from the Ship1 particle variables). TCH1 offsets the TCH0
+  // read; their channels make a radial cloud mask and a shade over CCH2.rgb: rgb = (shade + CCH2.rgb) x
+  // vc.rgb x PCMD, alpha the mask x vc.w (blend Alpha). No scene copy; Unfogged (DFOG 1).
+  VisorSteam = 1u << 19,
   // VFX_IceChargeBeam (9e0605cd, perms 000_1/000_0): a model particle whose CPU feed (CPortVfxMeshBatch::Add) has
   // turned and shaken the mesh by the shader's hash and filled tan. colorSlot = BCLR, normalSlot = NMAP, params =
   // CCH0..2, uv[1].x = the mesh's COLOR.z, extra rows 0..2 = PMTR A, B, C. Unfogged (DFOG 1: perm 000).

@@ -577,6 +577,14 @@ void CElementGen::PortGlobalIsPresented() {
       static_cast< CElementGen* >(*it)->PortGlobalIsPresented();
   }
 }
+
+void CElementGen::PortSetHudScene(float eyeScale) {
+  xPortHudEyeScale = eyeScale;
+  for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
+    if ((*it)->Get4CharId() == 'PART')
+      static_cast< CElementGen* >(*it)->PortSetHudScene(eyeScale);
+  }
+}
 #endif
 
 void CElementGen::SetModulationColor(const CColor& col) {
@@ -4101,6 +4109,27 @@ void CElementGen::RenderModels() {
 #ifdef TARGET_PC
   CPortVfxMeshBatch vfxMeshes;
   const bool vfxMesh = !square && PortVfxHasMesh(*x28_loadedGenDesc);
+  // A Remastered HUD billboard's model (VisorSteam): Remastered draws it in the HUD camera's
+  // space under the system transform BuildTransform4f(Q_g, T_g, S_g) (UpdateModelRenderState
+  // 0x246758), so the translation is never scaled and the scale covers the particle's position
+  // and model alike. Retail's trans above undoes the local scale, which the local scale on the
+  // right never puts back: the steam landed 1 / scale times as far away. The port's HUD local
+  // scale is in camera axes (as the sprite paths apply it), and the scene is pushed out from the
+  // eye so that the game's near plane clips where the HUD camera's does
+  // (CHUDBillboardEffect::PreRender).
+  const bool vfxHudMesh = vfxMesh && xPortHudEyeScale > 0.f;
+  CTransform4f vfxHudSystem(CTransform4f::Identity());
+  if (vfxHudMesh) {
+    const CTransform4f& view = CGraphics::GetViewMatrix();
+    CTransform4f viewRot(view);
+    viewRot.SetTranslation(CVector3f::Zero());
+    const CVector3f eye = view.GetTranslation();
+    vfxHudSystem = CTransform4f::Translate(eye) * CTransform4f::Scale(xPortHudEyeScale) *
+                   CTransform4f::Translate(xe8_globalTranslation - eye) *
+                   x10c_globalScaleTransform * viewRot * x178_localScaleTransform *
+                   viewRot.GetQuickInverse();
+    trans = CVector3f::Zero();
+  }
 #endif
   CTransform4f rot(CTransform4f::Identity());
   if (pmrtConst) {
@@ -4310,7 +4339,10 @@ void CElementGen::RenderModels() {
             PortRenderMeshesVfx(vfxMeshes);
           }
           vfxMeshes.Add(*x28_loadedGenDesc->xPortVfx,
-                        x10c_globalScaleTransform * partTrans * x178_localScaleTransform, particle,
+                        vfxHudMesh ? vfxHudSystem * partTrans
+                                   : x10c_globalScaleTransform * partTrans *
+                                         x178_localScaleTransform,
+                        particle,
                         partFrame, x338_moduColor, PortVfxExposureGain(*x28_loadedGenDesc, true));
           continue;
         }

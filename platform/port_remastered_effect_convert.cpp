@@ -514,7 +514,7 @@ constexpr uint32_t kColorTex = 1, kOpacityTex = 2, kErosion = 4, kRamp = 8, kInd
                    kThresholding = 64, kDualMod = 128, kOpacityFresnel = 256, kColorIndexing = 512, kAddColor = 1024,
                    kOpacityFade = 2048, kColorRgbOnly = 4096, kPyro = 8192, kDisintegration = 16384,
                    kSceneWarp = 32768, kVisorSplat = 65536, kFrameBufferColorErosion = 1u << 18,
-                   kIceChargeBeam = 1u << 20,
+                   kVisorSteam = 1u << 19, kIceChargeBeam = 1u << 20,
                    kIceChargeCollision = 1u << 21, kUnfogged = 1u << 22, kVisorRunOff = 1u << 23,
                    kVisorRunOffLit = 1u << 24, kIceChargeCollisionLit = 1u << 25, kParticleLit = 1u << 26,
                    kVisorRain = 1u << 28, kBarrierShield = 1u << 29, kBarrierGlow = 1u << 30;
@@ -699,6 +699,13 @@ const Recipe* RecipeOf(uint32_t shader) {
       // (0.75 .. 1) x vc.rgb, alpha vc.a; elsewhere discarded. The visor composite pass has no fog, so Unfogged
       // whatever the DFOG.
       {0x0ec41df0, kVisorRain, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, false, 1, false, true},
+      // VFX_VisorSteam (53eceaa4, the SteamMP1 HUD billboard's model particle, MATI f4970293; FS perm 000_0,
+      // VS 000_1; vfx/53eceaa4.md): TCH0 Repeat_Texture (wrap repeat) read at uv x CCH0.x, offset by TCH1
+      // Macro_Texture (the second raw sample slot, the Indirect role: no CCH warp) and scrolled by the VS's
+      // o2.yz, which depends on CCH0/2/3/4 only (the shader computes it). CCH0..4 in VPRM, SMTR-animated by the
+      // Ship1 particle variables. No scene copy; the visor composite pass has no fog, so Unfogged.
+      {0x53eceaa4, kVisorSteam, {{"TCH0", Role::Color, -1, -1}, {"TCH1", Role::Indirect, -1, -1}}, {}, -1, false,
+       false, 5, false, true},
       // VFX_FrameBuffer_Color_Erosion_Unlit (d8ece62c, the frozen-player HUD effect GENP c23f13f7, MATI
       // eaef3c6e; FS perm 000_0, fog perm 001_0, 002/004 identical to 000 and 003/005 to 001): BCLR's
       // x and y offset the scene copy at the fragment by near / HUD depth x CCH0.xy, read at lod
