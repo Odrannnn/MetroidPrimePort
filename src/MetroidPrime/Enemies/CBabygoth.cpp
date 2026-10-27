@@ -1435,6 +1435,11 @@ void CBabygoth::CreateFlameThrower(CStateManager& mgr) {
       flame->PortSetRemasteredFlame(
           fx.GetId(), PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFlameCollision));
     }
+    const SObjectTag frozenFx('PART',
+                              PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFrozenFx));
+    if (gpResourceFactory->CanBuild(frozenFx)) {
+      flame->PortSetFrozenFx(frozenFx.GetId());
+    }
 #endif
     mgr.AddObject(*flame);
   }

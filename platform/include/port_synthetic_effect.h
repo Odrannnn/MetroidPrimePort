@@ -65,8 +65,10 @@ inline constexpr const char* kRidleyBeamElectricEpsm = "5272fe00-f012-472c-92cf-
 // CFlameThrowerMP1 renders, and its KSSM child that takes the collision warp.
 inline constexpr const char* kBabygothFlame = "5bfbd5ec-c9b4-45a1-9b25-17f6c8134b47";
 inline constexpr const char* kBabygothFlameCollision = "97564fc0-faba-4473-939d-d131ff72e86f";
+// SLdrBabygothMP1 a57bf368 (+0x400): the frozen VFX of its SPlayerFrozenStateDataShip1 (+0x10).
+inline constexpr const char* kBabygothFrozenFx = "c23f13f7-8be3-4e93-be16-e12942e4b87f";
 inline constexpr const char* kActorEffectGuids[] = {kRidleyBeamElectric, kRidleyBeamElectricGpsm,
                                                     kRidleyBeamElectricEpsm, kBabygothFlame,
-                                                    kBabygothFlameCollision};
+                                                    kBabygothFlameCollision, kBabygothFrozenFx};
 
 }  // namespace PortRemastered

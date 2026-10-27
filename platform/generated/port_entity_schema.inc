@@ -1210,10 +1210,11 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CFlameThrower >()
       {"xPortFlameFxDesc", "rstl::single_ptr<TLockedToken<CGenDescription>>", PortSchemaKind::smart_ptr, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortFlameFxDesc), PES_ADDR(CFlameThrower, xPortFlameFxDesc), nullptr, nullptr},
       {"xPortFlameFxGen", "rstl::single_ptr<CElementGen>", PortSchemaKind::smart_ptr, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortFlameFxGen), PES_ADDR(CFlameThrower, xPortFlameFxGen), nullptr, nullptr},
       {"xPortCollisionFxId", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortCollisionFxId), PES_ADDR(CFlameThrower, xPortCollisionFxId), PES_GETI(CFlameThrower, xPortCollisionFxId), PES_SETI(CFlameThrower, xPortCollisionFxId)},
+      {"xPortFrozenFxId", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortFrozenFxId), PES_ADDR(CFlameThrower, xPortFrozenFxId), PES_GETI(CFlameThrower, xPortFrozenFxId), PES_SETI(CFlameThrower, xPortFrozenFxId)},
       {"xPortCollisionWarp", "CFlameThrower::PortCollisionWarp", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortCollisionWarp), PES_ADDR(CFlameThrower, xPortCollisionWarp), nullptr, nullptr},
       {"xPortCollisionWarpPending", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortCollisionWarpPending), PES_ADDR(CFlameThrower, xPortCollisionWarpPending), PES_GETI(CFlameThrower, xPortCollisionWarpPending), PES_SETI(CFlameThrower, xPortCollisionWarpPending)},
   };
-  static const PortSchemaClass desc = {"CFlameThrower", "CGameProjectile", fields, 21, 0x7A4BD0F2B7964E35ull};
+  static const PortSchemaClass desc = {"CFlameThrower", "CGameProjectile", fields, 22, 0x139EED7FCFEB80A4ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CFlickerBat >() {
@@ -2559,8 +2560,11 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPlayer >() {
       {"xa50_deferredCarryTick", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPlayer::xa50_deferredCarryTick), PES_ADDR(CPlayer, xa50_deferredCarryTick), PES_GETI(CPlayer, xa50_deferredCarryTick), PES_SETI(CPlayer, xa50_deferredCarryTick)},
       {"xa54_deferredCarry", "SPortDeferredCarry[4]", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CPlayer::xa54_deferredCarry), PES_ADDR(CPlayer, xa54_deferredCarry), nullptr, nullptr},
       {"xad4_carriedYaw", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::xad4_carriedYaw), PES_ADDR(CPlayer, xad4_carriedYaw), nullptr, nullptr},
+      {"xPortFrozenFxId", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPlayer::xPortFrozenFxId), PES_ADDR(CPlayer, xPortFrozenFxId), PES_GETI(CPlayer, xPortFrozenFxId), PES_SETI(CPlayer, xPortFrozenFxId)},
+      {"xPortFrozenFx", "TUniqueId", PortSchemaKind::uid, 0, kPortSchemaPrivate, sizeof(CPlayer::xPortFrozenFx), PES_ADDR(CPlayer, xPortFrozenFx), nullptr, nullptr},
+      {"xPortFrozenFxAmount", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::xPortFrozenFxAmount), PES_ADDR(CPlayer, xPortFrozenFxAmount), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CPlayer", "CPhysicsActor", fields, 208, 0x32CDBDA599755FE2ull};
+  static const PortSchemaClass desc = {"CPlayer", "CPhysicsActor", fields, 211, 0xCFABD88EC97E4C67ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CPoisonProjectile >() {
@@ -4673,4 +4677,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3399;
+const int PortEntitySchema::kFieldCount = 3403;

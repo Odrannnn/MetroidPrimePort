@@ -50,6 +50,7 @@
 #include "MetroidPrime/SFX/PuddleSpore.h"
 #include "MetroidPrime/SFX/Weapons.h"
 #include "MetroidPrime/ScriptObjects/CHUDBillboardEffect.hpp"
+#include "Kyoto/Particles/CElementGen.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptAreaAttributes.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptWater.hpp"
 #include "MetroidPrime/TCastTo.hpp"
@@ -2016,7 +2017,12 @@ void CPlayer::Think(float dt, CStateManager& mgr) {
 }
 
 void CPlayer::SetFrozenState(CStateManager& stateMgr, CAssetId steamTxtr, const ushort sfx,
-                             CAssetId iceTxtr) {
+                             CAssetId iceTxtr
+#ifdef TARGET_PC
+                             ,
+                             CAssetId portFrozenFx
+#endif
+) {
   if (!stateMgr.GetCameraManager()->IsInCinematicCamera() && !GetFrozenState()) {
     bool showMsg;
     CSystemState& systemState = gpGameState->SystemState();
@@ -2047,6 +2053,12 @@ void CPlayer::SetFrozenState(CStateManager& stateMgr, CAssetId steamTxtr, const 
     IsMorphBallTransitioning();
     xa08_steamTextureId = steamTxtr;
     xa0c_iceTextureId = iceTxtr;
+#ifdef TARGET_PC
+    // CPlayerMP1::SetFrozenState 0xc6f834 copies the frozen state data, then
+    // CreateFrozenVFXShip1.
+    xPortFrozenFxId = portFrozenFx;
+    PortCreateFrozenFx(stateMgr);
+#endif
     DoSfxEffects(CSfxManager::SfxStart(sfx));
     EndLandingControlFreeze();
   }
@@ -2076,12 +2088,94 @@ void CPlayer::BreakFrozenState(CStateManager& stateMgr) {
   }
 
   x768_morphball->ResetMorphBallIceBreak();
+#ifdef TARGET_PC
+  // CPlayerMP1::BreakFrozenState 0xc6fc34 sets no visor steam: the frozen VFX fades out in
+  // TickFrozenVFXShip1.
+  if (xPortFrozenFxId != kInvalidAssetId) {
+    return;
+  }
+#endif
   SetVisorSteam(0.f, 0.3f / 0.7f, 1.f / 14.f, xa08_steamTextureId, false);
 }
+
+#ifdef TARGET_PC
+namespace {
+// The frozen VFX's amount, real de3a3b53-9c80-43d7-9ff4-48291f47306a (0x1d20730), bytes_le.
+const PortGuid& PortFrozenFxAmountGuid() {
+  static const PortGuid g = [] {
+    static const u8 b[16] = {0x53, 0x3b, 0x3a, 0xde, 0x80, 0x9c, 0xd7, 0x43,
+                             0x9f, 0xf4, 0x48, 0x29, 0x1f, 0x47, 0x30, 0x6a};
+    PortGuid r;
+    for (int i = 0; i < 16; ++i) {
+      r.bytes[i] = b[i];
+    }
+    return r;
+  }();
+  return g;
+}
+}  // namespace
+
+// CPlayerMP1::CreateFrozenVFXShip1 0xc6fad8: replace the effect with one built from the frozen
+// VFX (HUD billboard, white, scale type 0) and bind the current amount.
+void CPlayer::PortCreateFrozenFx(CStateManager& mgr) {
+  if (xPortFrozenFx != kInvalidUniqueId) {
+    mgr.DeleteObjectRequest(xPortFrozenFx);
+    xPortFrozenFx = kInvalidUniqueId;
+  }
+  if (xPortFrozenFxId == kInvalidAssetId) {
+    return;
+  }
+  xPortFrozenFx = mgr.AllocateUniqueId();
+  CHUDBillboardEffect* effect = rs_new CHUDBillboardEffect(
+      rstl::optional_object< TToken< CGenDescription > >(
+          gpSimplePool->GetObj(SObjectTag('PART', xPortFrozenFxId))),
+      rstl::optional_object_null(), xPortFrozenFx, true, rstl::string_l("FrozenVFX"),
+      CHUDBillboardEffect::GetNearClipDistance(mgr), CHUDBillboardEffect::GetScaleForPOV(mgr),
+      CColor(1.f, 1.f, 1.f, 1.f), CVector3f(1.f, 1.f, 1.f), CVector3f(0.f, 0.f, 0.f));
+  effect->PortSetScaleType(0);
+  mgr.AddObject(effect);
+  PortBindFrozenFx(mgr);
+}
+
+// CPlayerMP1::PushFrozenVFXShip1Variables 0xc701fc.
+void CPlayer::PortBindFrozenFx(CStateManager& mgr) {
+  if (CHUDBillboardEffect* effect =
+          TCastToPtr< CHUDBillboardEffect >(mgr.ObjectById(xPortFrozenFx))) {
+    if (effect->IsElementGen()) {
+      static_cast< CElementGen* >(effect->GetParticleGen())
+          ->PortBindReal(PortFrozenFxAmountGuid(), xPortFrozenFxAmount);
+    }
+  }
+}
+
+// CPlayerMP1::TickFrozenVFXShip1 0xc70088: the amount rises to 0.7 over 0.3 s while frozen and
+// falls to 0 over 0.05 s after; the effect goes once it has faded.
+void CPlayer::PortTickFrozenFx(CStateManager& mgr, float dt) {
+  const bool frozen = GetFrozenState();
+  if (frozen) {
+    if (xPortFrozenFxAmount < 0.7f) {
+      xPortFrozenFxAmount = rstl::min_val(0.7f, xPortFrozenFxAmount + dt / 0.42857146f);
+    }
+  } else if (xPortFrozenFxAmount > 0.f) {
+    xPortFrozenFxAmount = rstl::max_val(0.f, xPortFrozenFxAmount - dt / 0.071428575f);
+  }
+  PortBindFrozenFx(mgr);
+  if (!frozen && xPortFrozenFxAmount <= 0.f) {
+    mgr.DeleteObjectRequest(xPortFrozenFx);
+    xPortFrozenFx = kInvalidUniqueId;
+  }
+}
+#endif
 
 void CPlayer::UpdateFrozenState(const CFinalInput& input, CStateManager& mgr) {
   x750_frozenTimeout -= input.Time();
   if (x750_frozenTimeout > 0.f) {
+#ifdef TARGET_PC
+    // CPlayerMP1::UpdateFrozenState 0xc6fe48 ticks the frozen VFX instead.
+    if (xPortFrozenFxId != kInvalidAssetId) {
+      PortTickFrozenFx(mgr, input.Time());
+    } else
+#endif
     SetVisorSteam(0.7f, 0.3f / 0.7f, 1.f / 14.f, xa08_steamTextureId, false);
   } else {
     BreakFrozenState(mgr);
@@ -2159,6 +2253,12 @@ void CPlayer::ProcessInput(const CFinalInput& input, CStateManager& mgr) {
     return;
   }
 
+#ifdef TARGET_PC
+  // CPlayerMP1::UpdateFrozenState runs every frame: thawed, it fades the frozen VFX out.
+  if (!GetFrozenState() && xPortFrozenFx != kInvalidUniqueId) {
+    PortTickFrozenFx(mgr, input.Time());
+  }
+#endif
   if (GetFrozenState()) {
     UpdateFrozenState(input, mgr);
 

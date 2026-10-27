@@ -297,8 +297,8 @@ fn vs_main(in: VIn) -> VOut {
     // vp_c4[0].w / -viewZ).
     out.sw = u.scene.z / -mv.z;
   }
-  if ((FEAT & 268435456u) != 0u) {
-    // VisorRain: o6.x = game near / HUD view depth. Remastered draws HUD billboards in the HUD
+  if ((FEAT & (268435456u | 262144u)) != 0u) {
+    // VisorRain (and FrameBufferColorErosion's o3.x): o6.x = game near / HUD view depth. Remastered draws HUD billboards in the HUD
     // camera at basewidget_visorFX (FRME_BaseHud z -2.2311, eye at the origin: the scale
     // 0xcb0ef8 fills the frustum there); the port scales that scene by (near + 0.01) / 2.2311
     // onto GetNearClipDistance, so map its depth back (kb topic/hud-billboard-visor-draw).
@@ -825,6 +825,24 @@ R"(  } else if ((FEAT & 536870912u) != 0u) {
     let g = sample_raw(S_PALETTE, pc, 0);
     rgb = g.rgb * vc.rgb * M;
     x = i.y * g.w;
+  } else if ((FEAT & 262144u) != 0u) {
+    // VFX_FrameBuffer_Color_Erosion_Unlit (d8ece62c, FS perm 000_0): BCLR at the sprite's uv and layer;
+    // its x and y offset the scene copy at the fragment by near / view depth x CCH0.xy (v down: -y),
+    // read at lod max(0, CCH0.z - 1), and the copy is added to the colour, x vc.rgb x PCMD (c5.x, M).
+    // The copy is exposed, so x the inverse exposure: the tail exposes it again. Alpha t.w: Erosion
+    // follows.
+    let c = u.ice0;
+    let uvs = uv_of(in, u.uvSets[max(S_COLOR, 0)]);
+    let t = sample_raw(S_COLOR, uvs.xy, layer(uvs.z, u.layers[max(S_COLOR, 0)]));
+    var fb = vec3f(0.0);
+    if (u.scene.w > 0.5) {
+      let fbuv = vec2f(in.pos.x * u.scene.x + t.x * in.sw * c.x, in.pos.y * u.scene.y - t.y * in.sw * c.y);
+      var ie = 1.0;
+      if (u.tone1.x > 0.0 && u.tone0.w > 0.0) { ie = 1.0 / u.tone0.w; }
+      fb = scene_light(textureSampleLevel(sceneColor, sceneSampler, fbuv, max(0.0, c.z - 1.0)).rgb) * ie;
+    }
+    rgb = (t.rgb + fb) * vc.rgb * M;
+    x = t.w;
   } else if ((FEAT & 1u) != 0u) {
     let c = sample_slot(in, S_COLOR, w);
     rgb = c.rgb * vc.rgb * M;
@@ -1698,7 +1716,8 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   // The slots each enabled feature reads; a slot nothing reads is left unbound (the dummy).
   const std::pair<uint32_t, int8_t> reads[] = {
       {ColorTex | ColorIndexing | Pyro | Disintegration | VisorSplat | IceChargeBeam | IceChargeCollision |
-           IceChargeCollisionLit | VisorRunOff | VisorRunOffLit | VisorRain | BarrierShield | BarrierGlow,
+           IceChargeCollisionLit | VisorRunOff | VisorRunOffLit | VisorRain | BarrierShield | BarrierGlow |
+           FrameBufferColorErosion,
        desc.colorSlot},
       {OpacityTex, desc.opacitySlot},
       {Ramp | Pyro, desc.rampSlot},
@@ -1754,7 +1773,7 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   const bool hdr = scene_hdr_pass_active();
   if (!hdr &&
       (features & (SceneWarp | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit | VisorRain |
-                   BarrierShield)) != 0) {
+                   BarrierShield | FrameBufferColorErosion)) != 0) {
     // The scene-reading effects read the HDR scene's light; outside it there is none to read.
     return;
   }
@@ -1793,15 +1812,15 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     u.scene[3] = 1.f;
   }
   if ((features & (IceChargeBeam | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit |
-                   VisorRain | BarrierShield | BarrierGlow)) != 0) {
+                   VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0) {
     // The recipe's CCH rows: IceChargeCollision 0..6, VisorRunOff 0..4, IceChargeBeam 0..2, VisorRain,
-    // BarrierShield and BarrierGlow 0 only.
+    // BarrierShield, BarrierGlow and FrameBufferColorErosion 0 only.
     uint32_t rows = 3;
     if ((features & (IceChargeCollision | IceChargeCollisionLit)) != 0) {
       rows = 7;
     } else if ((features & (VisorRunOff | VisorRunOffLit)) != 0) {
       rows = 5;
-    } else if ((features & (VisorRain | BarrierShield | BarrierGlow)) != 0) {
+    } else if ((features & (VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0) {
       rows = 1;
     }
     for (uint32_t i = 0; i < rows; ++i) {

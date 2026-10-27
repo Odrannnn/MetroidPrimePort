@@ -269,7 +269,12 @@ public:
   EOrbitValidationResult ValidateOrbitTargetId(TUniqueId target, CStateManager& mgr) const;
   void DoSfxEffects(CSfxHandle sfx);
   bool GetFrozenState() const;
-  void SetFrozenState(CStateManager& stateMgr, CAssetId steamTxtr, ushort sfx, CAssetId iceTxtr);
+  void SetFrozenState(CStateManager& stateMgr, CAssetId steamTxtr, ushort sfx, CAssetId iceTxtr
+#ifdef TARGET_PC
+                      ,
+                      CAssetId portFrozenFx = kInvalidAssetId
+#endif
+  );
   void BreakFrozenState(CStateManager& mgr);
   void SetFrozenTimeoutBias(float bias) { x758_frozenTimeoutBias = bias; }
   void UpdateCinematicState(CStateManager& mgr);
@@ -849,6 +854,15 @@ private:
   uint xa50_deferredCarryTick = ~0u;
   SPortDeferredCarry xa54_deferredCarry[4];
   float xad4_carriedYaw = 0.f;
+  // Port: Remastered's frozen VFX (SPlayerFrozenStateDataShip1 +0x10, CPlayerMP1 +0x10d0), a
+  // HUD billboard that replaces the visor steam while frozen. Its id, the effect (+0x1110)
+  // and the amount bound to its de3a3b53 real (+0x1114).
+  CAssetId xPortFrozenFxId = kInvalidAssetId;
+  TUniqueId xPortFrozenFx = kInvalidUniqueId;
+  float xPortFrozenFxAmount = 0.f;
+  void PortCreateFrozenFx(CStateManager& mgr);
+  void PortTickFrozenFx(CStateManager& mgr, float dt);
+  void PortBindFrozenFx(CStateManager& mgr);
 #endif
 };
 NESTED_CHECK_SIZEOF(CPlayer, CPlayerStuckTracker, 0x2e0);

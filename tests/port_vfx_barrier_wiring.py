@@ -94,14 +94,14 @@ class BarrierShieldWiring(WiringCase):
         self.assertEqual(count(self.vfx, "(FEAT & 536870912u) == 0u"), 2)
 
     def test_the_two_slots_and_the_scene_gate_are_read(self):
-        self.assertIn("VisorRain | BarrierShield | BarrierGlow,", self.vfx)  # the colour row
+        self.assertIn("VisorRain | BarrierShield | BarrierGlow |\n           FrameBufferColorErosion,", self.vfx)  # the colour row
         self.assertIn("Indirect | SceneWarp | VisorSplat | BarrierShield, desc.indirectSlot", self.vfx)
         # The HDR scene gate, the CCH-row block and the row-count selection all name the feature.
-        self.assertIn("VisorRunOffLit | VisorRain | BarrierShield)) != 0) {", self.vfx)
-        self.assertIn("(features & (VisorRain | BarrierShield | BarrierGlow)) != 0) {", self.vfx)
+        self.assertIn("VisorRunOffLit | VisorRain |\n                   BarrierShield | FrameBufferColorErosion)) != 0) {", self.vfx)
+        self.assertIn("(features & (VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0) {", self.vfx)
         # The glow shares the two rows lists (its CCH0 and its colour slot) but not the scene gate: it reads
         # no scene copy. Both barrier bits are in exactly the CCH-row block and the row-count selection.
-        self.assertEqual(count(self.vfx, "VisorRain | BarrierShield | BarrierGlow)) != 0)"), 2)
+        self.assertEqual(count(self.vfx, "VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0)"), 2)
 
     def test_the_vertex_layout_carries_the_mesh_colour(self):
         self.assertIn("float mesh[4];", self.aurora)
@@ -211,11 +211,11 @@ class BarrierGlowWiring(WiringCase):
 
     def test_the_colour_slot_and_cch_rows_are_shared_but_not_the_scene(self):
         # The colour row, the CCH-row block and the row-count selection name the bit...
-        self.assertIn("VisorRain | BarrierShield | BarrierGlow,", self.vfx)
-        self.assertEqual(count(self.vfx, "VisorRain | BarrierShield | BarrierGlow)) != 0)"), 2)
+        self.assertIn("VisorRain | BarrierShield | BarrierGlow |\n           FrameBufferColorErosion,", self.vfx)
+        self.assertEqual(count(self.vfx, "VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0)"), 2)
         # ... but the HDR scene gate does not: this perm reads no scene copy, so the only list that still
         # ends at the shield is the gate's.
-        self.assertEqual(count(self.vfx, "BarrierShield)) != 0)"), 1)
+        self.assertEqual(count(self.vfx, "BarrierShield | FrameBufferColorErosion)) != 0)"), 1)
         # And the indirect slot is not read (no TCH1 in the recipe).
         self.assertNotIn("VisorSplat | BarrierShield | BarrierGlow, desc.indirectSlot", self.vfx)
 

@@ -187,7 +187,8 @@ inline constexpr int kModels = 22;
 // 122: room-only ELC2 slots (AtomicBeta) as ELSCs.
 // 124: Ridley's plasma-beam ELC2 (kActorEffectGuids).
 // 125: its GPSM/EPSM GENPs, resolved under their own ids.
-inline constexpr int kEffects = 127;   // a standalone GENP another embeds: one id for both (Babygoth's flame collision)
+// 127: a standalone GENP another embeds: one id for both (Babygoth's flame collision).
+inline constexpr int kEffects = 129;   // Babygoth's frozen VFX (VFX_FrameBuffer_Color_Erosion_Unlit, a HUD billboard)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

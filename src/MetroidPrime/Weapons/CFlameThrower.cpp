@@ -363,7 +363,12 @@ void CFlameThrower::ApplyDamageToActor(CStateManager& mgr, TUniqueId id, float d
   if (id == mgr.GetPlayer()->GetUniqueId() && x3f4_playerSteamTextureId != kInvalidAssetId &&
       x3fc_playerIceTextureId != kInvalidAssetId) {
     mgr.Player()->SetFrozenState(mgr, x3f4_playerSteamTextureId, x3f8_playerHitSfx,
-                                 x3fc_playerIceTextureId);
+                                 x3fc_playerIceTextureId
+#ifdef TARGET_PC
+                                 ,
+                                 xPortFrozenFxId
+#endif
+    );
   }
   ApplyDamageToActors(mgr, x12c_curDamageInfo.MakeScaledForTime(dt));
 }

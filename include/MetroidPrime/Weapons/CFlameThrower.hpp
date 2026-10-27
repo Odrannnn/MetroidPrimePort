@@ -40,6 +40,8 @@ public:
   // keeps the flame-info effect (id3, +0x498) unrendered, carrying the flame warp for collision.
   // A collision warp goes on whichever of id1 or its active children is the id2 (+0x470) system.
   void PortSetRemasteredFlame(CAssetId fxId, CAssetId collisionFxId);
+  // The frozen VFX FreezePlayer 0x1015c1c passes in its SPlayerFrozenStateDataShip1 (+0x10).
+  void PortSetFrozenFx(CAssetId id) { xPortFrozenFxId = id; }
 #endif
 
 private:
@@ -90,6 +92,7 @@ private:
   rstl::single_ptr< TLockedToken< CGenDescription > > xPortFlameFxDesc;
   rstl::single_ptr< CElementGen > xPortFlameFxGen;
   CAssetId xPortCollisionFxId = kInvalidAssetId;
+  CAssetId xPortFrozenFxId = kInvalidAssetId;
   PortCollisionWarp xPortCollisionWarp;
   bool xPortCollisionWarpPending = false;
 #endif
