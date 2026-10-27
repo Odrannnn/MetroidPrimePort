@@ -190,7 +190,8 @@ inline constexpr int kModels = 22;
 // 127: a standalone GENP another embeds: one id for both (Babygoth's flame collision).
 // 129: Babygoth's frozen VFX (VFX_FrameBuffer_Color_Erosion_Unlit, a HUD billboard).
 // 130: the Ice Sheegoth's breath.
-inline constexpr int kEffects = 131;   // the Parasite Queen's beam electric
+// 131: the Parasite Queen's beam electric.
+inline constexpr int kEffects = 132;   // SteamMP1 GENPs (room-only)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -222,7 +223,8 @@ inline constexpr int kEffects = 131;   // the Parasite Queen's beam electric
 // 54: the unplaced relay pairs with the area's only type 0x84 object.
 // 55: Thardus, FlyingPirate, ElitePirate and OmegaPirate particle properties.
 // 56: AtomicBeta's electric effect (ELSC) property, per placement.
-inline constexpr int kRooms = 56;
+// 57: .roomfx v8, a matched Steam's Remastered visor steam (SteamMP1).
+inline constexpr int kRooms = 57;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

@@ -92,10 +92,10 @@ void TestFile() {
   bad.push_back(0);
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "trailing bytes");
   bad = data;
-  bad[4] = 7;
+  bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 7);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 8);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -339,6 +339,43 @@ void TestFilePatches() {
   CHECK(again[6] == 0x00 && again[7] == 0x49);
   std::vector<uint8_t> noName = {'w', 'x'};
   CHECK(PortRoomEffects::ApplyPatches(patches, 0x0410002A, noName.data(), noName.size(), nullptr) == 0);
+}
+
+// Version 8 appends Remastered steam records (CScriptSteamMP1): a retail Steam trigger, its
+// visor PART and parameters, two splines and the linked sources.
+void TestFileSteams() {
+  File in;
+  PortRoomEffects::Steam s;
+  s.id = 0x000901D9;
+  s.part = 0xFE00ABCD;
+  s.color[0] = 2.5f;
+  s.a = 0.6f;
+  s.h = 3.f;
+  s.colorFlag = false;
+  s.s1 = {1, 2, 3, 4, 5};
+  s.sources.push_back({0x000901DA, {1.f, -2.f, 3.f}});
+  s.sources.push_back({0, {4.f, 5.f, 6.f}});
+  in.steams.push_back(s);
+  in.steams.push_back(PortRoomEffects::Steam{});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 8);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.steams.size() == 2);
+  const PortRoomEffects::Steam& a = out.steams[0];
+  CHECK(a.id == 0x000901D9 && a.part == 0xFE00ABCD && a.color[0] == 2.5f && a.color[3] == 1.f);
+  CHECK(a.a == 0.6f && a.b == 0.25f && a.h == 3.f && !a.colorFlag);
+  CHECK(a.s1 == s.s1 && a.s2.empty() && a.sources.size() == 2);
+  CHECK(a.sources[0].id == 0x000901DA && a.sources[0].pos[1] == -2.f && a.sources[1].pos[2] == 6.f);
+  CHECK(out.steams[1].colorFlag && out.steams[1].part == 0xFFFFFFFF && out.steams[1].sources.empty());
+  for (size_t cut = 1; cut <= 40; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  in.steams.clear();
+  CHECK(PortRoomEffects::Write(in)[4] == 4);
 }
 
 // Version 4 carries a room's barrier: a controller retail Effect object, its duration, and five
@@ -672,6 +709,7 @@ int main() {
   TestOverridePlacement();
   TestFilePatterned();
   TestFilePatches();
+  TestFileSteams();
   TestFileBarriers();
   TestExternalVariables();
   uint32_t id = 0;

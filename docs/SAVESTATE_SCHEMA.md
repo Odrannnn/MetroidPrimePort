@@ -3,18 +3,18 @@
 Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 `platform/generated/port_entity_schema.inc`, its types `platform/include/port_entity_schema.h`.
 
-159 classes (CEntity and every subclass a header defines), 3405 own fields; 2657 of them plain data (`statedump` writes those under `fields` when the object's `kTagFields` block saves them, else under `fields_other`).
+159 classes (CEntity and every subclass a header defines), 3415 own fields; 2664 of them plain data (`statedump` writes those under `fields` when the object's `kTagFields` block saves them, else under `fields_other`).
 
 | kind | fields |
 |---|---|
-| bool | 113 |
-| int | 521 |
-| float | 953 |
+| bool | 114 |
+| int | 522 |
+| float | 956 |
 | bitfield | 642 |
-| math | 271 |
-| uid | 157 |
-| pod | 199 |
-| pointer | 1 |
+| math | 272 |
+| uid | 158 |
+| pod | 201 |
+| pointer | 2 |
 | smart_ptr | 208 |
 | container | 185 |
 | state_machine | 1 |
@@ -72,7 +72,7 @@ Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 
 ## `pod`: trivially copyable, pointer-free structs and arrays (raw bytes)
 
-`CDamageInfo` 42, `CColor` 25, `CHealthInfo` 19, `CDamageVulnerability` 19, `CSegId` 16, `CSpindleCameraInterpolant` 15, `CCameraSpring` 6, `CSteeringBehaviors` 4, `TAreaId` 3, `CMaterialList` 3, `CChozoGhost::CBehaveChance` 3, `CAnimRes` 3, `CRandom16` 3, `TEditorId` 2, `CMaterialFilter` 2, `int[4]` 2, `CGrappleParameters` 2, `CModelFlags` 1, `CBabygothData` 1, `uchar[7]` 1, `CBouncyGrenadeData` 1, `CLight` 1, `CEPGrenadeLauncherData` 1, `CIceSheegothData` 1, `CFlameInfo` 1, `CPatternedInfo` 1, `CMetroidBetaData` 1, `CMetroidPrimeIceAttack` 1, `float[4]` 1, `CMotionState` 1, `CPlayer::CVisorSteam` 1, `PortRemasteredGround::RetainedResult` 1, `PortRemasteredGroundRider::RiderController` 1, `CBeamInfo` 1, `CScriptGunTurretData` 1, `CHUDMemoParms` 1, `EffectReverbHiInfo` 1, `EffectChorusInfo` 1, `EffectReverbStdInfo` 1, `EffectDelayInfo` 1, `CAnimationParameters` 1, `CShockWaveInfo` 1, `uchar[4]` 1, `CIkChain` 1, `CTeamAiMgr::CUnknown` 1, `CCollisionSurface` 1, `u16[2]` 1
+`CDamageInfo` 42, `CColor` 25, `CHealthInfo` 19, `CDamageVulnerability` 19, `CSegId` 16, `CSpindleCameraInterpolant` 15, `CCameraSpring` 6, `CSteeringBehaviors` 4, `TAreaId` 3, `CMaterialList` 3, `CChozoGhost::CBehaveChance` 3, `CAnimRes` 3, `CRandom16` 3, `TEditorId` 2, `CMaterialFilter` 2, `int[4]` 2, `CPlayer::SPortVisorSteamShip1Params` 2, `CGrappleParameters` 2, `CModelFlags` 1, `CBabygothData` 1, `uchar[7]` 1, `CBouncyGrenadeData` 1, `CLight` 1, `CEPGrenadeLauncherData` 1, `CIceSheegothData` 1, `CFlameInfo` 1, `CPatternedInfo` 1, `CMetroidBetaData` 1, `CMetroidPrimeIceAttack` 1, `float[4]` 1, `CMotionState` 1, `CPlayer::CVisorSteam` 1, `PortRemasteredGround::RetainedResult` 1, `PortRemasteredGroundRider::RiderController` 1, `CBeamInfo` 1, `CScriptGunTurretData` 1, `CHUDMemoParms` 1, `EffectReverbHiInfo` 1, `EffectChorusInfo` 1, `EffectReverbStdInfo` 1, `EffectDelayInfo` 1, `CAnimationParameters` 1, `CShockWaveInfo` 1, `uchar[4]` 1, `CIkChain` 1, `CTeamAiMgr::CUnknown` 1, `CCollisionSurface` 1, `u16[2]` 1
 
 ## `smart_ptr` / `container` templates
 

@@ -341,9 +341,10 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool patches = !file.patches.empty();
+  const bool steams = !file.steams.empty();
+  const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -422,6 +423,25 @@ std::vector<uint8_t> Write(const File& file) {
       PutLE32(out, p.offset);
       PutLE32(out, p.retail);
       PutLE32(out, p.part);
+    }
+  }
+  if (steams) {
+    PutLE32(out, uint32_t(file.steams.size()));
+    for (const Steam& s : file.steams) {
+      PutLE32(out, s.id);
+      PutLE32(out, s.part);
+      for (float f : s.color) PutLEFloat(out, f);
+      for (float f : {s.a, s.b, s.g, s.h, s.i}) PutLEFloat(out, f);
+      PutLE32(out, s.colorFlag ? 1 : 0);
+      for (const std::vector<uint8_t>* spline : {&s.s1, &s.s2}) {
+        PutLE32(out, uint32_t(spline->size()));
+        out.insert(out.end(), spline->begin(), spline->end());
+      }
+      PutLE32(out, uint32_t(s.sources.size()));
+      for (const SteamSource& src : s.sources) {
+        PutLE32(out, src.id);
+        for (float f : src.pos) PutLEFloat(out, f);
+      }
     }
   }
   return out;
@@ -662,6 +682,50 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         return false;
       }
       file.patches.push_back(p);
+    }
+  }
+  if (version >= 8) {
+    // Fixed part: id, part, colour[4], five floats, flag, two spline sizes, source count.
+    constexpr size_t kSteamBytes = 4 * (2 + 4 + 5 + 1 + 2 + 1);
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / kSteamBytes) {
+      error = "truncated steam list";
+      return false;
+    }
+    auto readFloat = [&](float& f) {
+      uint32_t bits = 0;
+      if (!ReadLE32(data, at, bits)) return false;
+      std::memcpy(&f, &bits, 4);
+      return std::isfinite(f) != 0;
+    };
+    for (uint32_t i = 0; i < count; ++i) {
+      Steam s;
+      uint32_t flag = 0, sources = 0;
+      bool ok = ReadLE32(data, at, s.id) && ReadLE32(data, at, s.part);
+      for (float& f : s.color) ok = ok && readFloat(f);
+      for (float* f : {&s.a, &s.b, &s.g, &s.h, &s.i}) ok = ok && readFloat(*f);
+      ok = ok && ReadLE32(data, at, flag) && flag <= 1;
+      for (std::vector<uint8_t>* spline : {&s.s1, &s.s2}) {
+        uint32_t bytes = 0;
+        ok = ok && ReadLE32(data, at, bytes) && bytes <= kMaxSteamSplineBytes && bytes <= data.size() - at;
+        if (ok) {
+          spline->assign(data.begin() + std::ptrdiff_t(at), data.begin() + std::ptrdiff_t(at + bytes));
+          at += bytes;
+        }
+      }
+      ok = ok && ReadLE32(data, at, sources) && sources <= kMaxSteamSources && sources <= (data.size() - at) / 16;
+      for (uint32_t k = 0; ok && k < sources; ++k) {
+        SteamSource src;
+        ok = ReadLE32(data, at, src.id);
+        for (float& f : src.pos) ok = ok && readFloat(f);
+        s.sources.push_back(src);
+      }
+      if (!ok) {
+        error = "invalid steam record " + std::to_string(i);
+        return false;
+      }
+      s.colorFlag = flag != 0;
+      file.steams.push_back(std::move(s));
     }
   }
   if (at != data.size()) {

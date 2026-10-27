@@ -672,8 +672,16 @@ CEntity* ScriptLoader::LoadSteam(CStateManager& mgr, CInputStream& in, int propC
   float hy = extent.GetY() * 0.5f;
   float hz = extent.GetZ() * 0.5f;
   CAABox aabb = CAABox(CVector3f(-hx, -hy, -hz), CVector3f(hx, hy, hz));
-  return rs_new CScriptSteam(mgr.AllocateUniqueId(), name, info, position, aabb, dInfo,
-                             orientedForce, triggerFlags, active, texture, f1, f2, f3, f4, b2);
+  CScriptSteam* const steam =
+      rs_new CScriptSteam(mgr.AllocateUniqueId(), name, info, position, aabb, dInfo,
+                          orientedForce, triggerFlags, active, texture, f1, f2, f3, f4, b2);
+#ifdef TARGET_PC
+  // PORT: a Steam a mod's Remastered SteamMP1 matched takes its visor steam (port_room_effects.h).
+  if (const PortRoomEffects::Steam* const rm = PortRoomEffects::FindSteam(info.GetEditorId().value)) {
+    steam->PortSetShip1(*rm);
+  }
+#endif
+  return steam;
 }
 
 CEntity* ScriptLoader::LoadRipple(CStateManager& mgr, CInputStream& in, int propCount,

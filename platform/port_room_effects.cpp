@@ -104,6 +104,18 @@ const PatternedEffect* FindPatternedEffect(uint32_t eid, uint32_t slot) {
   return nullptr;
 }
 
+const Steam* FindSteam(uint32_t eid) {
+  if (!sLoading) {
+    return nullptr;
+  }
+  for (const Steam& s : sFile.steams) {
+    if ((s.id & 0x3FFFFFF) == (eid & 0x3FFFFFF)) {
+      return &s;
+    }
+  }
+  return nullptr;
+}
+
 bool HasPatches(uint32_t eid) {
   return sLoading && std::any_of(sFile.patches.begin(), sFile.patches.end(), [eid](const PropertyPatch& p) {
            return (p.id & 0x3FFFFFF) == (eid & 0x3FFFFFF);

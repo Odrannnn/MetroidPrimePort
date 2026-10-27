@@ -53,10 +53,17 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 7 then has u32 patches, then per patch: u32 editor id (layer bits included),
 //   u32 offset, u32 retail value, u32 part (see PropertyPatch). Files without patches are
 //   still written as version 6 or older.
+//   version 8 then has u32 steams, then per record: u32 editor id (layer bits included),
+//   u32 part, f32 colour[4], f32 a, b, g, h, i, u32 colour flag, u32 bytes and that many
+//   bytes of each of the two splines (CMayaSpline data), u32 sources and per source u32
+//   editor id (0 for none), f32 position[3] (see Steam). Files without steams are still
+//   written as version 7 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 7;
+constexpr uint32_t kFileVersion = 8;
+constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
+constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
 constexpr uint8_t kEffectType = 7;
 constexpr uint32_t kEffectProps = 24;
@@ -181,6 +188,32 @@ struct PropertyPatch {
   uint32_t part = 0;
 };
 
+// A retail Steam object the script matcher paired with a Remastered SteamMP1: it shows
+// Remastered's visor steam (CVisorSteamShip1) instead of retail's. The properties are
+// SteamMP1's (SLdr defaults when the instance leaves them out): colour faa2682b, PART
+// 4054322b, splines 8030d7a6 (s1) and 911d77bd (s2, both by distance to the eye), a d560318d,
+// b 14e3228a, g 5e432bd2, h 67d639e2, i 6b6d170d, colour flag 1c983b7f. `sources` are the
+// objects its 0x2ae68d05 link names: the retail object a source paired with (0 for none) and
+// where the source stands, for when no retail object lives.
+struct SteamSource {
+  uint32_t id = 0;
+  float pos[3] = {};
+};
+struct Steam {
+  uint32_t id = 0;
+  uint32_t part = 0xFFFFFFFF;
+  float color[4] = {1, 1, 1, 1};
+  float a = 0.8f;
+  float b = 0.25f;
+  float g = 2.f;
+  float h = 1.f;
+  float i = 0.5f;
+  bool colorFlag = true;
+  std::vector<uint8_t> s1;
+  std::vector<uint8_t> s2;
+  std::vector<SteamSource> sources;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -189,6 +222,7 @@ struct File {
   std::vector<BarrierGroup> barriers;
   std::vector<PatternedEffect> patterned;
   std::vector<PropertyPatch> patches;
+  std::vector<Steam> steams;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -225,6 +259,8 @@ const Override* FindOverride(uint32_t eid);
 // The death particle `slot` (PatternedEffect) of the retail object `eid` in the area being
 // loaded, or null.
 const PatternedEffect* FindPatternedEffect(uint32_t eid, uint32_t slot);
+// The steam record of the retail Steam object `eid` in the area being loaded, or null.
+const Steam* FindSteam(uint32_t eid);
 // Whether the retail object `eid` in the area being loaded has property patches.
 bool HasPatches(uint32_t eid);
 // Applies them to `props` (the object's properties from its name on; `size` bytes): finds

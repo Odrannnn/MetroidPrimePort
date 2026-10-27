@@ -73,6 +73,9 @@
 #include "Kyoto/Math/CTransform4f.hpp"
 #include "Kyoto/Math/CVector3f.hpp"
 #include "Kyoto/Math/CloseEnough.hpp"
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#endif
 #include "Kyoto/Text/CStringTable.hpp"
 
 #include "Collision/CCollisionInfo.hpp"
@@ -1186,6 +1189,10 @@ bool CPlayer::ShouldSampleFailsafe(CStateManager& mgr) const {
 }
 
 void CPlayer::UpdateVisorState(const CFinalInput& input, float dt, CStateManager& mgr) {
+#ifdef TARGET_PC
+  // CPlayerMP1::UpdateVisorState updates the Remastered visor steam first.
+  PortUpdateVisorSteamShip1(dt, mgr);
+#endif
   x7a0_visorSteam.Update(dt);
   if (x7a0_visorSteam.AffectsThermal()) {
     mgr.SetThermalColdScale2(mgr.GetThermalColdScale2() + x7a0_visorSteam.GetAlpha());
@@ -2164,6 +2171,155 @@ void CPlayer::PortTickFrozenFx(CStateManager& mgr, float dt) {
     mgr.DeleteObjectRequest(xPortFrozenFx);
     xPortFrozenFx = kInvalidUniqueId;
   }
+}
+
+namespace {
+PortGuid PortSteamGuid(const char* uuid) {
+  // Textual UUID -> bytes_le, as the PVRT stores them.
+  u8 raw[16];
+  int n = 0;
+  for (const char* p = uuid; *p != '\0' && n < 16; ++p) {
+    if (*p == '-') {
+      continue;
+    }
+    auto nib = [](char c) { return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10; };
+    raw[n++] = static_cast< u8 >(nib(p[0]) << 4 | nib(p[1]));
+    ++p;
+  }
+  PortGuid g;
+  static const int order[16] = {3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15};
+  for (int i = 0; i < 16; ++i) {
+    g.bytes[i] = raw[order[i]];
+  }
+  return g;
+}
+
+// CVisorSteamShip1::Initialize 0xc6b220's handles (0x1d206bc..0x1d2071c).
+const PortGuid& PortSteamVar(int i) {
+  static const PortGuid g[7] = {
+      PortSteamGuid("adaa0e6e-adc2-4798-8256-5bad55a79b51"),  // real: amount
+      PortSteamGuid("42cb395e-7a3a-4842-8b77-96779420664e"),  // real: time
+      PortSteamGuid("bbc89d9c-fb0b-4ba6-a621-7b7100ce24c3"),  // real: active
+      PortSteamGuid("78453678-edc6-4311-96b7-b37621aedb25"),  // vec3: direction
+      PortSteamGuid("8e03e6e6-a4cf-412b-9f04-41a92158214e"),  // vec3: first direction
+      PortSteamGuid("5722cee3-18b0-4f50-8130-36c400f16744"),  // real: i
+      PortSteamGuid("061627ff-4637-42e9-9daf-a634f4877128"),  // colour
+  };
+  return g[i];
+}
+
+// The per-float step of CVisorSteamShip1::Update: move a dt fraction of the way, or snap.
+float PortSteamApproach(float cur, float tgt, float dt) {
+  return 0.001f <= CMath::AbsF(cur - tgt) ? cur + (tgt - cur) * dt : tgt;
+}
+}  // namespace
+
+// CPlayerMP1::SetVisorSteamShip1 0xc6b3cc (with no effect yet) and CScriptSteamMP1::Think's
+// copy into the running one's target parameters.
+void CPlayer::PortSetVisorSteamShip1(CAssetId part, const SPortVisorSteamShip1Params& params,
+                                     CStateManager& mgr) {
+  if (xPortSteamFx != kInvalidUniqueId) {
+    xPortSteamTgt = params;
+  } else if (part != kInvalidAssetId && gpResourceFactory->GetResourceTypeById(part) != 0) {
+    // CreateHUDBillboardEffect(part, white, scale type 0), then CVisorSteamShip1::Initialize.
+    xPortSteamFx = mgr.AllocateUniqueId();
+    CHUDBillboardEffect* effect = rs_new CHUDBillboardEffect(
+        rstl::optional_object< TToken< CGenDescription > >(
+            gpSimplePool->GetObj(SObjectTag('PART', part))),
+        rstl::optional_object_null(), xPortSteamFx, true, rstl::string_l("VisorSteamShip1"),
+        CHUDBillboardEffect::GetNearClipDistance(mgr), CHUDBillboardEffect::GetScaleForPOV(mgr),
+        CColor(1.f, 1.f, 1.f, 1.f), CVector3f(1.f, 1.f, 1.f), CVector3f(0.f, 0.f, 0.f));
+    effect->PortSetScaleType(0);
+    effect->SetRunIndefinitely(true);
+    mgr.AddObject(effect);
+    xPortSteamActive = false;
+    xPortSteamInitDir = params.dir;
+    xPortSteamCur = params;
+    xPortSteamTgt = params;
+    xPortSteamState = 0;
+    xPortSteamAmount = 0.f;
+    xPortSteamTime = 0.f;
+    xPortSteamAmount2 = 0.f;
+  }
+  xPortSteamActive = true;
+}
+
+// CPlayerMP1::CVisorSteamShip1::Update 0xc6a4cc. Not ported: the reset when visor managed
+// effect 3 is active (the port has no visor effect manager) and the post-FX scale it writes
+// from s2 and the second amount (PostFXManager +0xaa0), which no port pass reads.
+void CPlayer::PortUpdateVisorSteamShip1(float dt, CStateManager& mgr) {
+  if (xPortSteamFx == kInvalidUniqueId) {
+    return;
+  }
+  SPortVisorSteamShip1Params& cur = xPortSteamCur;
+  const SPortVisorSteamShip1Params& tgt = xPortSteamTgt;
+  if (cur.flag) {
+    bool close = true;
+    for (int k = 0; k < 4; ++k) {
+      close = close && CMath::AbsF(cur.colour[k] - tgt.colour[k]) < 0.001f;
+    }
+    for (int k = 0; k < 4; ++k) {
+      cur.colour[k] = close ? tgt.colour[k] : (1.f - dt) * cur.colour[k] + tgt.colour[k] * dt;
+    }
+  }
+  if (!close_enough(cur.dir, tgt.dir, 0.001f)) {
+    cur.dir = cur.dir * (1.f - dt) + tgt.dir * dt;
+  } else {
+    cur.dir = tgt.dir;
+  }
+  cur.b = PortSteamApproach(cur.b, tgt.b, dt);
+  cur.i = PortSteamApproach(cur.i, tgt.i, dt);
+  cur.s1 = PortSteamApproach(cur.s1, tgt.s1, dt);
+  cur.a = PortSteamApproach(cur.a, tgt.a, dt);
+  cur.s2 = PortSteamApproach(cur.s2, tgt.s2, dt);
+  cur.g = PortSteamApproach(cur.g, tgt.g, dt);
+  cur.h = PortSteamApproach(cur.h, tgt.h, dt);
+
+  if (xPortSteamState == 0) {
+    const float rate = cur.s1 * dt;
+    if (xPortSteamActive || 0.25f <= xPortSteamAmount) {
+      xPortSteamAmount += rate;
+      xPortSteamAmount2 += cur.g * dt;
+    } else {
+      xPortSteamAmount -= rate;
+      xPortSteamAmount2 -= cur.g * dt;
+    }
+    xPortSteamTime += rate;
+  } else if (xPortSteamState == 1) {
+    xPortSteamAmount -= cur.a * dt;
+    xPortSteamTime += cur.a * dt;
+    xPortSteamAmount2 -= cur.h * dt;
+  }
+  xPortSteamAmount = rstl::min_val(rstl::max_val(xPortSteamAmount, 0.f), 1.f);
+  xPortSteamAmount2 = rstl::min_val(rstl::max_val(xPortSteamAmount2, 0.f), 1.f);
+  if (!xPortSteamActive && xPortSteamAmount == 1.f) {
+    xPortSteamState = 1;
+  }
+  mgr.AddThermalColdScale2(
+      rstl::min_val(rstl::max_val(xPortSteamAmount * cur.b, 0.f), 1.f));
+
+  if (CHUDBillboardEffect* effect =
+          TCastToPtr< CHUDBillboardEffect >(mgr.ObjectById(xPortSteamFx))) {
+    if (effect->IsElementGen()) {
+      CElementGen* gen = static_cast< CElementGen* >(effect->GetParticleGen());
+      const float half = xPortSteamAmount * 0.5f;
+      gen->PortBindReal(PortSteamVar(0), (xPortSteamState != 0 ? 1.f - half : half) * 100.f);
+      gen->PortBindReal(PortSteamVar(1), xPortSteamTime);
+      gen->PortBindReal(PortSteamVar(2), xPortSteamActive ? 1.f : 0.f);
+      gen->PortBindVector(PortSteamVar(3), cur.dir);
+      gen->PortBindVector(PortSteamVar(4), xPortSteamInitDir);
+      gen->PortBindReal(PortSteamVar(5), cur.i);
+      if (cur.flag) {
+        gen->PortBindColor(PortSteamVar(6), CColor(cur.colour[0], cur.colour[1], cur.colour[2],
+                                                   cur.colour[3]));
+      }
+    }
+  }
+  if (!xPortSteamActive && xPortSteamAmount == 0.f && xPortSteamAmount2 == 0.f) {
+    mgr.DeleteObjectRequest(xPortSteamFx);
+    xPortSteamFx = kInvalidUniqueId;
+  }
+  xPortSteamActive = false;
 }
 #endif
 
