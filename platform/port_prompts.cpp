@@ -63,6 +63,7 @@ struct PromptKey {
   uint32_t height;
   uint64_t hash;
   const char* format;
+  bool wii = false;  // Trilogy's Wii art, which no device leaves on screen
 };
 constexpr PromptKey kKeys[] = {
     {PAD_BUTTON_A, 32, 32, 0xbb21e8755f36b2f0ull, "5"},   // AButtonIn
@@ -114,6 +115,24 @@ constexpr PromptKey kKeys[] = {
     {PAD_BUTTON_DOWN, 64, 32, 0x112b6136175108bbull, "5"},    // DPadD, Thermal Visor
     {PAD_BUTTON_LEFT, 64, 32, 0x8c1d5fec98c638efull, "5"},    // DPadL, Scan Visor
     {PAD_BUTTON_RIGHT, 64, 32, 0x43a63656a5767a1dull, "5"},   // DPadR, X-Ray Visor
+    // Trilogy's hints draw the Wii Remote and Nunchuk (RS5.pak), each standing
+    // for the GameCube action it does here. Wii 1 and 2 have none.
+    {PAD_BUTTON_A, 32, 32, 0x2a304e0fc49a883cull, "5", true},   // Wii A [TXTR_Fire]
+    {PAD_BUTTON_B, 32, 32, 0xf0599000a4f68a36ull, "5", true},   // Wii B [TXTR_Jump]
+    {PAD_BUTTON_X, 32, 32, 0xa7ef87b56d6b4bdfull, "5", true},   // Nunchuk C, Morph Ball
+    {PAD_BUTTON_X, 32, 32, 0x0303707251c07954ull, "5", true},   // C_Glow
+    {PAD_TRIGGER_L, 32, 32, 0xe74dc87e7b4eef8dull, "5", true},  // Nunchuk Z, lock on
+    {PAD_TRIGGER_L, 32, 32, 0x78a0ae3d1bb0f88aull, "5", true},  // Z_Glow
+    {PROMPT_DPAD, 32, 32, 0xa28e2885c4fe7e1cull, "5", true},    // - [TXTR_Visor]
+    {PROMPT_CSTICK, 32, 32, 0x7e31a38b70ecbdddull, "5", true},  // + [TXTR_Beam]
+    // The Nunchuk stick, pushed left, centred and right ("hold Z and move the
+    // stick to strafe"). Hashes as Aurora names them at run time
+    // (MP_DUMP_TEXTURES), which tools/extract_textures.py gets wrong for these.
+    {PROMPT_STICK_LEFT, 64, 32, 0x42ca5ae71fc5a4ddull, "5", true},   // BBED079B
+    {PROMPT_STICK_LEFT, 64, 32, 0xffeb4d8af2d792d8ull, "5", true},   // 2B97F6A0
+    {PROMPT_STICK, 64, 32, 0x175a89d65955dc3bull, "5", true},        // 9E9624C9
+    {PROMPT_STICK_RIGHT, 64, 32, 0x16a58a4eea792bbeull, "5", true},  // D717196D
+    {PROMPT_STICK_RIGHT, 64, 32, 0x1606dfde024ac097ull, "5", true},  // DFEF9E78
 };
 constexpr size_t kKeyCount = sizeof(kKeys) / sizeof(kKeys[0]);
 
@@ -714,6 +733,19 @@ std::string IconStemForPrompt(uint32_t prompt, const char* device) {
   }
 }
 
+// The GameCube pad's own button for a Trilogy Wii glyph, where IconStemForPrompt
+// leaves the game's art: that art is a Wii Remote's, not the pad in hand. The
+// sticks and D-pad have no GameCube icons, so their Wii art stays.
+std::string GameCubeStemForWiiKey(uint32_t prompt) {
+  switch (prompt) {
+  case PAD_BUTTON_A: return "gamecube_a";
+  case PAD_BUTTON_B: return "gamecube_b";
+  case PAD_BUTTON_X: return "gamecube_x";
+  case PAD_TRIGGER_L: return "gamecube_l";
+  default: return {};
+  }
+}
+
 void Apply(size_t index, const std::string& stem) {
   Registration& reg = sRegistrations[index];
   if (reg.registered) {
@@ -848,13 +880,18 @@ void Poll() {
   }
   sLastDevice = device;
   sLastResolveNs = nowNs != 0 ? nowNs : 1;
+  // Original experience keeps the disc's art, Wii glyphs included.
+  const bool gameCubeForWii = std::strcmp(device, "gamecube") == 0 && !PortDebug::OriginalExperience();
   for (const PromptAction& action : kActions) {
-    const std::string stem = IconStemForPrompt(action.prompt, device);
+    const std::string actionStem = IconStemForPrompt(action.prompt, device);
+    const std::string wiiStem =
+        actionStem.empty() && gameCubeForWii ? GameCubeStemForWiiKey(action.prompt) : actionStem;
     size_t applied = 0;
     for (size_t i = 0; i < kKeyCount; ++i) {
       if (kKeys[i].prompt != action.prompt) {
         continue;
       }
+      const std::string& stem = kKeys[i].wii ? wiiStem : actionStem;
       const std::string& current = sRegistrations[i].activeStem;
       if (stem.empty() && current.empty()) {
         continue;
@@ -867,7 +904,7 @@ void Poll() {
     }
     if (applied != 0) {
       PortLog::Write("metroid_prime_port: prompt %s %s\n", action.label,
-                     stem.empty() ? "(back to the static icon)" : stem.c_str());
+                     wiiStem.empty() ? "(back to the static icon)" : wiiStem.c_str());
     }
   }
 }

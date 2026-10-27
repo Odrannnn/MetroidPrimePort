@@ -189,7 +189,7 @@ def read_prompt_keys():
     once, in the C++ where it is used.
     """
     pattern = re.compile(
-        r"\{\s*((?:PAD|PROMPT)_\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*0x([0-9a-fA-F]+)ull\s*,\s*\"(\w+)\"\s*\}")
+        r"\{\s*((?:PAD|PROMPT)_\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*0x([0-9a-fA-F]+)ull\s*,\s*\"(\w+)\"\s*(?:,\s*true\s*)?\}")
     with open(PORT_PROMPTS) as f:
         keys = pattern.findall(f.read())
     if not keys:

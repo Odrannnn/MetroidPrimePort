@@ -11,7 +11,7 @@ It also lists the textures the game's strings draw inline with &image= tags
 (the HUD hint memos, the pause and map screens), which is where button prompts
 inside text come from.
 
-    python3 tools/extract_textures.py <disc.iso> <outdir> [--max-dim N] [--png]
+    python3 tools/extract_textures.py <disc.iso or extracted dir> <outdir> [--max-dim N] [--png]
 
 Writes <outdir>/index.tsv (every texture, with its PAK name where it has one), <outdir>/strg_images.tsv (the
 textures &image= tags use, with the text around the tag) and, with --png, a PNG
@@ -267,24 +267,35 @@ def main():
     textures = {}  # id -> (pak, fmt, w, h, palette, base)
     image_uses = {}  # (id, tag) -> [(strg id, text)]
     res_names = {}  # id -> the PAK's name for it, where it has one
-    with open(args.iso, "rb") as iso:
-        for name, off, size in disc_files(iso):
-            if not name.lower().endswith(".pak"):
-                continue
-            iso.seek(off)
-            pak = iso.read(size)
-            for rid, rname in pak_names(pak).items():
-                res_names.setdefault(rid, rname)
-            for rtype, rid, data in pak_resources(pak):
-                if rtype == "TXTR" and rid not in textures:
-                    parsed = parse_txtr(data)
-                    if parsed is not None:
-                        textures[rid] = (name,) + parsed
-                elif rtype == "STRG":
-                    for tid, tag, text in strg_image_uses(data):
-                        uses = image_uses.setdefault((tid, tag), [])
-                        if (rid, text) not in uses:
-                            uses.append((rid, text))
+    if os.path.isdir(args.iso):
+        # An extracted disc (a Wii disc's partition is encrypted, so Trilogy's
+        # MP1 directory comes from dolphin-tool extract): its PAKs as files.
+        def paks():
+            for root, _, files in sorted(os.walk(args.iso)):
+                for name in sorted(files):
+                    if name.lower().endswith(".pak"):
+                        with open(os.path.join(root, name), "rb") as f:
+                            yield name, f.read()
+    else:
+        def paks():
+            with open(args.iso, "rb") as iso:
+                for name, off, size in disc_files(iso):
+                    if name.lower().endswith(".pak"):
+                        iso.seek(off)
+                        yield name, iso.read(size)
+    for name, pak in paks():
+        for rid, rname in pak_names(pak).items():
+            res_names.setdefault(rid, rname)
+        for rtype, rid, data in pak_resources(pak):
+            if rtype == "TXTR" and rid not in textures:
+                parsed = parse_txtr(data)
+                if parsed is not None:
+                    textures[rid] = (name,) + parsed
+            elif rtype == "STRG":
+                for tid, tag, text in strg_image_uses(data):
+                    uses = image_uses.setdefault((tid, tag), [])
+                    if (rid, text) not in uses:
+                        uses.append((rid, text))
 
     names = {}
     with open(os.path.join(args.outdir, "index.tsv"), "w") as index:
