@@ -103,8 +103,24 @@ struct FogTransitionData {
   std::vector<PortRoomGeo::Link> links;
 };
 
+// A LightDynamic's links and timeline (see PortRoomEnv::LightTimeline): show/hide and the timeline's
+// actions (LightAct); the timeline flags, its falloff, whether its end deactivates it (its finished
+// event -> ICMP/ICTV on itself), the entity's scale x and y (for near and far), the static colour and
+// intensity (for a timeline that lacks a spline) and the splines' bytes (PortRoomEnv::kLightSplines;
+// empty: absent).
+struct LightTimelineData {
+  std::vector<PortRoomGeo::Link> links;
+  bool animated = false, playing = false, loop = false, offAtStart = false;
+  uint8_t animFalloff = 3;
+  float length = 0.f;
+  float scale[2] = {1.f, 1.f};
+  float intensity = 0.f;
+  float rgb[3] = {};
+  std::vector<uint8_t> splines[PortRoomEnv::kLightSplines];
+};
+
 // A directional LightDynamic (see PortRoomEnv::Sun).
-struct SunData {
+struct SunData : LightTimelineData {
   int32_t layer = -1;
   bool on = false;
   float toSun[3] = {}; // retail world, unit length
@@ -115,7 +131,7 @@ struct SunData {
 
 // A point or spot LightDynamic (see PortRoomEnv::RoomLights), as SLdrLightDynamic::Load and
 // NLightLoaders::build_light read it (kb func/light-dynamic.md).
-struct PointLightData {
+struct PointLightData : LightTimelineData {
   int32_t layer = -1;
   bool on = false;
   bool spot = false;
@@ -126,17 +142,6 @@ struct PointLightData {
   float nearFar[2] = {0.25f, 1.f};  // times the entity's scale x and y
   float cone[2] = {0.f, 45.f}; // inner, outer full angles in degrees
   uint32_t group = PortRoomGeo::kNoGroup;
-  std::vector<PortRoomGeo::Link> links;  // show/hide and the timeline's actions (LightAct)
-  // The animated path: timeline flags, its falloff, whether its end deactivates it (its
-  // finished event -> ICMP/ICTV on itself), the entity's scale x and y (for near and far),
-  // and the splines' bytes (PortRoomEnv::kLightSplines; empty: absent).
-  bool animated = false, playing = false, loop = false, offAtStart = false;
-  uint8_t animFalloff = 3;
-  float length = 0.f;
-  float scale[2] = {1.f, 1.f};
-  float intensity = 0.f; // the static colour and intensity, for a timeline that lacks a spline
-  float rgb[3] = {};
-  std::vector<uint8_t> splines[PortRoomEnv::kLightSplines];
 };
 
 struct Placement {
@@ -944,8 +949,110 @@ void Writer::ReadFogs(const RoomData& r, const Area* area, std::vector<FogData>&
   }
 }
 
+// Version 19's links, animation block and splines (port_room_env.h).
+static void AppendLightTimeline(std::vector<uint8_t>& out, const LightTimelineData& l) {
+  AppendLE32(out, uint32_t(l.links.size()));
+  for (const PortRoomGeo::Link& link : l.links) {
+    AppendLE32(out, link.sender);
+    out.push_back(link.state);
+    out.push_back(link.action);
+    out.insert(out.end(), 2, 0);
+  }
+  out.push_back(l.animated ? 1 : 0);
+  out.push_back(l.playing ? 1 : 0);
+  out.push_back(l.loop ? 1 : 0);
+  out.push_back(l.offAtStart ? 1 : 0);
+  out.push_back(l.animFalloff);
+  out.insert(out.end(), 3, 0);
+  AppendLEFloat(out, l.length);
+  AppendLEFloat(out, l.scale[0]);
+  AppendLEFloat(out, l.scale[1]);
+  AppendLEFloat(out, l.intensity);
+  for (const float c : l.rgb) {
+    AppendLEFloat(out, c);
+  }
+  for (const std::vector<uint8_t>& spline : l.splines) {
+    AppendLE32(out, uint32_t(spline.size()));
+    out.insert(out.end(), spline.begin(), spline.end());
+    out.insert(out.end(), (4 - spline.size() % 4) % 4, 0);
+  }
+}
+
+// A LightDynamic's links and timeline (SLdrLightDynamic's Attributes and splines; kb
+// func/light-dynamic.md), whatever its kind. `l.scale`, `l.intensity` and `l.rgb` are the caller's.
+static void ReadLightTimeline(const RoomData& r, const Component& c, const std::vector<Connection>& conns,
+                              const SceneryScripts& scripts, LightTimelineData& l) {
+  Span sp;
+  const auto byte = [&](uint32_t a, uint32_t b) {
+    return r.room.Nested(c, {a, b}, sp) && sp.size >= 1 && r.room.Bytes(sp)[0] != 0;
+  };
+  l.animated = byte(kPropLightAttributes, kPropLightAnimated);
+  if (l.animated) {
+    l.playing = byte(kPropLightAttributes, kPropLightPlaying);
+    l.loop = byte(kPropLightAttributes, kPropLightLoop);
+    if (r.room.Nested(c, {kPropLightAttributes, kPropLightLength}, sp) && sp.size >= 4) {
+      const float length = ReadLEFloat(r.room.Bytes(sp));
+      l.length = std::isfinite(length) ? std::clamp(length, 0.f, 3600.f) : 0.f;
+    }
+    if (r.room.Nested(c, {kPropLightDistanceDynamic, kPropLightDistanceDynamicKind}, sp) && sp.size >= 4) {
+      const uint32_t falloff = ReadLE32(r.room.Bytes(sp));
+      l.animFalloff = falloff == kLightFalloffSquared ? 2 : falloff == kLightFalloffLinear ? 1 : 3;
+    }
+    // One spline, checked; the gradient's four follow one another.
+    const auto take = [&](uint32_t a, uint32_t b, std::vector<uint8_t>& to) {
+      PortMayaSpline check;
+      if (r.room.Nested(c, {a, b}, sp) && check.Load(r.room.Bytes(sp), sp.size)) {
+        to.assign(r.room.Bytes(sp), r.room.Bytes(sp) + sp.size);
+      }
+    };
+    take(kPropLightIntensitySpline[0], kPropLightIntensitySpline[1], l.splines[PortRoomEnv::kLightSplineIntensity]);
+    take(kPropLightDistanceDynamic, kPropLightDistanceDynamicNear, l.splines[PortRoomEnv::kLightSplineNear]);
+    take(kPropLightDistanceDynamic, kPropLightDistanceDynamicFar, l.splines[PortRoomEnv::kLightSplineFar]);
+    take(kPropLightConeDynamic, kPropLightConeDynamicInner, l.splines[PortRoomEnv::kLightSplineInner]);
+    take(kPropLightConeDynamic, kPropLightConeDynamicOuter, l.splines[PortRoomEnv::kLightSplineOuter]);
+    take(kPropLightColorDynamic, kPropLightColorDynamicSpline, l.splines[PortRoomEnv::kLightSplineColor]);
+    if (r.room.Nested(c, {kPropLightColorDynamic, kPropLightColorDynamicGradient}, sp) && sp.size >= 4 &&
+        ReadLE32(r.room.Bytes(sp)) == 4) {
+      const uint8_t* d = r.room.Bytes(sp) + 4;
+      size_t left = sp.size - 4;
+      for (int i = 0; i < 4; ++i) {
+        PortMayaSpline check;
+        size_t used = 0;
+        if (!check.Load(d, left, &used)) {
+          break;
+        }
+        l.splines[PortRoomEnv::kLightSplineGradient + i].assign(d, d + used);
+        d += used;
+        left -= used;
+      }
+    }
+    for (const Connection& conn : conns) {
+      const int target = r.room.ByGuid(conn.target);
+      if (r.room.Components()[conn.sender].entity == c.entity && target >= 0 &&
+          r.room.Components()[size_t(target)].entity == c.entity && conn.event == kEventLightReachedStart &&
+          (conn.action == kActionComponentDeactivate || conn.action == kActionEntityDeactivate)) {
+        l.offAtStart = true;
+      }
+    }
+  }
+  if (const auto linked = scripts.links.find(c.entity); linked != scripts.links.end()) {
+    for (PortRoomGeo::Link link : linked->second) {
+      if (link.action != PortRoomGeo::kShow && link.action != PortRoomGeo::kHide &&
+          link.action != PortRoomGeo::kToggle &&
+          (link.action < PortRoomEnv::kLightStart || link.action > PortRoomEnv::kLightReverse)) {
+        continue;
+      }
+      if (!PortRoomEnv::PseudoSender(link.sender)) {
+        link.sender &= 0x3ffffff;
+      }
+      l.links.push_back(link);
+    }
+  }
+}
+
 void Writer::ReadSuns(const RoomData& r, const SceneryScripts& scripts, const Mat34& xf,
                       std::vector<SunData>& out) const {
+  const std::vector<Connection> conns = ReadConnections(r.room);
   for (const Component* c : r.room.Of(kLightDynamic)) {
     const auto f = r.room.Flat(*c);
     const auto type = f.find(kPropLightType);
@@ -986,7 +1093,12 @@ void Writer::ReadSuns(const RoomData& r, const SceneryScripts& scripts, const Ma
     for (int i = 0; i < 3; ++i) {
       s.toSun[i] = float(-d[size_t(i)] / len);
       s.color[i] = std::isfinite(color[i] * intensity) ? std::max(0.f, color[i] * intensity) : 0.f;
+      s.rgb[i] = std::isfinite(color[i]) ? std::max(0.f, color[i]) : 0.f;
     }
+    s.intensity = std::isfinite(intensity) ? intensity : 0.f;
+    s.scale[0] = float(std::max(scale[0], 0.0));
+    s.scale[1] = float(std::max(scale[1], 0.0));
+    ReadLightTimeline(r, *c, conns, scripts, s);
     // LightFlags (35b27754) byte 0, a103d675: RebuildLightProxy gates the shadow map on it
     // (build_directional_shadow_map_data 0x89da60); absent (the struct's count 0) is 0.
     if (r.room.Nested(*c, {kPropLightFlags[0], kPropLightFlags[1]}, sp) && sp.size >= 1) {
@@ -1002,11 +1114,13 @@ void Writer::ReadSuns(const RoomData& r, const SceneryScripts& scripts, const Ma
     if (group != scripts.group.end()) {
       s.group = group->second;
     }
-    char line[200];
-    std::snprintf(line, sizeof line, "  %s: sun (%.3f, %.3f, %.3f) colour (%.2f, %.2f, %.2f) layer %d%s%s",
+    char line[240];
+    std::snprintf(line, sizeof line, "  %s: sun (%.3f, %.3f, %.3f) colour (%.2f, %.2f, %.2f) layer %d%s%s%s, %zu link(s)",
                   r.name.c_str(), s.toSun[0], s.toSun[1], s.toSun[2], s.color[0], s.color[1], s.color[2],
                   int(s.layer), s.on ? "" : " (off)",
-                  s.group != PortRoomGeo::kNoGroup ? (" group " + std::to_string(s.group)).c_str() : "");
+                  s.group != PortRoomGeo::kNoGroup ? (" group " + std::to_string(s.group)).c_str() : "",
+                  s.animated ? (" animated " + std::to_string(s.length) + " s" + (s.playing ? " playing" : "")).c_str() : "",
+                  s.links.size());
     Log(line);
     out.push_back(s);
   }
@@ -1090,71 +1204,7 @@ void Writer::ReadPointLights(const RoomData& r, const SceneryScripts& scripts, c
     }
     l.scale[0] = float(std::max(scale[0], 0.0));
     l.scale[1] = float(std::max(scale[1], 0.0));
-    const auto byte = [&](uint32_t a, uint32_t b) {
-      return r.room.Nested(*c, {a, b}, sp) && sp.size >= 1 && r.room.Bytes(sp)[0] != 0;
-    };
-    l.animated = byte(kPropLightAttributes, kPropLightAnimated);
-    if (l.animated) {
-      l.playing = byte(kPropLightAttributes, kPropLightPlaying);
-      l.loop = byte(kPropLightAttributes, kPropLightLoop);
-      if (r.room.Nested(*c, {kPropLightAttributes, kPropLightLength}, sp) && sp.size >= 4) {
-        const float length = ReadLEFloat(r.room.Bytes(sp));
-        l.length = std::isfinite(length) ? std::clamp(length, 0.f, 3600.f) : 0.f;
-      }
-      if (r.room.Nested(*c, {kPropLightDistanceDynamic, kPropLightDistanceDynamicKind}, sp) && sp.size >= 4) {
-        const uint32_t falloff = ReadLE32(r.room.Bytes(sp));
-        l.animFalloff = falloff == kLightFalloffSquared ? 2 : falloff == kLightFalloffLinear ? 1 : 3;
-      }
-      // One spline, checked; the gradient's four follow one another.
-      const auto take = [&](uint32_t a, uint32_t b, std::vector<uint8_t>& to) {
-        PortMayaSpline check;
-        if (r.room.Nested(*c, {a, b}, sp) && check.Load(r.room.Bytes(sp), sp.size)) {
-          to.assign(r.room.Bytes(sp), r.room.Bytes(sp) + sp.size);
-        }
-      };
-      take(kPropLightIntensitySpline[0], kPropLightIntensitySpline[1], l.splines[PortRoomEnv::kLightSplineIntensity]);
-      take(kPropLightDistanceDynamic, kPropLightDistanceDynamicNear, l.splines[PortRoomEnv::kLightSplineNear]);
-      take(kPropLightDistanceDynamic, kPropLightDistanceDynamicFar, l.splines[PortRoomEnv::kLightSplineFar]);
-      take(kPropLightConeDynamic, kPropLightConeDynamicInner, l.splines[PortRoomEnv::kLightSplineInner]);
-      take(kPropLightConeDynamic, kPropLightConeDynamicOuter, l.splines[PortRoomEnv::kLightSplineOuter]);
-      take(kPropLightColorDynamic, kPropLightColorDynamicSpline, l.splines[PortRoomEnv::kLightSplineColor]);
-      if (r.room.Nested(*c, {kPropLightColorDynamic, kPropLightColorDynamicGradient}, sp) && sp.size >= 4 &&
-          ReadLE32(r.room.Bytes(sp)) == 4) {
-        const uint8_t* d = r.room.Bytes(sp) + 4;
-        size_t left = sp.size - 4;
-        for (int i = 0; i < 4; ++i) {
-          PortMayaSpline check;
-          size_t used = 0;
-          if (!check.Load(d, left, &used)) {
-            break;
-          }
-          l.splines[PortRoomEnv::kLightSplineGradient + i].assign(d, d + used);
-          d += used;
-          left -= used;
-        }
-      }
-      for (const Connection& conn : conns) {
-        const int target = r.room.ByGuid(conn.target);
-        if (r.room.Components()[conn.sender].entity == c->entity && target >= 0 &&
-            r.room.Components()[size_t(target)].entity == c->entity && conn.event == kEventLightReachedStart &&
-            (conn.action == kActionComponentDeactivate || conn.action == kActionEntityDeactivate)) {
-          l.offAtStart = true;
-        }
-      }
-    }
-    if (const auto linked = scripts.links.find(c->entity); linked != scripts.links.end()) {
-      for (PortRoomGeo::Link link : linked->second) {
-        if (link.action != PortRoomGeo::kShow && link.action != PortRoomGeo::kHide &&
-            link.action != PortRoomGeo::kToggle &&
-            (link.action < PortRoomEnv::kLightStart || link.action > PortRoomEnv::kLightReverse)) {
-          continue;
-        }
-        if (!PortRoomEnv::PseudoSender(link.sender)) {
-          link.sender &= 0x3ffffff;
-        }
-        l.links.push_back(link);
-      }
-    }
+    ReadLightTimeline(r, *c, conns, scripts, l);
     const auto shown = f.find(kPropLightShown);
     l.on = r.room.Active(*c) && (shown == f.end() || shown->second.size < 1 || r.room.Bytes(shown->second)[0] != 0);
     const auto layer = scripts.layer.find(c->entity);
@@ -3335,7 +3385,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 28);
+  AppendLE32(out, 29);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3546,6 +3596,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     AppendLE32(out, s.group);
     out.push_back(s.casts ? 1 : 0);
     out.insert(out.end(), 3, 0);
+    AppendLightTimeline(out, s);
   }
   // The lightmap the room geometry's lookups index, or a width of 0.
   if (withLightmap) {
@@ -3590,31 +3641,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
       AppendLEFloat(out, v);
     }
     AppendLE32(out, l.group);
-    AppendLE32(out, uint32_t(l.links.size()));
-    for (const PortRoomGeo::Link& link : l.links) {
-      AppendLE32(out, link.sender);
-      out.push_back(link.state);
-      out.push_back(link.action);
-      out.insert(out.end(), 2, 0);
-    }
-    out.push_back(l.animated ? 1 : 0);
-    out.push_back(l.playing ? 1 : 0);
-    out.push_back(l.loop ? 1 : 0);
-    out.push_back(l.offAtStart ? 1 : 0);
-    out.push_back(l.animFalloff);
-    out.insert(out.end(), 3, 0);
-    AppendLEFloat(out, l.length);
-    AppendLEFloat(out, l.scale[0]);
-    AppendLEFloat(out, l.scale[1]);
-    AppendLEFloat(out, l.intensity);
-    for (const float c : l.rgb) {
-      AppendLEFloat(out, c);
-    }
-    for (const std::vector<uint8_t>& spline : l.splines) {
-      AppendLE32(out, uint32_t(spline.size()));
-      out.insert(out.end(), spline.begin(), spline.end());
-      out.insert(out.end(), (4 - spline.size() % 4) % 4, 0);
-    }
+    AppendLightTimeline(out, l);
   }
   AppendLE32(out, uint32_t(fluidHints.size()));
   for (const PortRoomEnv::FluidHint& h : fluidHints) {

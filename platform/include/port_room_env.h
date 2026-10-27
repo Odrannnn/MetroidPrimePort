@@ -153,6 +153,8 @@
 //   EnvironmentFX rain, snow and underwater flakes (CEnvFxManagerMP1::SetColorIntensity), from the
 //   CEnvFxDensityControllerMP1 a RelayAutoFire reaches when the area loads (1 when none does; a
 //   controller only a trigger fires is left out). Older files have 1.
+// Version 29 adds to each sun, after the casts block, a light's links, animation block and
+//   splines (as version 19's lights from u32 links on; the animation's falloff and scale unused).
 // The tonemap is Remastered's: the exposure value without auto exposure, the radiance
 // that comes out as middle grey once exposed, and how far the curve's toe and shoulder
 // are pulled in.
@@ -382,16 +384,7 @@ struct FogTransition {
   std::vector<GradeLink> links;
 };
 
-struct SunLight {
-  int32_t layer = -1;
-  bool on = true;
-  float toSun[3] = {};
-  float color[3] = {};
-  uint32_t group = 0xffffffff;  // PortRoomGeo::kNoGroup
-  bool casts = false;           // version 24: the cast bit (LightFlags a103d675)
-};
-
-// A point or spot LightDynamic (CLightDynamicGOC). Static: colour, range and cone as stored.
+// A LightDynamic (CLightDynamicGOC). Static: colour, range and cone as stored.
 // Animated (its Attributes' animated flag): a playback over `length` seconds
 // (CTimePlaybackManager, steps of 1/60000 s; it advances only while playing and active,
 // stops at the end unless `loop` wraps it; backwards mirrors that) gives t, and then the
@@ -418,17 +411,8 @@ enum LightSpline : uint8_t {
   kLightSplineGradient, // r, g, b, a
   kLightSplines = kLightSplineGradient + 4,
 };
-struct PointLight {
-  int32_t layer = -1;
-  bool on = true;
-  bool spot = false;
-  uint8_t falloff = 3;
-  float pos[3] = {};
-  float toLight[3] = {};
-  float color[3] = {};
-  float nearFar[2] = {};
-  float cone[2] = {};  // inner, outer
-  uint32_t group = 0xffffffff;  // PortRoomGeo::kNoGroup
+// Its links and timeline, which every kind has.
+struct LightTimeline {
   std::vector<GradeLink> links;
   bool animated = false;
   bool playing = false;
@@ -441,6 +425,28 @@ struct PointLight {
   float rgb[3] = {};
   PortMayaSpline splines[kLightSplines];
   bool hasSpline[kLightSplines] = {};
+};
+struct PointLight : LightTimeline {
+  int32_t layer = -1;
+  bool on = true;
+  bool spot = false;
+  uint8_t falloff = 3;
+  float pos[3] = {};
+  float toLight[3] = {};
+  float color[3] = {};
+  float nearFar[2] = {};
+  float cone[2] = {};  // inner, outer
+  uint32_t group = 0xffffffff;  // PortRoomGeo::kNoGroup
+};
+// A directional one (see Sun). Its timeline (version 29) drives its colour as a point light's:
+// the intro's fill suns fade out over their 30 s before the next shot hides them.
+struct SunLight : LightTimeline {
+  int32_t layer = -1;
+  bool on = true;
+  float toSun[3] = {};
+  float color[3] = {};
+  uint32_t group = 0xffffffff;  // PortRoomGeo::kNoGroup
+  bool casts = false;           // version 24: the cast bit (LightFlags a103d675)
 };
 
 // An auto exposure hint with a fluid mode (CAutoExposureHintGOC mode 1 or 2), or one of the pair a

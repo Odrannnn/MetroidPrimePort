@@ -235,7 +235,8 @@ inline constexpr int kEffects = 138;   // Drone laser and scanner particles (roo
 // 60: GunTurret particle properties (idle, deactivate, targetting, charging, panning).
 // 61: a GunTurret's visor effect (actor slot 4: ELC2 or GENP).
 // 62: a Drone's laser particles and its scanner effect (actor slot 5).
-inline constexpr int kRooms = 62;
+// 63: roomenv version 29, the suns' links and timelines (the intro's fill suns fade out).
+inline constexpr int kRooms = 63;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

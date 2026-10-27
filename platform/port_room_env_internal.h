@@ -120,7 +120,7 @@ struct Area {
     float cap = 0.f;
   };
   std::vector<Transition> transitions;
-  // A point or spot light's state (CLightDynamicGOC): active, and its timeline.
+  // A light's state (CLightDynamicGOC): active, and its timeline.
   struct Light {
     bool active = false;
     bool playing = false;
@@ -129,6 +129,7 @@ struct Area {
     int group = -1; // what its script group last said (PortRoomGeo::GroupShown)
   };
   std::vector<Light> lights;
+  std::vector<Light> suns;
 };
 
 // The frame's exposure and tone curve, as CPostFXManager::UpdateTonemapping moves them.

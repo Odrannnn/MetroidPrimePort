@@ -15,7 +15,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 28;
+constexpr uint32_t kVersion = 29;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -151,6 +151,73 @@ bool ParseTiles(const std::vector<uint8_t>& data, size_t& at, PortRoomEnvTiles::
   }
   set.data.assign(data.begin() + ptrdiff_t(at), data.begin() + ptrdiff_t(at + bytes));
   at += bytes;
+  return true;
+}
+
+// A light's links, animation block and splines at `at` (version 19's, from u32 links on).
+constexpr size_t kTimelineAnimBytes = 36;
+constexpr size_t kTimelineLeast = 4 + kTimelineAnimBytes + 4 * kLightSplines;
+bool ParseTimeline(const std::vector<uint8_t>& data, size_t& at, LightTimeline& l, std::string& error) {
+  if (data.size() - at < 4) {
+    error = "cut short";
+    return false;
+  }
+  const uint32_t links = ReadLE32(data.data() + at);
+  at += 4;
+  if (links > kMaxGradeLinks || (data.size() - at) / 8 < links) {
+    error = "cut short";
+    return false;
+  }
+  l.links.resize(links);
+  for (GradeLink& link : l.links) {
+    const uint8_t* k = data.data() + at;
+    link.sender = ReadLE32(k);
+    link.state = k[4];
+    link.action = k[5];
+    at += 8;
+  }
+  if (data.size() - at < kTimelineAnimBytes) {
+    error = "cut short";
+    return false;
+  }
+  const uint8_t* a = data.data() + at;
+  l.animated = a[0] != 0;
+  l.playing = a[1] != 0;
+  l.loop = a[2] != 0;
+  l.offAtStart = a[3] != 0;
+  l.animFalloff = a[4];
+  l.length = ReadLEFloat(a + 8);
+  l.scale[0] = ReadLEFloat(a + 12);
+  l.scale[1] = ReadLEFloat(a + 16);
+  l.intensity = ReadLEFloat(a + 20);
+  for (int i = 0; i < 3; ++i) {
+    l.rgb[i] = ReadLEFloat(a + 24 + 4 * i);
+  }
+  at += kTimelineAnimBytes;
+  if (!std::isfinite(l.length) || l.length < 0.f) {
+    l.length = 0.f;
+  }
+  for (int i = 0; i < kLightSplines; ++i) {
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t size = ReadLE32(data.data() + at);
+    at += 4;
+    const size_t padded = (size_t(size) + 3) & ~size_t(3);
+    if (data.size() - at < padded) {
+      error = "cut short";
+      return false;
+    }
+    if (size != 0) {
+      if (!l.splines[i].Load(data.data() + at, size)) {
+        error = "bad light spline";
+        return false;
+      }
+      l.hasSpline[i] = true;
+    }
+    at += padded;
+  }
   return true;
 }
 
@@ -817,12 +884,17 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
     const uint32_t suns = ReadLE32(data.data() + at);
     at += 4;
     const size_t size = version >= 24 ? 40 : version >= 17 ? 36 : 32;
-    if ((data.size() - at) / size < suns) {
+    const size_t least = size + (version >= 29 ? kTimelineLeast : 0);
+    if ((data.size() - at) / least < suns) {
       error = "cut short";
       return false;
     }
     out.suns.resize(suns);
     for (SunLight& s : out.suns) {
+      if (data.size() - at < size) {
+        error = "cut short";
+        return false;
+      }
       const uint8_t* q = data.data() + at;
       s.layer = int32_t(ReadLE32(q));
       s.on = q[4] != 0;
@@ -835,6 +907,9 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       }
       s.casts = version >= 24 && q[36] != 0;
       at += size;
+      if (version >= 29 && !ParseTimeline(data, at, s, error)) {
+        return false;
+      }
     }
   }
   if (version >= 18) {
@@ -878,8 +953,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
     at += 4;
     // The fixed part, the link count, the animation block and the spline sizes.
     constexpr size_t kSize = 64;
-    constexpr size_t kAnimBytes = 36;
-    constexpr size_t kLeast = kSize + 4 + kAnimBytes + 4 * kLightSplines;
+    constexpr size_t kLeast = kSize + kTimelineLeast;
     if ((data.size() - at) / kLeast < lights) {
       error = "cut short";
       return false;
@@ -906,61 +980,8 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       }
       l.group = ReadLE32(q + 60);
       at += kSize;
-      const uint32_t links = ReadLE32(data.data() + at);
-      at += 4;
-      if (links > kMaxGradeLinks || (data.size() - at) / 8 < links) {
-        error = "cut short";
+      if (!ParseTimeline(data, at, l, error)) {
         return false;
-      }
-      l.links.resize(links);
-      for (GradeLink& link : l.links) {
-        const uint8_t* k = data.data() + at;
-        link.sender = ReadLE32(k);
-        link.state = k[4];
-        link.action = k[5];
-        at += 8;
-      }
-      if (data.size() - at < kAnimBytes) {
-        error = "cut short";
-        return false;
-      }
-      const uint8_t* a = data.data() + at;
-      l.animated = a[0] != 0;
-      l.playing = a[1] != 0;
-      l.loop = a[2] != 0;
-      l.offAtStart = a[3] != 0;
-      l.animFalloff = a[4];
-      l.length = ReadLEFloat(a + 8);
-      l.scale[0] = ReadLEFloat(a + 12);
-      l.scale[1] = ReadLEFloat(a + 16);
-      l.intensity = ReadLEFloat(a + 20);
-      for (int i = 0; i < 3; ++i) {
-        l.rgb[i] = ReadLEFloat(a + 24 + 4 * i);
-      }
-      at += kAnimBytes;
-      if (!std::isfinite(l.length) || l.length < 0.f) {
-        l.length = 0.f;
-      }
-      for (int i = 0; i < kLightSplines; ++i) {
-        if (data.size() - at < 4) {
-          error = "cut short";
-          return false;
-        }
-        const uint32_t size = ReadLE32(data.data() + at);
-        at += 4;
-        const size_t padded = (size_t(size) + 3) & ~size_t(3);
-        if (data.size() - at < padded) {
-          error = "cut short";
-          return false;
-        }
-        if (size != 0) {
-          if (!l.splines[i].Load(data.data() + at, size)) {
-            error = "bad light spline";
-            return false;
-          }
-          l.hasSpline[i] = true;
-        }
-        at += padded;
       }
     }
   }

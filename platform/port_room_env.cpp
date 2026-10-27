@@ -1104,12 +1104,50 @@ const Area* SunArea(float& exposure) {
   return exposure > 0.f ? &view->second : nullptr;
 }
 
-// Whether a sun shines now: on (as the room geometry's script last set it, else as it starts) and, on a
-// story layer, only for its cinematic. The intro's suns are its shots' lighting: the next shot hides them,
-// but a skipped intro (randomprime's patches) never plays it, and they'd light the hangar from overhead.
-SunWhy SunState(const SunLight& s, LayerActive layerActive, void* context, bool cinematic) {
-  const int shown = s.group != PortRoomGeo::kNoGroup ? PortRoomGeo::GroupShown(sViewArea, s.group) : -1;
-  if (!(shown >= 0 ? shown == 1 : s.on)) {
+// A light's colour times intensity now: its timeline's splines at the state's time when animated
+// (intensity, and the gradient at the colour spline), else the stored colour.
+void TimelineColor(const LightTimeline& l, const float stored[3], const Area::Light* state, float out[3]) {
+  if (!l.animated || state == nullptr) {
+    std::copy(stored, stored + 3, out);
+    return;
+  }
+  const float t = float(state->time);
+  const auto at = [&](LightSpline s, float fallback) {
+    return l.hasSpline[s] ? l.splines[s].Eval(t) : fallback;
+  };
+  const float intensity = at(kLightSplineIntensity, l.intensity);
+  float rgb[3] = {l.rgb[0], l.rgb[1], l.rgb[2]};
+  if (l.hasSpline[kLightSplineGradient] && l.hasSpline[kLightSplineGradient + 1] &&
+      l.hasSpline[kLightSplineGradient + 2]) {
+    const float x = std::clamp(at(kLightSplineColor, 0.f), 0.f, 1.f);
+    for (int c = 0; c < 3; ++c) {
+      rgb[c] = l.splines[kLightSplineGradient + c].Eval(x);
+    }
+  }
+  for (int c = 0; c < 3; ++c) {
+    out[c] = rgb[c] * intensity;
+  }
+}
+
+// Sun `i`'s state, once the area's script has started.
+const Area::Light* SunStateOf(const Area& area, size_t i) {
+  return i < area.suns.size() ? &area.suns[i] : nullptr;
+}
+
+// Whether a sun shines now: active (as the room geometry's script and its links last set it, else as it
+// starts) and, on a story layer, only for its cinematic. The intro's suns are its shots' lighting: the next
+// shot hides them, but a skipped intro (randomprime's patches) never plays it, and they'd light the hangar
+// from overhead.
+SunWhy SunState(const SunLight& s, const Area::Light* state, LayerActive layerActive, void* context,
+                bool cinematic) {
+  bool on = s.on;
+  if (state != nullptr) {
+    on = state->active;
+  } else if (s.group != PortRoomGeo::kNoGroup) {
+    const int shown = PortRoomGeo::GroupShown(sViewArea, s.group);
+    on = shown >= 0 ? shown == 1 : s.on;
+  }
+  if (!on) {
     return SunWhy::Off;
   }
   if (s.layer >= 0 && (!cinematic || (layerActive != nullptr && !layerActive(s.layer, context)))) {
@@ -1129,10 +1167,11 @@ bool Sun(LayerActive layerActive, void* context, bool cinematic, float toSun[3],
   const std::vector< SunLight >& suns = area->file.suns;
   sSunWhy.assign(suns.size(), SunWhy::Lit);
   const SunLight* pick = nullptr;
+  float pickColor[3] = {};
   float pickStrength = 0.f;
   for (size_t i = 0; i < suns.size(); ++i) {
     const SunLight& s = suns[i];
-    const SunWhy state = SunState(s, layerActive, context, cinematic);
+    const SunWhy state = SunState(s, SunStateOf(*area, i), layerActive, context, cinematic);
     if (state != SunWhy::Lit) {
       sSunWhy[i] = state;
       continue;
@@ -1143,9 +1182,12 @@ bool Sun(LayerActive layerActive, void* context, bool cinematic, float toSun[3],
       continue;
     }
     sSunWhy[i] = SunWhy::Weaker;
-    const float strength = s.color[0] + s.color[1] + s.color[2];
+    float now[3];
+    TimelineColor(s, s.color, SunStateOf(*area, i), now);
+    const float strength = now[0] + now[1] + now[2];
     if (std::isfinite(strength) && strength > pickStrength) {
       pick = &s;
+      std::copy(now, now + 3, pickColor);
       pickStrength = strength;
     }
   }
@@ -1159,7 +1201,7 @@ bool Sun(LayerActive layerActive, void* context, bool cinematic, float toSun[3],
   const float scale = exposure * LightGain() / 3.14159265f;
   for (int i = 0; i < 3; ++i) {
     toSun[i] = pick->toSun[i];
-    color[i] = pick->color[i] * scale;
+    color[i] = pickColor[i] * scale;
   }
   return true;
 }
@@ -1178,15 +1220,19 @@ void SunLights(LayerActive layerActive, void* context, bool cinematic, const flo
     return;
   }
   const float scale = exposure * LightGain() / 3.14159265f;
-  for (const SunLight& s : area->file.suns) {
+  for (size_t i = 0; i < area->file.suns.size(); ++i) {
+    const SunLight& s = area->file.suns[i];
+    const Area::Light* state = SunStateOf(*area, i);
     // A cast-bit sun is the shadow's (Sun).
-    if (s.casts || SunState(s, layerActive, context, cinematic) != SunWhy::Lit) {
+    if (s.casts || SunState(s, state, layerActive, context, cinematic) != SunWhy::Lit) {
       continue;
     }
+    float now[3];
+    TimelineColor(s, s.color, state, now);
     float color[3];
     bool lit = false;
     for (int c = 0; c < 3; ++c) {
-      color[c] = std::isfinite(s.color[c]) ? std::max(s.color[c], 0.f) * scale : 0.f;
+      color[c] = std::isfinite(now[c]) ? std::max(now[c], 0.f) * scale : 0.f;
       lit = lit || color[c] > 0.f;
     }
     // Kind 2 of GXPortSetRoomLights' records: a direction, no position or falloff.
@@ -1219,11 +1265,20 @@ std::string SunInfo() {
   std::string out;
   for (size_t i = 0; i < suns.size(); ++i) {
     const SunLight& s = suns[i];
-    char line[256];
-    std::snprintf(line, sizeof(line), "sun %zu: to sun %.3f %.3f %.3f colour %.3f %.3f %.3f layer %d group %s%s: %s\n",
-                  i, s.toSun[0], s.toSun[1], s.toSun[2], s.color[0], s.color[1], s.color[2], int(s.layer),
+    const Area::Light* state = SunStateOf(view->second, i);
+    float now[3];
+    TimelineColor(s, s.color, state, now);
+    char timeline[64] = "";
+    if (s.animated && state != nullptr) {
+      std::snprintf(timeline, sizeof(timeline), " t %.2f/%.2f%s", state->time, double(s.length),
+                    state->playing ? "" : " (stopped)");
+    }
+    char line[320];
+    std::snprintf(line, sizeof(line),
+                  "sun %zu: to sun %.3f %.3f %.3f colour %.3f %.3f %.3f layer %d group %s%s%s: %s\n", i, s.toSun[0],
+                  s.toSun[1], s.toSun[2], now[0], now[1], now[2], int(s.layer),
                   s.group != PortRoomGeo::kNoGroup ? std::to_string(s.group).c_str() : "-", s.on ? "" : " (starts off)",
-                  i < sSunWhy.size() ? kWhy[int(sSunWhy[i])] : "not looked at");
+                  timeline, i < sSunWhy.size() ? kWhy[int(sSunWhy[i])] : "not looked at");
     out += line;
   }
   out.pop_back();
@@ -1244,21 +1299,7 @@ LightNow EvalLight(const PointLight& l, const Area::Light& state) {
     return n;
   }
   const float t = float(state.time);
-  const auto at = [&](LightSpline s, float fallback) {
-    return l.hasSpline[s] ? l.splines[s].Eval(t) : fallback;
-  };
-  const float intensity = at(kLightSplineIntensity, l.intensity);
-  float rgb[3] = {l.rgb[0], l.rgb[1], l.rgb[2]};
-  if (l.hasSpline[kLightSplineGradient] && l.hasSpline[kLightSplineGradient + 1] &&
-      l.hasSpline[kLightSplineGradient + 2]) {
-    const float x = std::clamp(at(kLightSplineColor, 0.f), 0.f, 1.f);
-    for (int c = 0; c < 3; ++c) {
-      rgb[c] = l.splines[kLightSplineGradient + c].Eval(x);
-    }
-  }
-  for (int c = 0; c < 3; ++c) {
-    n.color[c] = rgb[c] * intensity;
-  }
+  TimelineColor(l, l.color, &state, n.color);
   // The stored near and far already have the entity's scale; the splines' don't.
   if (l.hasSpline[kLightSplineNear] && l.hasSpline[kLightSplineFar]) {
     n.nearFar[0] = l.scale[0] * l.splines[kLightSplineNear].Eval(t);
