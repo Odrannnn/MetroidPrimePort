@@ -1,5 +1,7 @@
 # Metroid Prime Unbound - native port
 
+**Looking for the sequel? See the [Metroid Prime 2: Echoes native port](https://github.com/Odrannnn/MetroidPrime2Port).**
+
 **Make sure to check out the F1 (Or start+back on controller) menu for all the additional features and QoL!**
 
 **You can load prime remastered models and textures in the game (check F1 > mods), you must provide your
