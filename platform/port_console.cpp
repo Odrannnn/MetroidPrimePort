@@ -2684,6 +2684,27 @@ void CmdPickups() {
     Out("dot %ld collected", index);
     return Finish();
   }
+  if (value == "collected") {
+    // This world's dots whose memory relay is in the mailbox, as the map
+    // shows them collected.
+    if (gpGameState == nullptr) {
+      return Finish("not in a game");
+    }
+    size_t dots = 0;
+    const PortMapPickups::Dot* list = PortMapPickups::Dots(dots);
+    const uint32_t world = gpGameState->CurrentWorldAssetId();
+    const CScriptMailbox& mailbox = *gpGameState->StateForWorld(world).Mailbox().GetPtr();
+    std::string indices;
+    for (size_t i = 0; i < dots; ++i) {
+      if (list[i].world == world && mailbox.HasMsg(TEditorId(list[i].relay))) {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%s%zu(%08X)", indices.empty() ? "" : " ", i, list[i].relay);
+        indices += text;
+      }
+    }
+    Out("collected in this world: %s", indices.empty() ? "none" : indices.c_str());
+    return Finish();
+  }
   if (value == "kinds" || value == "station") {
     const std::string sub = sCmd.args.size() > 2 ? Lower(sCmd.args[2]) : "";
     if (sub == "on" || sub == "off") {
@@ -2726,6 +2747,7 @@ void CmdPickups() {
                   "       pickups seen [clear|all]   the pickups seen so far in this save\n"
                   "       pickups kinds [on|off]     major/minor shapes; no argument lists them\n"
                   "       pickups collect <dot>      mark a dot's pickup collected (test aid)\n"
+                  "       pickups collected          this world's dots whose relay is in the mailbox\n"
                   "       pickups station <on|off>   map stations show pickups in Seen");
   }
   Finish();
