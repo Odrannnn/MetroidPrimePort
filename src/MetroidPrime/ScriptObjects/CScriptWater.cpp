@@ -277,7 +277,7 @@ void CScriptWater::Render(const CStateManager& mgr) const {
 #ifdef TARGET_PC
     // A mod's surface stands in for the fluid plane (port_room_liquid.h).
     remastered = PortRoomLiquid::Draw(mgr, mgr.GetWorld()->GetAreaAlways(GetCurrentAreaId()), GetUniqueId().value,
-                                      GetTranslation(), x1b4_fluidPlane->GetFluidType(),
+                                      GetEditorId().value, GetTranslation(), x1b4_fluidPlane->GetFluidType(),
                                       GetTranslation().GetZ() + x130_bounds.GetMaxPoint().GetZ());
 #endif
     if (!remastered)

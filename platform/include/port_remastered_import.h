@@ -224,7 +224,8 @@ inline constexpr int kEffects = 132;   // SteamMP1 GENPs (room-only)
 // 55: Thardus, FlyingPirate, ElitePirate and OmegaPirate particle properties.
 // 56: AtomicBeta's electric effect (ELSC) property, per placement.
 // 57: .roomfx v8, a matched Steam's Remastered visor steam (SteamMP1).
-inline constexpr int kRooms = 57;
+// 58: .roomliquid v5, each surface's matched retail Water editor id.
+inline constexpr int kRooms = 58;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

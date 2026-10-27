@@ -43,9 +43,9 @@ namespace PortRoomLiquid {
 namespace {
 
 constexpr uint32_t kMagic = 0x4C52504D; // 'MPRL'
-constexpr uint32_t kVersion = 4;
+constexpr uint32_t kVersion = 5;
 constexpr size_t kHeaderBytes = 12;
-constexpr size_t kSurfaceBytes = 8 + 12 * 4;
+constexpr size_t kSurfaceBytes = 12 + 12 * 4;
 // The Water block before its vertices: 2 counts, the bounds, the feature bytes, then
 // 49 floats and 5 ids.
 constexpr size_t kWaterBytes = 8 + 24 + 12 + 49 * 4 + 5 * 4;
@@ -60,6 +60,7 @@ constexpr float kClockWrap = 5000.f;
 struct Placed {
   uint32_t type = 0;
   uint32_t id = 0;
+  uint32_t owner = 0; // Surface::owner
   CTransform4f xf = CTransform4f::Identity(); // model -> world
   bool taken = false;                         // a water object draws it
   // Lava: a CMDL.
@@ -146,6 +147,7 @@ void Load(uint32_t mrea, Area& area) {
     Placed& item = area.items.emplace_back();
     item.type = surface.type;
     item.id = surface.model;
+    item.owner = surface.owner;
     const float* const m = surface.transform;
     item.xf = CTransform4f(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);
     if (surface.type == 2) {
@@ -470,7 +472,8 @@ bool Parse(const std::vector< uint8_t >& data, std::vector< Surface >& out, std:
     }
     s.type = ReadLE32(p);
     s.model = ReadLE32(p + 4);
-    p += 8;
+    s.owner = ReadLE32(p + 8);
+    p += 12;
     if (s.type > 2) {
       return fail("unknown surface type");
     }
@@ -566,8 +569,8 @@ void Advance(float dt) {
   }
 }
 
-bool Draw(const CStateManager& mgr, const CGameArea& gameArea, uint32_t uid, const CVector3f& position,
-          int fluidType, float surfaceZ) {
+bool Draw(const CStateManager& mgr, const CGameArea& gameArea, uint32_t uid, uint32_t editorId,
+          const CVector3f& position, int fluidType, float surfaceZ) {
   Area* const prepared = Prepare(gameArea);
   if (prepared == nullptr || prepared->items.empty()) {
     return false;
@@ -576,24 +579,39 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, uint32_t uid, con
   const uint32_t mrea = gameArea.GetAreaAssetId();
   auto owner = area.owners.find(uid);
   if (owner == area.owners.end()) {
-    // The nearest surface of what the object holds; thick lava is lava here.
+    // The surface the importer matched to this object; else the nearest unmatched surface of
+    // what the object holds (thick lava is lava here).
     const uint32_t type = fluidType == 1 ? 1 : fluidType == 2 || fluidType == 5 ? 2 : fluidType == 0 ? 0 : ~0u;
+    const uint32_t eid = editorId & 0x3FFFFFFu;
     int best = -1;
     float bestDistance = 1e30f;
+    bool matched = false;
     for (size_t i = 0; i < area.items.size(); ++i) {
       const Placed& item = area.items[i];
+      if (eid != 0 && item.owner == eid && !item.taken) {
+        best = int(i);
+        bestDistance = (CVector3f(item.xf.Get03(), item.xf.Get13(), item.xf.Get23()) - position).Magnitude();
+        matched = true;
+        break;
+      }
+    }
+    for (size_t i = 0; !matched && i < area.items.size(); ++i) {
+      const Placed& item = area.items[i];
       const float distance = (CVector3f(item.xf.Get03(), item.xf.Get13(), item.xf.Get23()) - position).Magnitude();
-      if (item.type == type && !item.taken && distance < bestDistance) {
+      if (item.owner == 0 && item.type == type && !item.taken && distance < bestDistance) {
         best = int(i);
         bestDistance = distance;
       }
     }
-    PortLog::Write("room liquid: %08X: object %u (fluid %d) at (%.1f, %.1f, %.1f), surface at %.1f: %s, %.2f away"
-                   ", its own top at %.2f\n",
-                   mrea, uid, fluidType, position.GetX(), position.GetY(), position.GetZ(), surfaceZ,
-                   best < 0 ? "no surface" : bestDistance > kReach ? "nearest surface too far" : "surface found",
+    PortLog::Write("room liquid: %08X: object %u (editor %08X, fluid %d) at (%.1f, %.1f, %.1f), surface at %.1f: %s"
+                   ", %.2f away, its own top at %.2f\n",
+                   mrea, uid, editorId, fluidType, position.GetX(), position.GetY(), position.GetZ(), surfaceZ,
+                   matched              ? "matched surface"
+                   : best < 0           ? "no surface"
+                   : bestDistance > kReach ? "nearest surface too far"
+                                           : "surface found",
                    best < 0 ? 0.f : bestDistance, best < 0 ? 0.f : SurfaceTop(area.items[size_t(best)]));
-    if (bestDistance > kReach) {
+    if (!matched && bestDistance > kReach) {
       best = -1;
     }
     if (best >= 0) {

@@ -252,7 +252,7 @@ private:
   // The room's static geometry (its ModCon components), as "<MREA id>.roomgeo".
   void WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area);
   // The room's liquid surfaces (its water and lava render volumes), as "<MREA id>.roomliquid".
-  void WriteLiquids(const RoomData& r, uint32_t mrea);
+  void WriteLiquids(const RoomData& r, uint32_t mrea, const Area& area);
   std::string WriteRoom(const RoomData& r, const std::map<std::string, Placement>& placed, const Vec3& shift,
                         const float tonemap[5], const BloomData& bloom, const std::vector<GradeData>& worldGrades,
                         const std::vector<BacklightData>& worldBacklights, const std::vector<FogData>& worldFogs,
@@ -2767,12 +2767,55 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
   Log(line);
 }
 
-void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
+void Writer::WriteLiquids(const RoomData& r, uint32_t mrea, const Area& area) {
   // Liquids are room geometry: they come with it, so a models-only import keeps the
   // retail planes (and the small arena its mod starts with).
   if (!m_io.liquid || (m_io.wantsGeometry && !m_io.wantsGeometry(r.name))) {
     return;
   }
+  // The retail Water (0x20) each render volume's entity matched: the object that draws it.
+  const SceneryScripts scripts = MatchScripts(r.room, area);
+  // A water entity Remastered moved beyond the match's reach: when it is the room's only
+  // unmatched one and the area has one Water no entity matched, that Water is its own (as an
+  // unplaced relay is the area's only relay).
+  int soleEntity = -1;
+  size_t soleWater = area.objects.size();
+  {
+    std::set<size_t> claimed;
+    for (const auto& [entity, index] : scripts.retail) {
+      claimed.insert(index);
+    }
+    std::set<int> unmatched;
+    for (const Component* c : r.room.Of(kWaterMP1)) {
+      if (c->entity >= 0 && scripts.retail.count(c->entity) == 0) {
+        unmatched.insert(c->entity);
+      }
+    }
+    size_t free = 0;
+    for (size_t j = 0; j < area.objects.size(); ++j) {
+      if (area.objects[j].type == 0x20 && claimed.count(j) == 0) {
+        soleWater = j;
+        ++free;
+      }
+    }
+    if (unmatched.size() == 1 && free == 1) {
+      soleEntity = *unmatched.begin();
+    } else {
+      soleWater = area.objects.size();
+    }
+  }
+  auto owner = [&](int entity) -> uint32_t {
+    if (entity >= 0 && entity == soleEntity) {
+      return area.objects[soleWater].id & 0x3FFFFFFu;
+    }
+    const auto matched = entity >= 0 ? scripts.retail.find(entity) : scripts.retail.end();
+    if (matched == scripts.retail.end() || matched->second >= area.objects.size() ||
+        area.objects[matched->second].type != 0x20) {
+      return 0;
+    }
+    return area.objects[matched->second].id & 0x3FFFFFFu;  // as TEditorId::Value, without the layer
+  };
+  size_t owned = 0;
   static const int kAxis[3] = {0, 2, 1};
   static const double kSign[3] = {-1, 1, 1};
   // What each entity's retail water object is filled with, and every water object's camera
@@ -2900,6 +2943,9 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
       };
       AppendLE32(body, uint32_t(liquid.type));
       AppendLE32(body, id);
+      const uint32_t own = owner(c->entity);
+      owned += own != 0;
+      AppendLE32(body, own);
       for (int row = 0; row < 3; ++row) {
         // A lava pool is converted into the area's axes. A water mesh is not: it stays in
         // Remastered's model space and the transform takes it there, (x, y, z) -> (-x, z, y).
@@ -2971,7 +3017,7 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
   }
   std::vector<uint8_t> out;
   AppendLE32(out, 0x4C52504D);  // 'MPRL'
-  AppendLE32(out, 4);
+  AppendLE32(out, 5);
   AppendLE32(out, count);
   out.insert(out.end(), body.begin(), body.end());
   AppendLE32(out, filterCount);
@@ -2983,8 +3029,8 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
     return;
   }
   char line[160];
-  std::snprintf(line, sizeof line, "  %s: %u liquid surfaces, %zu dropped, %u water filters", r.name.c_str(),
-                count, dropped, filterCount);
+  std::snprintf(line, sizeof line, "  %s: %u liquid surfaces (%zu with a matched Water), %zu dropped, %u water filters",
+                r.name.c_str(), count, owned, dropped, filterCount);
   Log(line);
 }
 
@@ -3133,7 +3179,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   char head[96];
   PairRetailModels(r, *m.area);
   WriteGeometry(r, m.mrea, *m.area);
-  WriteLiquids(r, m.mrea);
+  WriteLiquids(r, m.mrea, *m.area);
   const std::vector<Vec3>& gdoors = m.area->doors;
   double rot[3][3], trans[3];
   for (int i = 0; i < 3; ++i) {

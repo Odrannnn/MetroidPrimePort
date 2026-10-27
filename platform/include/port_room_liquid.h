@@ -19,8 +19,9 @@ class CVector3f;
 // aurora's water shader (aurora/water.hpp). Lava is a CMDL whose material is PBR kind 6.
 //
 // The file is little endian:
-//   'MPRL', u32 version (4), u32 surfaces
+//   'MPRL', u32 version (5), u32 surfaces
 //   surface: u32 type (0 water, 1 poison, 2 lava), u32 CMDL id (lava; 0 otherwise),
+//            u32 owner (editor id, no layer, of the retail Water its entity matched; 0 none),
 //            f32 transform[12] (rows of mesh -> area; a water mesh is in Remastered's
 //            model space, so this includes the (x, y, z) -> (-x, z, y) axis change)
 //   then, for water and poison only, a Water block:
@@ -71,6 +72,7 @@ struct Water {
 struct Surface {
   uint32_t type;
   uint32_t model;
+  uint32_t owner; // the editor id (no layer) of the retail Water that draws it; 0 when unmatched
   float transform[12];
   Water water; // type 0 and 1
 };
@@ -90,11 +92,12 @@ void SetLoadedAreas(const uint32_t* mreas, size_t count);
 // Once a frame, `dt` game seconds on: the water's clock (CStateManagerGameData's, which
 // wraps at 5000 s) that its normal maps, waves and flow scroll with.
 void Advance(float dt);
-// Draws the surface of the area's water object `uid`, which is at `position` and holds
-// `fluidType` (CFluidPlane::EFluidType). False when there is none or its model has not
-// loaded yet, and the object draws its own fluid plane.
-bool Draw(const CStateManager& mgr, const CGameArea& area, uint32_t uid, const CVector3f& position, int fluidType,
-          float surfaceZ);
+// Draws the surface of the area's water object `uid` (editor id `editorId`), which is at
+// `position` and holds `fluidType` (CFluidPlane::EFluidType): the surface the importer
+// matched to that object, else the nearest unmatched one of its fluid. False when there is
+// none or its model has not loaded yet, and the object draws its own fluid plane.
+bool Draw(const CStateManager& mgr, const CGameArea& area, uint32_t uid, uint32_t editorId,
+          const CVector3f& position, int fluidType, float surfaceZ);
 // Remastered's camera filter for the camera inside the area's water object `uid` at
 // `position`: true, with its colour, when the area has a file with a water object
 // within reach. CCameraManagerMP1::UpdateFilters then multiplies the screen by that
