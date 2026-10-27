@@ -24,6 +24,7 @@
 #include "port_room_liquid.h"
 
 #include <aurora/dvd.h>
+#include <aurora/gfx.h>
 #include <dolphin/gx.h>
 #include <aurora/texture.hpp>
 #include <dolphin/dvd.h>
@@ -302,6 +303,19 @@ bool HasRoomGeometry() {
   // The same folders the scan loads, the built-in import included: the frame buffers and the arena
   // are sized from this before there is a renderer (main.cpp).
   return HasRoomGeometryNow(ScanModFolders(Folder()));
+}
+
+bool HasEnabledRoomGeometry() {
+  if (!PortDebug::ModsEnabled()) {
+    return false;
+  }
+  const std::vector<std::string> disabled = SplitDisabled(PortDebug::ModsDisabled());
+  std::vector<PortRemasteredStorage::ModFolder> mods = ScanModFolders(Folder());
+  std::erase_if(mods, [&](const PortRemasteredStorage::ModFolder& mod) {
+    const std::string name = PathString(PathFromString(mod.path).filename());
+    return std::find(disabled.begin(), disabled.end(), name) != disabled.end();
+  });
+  return HasRoomGeometryNow(mods);
 }
 
 bool AnyModEnabled() {
@@ -638,19 +652,24 @@ void Initialize() {
         files.push_back(it->path());
       }
     }
-    // Geometry buffers are reserved at process startup: always on the desktop, on a
-    // phone only when room geometry was installed then (main.cpp). Defer the WHOLE mod if
-    // it arrived later, before even textures/sidecars can register: a partially
-    // active Remastered import is not a usable fallback. Keep mods_disabled as
+    // Geometry buffers are reserved at process startup (main.cpp) unless MP_FRAME_BUFFERS
+    // pins them at 1. Defer the WHOLE mod then, before even textures/sidecars can register:
+    // a partially active Remastered import is not a usable fallback. Keep mods_disabled as
     // saved so the next process loads it. Reuse the file list (no second walk).
-    if (!PortRoomGeo::BuffersReady() && std::any_of(files.begin(), files.end(), [](const fs::path& file) {
-          uint32_t id = 0;
-          return PortRoomGeo::ParseFileName(PathString(file.filename()), id);
-        })) {
+    const bool roomGeometry = std::any_of(files.begin(), files.end(), [](const fs::path& file) {
+      uint32_t id = 0;
+      return PortRoomGeo::ParseFileName(PathString(file.filename()), id);
+    });
+    if (roomGeometry && !PortRoomGeo::BuffersReady()) {
       info.enabled = false;
       info.pendingRestart = true;
       Message(info.name + ": Restart the application to apply (room geometry buffers were not reserved at startup)");
       continue;
+    }
+    if (roomGeometry) {
+      // A phone started without room geometry runs at the unscaled frame buffers; the
+      // reserved ones are taken before the next frame, ahead of the room that draws it.
+      aurora_reserve_frame_buffers();
     }
     std::sort(files.begin(), files.end());
     std::unordered_map<uint32_t, std::string> native;

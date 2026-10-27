@@ -57,12 +57,12 @@ everything reads through Aurora's DVD overlays, so the game code is unchanged.
 
 F1 > Mods > Reload mods (console: `mods reload`) reads the mods folder again while the game runs.
 
-If a geometry-bearing mod is installed after startup and room geometry buffers were not reserved,
-the **entire mod** stays unloaded (including its models, textures and other replacements). The Mods
-page says **Restart the application to apply**; reloading mods or the world cannot apply it. Its
-enabled switch is kept, so restarting loads it automatically. Preinstalled geometry mods reserve
-buffers even when disabled, so they can still be enabled with a mod reload. Mods without room
-geometry, including the Dread Samus import, do not need this restart.
+Room geometry buffers are reserved at startup on every platform, so a geometry-bearing mod installed
+or enabled later loads with a mod reload. The reserve costs no memory until room geometry uses it;
+on Android the larger frame buffers are taken only when the first such mod loads. Only when
+`MP_FRAME_BUFFERS` or `MP_STORAGE_BUFFERS` pins the buffers too small does the **entire mod** stay
+unloaded (including its models, textures and other replacements): the Mods page then says **Restart
+the application to apply**, and its enabled switch is kept for the next start.
 
 Except for geometry mods awaiting that startup allocation, added, removed, edited, enabled and
 disabled mods take effect on reload, PAK resources and native `.dds` textures alike.

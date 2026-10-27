@@ -28,6 +28,7 @@ bool modsOn = true;
 std::string disabled;
 int overlays = 0;
 int discRegistrations = 0;
+int frameBufferReserves = 0;
 void Check(bool ok, const char* what) {
   if (!ok) { std::fprintf(stderr, "%s\n", what); std::exit(1); }
 }
@@ -64,6 +65,7 @@ ReplacementRegistration register_file_replacement(ReplacementKey, const std::fil
 void unregister_replacement(const ReplacementRegistration&) {}
 }
 extern "C" {
+void aurora_reserve_frame_buffers() { ++frameBufferReserves; }
 void* aurora_dvd_base_open(s32) { return nullptr; }
 void aurora_dvd_base_close(void*) {}
 int64_t aurora_dvd_base_seek(void*, int64_t, int32_t) { return -1; }
@@ -121,10 +123,12 @@ int main() {
   }), "missing restart diagnostic");
   scan(); // a world/mod reload cannot turn this into a partially active mod
   Check(PortMods::CurrentStatus().mods[0].pendingRestart && discRegistrations == 0, "reload bypassed deferral");
+  Check(frameBufferReserves == 0, "deferred mod asked for the frame buffers");
   ready = true;
   scan();
   Check(PortMods::CurrentStatus().mods[0].enabled && !PortMods::CurrentStatus().mods[0].pendingRestart,
         "ready geometry mod did not load");
+  Check(frameBufferReserves == 1, "geometry mod did not ask for the frame buffers");
   Check(PortMods::RoomGeometryLoaded() && PortMods::NativeTextureCount() == 1 && overlays == 1 &&
         !PortMods::ResourceProvider(0x434d444c, 2).empty() && !PortMods::EnvFxPath().empty(),
         "ready geometry mod missing resources");

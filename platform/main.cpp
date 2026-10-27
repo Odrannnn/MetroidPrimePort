@@ -962,15 +962,12 @@ int main(int argc, char** argv) {
         PortLog::Write("metroid_prime_port: installed the imported Remastered models\n");
     }
     const bool roomGeometry = PortMods::HasRoomGeometry();
-    // The desktop sets the arena and the frame limits aside without room geometry too, so an
-    // import made or turned on later loads without a restart. Neither costs memory until used:
-    // the arena's pages are touched as the heap fills, and the frame buffers start small and
-    // grow. A phone takes its device buffers at the full limit up front (aurora, issue #165).
-#if defined(__ANDROID__) || defined(SDL_PLATFORM_IOS)
-    const bool reserveRoomGeometry = roomGeometry;
-#else
+    // The arena and the frame limits are set aside without room geometry too, so an import
+    // made or turned on later loads without a restart. Neither costs memory until used: the
+    // arena's pages are touched as the heap fills, and the frame buffers start small and grow.
+    // Android takes its device buffers at the full limit up front (aurora, issue #165), so
+    // when no enabled mod has room geometry it holds the limits back until one loads (port_mods).
     const bool reserveRoomGeometry = true;
-#endif
     uint32_t mem1Size = MEM1_DEFAULT_SIZE;
     {
         const int envMb = port::EnvInt("MP_MEM1_MB", -1);
@@ -992,8 +989,11 @@ int main(int argc, char** argv) {
     const unsigned long kResidentMiB = 256;
 #endif
     const unsigned long kResidentFrameBuffers = 2;
-    bool resident = roomGeometry && PortDebug::RoomGeoResidentAtStartup();
-    resident = roomGeometry && port::EnvFlag("MP_ROOM_GEO_RESIDENT", resident);
+    // Only for a mod that loads now: the region would otherwise keep the frame buffers taken
+    // whole on Android. One turned on later is sent each frame until the next launch.
+    const bool enabledRoomGeometry = roomGeometry && PortMods::HasEnabledRoomGeometry();
+    bool resident = enabledRoomGeometry && PortDebug::RoomGeoResidentAtStartup();
+    resident = enabledRoomGeometry && port::EnvFlag("MP_ROOM_GEO_RESIDENT", resident);
     uint32_t residentMiB = 0;
     if (resident) {
         const int envMiB = port::EnvInt("MP_ROOM_GEO_RESIDENT_MB", -1);
@@ -1190,6 +1190,7 @@ int main(int argc, char** argv) {
         .dawnDisableToggles = nullptr,
         // Explicit MP_FRAME_BUFFERS / MP_STORAGE_BUFFERS keep the staging buffers at full size.
         .frameBuffersPinned = envFrameBuffers >= 0 || envStorageBuffers >= 0,
+        .frameBuffersDeferred = !enabledRoomGeometry,
         // Aurora's Null backend draws nothing: the game would play its sound behind
         // a black window (issue #33). Scripted runs, which can't answer a box, keep it.
         .noGraphicsMessage = port::EnvFlag("MP_NO_DISC_DIALOG")

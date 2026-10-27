@@ -101,6 +101,9 @@ typedef struct AuroraTextureSite {
 uint32_t aurora_get_texture_sites(AuroraTextureSite* out, uint32_t cap);
 // The AuroraConfig::frameBufferScale in use: the device may allow less than was asked for.
 uint32_t aurora_get_frame_buffer_scale();
+// Takes the frame limits AuroraConfig::frameBuffersDeferred held back, at the start of the next
+// frame (with no frame in flight). Safe from any thread; nothing when none are held.
+void aurora_reserve_frame_buffers();
 // The AuroraConfig::frameStorageScale in use (the array buffer's, in units of its 8 MiB at 1).
 uint32_t aurora_get_frame_storage_scale();
 // The MiB set aside for AuroraConfig::residentGeometryMiB: the device may allow less.

@@ -186,6 +186,14 @@ typedef struct {
   bool frameBuffersPinned;
 
   /*
+   * Android, where the device buffers are taken at their frame limit up front: hold the
+   * frameBufferScale/frameStorageScale limits back and run at the unscaled ones (what a scale of
+   * 1 takes) until aurora_reserve_frame_buffers() asks for them, then take them whole between
+   * two frames. Elsewhere, or with the scale pinned, it does nothing.
+   */
+  bool frameBuffersDeferred;
+
+  /*
    * When set and only the Null backend started (no GPU and no software adapter), this message is
    * shown in an error box and the process exits with status 1, instead of running with no picture.
    */

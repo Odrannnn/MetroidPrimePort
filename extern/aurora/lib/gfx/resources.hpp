@@ -66,6 +66,12 @@ struct FrameBufferSizes {
   uint64_t storageReserve = StorageBufferSize;
   // The most `storage` grows to after an overflow (0: it is fixed).
   uint64_t storageCap = 0;
+  // The scaled limits AuroraConfig::frameBuffersDeferred holds back while the max* above are
+  // the unscaled ones (all 0: none held).
+  uint64_t heldVertex = 0;
+  uint64_t heldUniform = 0;
+  uint64_t heldIndex = 0;
+  uint64_t heldStorage = 0;
 
   // Kept across frames (AuroraConfig::residentGeometryMiB): the device buffers hold these
   // first, from offset 0, so they stay put when the per-frame part after them grows; no
