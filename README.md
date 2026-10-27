@@ -1,16 +1,14 @@
-# Metroid Prime — native port
+# Metroid Prime Unbound - native port
 
 **Make sure to check out the F1 (Or start+back on controller) menu for all the additional features and QoL!**
 
 **You can load prime remastered models and textures in the game (check F1 > mods), you must provide your
 personal Metroid Prime Remastered dumped image, no assets are provided in this repo**
 
-A native build of **Metroid Prime** for Linux, Windows and Android (plus
-experimental, untested-on-hardware macOS and iPhone/iPad builds), compiled
+A native build of **Metroid Prime** for Linux, Windows, Android, macOS and iPhone/iPad, compiled
 from the [PrimeDecomp](https://github.com/PrimeDecomp/prime) decompilation and
 rendered through Aurora (SDL3/WebGPU). There's no emulator involved. Supported
-discs: USA 1.00, 1.01 and 1.02, PAL, and (experimental) the Wii's Metroid Prime
-Trilogy, USA and PAL.
+discs: USA 1.00, 1.01 and 1.02, PAL and Trilogy, both USA and PAL.
 
 **No game content is included.** You need your own copy of the game: the port
 reads it from a disc image and never ships any of its assets. This repository
@@ -57,14 +55,12 @@ Releases are published on the
 [GitHub releases page](https://github.com/Odrannnn/MetroidPrimePort/releases).
 Every build needs your own disc image; none of them contains one.
 
-**Quick start:** download the build for your platform (Windows zip, Linux
-AppImage, tarball or Flatpak, macOS zip, Android APK, or the iPhone/iPad `.ipa`
-to sideload, see [docs/IOS.md](docs/IOS.md)), start it, and pick your disc image when it
-asks. It remembers the choice. Supported discs are the GameCube USA 1.00, 1.01
-and 1.02 (`GM8E01`) and PAL (`GM8P01`) releases and the Wii Metroid Prime
-Trilogy (USA `R3ME01` and PAL `R3MP01`; its Metroid Prime, experimental), as `.iso`, `.gcm`,
-`.rvz`, `.wbfs`, `.ciso` or `.nkit`. The Japanese and Korean releases, the
-Japanese Trilogy and Remastered are not run as the base game. Press **F1** for every setting.
+**Quick start:** download the build for your platform, start it, and pick your disc image when it
+asks. Supported discs are the GameCube USA 1.00, 1.01
+and 1.02 (`GM8E01`), PAL (`GM8P01`) and Trilogy (USA `R3ME01` and PAL `R3MP01`), as `.iso`, `.gcm`,
+`.rvz`, `.wbfs`, `.ciso` or `.nkit`. 
+
+Press **F1** for every setting.
 
 ## Building
 
@@ -89,17 +85,8 @@ macOS, the CMake options and what CI runs are in
   My iPhone (or iPad) > Metroid Prime. Attach it to a bug report.
 - **"unsupported disc"**: the image is not one of the revisions above (see the
   log for the disc id it found). Re-dump it, or check you picked the GameCube disc.
-- **Stuck at startup on a GNOME Wayland session**: run with
-  `SDL_VIDEODRIVER=x11`. The port does this itself when `DISPLAY` is set; see
-  `docs/NATIVE_PORT.md`.
 - **Settings in a bad state**: F1 > System > Settings > **Reset configuration...**
   backs up and resets every setting and mapping; saves are not touched.
-
-## Packaging
-
-`tools/make_appimage.sh` builds a self-contained AppImage and
-`tools/make_flatpak.sh` a Flatpak. Neither bundles the disc. See
-`docs/NATIVE_PORT.md` for what each one expects from the host.
 
 ## Credits and licensing
 
