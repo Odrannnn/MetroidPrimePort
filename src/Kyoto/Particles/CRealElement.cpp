@@ -392,8 +392,12 @@ bool CREDistanceFromCameraBlend::GetValue(int frame, float& valOut) const {
     }
   }
   // The view matrix is already camera-to-world (CGraphics::SetViewPointMatrix).
+  // Remastered's CalculateBlendValue (0x298f44) dots against column 2 of the
+  // camera transform, which SetCameraTransformById (0x27b2c0) copies raw from
+  // the game camera, so in Retro space that is the camera's up axis, not its
+  // forward one. A streak at eye height therefore blends to B.
   const CTransform4f& camera = CGraphics::GetViewMatrix();
-  const float d = CVector3f::Dot(pos - camera.GetTranslation(), camera.GetForward());
+  const float d = CVector3f::Dot(pos - camera.GetTranslation(), camera.GetUp());
   valOut = DistanceBlend(d, a, b);
   return false;
 }
