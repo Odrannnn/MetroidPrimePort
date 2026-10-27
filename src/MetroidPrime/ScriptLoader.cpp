@@ -23,6 +23,7 @@
 #include "port_randomizer.h"
 #include "port_room_effects.h"
 #include "port_skip_cutscenes.h"
+#include "port_synthetic_effect.h"
 
 #include <string>
 #include "MetroidPrime/Enemies/CAmbientAI.hpp"
@@ -4166,6 +4167,16 @@ CEntity* ScriptLoader::LoadPuffer(CStateManager& mgr, CInputStream& in, int prop
   CActorParameters actParms = LoadActorParameters(in);
   float hoverSpeed = in.ReadFloat();
   CAssetId cloudEffect = in.ReadLong();
+#ifdef TARGET_PC
+  // Remastered gives the cloud its own effect where retail reuses the
+  // patterned particle (C9D453A3 in both slots, every placement); the mod
+  // imports it under a synthetic id (port_remastered_effect_import.cpp).
+  if (cloudEffect == 0xC9D453A3) {
+    const CAssetId cloud = PortRemastered::SyntheticEffectId("puffercloud");
+    if (gpResourceFactory->CanBuild(SObjectTag('PART', cloud)))
+      cloudEffect = cloud;
+  }
+#endif
   CDamageInfo cloudDamage(in);
   CAssetId cloudSteam = in.ReadLong();
   float f2 = in.ReadFloat();

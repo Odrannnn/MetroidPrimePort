@@ -177,7 +177,8 @@ inline constexpr int kModels = 22;
 // 112: a VFX material's sRGB texture over 64 texels is an sRGB .dds, decoded by the GPU.
 // 113: early PIRN (old late-marker PARTs need reimport) and Ice model back culling.
 // 114: WallCrawlerSwarm part1 paired (0A621238, 7DFF579C; #by-hand).
-inline constexpr int kEffects = 115;   // MetroidBeta electricParticle 9AEBBD85 paired (#by-hand)
+// 115: MetroidBeta electricParticle 9AEBBD85 paired (#by-hand).
+inline constexpr int kEffects = 116;   // Puffer particle C9D453A3 and synthetic puffercloud (#by-hand)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

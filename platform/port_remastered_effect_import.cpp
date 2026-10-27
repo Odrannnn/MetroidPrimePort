@@ -852,6 +852,13 @@ constexpr MatchedEffect kMatchedEffects[] = {
     // CMetroidPrimeData xa1c_particle2 is the same PART and MetroidPrimeRelayMP1
     // names no counterpart, so Exo takes this effect too.
     {"8e1a4b01-b461-4968-951e-6aab5fbbd6e3", 0x9AEBBD85},  // MetroidBeta electricParticle
+    // Puffer: all 71 retail placements put C9D453A3 in both the CPatternedInfo
+    // particle slot and LoadPuffer's cloudEffect; all 69 Remastered ones put
+    // 813f0267 in the PatternedInfo slot and 78aa5da7 in the cloud slot. The
+    // cloud has no PART of its own, so it goes under a synthetic id that
+    // LoadPuffer substitutes (ScriptLoader.cpp).
+    {"813f0267-799d-41c2-b1aa-a50a25691614", 0xC9D453A3},  // Puffer patterned particle
+    {"78aa5da7-0062-4fce-8de1-3b7ee4894b3a", PortRemastered::SyntheticEffectId("puffercloud")},
     {"#loose-chpr", 0},  // method of the entries below
     // No ROOM, CHPR-set or script reference reaches these, or the counts are not
     // 1:1 (kb topic/unpaired-retail-particles.md). The missile pickup: CHPR a9b8e446 has one
