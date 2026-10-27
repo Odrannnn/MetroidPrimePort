@@ -558,6 +558,9 @@ int main() {
     other = meta;
     other.identity.clear();
     REQUIRE(!PortSaveState::ResumeMatches(meta, other));
+    PortSaveState::ResumeMeta noCard = meta;
+    noCard.cardSerial = 0;
+    REQUIRE(!PortSaveState::ResumeMatches(noCard, noCard));
   }
 
   // Quick resume skip rules.

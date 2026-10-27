@@ -965,15 +965,21 @@ ResumeMeta CurrentMeta() {
 // Builds the snapshot from the live game (caller checked SafeNow).
 bool TakeSnapshot(CStateManager& mgr) {
   const auto start = Clock::now();
-  Header header;
-  std::vector< uint8_t > blob;
-  Capture(mgr, header, blob);
   ResumeSnapshot snap;
   snap.meta = CurrentMeta();
   if (snap.meta.fileIdx > 2) {
     ResumeNote("blocked: no card file selected (file " + std::to_string(snap.meta.fileIdx) + ")");
     return false;
   }
+  // No card serial: a save state loaded from the title, or "continue without
+  // saving". No card file can take such a state at the title, so it isn't kept.
+  if (snap.meta.cardSerial == 0) {
+    ResumeNote("blocked: the game has no memory card");
+    return false;
+  }
+  Header header;
+  std::vector< uint8_t > blob;
+  Capture(mgr, header, blob);
   snap.path = ResumePath();
   if (snap.path.empty()) {
     ResumeNote("blocked: no resume path (no user folder)");

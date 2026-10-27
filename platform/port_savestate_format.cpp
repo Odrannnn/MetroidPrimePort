@@ -663,7 +663,8 @@ bool DecodeResume(const std::string& data, ResumeMeta& meta, std::string& stateF
 }
 
 bool ResumeMatches(const ResumeMeta& stored, const ResumeMeta& current) {
-  return stored.cardSerial == current.cardSerial && stored.identity == current.identity &&
+  // Serial 0 is no card: a resume written without one is never offered.
+  return stored.cardSerial != 0 && stored.cardSerial == current.cardSerial && stored.identity == current.identity &&
          stored.fileIdx <= 2;
 }
 
