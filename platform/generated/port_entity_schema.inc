@@ -808,8 +808,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CDrone >() {
       {"x835_24_", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CDrone, x835_24_), PES_SETI(CDrone, x835_24_)},
       {"x835_25_", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CDrone, x835_25_), PES_SETI(CDrone, x835_25_)},
       {"x835_26_", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CDrone, x835_26_), PES_SETI(CDrone, x835_26_)},
+      {"xPortScannerEffect", "rstl::single_ptr<CElementGen>", PortSchemaKind::smart_ptr, 0, kPortSchemaPrivate, sizeof(CDrone::xPortScannerEffect), PES_ADDR(CDrone, xPortScannerEffect), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CDrone", "CPatterned", fields, 86, 0x5FD064C9662B50F5ull};
+  static const PortSchemaClass desc = {"CDrone", "CPatterned", fields, 87, 0xA1A563E9F7B098B2ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CDroneLaser >() {
@@ -4693,4 +4694,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3419;
+const int PortEntitySchema::kFieldCount = 3420;

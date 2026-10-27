@@ -196,7 +196,8 @@ inline constexpr int kModels = 22;
 // 134: Metroid Prime's beams' electric (room ELC2s).
 // 135: KESP kept as the ELC2 node tween (AtomicBeta ELC2 radius).
 // 136: GunTurret particle properties (room GENPs).
-inline constexpr int kEffects = 137;   // GunTurret visor effects (room ELC2s)
+// 137: GunTurret visor effects (room ELC2s).
+inline constexpr int kEffects = 138;   // Drone laser and scanner particles (room GENPs)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -233,7 +234,8 @@ inline constexpr int kEffects = 137;   // GunTurret visor effects (room ELC2s)
 // 59: .roomfx v9, the Metroid Prime relay's beams' Remastered electric (actor slots).
 // 60: GunTurret particle properties (idle, deactivate, targetting, charging, panning).
 // 61: a GunTurret's visor effect (actor slot 4: ELC2 or GENP).
-inline constexpr int kRooms = 61;
+// 62: a Drone's laser particles and its scanner effect (actor slot 5).
+inline constexpr int kRooms = 62;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

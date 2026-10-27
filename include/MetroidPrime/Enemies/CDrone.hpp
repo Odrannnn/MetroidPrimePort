@@ -10,6 +10,10 @@
 #include "MetroidPrime/PathFinding/CPathFindSearch.hpp"
 #include "rstl/vector.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/Particles/CElementGen.hpp"
+#endif
+
 class CCollisionResponseData;
 
 class CDrone : public CPatterned {
@@ -181,6 +185,11 @@ private:
   bool x835_24_ : 1;
   bool x835_25_ : 1;
   bool x835_26_ : 1;
+#ifdef TARGET_PC
+  // Remastered's scanner effect (CDroneMP1 +0x818), drawn while scanning in place of the
+  // LaserLight.
+  rstl::single_ptr< CElementGen > xPortScannerEffect;
+#endif
 };
 CHECK_SIZEOF(CDrone, (VERSION >= VERSION_GM8P_00 ? 0x848 : 0x838))
 

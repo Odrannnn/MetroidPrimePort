@@ -33,6 +33,12 @@
 #include "MetroidPrime/Player/CPlayerState.hpp"
 #include "rstl/math.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#include "Kyoto/Math/CQuaternion.hpp"
+#include "port_room_effects.h"
+#endif
+
 static const char* sBeaconLocator = "Beacon_LCTR";
 static const char* sRightGunLocator = "R_GUN_TOP_LCTR";
 static const char* sLeftGunLocator = "L_GUN_TOP_LCTR";
@@ -263,6 +269,16 @@ CDrone::CDrone(TUniqueId uid, const rstl::string& name, EFlavorType flavor, cons
   x460_knockBackController.SetLocomotionDuringElectrocution(true);
   MakeThermalColdAndHot();
   SetDrawShadow(x3fc_flavor != kFT_One);
+#ifdef TARGET_PC
+  // CDroneMP1GOC::Create (0xe943d8) builds the scanner effect (SLdr +0x8, d6a76aad).
+  if (const PortRoomEffects::ActorSlotEffect* const fx = PortRoomEffects::FindActorSlotEffect(
+          info.GetEditorId().value, PortRoomEffects::kActorSlotDroneScannerEffect)) {
+    if (gpResourceFactory->GetResourceTypeById(CAssetId(fx->part)) == 'PART') {
+      xPortScannerEffect =
+          rs_new CElementGen(gpSimplePool->GetObj(SObjectTag('PART', CAssetId(fx->part))));
+    }
+  }
+#endif
 }
 
 ENTITY_ACCEPT_IMPL(CDrone)
@@ -304,6 +320,20 @@ void CDrone::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId sender, CStateM
     x5cc_ = 0.f;
     x460_knockBackController.SetEnableFreeze(false);
     AddMaterial(kMT_AIJoint, mgr);
+#ifdef TARGET_PC
+    // CDroneMP1 makes no LaserLight: its scanner effect's own lights stand in for it
+    // (SetLightEnabled 0xe47cb8). A light the effect has goes up as an effect actor's does.
+    if (xPortScannerEffect.get()) {
+      if (xPortScannerEffect->SystemHasLight()) {
+        x578_lightId = mgr.AllocateUniqueId();
+        mgr.AddObject(rs_new CGameLight(x578_lightId, GetCurrentAreaId(), GetActive(),
+                                        rstl::string_l("ParticleLight_") + GetDebugName(),
+                                        GetTransform(), GetUniqueId(),
+                                        xPortScannerEffect->GetLight(), 0, 1, 0.f));
+      }
+      break;
+    }
+#endif
     x578_lightId = mgr.AllocateUniqueId();
     const CLight light(CLight::BuildPoint(CVector3f::Zero(), CColor::Red()));
     CGameLight* const laserLight = rs_new CGameLight(
@@ -714,6 +744,25 @@ void CDrone::UpdateScanner(CStateManager& mgr, float dt) {
   const float x = 0.5f * CMath::FastCosR(x5d8_);
   const CVector3f scan(x, 1.f, 0.5f * CMath::FastSinR(2.05f * x5d8_));
   const CVector3f direction = GetTransform().Rotate(scan.AsNormalized());
+#ifdef TARGET_PC
+  // CDroneMP1::UpdateScanner (0xe498c0) casts no ray: the effect sits on the beacon, faces the
+  // scan direction, and updates.
+  if (xPortScannerEffect.get()) {
+    const CTransform4f beacon(GetLctrTransform(rstl::string_l(sBeaconLocator)));
+    xPortScannerEffect->SetGlobalTranslation(beacon.GetTranslation());
+    xPortScannerEffect->SetGlobalOrientation(
+        CQuaternion::LookAt(CUnitVector3f(CVector3f::Forward()), CUnitVector3f(direction),
+                            CRelAngle(M_2PIF))
+            .BuildTransform4f());
+    xPortScannerEffect->Update(dt);
+    if (x578_lightId != kInvalidUniqueId) {
+      if (CGameLight* light = TCastToPtr< CGameLight >(mgr.ObjectById(x578_lightId))) {
+        light->SetLight(xPortScannerEffect->GetLight());
+      }
+    }
+    return;
+  }
+#endif
   static const CMaterialFilter filter = CMaterialFilter::MakeIncludeExclude(
       CMaterialList(kMT_Solid), CMaterialList(kMT_ProjectilePassthrough));
   const CTransform4f beacon(GetLctrTransform(rstl::string_l(sBeaconLocator)));
@@ -1118,6 +1167,12 @@ void CDrone::Render(const CStateManager& mgr) const {
 
 void CDrone::AddToRenderer(const CFrustumPlanes& frustum, const CStateManager& mgr) const {
   CPatterned::AddToRenderer(frustum, mgr);
+#ifdef TARGET_PC
+  // CDroneMP1::AddToRenderer (0xe4b5b8): the scanner effect draws while scanning.
+  if (x834_25_ && xPortScannerEffect.get()) {
+    gpRender->AddParticleGen(*xPortScannerEffect);
+  }
+#endif
 }
 
 void CDrone::TargetPlayer(CStateManager& mgr, EStateMsg msg, float) {

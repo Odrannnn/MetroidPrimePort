@@ -849,6 +849,9 @@ constexpr PartSlot kPartSlots[] = {
     {0x1704c1f0, {0x8648f4bd}, 0x64, 418},
     {0x1704c1f0, {0x87cf241f}, 0x64, 426},
     {0x1704c1f0, {0x2107615d}, 0x64, 430},
+    // DroneMP1: the laser particles (SLdr +0x18, CDroneMP1 ctor argument 11; retail aId1,
+    // x568_laserParticlesId).
+    {0x50b7576d, {0x067eb238}, 0x43, 534},
     // MetroidPrimeRelayMP1's CMetroidPrimeData (CMetroidPrimeRelay.cpp), by the
     // CMetroidPrimeDataMP1 ctor and the SLdr typedef converters: ice attack particles 1-3,
     // x460_particle1, beam 0's contact and pulse effects, beam 2's fourth weapon asset, beam
@@ -883,6 +886,8 @@ constexpr ActorSlot kActorSlotTable[] = {
     {kMetroidPrimeRelayMP1, {kPrimeData, 0x728f76b5, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric + 3},
     // GunTurretMP1: the visor effect, an ELC2 or a GENP (retail's visor PART, props 434).
     {0x1704c1f0, {0xde43a94b}, 0x64, PortRoomEffects::kActorSlotGunTurretVisorEffect},
+    // DroneMP1: the scanner effect (CDroneMP1 +0x818), which retail draws with a LaserLight.
+    {0x50b7576d, {0xd6a76aad}, 0x43, PortRoomEffects::kActorSlotDroneScannerEffect},
 };
 
 // The GENP (or other effect) a property path holds, zero when unset or absent. flat caches
