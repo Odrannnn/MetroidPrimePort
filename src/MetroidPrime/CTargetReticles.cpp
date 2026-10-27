@@ -2169,6 +2169,20 @@ void CCompoundTargetReticle::PortTriUpdateCombat(float dt, const CStateManager& 
   } else { x388_triOffScreenTicks = 0; x384_triOffScreenTime = 0.f; }
 }
 
+// The port's crosshair settings on Trilogy's aiming cursor and retained crosshair, as on GC's:
+// a custom colour replaces theirs, opacity scales their alpha (100%, the default, is retail) and
+// size scales them under direct aim.
+static CColor PortTriXhairColor(const CColor& color) {
+  float rgb[3];
+  return PortDebug::CrosshairColor(rgb) ? CColor(rgb[0], rgb[1], rgb[2], color.GetAlpha()) : color;
+}
+static float PortTriXhairAlpha(float alpha) {
+  return alpha * static_cast< float >(PortDebug::CrosshairOpacity()) / 100.f;
+}
+static float PortTriXhairSize() {
+  return PortDebug::DirectAim() ? static_cast< float >(PortDebug::CrosshairSize()) / 100.f : 1.f;
+}
+
 // fn_80237B04: independent next-target and released-lock loops.
 void CCompoundTargetReticle::PortTriDrawNext(const CMatrix3f& rot) const {
   for (int group = 0; group < 2; ++group) {
@@ -2203,17 +2217,30 @@ void CCompoundTargetReticle::PortTriDrawLocked(const CMatrix3f& rot) const {
 }
 // fn_802383C4: the pointer's near position is the 1.25-depth plane (80015CD4).
 void CCompoundTargetReticle::PortTriDrawAiming(const CMatrix3f& rot, const CStateManager& mgr) const {
-  if (x258_aimArmAlpha <= 0.f) return;
+  const bool remastered = PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_Remastered;
+  if (!remastered && x258_aimArmAlpha <= 0.f) return;
   const CTransform4f cam = PortReticleCameraXf(mgr);
   const CVector3f dir = PortTriPointerDir(cam, mgr, true);
   const CVector3f pos = cam.GetTranslation() + dir * (1.25f / CVector3f::Dot(dir, cam.GetForward()));
-  const CTransform4f base(rot, pos);
+  if (remastered) {
+    // The port's Remastered style in place of the aiming cursor, as DrawOrbitZoneGroup draws it on
+    // GC; pos already lies on Remastered's 1.25 cursor plane.
+    if (x28_noDrawTicks > 0 || x1e8_crosshairsScale <= 0.f) return;
+    CColor rc = PortRemasteredCrosshairColor(x20_prevState, xPortXhairTargetT);
+    rc = CColor(rc.GetRed(), rc.GetGreen(), rc.GetBlue(), PortTriXhairAlpha(x1e8_crosshairsScale));
+    CGraphics::SetDepthWriteMode(false, kE_Always, false);
+    PortDrawRemasteredCrosshair(rot, pos, PortTriXhairSize(), xPortXhairArmScale, xPortXhairCentreScale, rc);
+    gpRender->SetBlendMode_AlphaBlended();
+    return;
+  }
+  const CTransform4f base = CTransform4f(rot, pos) * CTransform4f::Scale(PortTriXhairSize());
   PortTriDrawModel(x38c_aimCenter, base * CTransform4f::Scale(.45f * x278_aimCenterScale),
-      x25c_aimCenterColor, x260_aimCenterAlpha);
+      PortTriXhairColor(x25c_aimCenterColor), PortTriXhairAlpha(x260_aimCenterAlpha));
   for (int i = 0; i < 3; ++i) {
     PortTriDrawModel(x398_aimArm, base * CTransform4f::RotateY(CRelAngle::FromDegrees(i * 120.f)) *
         CTransform4f::Scale(.45f) * CTransform4f::Translate(0.f, 0.f, .25f) *
-        CTransform4f::Scale(1.f, 1.f, x274_aimArmScale), x254_aimArmColor, x258_aimArmAlpha);
+        CTransform4f::Scale(1.f, 1.f, x274_aimArmScale), PortTriXhairColor(x254_aimArmColor),
+        PortTriXhairAlpha(x258_aimArmAlpha));
   }
 }
 // fn_802386E8: white pulse at aiming cursor, not a screen-edge arrow.
@@ -2231,11 +2258,14 @@ void CCompoundTargetReticle::PortTriDrawOffScreen(const CMatrix3f& rot, const CS
 // fn_80238C88: retained GC asset, flags7 and replaced alpha, separately from new aiming.
 void CCompoundTargetReticle::PortTriDrawCrosshairs(const CMatrix3f& rot) const {
   if (x28_noDrawTicks > 0 || x1e8_crosshairsScale <= 0.f) return;
+  // The Remastered style replaces this model too (PortTriDrawAiming draws it).
+  if (PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_Remastered) return;
   const_cast< TCachedToken< CModel >& >(x34_crosshairs).TryCache();
   if (const CModel* model = x34_crosshairs.GetObject()) {
-    CColor color = gpTweakTargeting->x1c0_crosshairsColor;
-    color.SetAlpha(PortTriAlphaU8(255.f * x1e8_crosshairsScale));
-    gpRender->SetModelMatrix(CTransform4f(rot, xf4_targetPos) * CTransform4f::Scale(x1e8_crosshairsScale));
+    CColor color = PortTriXhairColor(gpTweakTargeting->x1c0_crosshairsColor);
+    color.SetAlpha(PortTriAlphaU8(255.f * PortTriXhairAlpha(x1e8_crosshairsScale)));
+    gpRender->SetModelMatrix(CTransform4f(rot, xf4_targetPos) *
+                             CTransform4f::Scale(x1e8_crosshairsScale * PortTriXhairSize()));
     model->Draw(CModelFlags(CModelFlags::kT_Additive, 0, CModelFlags::kF_Nothing, color));
   }
 }

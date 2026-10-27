@@ -692,6 +692,11 @@
   size is Remastered's size at a 55 degree vertical FOV (it scales with the screen height);
   the size slider scales it. A custom crosshair colour replaces the idle colour, opacity
   multiplies the alpha. Classic under Original experience.
+- On Trilogy discs these crosshair settings act on Trilogy's own aiming cursor (centre and
+  arms) and the old crosshair it still draws: a custom colour replaces their colour, opacity
+  scales their alpha (the defaults leave them as on the Wii), the size slider scales them under
+  direct aim, and `remastered` draws the Remastered cursor where the aiming cursor is, without
+  the old crosshair.
 - Secondary crosshairs (Video > Display, `secondary_crosshairs`, `MP_SECONDARY_CROSSHAIRS`,
   default on): off hides the next-target reticles: the combat visor's seeker and the
   X-ray ring and thermal crosshair on the target Lock-On would pick. The lock-on
