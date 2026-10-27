@@ -855,6 +855,13 @@ constexpr MatchedEffect kMatchedEffects[] = {
     // the same PART, so Exo takes 3ec1f3bd too.
     {"3ec1f3bd-e45d-4fac-99ed-488537af39c3", 0x9AEBBD85},  // MetroidBeta electricParticle
     {"8e1a4b01-b461-4968-951e-6aab5fbbd6e3", 0x18E0EADC},  // MetroidBeta electricSwoosh
+    // Electric (ELC2) slots by SLdr slot order between paired assets; every
+    // placement agrees. Elite and Omega Pirate share CElitePirateData's
+    // x118 shockwave weapon (CElitePirate.cpp).
+    {"d4ee1e33-8108-467b-92c8-86d500dcf210", 0x5C29A5C5},  // Elite/Omega shockwave
+    {"c4409b28-4503-45ba-b63f-f05ac2d80ced", 0x38C0B9C6},  // PhazonHealingNodule (9 of 9)
+    {"b204de64-5633-4f81-8b98-06cabda8ef04", 0x1EB570E1},  // IceSheegoth x1ac (5 of 5)
+    {"c9c4d688-74fc-4464-aab7-fec950f28147", 0x6A6957FB},  // MetroidPrimeStage2 (1 of 1)
     // Puffer: all 71 retail placements put C9D453A3 in both the CPatternedInfo
     // particle slot and LoadPuffer's cloudEffect; all 69 Remastered ones put
     // 813f0267 in the PatternedInfo slot and 78aa5da7 in the cloud slot. The

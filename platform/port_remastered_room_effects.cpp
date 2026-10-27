@@ -810,6 +810,18 @@ constexpr PartSlot kPartSlots[] = {
     {kWaterMP1, {0x89d688f5}, 0x20, 268},
     {0xcb5682c4, {0x58e230a7}, 0x53, 12},   // VisorGooMP1: particle (LoadVisorGoo)
     {0x1c3d435d, {0x8f72b975}, 0x7f, 522},  // BurrowerMP1
+    // ThardusMP1: particle4 and particle7 (ScriptLoader::LoadThardus), by SLdr slot order
+    // between the paired particles.
+    {0xeaa40b01, {0x34af0446}, 0x58, 556},
+    {0xeaa40b01, {0x04788e48}, 0x58, 568},
+    {0x6cfa6902, {0x3ad31b32}, 0x25, 558},  // FlyingPirateMP1: the particle after its three weapons
+    // ElitePirateMP1 and OmegaPirateMP1 (CElitePirateData): grenade element gens 1-3, and
+    // Omega's launcher particle.
+    {0xf4326a02, {0x54eef7aa}, 0x26, 695},
+    {0xf4326a02, {0x6903955e}, 0x26, 699},
+    {0xf4326a02, {0xe32acfab}, 0x26, 703},
+    {0x7f2845c7, {0x63903958}, 0x86, 659},
+    {0x7f2845c7, {0x50025ca7}, 0x86, 703},
     // MetroidPrimeRelayMP1's CMetroidPrimeData (CMetroidPrimeRelay.cpp), by the
     // CMetroidPrimeDataMP1 ctor and the SLdr typedef converters: ice attack particles 1-3,
     // x460_particle1, beam 0's contact and pulse effects, beam 2's fourth weapon asset, beam
