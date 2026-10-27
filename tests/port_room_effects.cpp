@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 8);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 9);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -375,6 +375,32 @@ void TestFileSteams() {
     CHECK(!PortRoomEffects::Parse(bad, out, error));
   }
   in.steams.clear();
+  CHECK(PortRoomEffects::Write(in)[4] == 4);
+}
+
+// Version 9 appends actor slot effects: assets Remastered gives a retail object where retail
+// has no property (the Metroid Prime relay's beam electric).
+void TestFileActorSlots() {
+  File in;
+  in.actorSlots.push_back({0x0C1000A2, PortRoomEffects::kActorSlotExoBeamElectric, 0xFE001234});
+  in.actorSlots.push_back({0x0C1000A2, PortRoomEffects::kActorSlotExoBeamElectric + 3, 0xFE005678});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 9);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.actorSlots.size() == 2 && out.steams.empty() && out.patches.empty());
+  CHECK(out.actorSlots[0].id == 0x0C1000A2 && out.actorSlots[0].slot == 0 && out.actorSlots[0].part == 0xFE001234);
+  CHECK(out.actorSlots[1].slot == 3 && out.actorSlots[1].part == 0xFE005678);
+  for (size_t cut = 1; cut <= 12; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  auto bad = data;
+  bad[bad.size() - 8] = uint8_t(PortRoomEffects::kActorSlots);  // the last record's slot
+  CHECK(!PortRoomEffects::Parse(bad, out, error));
+  in.actorSlots.clear();
   CHECK(PortRoomEffects::Write(in)[4] == 4);
 }
 
@@ -710,6 +736,7 @@ int main() {
   TestFilePatterned();
   TestFilePatches();
   TestFileSteams();
+  TestFileActorSlots();
   TestFileBarriers();
   TestExternalVariables();
   uint32_t id = 0;

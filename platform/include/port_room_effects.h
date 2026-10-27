@@ -58,10 +58,13 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   bytes of each of the two splines (CMayaSpline data), u32 sources and per source u32
 //   editor id (0 for none), f32 position[3] (see Steam). Files without steams are still
 //   written as version 7 or older.
+//   version 9 then has u32 actor slots, then per record: u32 editor id (layer bits included),
+//   u32 slot, u32 asset (see ActorSlotEffect). Files without them are still written as
+//   version 8 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 8;
+constexpr uint32_t kFileVersion = 9;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -214,6 +217,21 @@ struct Steam {
   std::vector<SteamSource> sources;
 };
 
+// An effect Remastered gives a retail object the script matcher paired, in a slot retail's
+// properties have no field for: `part` is the port asset the mod has (its type is the slot's).
+// Slots 0-3 are the Metroid Prime relay's four beams' electric (ELSC): Remastered's beam
+// struct 5d9bd2fe (SLdr +0x170), copied to the beam record's +0x184 by
+// CMetroidPrimeDataMP1::LoadParasiteQueenBeams (0xe2d3dc), to CMetroidPrimeMP1 +0x12ac + i*0x10
+// by its constructor (0xe2ec30), and given to the beam's plasma projectile by
+// CreateParasiteQueenProjectile (0xe31518).
+constexpr uint32_t kActorSlotExoBeamElectric = 0;  // to 3, by beam
+constexpr uint32_t kActorSlots = 4;
+struct ActorSlotEffect {
+  uint32_t id = 0;
+  uint32_t slot = 0;
+  uint32_t part = 0;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -223,6 +241,7 @@ struct File {
   std::vector<PatternedEffect> patterned;
   std::vector<PropertyPatch> patches;
   std::vector<Steam> steams;
+  std::vector<ActorSlotEffect> actorSlots;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -261,6 +280,9 @@ const Override* FindOverride(uint32_t eid);
 const PatternedEffect* FindPatternedEffect(uint32_t eid, uint32_t slot);
 // The steam record of the retail Steam object `eid` in the area being loaded, or null.
 const Steam* FindSteam(uint32_t eid);
+// The actor slot effect `slot` (ActorSlotEffect) of the retail object `eid` in the area being
+// loaded, or null.
+const ActorSlotEffect* FindActorSlotEffect(uint32_t eid, uint32_t slot);
 // Whether the retail object `eid` in the area being loaded has property patches.
 bool HasPatches(uint32_t eid);
 // Applies them to `props` (the object's properties from its name on; `size` bytes): finds

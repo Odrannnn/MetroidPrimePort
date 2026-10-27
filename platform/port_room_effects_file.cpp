@@ -341,10 +341,11 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool steams = !file.steams.empty();
+  const bool actorSlots = !file.actorSlots.empty();
+  const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -442,6 +443,14 @@ std::vector<uint8_t> Write(const File& file) {
         PutLE32(out, src.id);
         for (float f : src.pos) PutLEFloat(out, f);
       }
+    }
+  }
+  if (actorSlots) {
+    PutLE32(out, uint32_t(file.actorSlots.size()));
+    for (const ActorSlotEffect& a : file.actorSlots) {
+      PutLE32(out, a.id);
+      PutLE32(out, a.slot);
+      PutLE32(out, a.part);
     }
   }
   return out;
@@ -726,6 +735,24 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
       }
       s.colorFlag = flag != 0;
       file.steams.push_back(std::move(s));
+    }
+  }
+  if (version >= 9) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 12) {
+      error = "truncated actor slot list";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      ActorSlotEffect a;
+      ReadLE32(data, at, a.id);
+      ReadLE32(data, at, a.slot);
+      ReadLE32(data, at, a.part);
+      if (a.slot >= kActorSlots) {
+        error = "invalid actor slot " + std::to_string(i);
+        return false;
+      }
+      file.actorSlots.push_back(a);
     }
   }
   if (at != data.size()) {

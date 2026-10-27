@@ -6,6 +6,10 @@
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "Kyoto/Streams/CInputStream.hpp"
 
+#ifdef TARGET_PC
+#include "port_room_effects.h"
+#endif
+
 CCameraShakeData LoadAndBuildPrimeCameraShakeData(CInputStream& in);
 
 CMetroidPrimeIceAttack::CMetroidPrimeIceAttack(CInputStream& in)
@@ -128,7 +132,15 @@ CMetroidPrimeRelay::CMetroidPrimeRelay(
 , xcac_w3(w3)
 , xcb0_w4(w4)
 , xcb4_w5(w5)
-, xcb8_roomParms(roomParms) {}
+, xcb8_roomParms(roomParms) {
+#ifdef TARGET_PC
+  for (uint32_t i = 0; i < 4; ++i) {
+    const PortRoomEffects::ActorSlotEffect* const fx = PortRoomEffects::FindActorSlotEffect(
+        info.GetEditorId().value, PortRoomEffects::kActorSlotExoBeamElectric + i);
+    mPortBeamElectric[i] = fx != nullptr ? CAssetId(fx->part) : kInvalidAssetId;
+  }
+#endif
+}
 
 ENTITY_ACCEPT_IMPL(CMetroidPrimeRelay)
 
@@ -182,6 +194,11 @@ void CMetroidPrimeRelay::CreateMetroidPrime(CStateManager& mgr) {
       x74_parms.x948_, x74_parms.xa1c_particle2, x74_parms.xa20_swoosh, x74_parms.xa24_particle3,
       x74_parms.xa28_particle4, x74_parms.xa2c_);
 
+#ifdef TARGET_PC
+  for (int i = 0; i < 4; ++i) {
+    mp->PortSetBeamElectric(i, mPortBeamElectric[i]);
+  }
+#endif
   mgr.AddObject(*mp);
   mgr.DeliverScriptMsg(mp, kInvalidUniqueId, kSM_InitializedInArea);
 }

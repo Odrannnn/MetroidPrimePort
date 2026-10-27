@@ -1818,8 +1818,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CMetroidPrime >()
       {"x1444_25_", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CMetroidPrime, x1444_25_), PES_SETI(CMetroidPrime, x1444_25_)},
       {"mPortFaceHits", "int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CMetroidPrime::mPortFaceHits), PES_ADDR(CMetroidPrime, mPortFaceHits), PES_GETI(CMetroidPrime, mPortFaceHits), PES_SETI(CMetroidPrime, mPortFaceHits)},
       {"mPortFaceHP", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CMetroidPrime::mPortFaceHP), PES_ADDR(CMetroidPrime, mPortFaceHP), nullptr, nullptr},
+      {"mPortBeamElectric", "CAssetId[4]", PortSchemaKind::pod, 0, kPortSchemaPrivate, sizeof(CMetroidPrime::mPortBeamElectric), PES_ADDR(CMetroidPrime, mPortBeamElectric), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CMetroidPrime", "CPatterned", fields, 101, 0xD8BCEA0D4D2938C9ull};
+  static const PortSchemaClass desc = {"CMetroidPrime", "CPatterned", fields, 102, 0xA583BF724C9ADA5Cull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CMetroidPrime::CMissileTarget >() {
@@ -1844,8 +1845,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CMetroidPrimeRela
       {"xcb0_w4", "int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CMetroidPrimeRelay::xcb0_w4), PES_ADDR(CMetroidPrimeRelay, xcb0_w4), PES_GETI(CMetroidPrimeRelay, xcb0_w4), PES_SETI(CMetroidPrimeRelay, xcb0_w4)},
       {"xcb4_w5", "int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CMetroidPrimeRelay::xcb4_w5), PES_ADDR(CMetroidPrimeRelay, xcb4_w5), PES_GETI(CMetroidPrimeRelay, xcb4_w5), PES_SETI(CMetroidPrimeRelay, xcb4_w5)},
       {"xcb8_roomParms", "rstl::reserved_vector<CMetroidPrime::CMetroidPrimeAttackWeights, 4>", PortSchemaKind::container, 0, kPortSchemaPrivate, sizeof(CMetroidPrimeRelay::xcb8_roomParms), PES_ADDR(CMetroidPrimeRelay, xcb8_roomParms), nullptr, nullptr},
+      {"mPortBeamElectric", "CAssetId[4]", PortSchemaKind::pod, 0, kPortSchemaPrivate, sizeof(CMetroidPrimeRelay::mPortBeamElectric), PES_ADDR(CMetroidPrimeRelay, mPortBeamElectric), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CMetroidPrimeRelay", "CEntity", fields, 16, 0xD8FB6093A80BA0BEull};
+  static const PortSchemaClass desc = {"CMetroidPrimeRelay", "CEntity", fields, 17, 0x8B78D7BA41C23C9Bull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CMetroidPrimeStage2 >() {
@@ -4689,4 +4691,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3415;
+const int PortEntitySchema::kFieldCount = 3417;

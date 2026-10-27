@@ -192,7 +192,8 @@ inline constexpr int kModels = 22;
 // 130: the Ice Sheegoth's breath.
 // 131: the Parasite Queen's beam electric.
 // 132: SteamMP1 GENPs (room-only).
-inline constexpr int kEffects = 133;   // visor steam (VFX_VisorSteam 53eceaa4)
+// 133: visor steam (VFX_VisorSteam 53eceaa4).
+inline constexpr int kEffects = 134;   // Metroid Prime's beams' electric (room ELC2s)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -226,7 +227,8 @@ inline constexpr int kEffects = 133;   // visor steam (VFX_VisorSteam 53eceaa4)
 // 56: AtomicBeta's electric effect (ELSC) property, per placement.
 // 57: .roomfx v8, a matched Steam's Remastered visor steam (SteamMP1).
 // 58: .roomliquid v5, each surface's matched retail Water editor id.
-inline constexpr int kRooms = 58;
+// 59: .roomfx v9, the Metroid Prime relay's beams' Remastered electric (actor slots).
+inline constexpr int kRooms = 59;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

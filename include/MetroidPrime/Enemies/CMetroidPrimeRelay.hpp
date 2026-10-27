@@ -67,6 +67,11 @@ private:
   int xcb0_w4;
   int xcb4_w5;
   rstl::reserved_vector< CMetroidPrime::CMetroidPrimeAttackWeights, 4 > xcb8_roomParms;
+#ifdef TARGET_PC
+  // The beams' Remastered electric (port_room_effects.h ActorSlotEffect), read while the area
+  // loads: the Exo it creates has no editor id of its own.
+  CAssetId mPortBeamElectric[4];
+#endif
 };
 CHECK_SIZEOF(CMetroidPrimeRelay, 0xDAC)
 

@@ -377,6 +377,11 @@ private:
   // hand-over to the fight starts a stage's face hits afresh, so it takes these instead.
   int mPortFaceHits; // -1: none pending
   float mPortFaceHP;
+  // Each beam's Remastered electric (ELSC), from the relay (CMetroidPrimeMP1 +0x12ac + i*0x10).
+  CAssetId mPortBeamElectric[4];
+
+public:
+  void PortSetBeamElectric(int beam, CAssetId id) { mPortBeamElectric[beam] = id; }
 #endif
 };
 CHECK_SIZEOF(CMetroidPrime, (VERSION >= VERSION_GM8P_00 ? 0x1458 : 0x1448))

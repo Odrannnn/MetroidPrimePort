@@ -266,6 +266,11 @@ CMetroidPrime::CMetroidPrime(
 , mPortFaceHP(0.f)
 #endif
 {
+#ifdef TARGET_PC
+  for (int i = 0; i < 4; ++i) {
+    mPortBeamElectric[i] = kInvalidAssetId;
+  }
+#endif
   for (int i = 0; i < breathAttacks.size(); ++i) {
     const CMetroidPrimeParasiteQueenAttack& attack = breathAttacks[i];
     x96c_.push_back(attack.x0_beamInfo);
@@ -1304,6 +1309,12 @@ void CMetroidPrime::CreateParasiteQueenProjectile(CStateManager& mgr) {
       if (gpResourceFactory->CanBuild(frozenFx)) {
         projectile->PortSetFrozenFx(frozenFx.GetId());
       }
+    }
+    // CreateParasiteQueenProjectile (0xe31518) passes this+0x12ac + i*0x10, the beam's
+    // electric (5d9bd2fe), to CPlasmaProjectileMP1GOC::CreatePlasmaProjectileGameObject.
+    if (mPortBeamElectric[i] != kInvalidAssetId &&
+        gpResourceFactory->CanBuild(SObjectTag('ELSC', mPortBeamElectric[i]))) {
+      projectile->PortSetBeamElectric(mPortBeamElectric[i]);
     }
 #endif
     mgr.AddObject(*projectile);

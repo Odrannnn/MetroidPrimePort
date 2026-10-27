@@ -858,10 +858,27 @@ constexpr PartSlot kPartSlots[] = {
     {kMetroidPrimeRelayMP1, {kPrimeData, 0x31f3a3f5}, 0x84, 2362},
 };
 
-// The GENP a slot's property holds, zero when unset or absent. flat caches room.Flat(c).
-Id16 SlotGenp(const Room& room, const Component& c, const PartSlot& slot, std::map<uint32_t, Span>& flat) {
+// Remastered effect properties with no retail field (port_room_effects.h ActorSlotEffect): the
+// component, the property path, the paired retail object's type and the slot.
+struct ActorSlot {
+  uint32_t component;
+  uint32_t path[4];
+  uint8_t retailType;
+  uint32_t slot;
+};
+constexpr ActorSlot kActorSlotTable[] = {
+    // MetroidPrimeRelayMP1: beams 0-3's electric (CMetroidPrimeMP1 +0x12ac, the beam's 5d9bd2fe).
+    {kMetroidPrimeRelayMP1, {kPrimeData, 0x6a5a1bfe, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric},
+    {kMetroidPrimeRelayMP1, {kPrimeData, 0x194f407d, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric + 1},
+    {kMetroidPrimeRelayMP1, {kPrimeData, 0x6e48d90d, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric + 2},
+    {kMetroidPrimeRelayMP1, {kPrimeData, 0x728f76b5, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric + 3},
+};
+
+// The GENP (or other effect) a property path holds, zero when unset or absent. flat caches
+// room.Flat(c).
+Id16 SlotGenp(const Room& room, const Component& c, const uint32_t (&path)[4], std::map<uint32_t, Span>& flat) {
   size_t depth = 0;
-  while (depth < std::size(slot.path) && slot.path[depth] != 0) {
+  while (depth < std::size(path) && path[depth] != 0) {
     ++depth;
   }
   Span at{};
@@ -869,12 +886,12 @@ Id16 SlotGenp(const Room& room, const Component& c, const PartSlot& slot, std::m
     if (flat.empty()) {
       flat = room.Flat(c);
     }
-    const auto found = flat.find(slot.path[0]);
+    const auto found = flat.find(path[0]);
     if (found == flat.end()) {
       return {};
     }
     at = found->second;
-  } else if (!room.Nested(c, slot.path, depth, at)) {
+  } else if (!room.Nested(c, path, depth, at)) {
     return {};
   }
   return at.size == 16 ? SwapUuid(room.Bytes(at)) : Id16{};
@@ -906,7 +923,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   if (effects.empty() && enemies.empty() && !slotted) {
     return {};
   }
-  char line[640];
+  char line[768];
   const std::vector<ScriptObject>& objects = area.objects;
   if (objects.empty()) {
     return "  " + name + ": no retail objects, its effect actors left out";
@@ -1155,6 +1172,9 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   // GENP, written over the retail one as the object loads.
   std::vector<PortRoomEffects::PropertyPatch> patches;
   size_t patchNoPart = 0;
+  // And the effects Remastered gives it where retail has no property (kActorSlotTable).
+  std::vector<PortRoomEffects::ActorSlotEffect> actorSlots;
+  size_t actorSlotNoPart = 0;
   for (const Component& c : room.Components()) {
     const auto matched = c.entity >= 0 ? scripts.retail.find(c.entity) : scripts.retail.end();
     const ScriptObject* paired = matched != scripts.retail.end() && matched->second < objects.size()
@@ -1185,7 +1205,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       if (slot.component != c.type || slot.retailType != o.type || o.props.size() < slot.offset + 4) {
         continue;
       }
-      const Id16 genp = SlotGenp(room, c, slot, flat);
+      const Id16 genp = SlotGenp(room, c, slot.path, flat);
       if (genp == Id16{}) {
         continue;
       }
@@ -1206,6 +1226,21 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       if (p.retail != p.part) {
         patches.push_back(p);
       }
+    }
+    for (const ActorSlot& slot : kActorSlotTable) {
+      if (slot.component != c.type || slot.retailType != o.type) {
+        continue;
+      }
+      const Id16 effect = SlotGenp(room, c, slot.path, flat);
+      if (effect == Id16{}) {
+        continue;
+      }
+      const uint32_t part = io.effect(effect);
+      if (part == 0) {
+        ++actorSlotNoPart;
+        continue;
+      }
+      actorSlots.push_back({o.id, slot.slot, part});
     }
   }
   // A paired Steam object's Remastered visor steam (port_room_effects.h Steam): the SteamMP1's
@@ -1316,11 +1351,13 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                   "retail object)",
                   steams.size(), steamNoPart, steamUnpaired, steamSources, steamSourcesPaired);
   }
-  char patternedNote[160] = "";
-  if (!patterned.empty() || patternedNoPart != 0 || !patches.empty() || patchNoPart != 0) {
+  char patternedNote[224] = "";
+  if (!patterned.empty() || patternedNoPart != 0 || !patches.empty() || patchNoPart != 0 || !actorSlots.empty() ||
+      actorSlotNoPart != 0) {
     std::snprintf(patternedNote, sizeof patternedNote,
-                  ", %zu enemy death particle(s) (%zu without a PART), %zu particle propert(ies) (%zu without a PART)",
-                  patterned.size(), patternedNoPart, patches.size(), patchNoPart);
+                  ", %zu enemy death particle(s) (%zu without a PART), %zu particle propert(ies) (%zu without a "
+                  "PART), %zu Remastered-only effect slot(s) (%zu without an asset)",
+                  patterned.size(), patternedNoPart, patches.size(), patchNoPart, actorSlots.size(), actorSlotNoPart);
   }
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
@@ -1330,7 +1367,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                 keptOwn, noPart, noLayer, full != 0 ? ", the id range is full" : "",
                 badVars != 0 ? ", unreadable particle variables" : "", barrierNote, patternedNote, steamNote);
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
-      steams.empty()) {
+      steams.empty() && actorSlots.empty()) {
     return line;
   }
   PortRoomEffects::File file;
@@ -1343,6 +1380,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   file.patterned = std::move(patterned);
   file.patches = std::move(patches);
   file.steams = std::move(steams);
+  file.actorSlots = std::move(actorSlots);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;
@@ -1422,9 +1460,18 @@ std::vector<std::array<uint8_t, 16>> RoomEffectGenpsOf(const Room& room) {
       if (slot.component != c.type) {
         continue;
       }
-      const Id16 genp = SlotGenp(room, c, slot, flat);
+      const Id16 genp = SlotGenp(room, c, slot.path, flat);
       if (genp != Id16{}) {
         out.push_back(genp);
+      }
+    }
+    for (const ActorSlot& slot : kActorSlotTable) {
+      if (slot.component != c.type) {
+        continue;
+      }
+      const Id16 effect = SlotGenp(room, c, slot.path, flat);
+      if (effect != Id16{}) {
+        out.push_back(effect);
       }
     }
   }
