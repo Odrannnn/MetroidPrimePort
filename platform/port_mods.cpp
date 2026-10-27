@@ -601,6 +601,7 @@ void Initialize() {
 
   // Keyed by disc entry and by (type, id); a later mod overwrites an earlier.
   std::map<int32_t, Replacement> replaced;
+  std::map<std::string, std::pair<std::string, Replacement>> addedMovies; // by lower-case disc path
   std::map<std::pair<uint32_t, uint32_t>, LooseResource> loose;
   std::map<std::pair<uint32_t, uint32_t>, size_t> looseMod;
   for (const fs::path& modDir : modDirs) {
@@ -773,6 +774,14 @@ void Initialize() {
       const int32_t entry = DVDConvertPathToEntrynum(("/" + relative).c_str());
       DVDDir dir;
       if (entry < 0 || entry >= aurora_dvd_base_entry_count() || DVDFastOpenDir(entry, &dir)) {
+        // A movie the disc lacks is added: the game opens movies by name, and
+        // Trilogy's MP1 has none of the GameCube ones (the front end falls back
+        // to its own only when the GameCube name is missing).
+        if (EndsWith(Lower(name), ".thp") && (entry < 0 || entry >= aurora_dvd_base_entry_count()) && size > 0 &&
+            size <= kMaxFileSize) {
+          addedMovies[Lower("/" + relative)] = {"/" + relative, {PathString(file), size, modIndex}};
+          continue;
+        }
         if (!IsDocument(name)) {
           Message(info.name + ": " + relative + " is not a disc file; ignored");
         }
@@ -1000,6 +1009,20 @@ void Initialize() {
     if (whole.length > 0) {
       file->segments.push_back(whole);
     }
+    sFiles.push_back(std::move(file));
+  }
+  for (const auto& [key, movie] : addedMovies) {
+    const Replacement& replacement = movie.second;
+    ++sStatus.mods[replacement.mod].files;
+    auto file = std::make_shared<VirtualFile>();
+    file->discPath = movie.first;
+    file->size = replacement.size;
+    Segment whole;
+    whole.kind = Segment::kHost;
+    whole.length = replacement.size;
+    whole.hostPath = replacement.hostPath;
+    whole.hostSize = replacement.size;
+    file->segments.push_back(whole);
     sFiles.push_back(std::move(file));
   }
   for (auto& [entry, file] : patched) {
