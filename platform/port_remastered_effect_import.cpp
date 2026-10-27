@@ -1290,9 +1290,18 @@ public:
     std::vector<ConvertedPart> parts;
   };
 
+  bool RoomOnly(const EffectGuid& id) const {
+    return std::find(m_io.roomOnly.begin(), m_io.roomOnly.end(), id) != m_io.roomOnly.end();
+  }
+
   void Children(const EffectNode& node, uint32_t root, std::map<EffectGuid, Child>& out) {
     for (const EffectNode& child : node.children) {
-      out.emplace(child.id, Child{m_io.freshId(Hash(child.id, root)), EffectRetailType(child.form)});
+      const uint32_t type = EffectRetailType(child.form);
+      // An embedded child that is also a GENP the import writes standalone is that one asset, as a
+      // GUID is on the Switch (the Babygoth flame's collision child, 97564fc0, which CFlameThrower
+      // finds among its generator's children by description): both resolve to its room id.
+      const bool standalone = type == kPart && m_io.typeOf(Swap(child.id)) == kGenp && RoomOnly(Swap(child.id));
+      out.emplace(child.id, Child{standalone ? RoomEffectId(Swap(child.id)) : m_io.freshId(Hash(child.id, root)), type});
       Children(child, root, out);
     }
   }
@@ -1572,6 +1581,11 @@ public:
       Log(name + ": " + error);
       Report(row, "failed", "parse: " + error);
       return;
+    }
+    // A standalone GENP another embeds as a child (Children()) is written once per embedding too:
+    // its GUID makes the root carry the same PGID, so every copy is the same file.
+    if (synthetic && !swoosh && !electric && RoomOnly(id)) {
+      effect.id = Swap(id);
     }
     std::map<EffectGuid, Child> children;
     Children(effect, retail, children);

@@ -35,6 +35,13 @@ public:
 
   void SetTransform(const CTransform4f& xf, CStateManager& mgr, float);
 
+#ifdef TARGET_PC
+  // Remastered's CFlameThrowerMP1 renders a separate flame effect (id1, flame info +0x450) and
+  // keeps the flame-info effect (id3, +0x498) unrendered, carrying the flame warp for collision.
+  // A collision warp goes on whichever of id1 or its active children is the id2 (+0x470) system.
+  void PortSetRemasteredFlame(CAssetId fxId, CAssetId collisionFxId);
+#endif
+
 private:
   void CreateFlameParticles(CStateManager& mgr);
   void SetFlameLightActive(bool active, CStateManager& mgr);
@@ -58,6 +65,34 @@ private:
   bool x400_25_particlesActive : 1;
   bool x400_26_zTest : 1;
   bool x400_27_coneCollision : 1;
+
+#ifdef TARGET_PC
+  // CCollisionWarpMP1: keeps particles on the near side of solid world geometry.
+  class PortCollisionWarp : public CWarp {
+  public:
+    PortCollisionWarp() : xMgr(nullptr), xActive(false) {}
+    bool UpdateWarp() override { return xActive; }
+    void ModifyParticles(int particleCount, int stripe, int*, CVector3f* particlePrevPos,
+                         CVector3f* particlePos, CVector3f* particleVelocity, CColor*, float*,
+                         float*) override;
+    void Activate(bool active) override { xActive = active; }
+    bool IsActivated() override { return xActive; }
+    FourCC Get4CharID() override { return 'CWRP'; }
+    void SetStateManager(CStateManager& mgr) { xMgr = &mgr; }
+
+  private:
+    CStateManager* xMgr;
+    bool xActive;
+  };
+
+  void PortTryAddCollisionWarp();
+
+  rstl::single_ptr< TLockedToken< CGenDescription > > xPortFlameFxDesc;
+  rstl::single_ptr< CElementGen > xPortFlameFxGen;
+  CAssetId xPortCollisionFxId = kInvalidAssetId;
+  PortCollisionWarp xPortCollisionWarp;
+  bool xPortCollisionWarpPending = false;
+#endif
 
   static const CVector3f kLightOffset;
 };

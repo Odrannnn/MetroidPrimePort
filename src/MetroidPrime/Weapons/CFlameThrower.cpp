@@ -66,6 +66,10 @@ void CFlameThrower::Think(float dt, CStateManager& mgr) {
     return;
   }
   const CTransform4f& xf = x2e8_flameXf;
+#ifdef TARGET_PC
+  PortTryAddCollisionWarp();
+  xPortCollisionWarp.SetStateManager(mgr);
+#endif
   UpdateFlameState(dt, mgr);
 
   const CVector3f flamePoint = xf.GetTranslation();
@@ -78,11 +82,26 @@ void CFlameThrower::Think(float dt, CStateManager& mgr) {
     x34c_flameWarp.SetStateManager(mgr);
     x348_flameGen->SetTranslation(flamePoint);
     x348_flameGen->SetOrientation(xf.GetRotation());
+#ifdef TARGET_PC
+    xPortCollisionWarp.Activate(true);
+    if (xPortFlameFxGen.get()) {
+      xPortFlameFxGen->SetTranslation(flamePoint);
+      xPortFlameFxGen->SetOrientation(xf.GetRotation());
+    }
+#endif
     break;
   default:
     x34c_flameWarp.Activate(false);
+#ifdef TARGET_PC
+    xPortCollisionWarp.Activate(false);
+#endif
     break;
   }
+#ifdef TARGET_PC
+  if (xPortFlameFxGen.get()) {
+    xPortFlameFxGen->Update(dt);
+  }
+#endif
   x348_flameGen->Update(dt);
   x34c_flameWarp.SetMaxDistSq(0.f);
   x34c_flameWarp.SetFloatingPoint(flamePoint);
@@ -122,6 +141,14 @@ void CFlameThrower::Think(float dt, CStateManager& mgr) {
     if (CGameLight* light = TCastToPtr< CGameLight >(mgr.ObjectById(GetProjectileLightId()))) {
       light->SetTransform(GetTransform());
       light->SetTranslation(x34c_flameWarp.GetFloatingPoint());
+#ifdef TARGET_PC
+      if (xPortFlameFxDesc.get()) {
+        // Remastered lights the scene from the rendered flame's own system light.
+        if (xPortFlameFxGen.get() && xPortFlameFxGen->SystemHasLight()) {
+          light->SetLight(xPortFlameFxGen->GetLight());
+        }
+      } else
+#endif
       if (x348_flameGen.get() && x348_flameGen->SystemHasLight()) {
         light->SetLight(x348_flameGen->GetLight());
       }
@@ -161,6 +188,14 @@ void CFlameThrower::SetTransform(const CTransform4f& xf, CStateManager&, float) 
 }
 
 void CFlameThrower::AddToRenderer(const CFrustumPlanes&, const CStateManager& mgr) const {
+#ifdef TARGET_PC
+  // Remastered renders only the flame effect; the flame-info system just carries the warp.
+  if (xPortFlameFxDesc.get()) {
+    if (xPortFlameFxGen.get()) {
+      gpRender->AddParticleGen(*xPortFlameFxGen);
+    }
+  } else
+#endif
   gpRender->AddParticleGen(*x348_flameGen);
   EnsureRendered(mgr, x2e8_flameXf.GetTranslation(), GetSortingBounds(mgr));
 }
@@ -188,9 +223,19 @@ void CFlameThrower::Reset(CStateManager& mgr, bool resetWarp) {
     x330_particleWaitDelayTimer = 0.f;
     x334_fireStopTimer = 0.f;
     x318_flameBounds = CAABox::MakeNullBox();
+#ifdef TARGET_PC
+    if (xPortFlameFxGen.get()) {
+      xPortFlameFxGen->ShutdownEffect();
+    }
+#endif
     x348_flameGen->ShutdownEffect();
     x34c_flameWarp.ResetPosition(x2e8_flameXf.GetTranslation());
   } else {
+#ifdef TARGET_PC
+    if (xPortFlameFxGen.get()) {
+      xPortFlameFxGen->ShutdownEffect();
+    }
+#endif
     x348_flameGen->ShutdownEffect();
     x400_25_particlesActive = false;
     x3f0_flameState = kFS_FireStopTimer;
@@ -199,6 +244,30 @@ void CFlameThrower::Reset(CStateManager& mgr, bool resetWarp) {
 
 void CFlameThrower::CreateFlameParticles(CStateManager& mgr) {
   DeleteProjectileLight(mgr);
+#ifdef TARGET_PC
+  // CFlameThrowerMP1::CreateFlameParticles 0x101591c: the flame effect, its collision warp on it
+  // or (pending, TryAddCollisionWarp) on the matching child, then the flame-info system with the
+  // flame warp reset to the flame's position. No z-test override on either.
+  if (xPortFlameFxDesc.get()) {
+    xPortFlameFxGen = rs_new CElementGen(*xPortFlameFxDesc);
+    xPortCollisionWarpPending = false;
+    if (xPortFlameFxGen.get()) {
+      if (xPortFlameFxGen->PortDescId() == xPortCollisionFxId) {
+        xPortFlameFxGen->AddModifier(&xPortCollisionWarp);
+      } else {
+        xPortCollisionWarpPending = xPortCollisionFxId != kInvalidAssetId;
+      }
+      if (xPortFlameFxGen->SystemHasLight() && x2c8_projectileLight == kInvalidUniqueId) {
+        CreateProjectileLight(rstl::string_l("FlameThrower_Light"), xPortFlameFxGen->GetLight(),
+                              mgr);
+      }
+    }
+    x348_flameGen = rs_new CElementGen(x33c_flamethrowerDesc);
+    x34c_flameWarp.ResetPosition(x2e8_flameXf.GetTranslation());
+    x348_flameGen->AddModifier(&x34c_flameWarp);
+    return;
+  }
+#endif
   x348_flameGen = rs_new CElementGen(x33c_flamethrowerDesc);
   if (x348_flameGen.get()) {
     x348_flameGen->SetZTest(x400_26_zTest);
@@ -298,3 +367,76 @@ void CFlameThrower::ApplyDamageToActor(CStateManager& mgr, TUniqueId id, float d
   }
   ApplyDamageToActors(mgr, x12c_curDamageInfo.MakeScaledForTime(dt));
 }
+
+#ifdef TARGET_PC
+void CFlameThrower::PortSetRemasteredFlame(CAssetId fxId, CAssetId collisionFxId) {
+  xPortFlameFxDesc = rs_new TLockedToken< CGenDescription >(
+      gpSimplePool->GetObj(SObjectTag('PART', fxId)));
+  xPortCollisionFxId = collisionFxId;
+}
+
+// CFlameThrowerMP1::TryAddCollisionWarp 0x1014d20: the first active child built from the id2
+// system takes the collision warp.
+void CFlameThrower::PortTryAddCollisionWarp() {
+  if (!xPortCollisionWarpPending || !xPortFlameFxGen.get()) {
+    return;
+  }
+  const int count = xPortFlameFxGen->GetNumActiveChildParticles();
+  for (int i = 0; i < count; ++i) {
+    CParticleGen* const child = xPortFlameFxGen->GetActiveChildParticle(i);
+    if (child->Get4CharId() == 'PART' &&
+        static_cast< CElementGen* >(child)->PortDescId() == xPortCollisionFxId) {
+      child->AddModifier(&xPortCollisionWarp);
+      xPortCollisionWarpPending = false;
+      return;
+    }
+  }
+}
+
+// CCollisionWarpMP1::ModifyParticles 0x1015e9c: a particle whose step crossed solid world
+// geometry is put back on the surface and carried along it by its velocity.
+void CFlameThrower::PortCollisionWarp::ModifyParticles(int particleCount, int stripe, int*,
+                                                       CVector3f* particlePrevPos,
+                                                       CVector3f* particlePos,
+                                                       CVector3f* particleVelocity, CColor*,
+                                                       float*, float*) {
+  if (xMgr == nullptr || particleCount < 1) {
+    return;
+  }
+  static const CMaterialFilter filter = CMaterialFilter::MakeIncludeExclude(
+      CMaterialList(kMT_Solid), CMaterialList(kMT_ProjectilePassthrough));
+  char* prevPos = reinterpret_cast< char* >(particlePrevPos);
+  char* pos = reinterpret_cast< char* >(particlePos);
+  char* vel = reinterpret_cast< char* >(particleVelocity);
+  for (int i = 0; i < particleCount; ++i, prevPos += stripe, pos += stripe, vel += stripe) {
+    const CVector3f& prev = *reinterpret_cast< CVector3f* >(prevPos);
+    CVector3f& p = *reinterpret_cast< CVector3f* >(pos);
+    CVector3f& v = *reinterpret_cast< CVector3f* >(vel);
+    const CVector3f delta = p - prev;
+    if (delta.MagSquared() < 0.0011920929f) {
+      continue;
+    }
+    const CVector3f dir = delta.AsNormalized();
+    const CVector3f start = prev - dir * 0.5f;
+    const CRayCastResult result =
+        xMgr->RayStaticIntersection(start, dir, (p - start).Magnitude(), filter);
+    if (result.IsInvalid()) {
+      continue;
+    }
+    const CVector3f normal = result.GetPlane().GetNormal();
+    const float d = result.GetPlane().GetConstant();
+    const float dist = CVector3f::Dot(normal, p) - d;
+    if (dist > 0.f) {
+      continue;
+    }
+    p -= normal * dist;
+    const float nv = CVector3f::Dot(normal, v);
+    if (nv >= 0.f) {
+      continue;
+    }
+    const float t = -1.f - (CVector3f::Dot(normal, p - v) - d) / nv;
+    p = p + v * t;
+    v -= v * 0.001f;
+  }
+}
+#endif

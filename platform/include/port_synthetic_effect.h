@@ -61,7 +61,12 @@ inline constexpr const char* kRidleyBeamElectric = "c5588467-1dcb-4b76-afaa-6750
 // Its GPSM and EPSM, Remastered-only GENPs the ELC2 names.
 inline constexpr const char* kRidleyBeamElectricGpsm = "34a60394-d3ee-4aa1-87de-70d3dc7c20cc";
 inline constexpr const char* kRidleyBeamElectricEpsm = "5272fe00-f012-472c-92cf-f7690053b9fa";
+// Babygoth's breath (SLdrBabygothMP1 0x320, 0x330; the same in all 14 placements): the flame
+// CFlameThrowerMP1 renders, and its KSSM child that takes the collision warp.
+inline constexpr const char* kBabygothFlame = "5bfbd5ec-c9b4-45a1-9b25-17f6c8134b47";
+inline constexpr const char* kBabygothFlameCollision = "97564fc0-faba-4473-939d-d131ff72e86f";
 inline constexpr const char* kActorEffectGuids[] = {kRidleyBeamElectric, kRidleyBeamElectricGpsm,
-                                                    kRidleyBeamElectricEpsm};
+                                                    kRidleyBeamElectricEpsm, kBabygothFlame,
+                                                    kBabygothFlameCollision};
 
 }  // namespace PortRemastered

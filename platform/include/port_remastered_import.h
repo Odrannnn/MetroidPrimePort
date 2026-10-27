@@ -186,7 +186,8 @@ inline constexpr int kModels = 22;
 // 121: Thardus/FlyingPirate/Elite/Omega slot GENPs, four ELC2 slots (#by-hand).
 // 122: room-only ELC2 slots (AtomicBeta) as ELSCs.
 // 124: Ridley's plasma-beam ELC2 (kActorEffectGuids).
-inline constexpr int kEffects = 125;   // its GPSM/EPSM GENPs, resolved under their own ids
+// 125: its GPSM/EPSM GENPs, resolved under their own ids.
+inline constexpr int kEffects = 127;   // a standalone GENP another embeds: one id for both (Babygoth's flame collision)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

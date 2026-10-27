@@ -3,25 +3,25 @@
 Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 `platform/generated/port_entity_schema.inc`, its types `platform/include/port_entity_schema.h`.
 
-159 classes (CEntity and every subclass a header defines), 3394 own fields; 2649 of them plain data (`statedump` writes those under `fields` when the object's `kTagFields` block saves them, else under `fields_other`).
+159 classes (CEntity and every subclass a header defines), 3399 own fields; 2651 of them plain data (`statedump` writes those under `fields` when the object's `kTagFields` block saves them, else under `fields_other`).
 
 | kind | fields |
 |---|---|
-| bool | 112 |
-| int | 516 |
+| bool | 113 |
+| int | 517 |
 | float | 952 |
 | bitfield | 642 |
 | math | 271 |
 | uid | 156 |
 | pod | 199 |
 | pointer | 1 |
-| smart_ptr | 206 |
+| smart_ptr | 208 |
 | container | 185 |
 | state_machine | 1 |
 | body_controller | 1 |
 | anim_data | 14 |
 | path_search | 19 |
-| other | 119 |
+| other | 120 |
 
 ## `other`: types without a codec yet (by field count)
 
@@ -43,6 +43,7 @@ Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 - 1 `SPositionHistory`
 - 1 `CFlaahgraData`
 - 1 `CFlameWarp`
+- 1 `CFlameThrower::PortCollisionWarp`
 - 1 `CFlyingPirate::CFlyingPirateData`
 - 1 `CProjectileWeapon`
 - 1 `CMarkerGrid`
@@ -75,7 +76,7 @@ Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 
 ## `smart_ptr` / `container` templates
 
-`rstl::single_ptr` 107, `rstl::reserved_vector` 79, `rstl::vector` 59, `TLockedToken` 48, `rstl::optional_object` 38, `rstl::auto_ptr` 22, `TToken` 21, `TCachedToken` 6, `rstl::basic_string` 5, `rstl::list` 4, `rstl::ncrc_ptr` 2
+`rstl::single_ptr` 109, `rstl::reserved_vector` 79, `rstl::vector` 59, `TLockedToken` 48, `rstl::optional_object` 38, `rstl::auto_ptr` 22, `TToken` 21, `TCachedToken` 6, `rstl::basic_string` 5, `rstl::list` 4, `rstl::ncrc_ptr` 2
 
 ## Not in the table
 

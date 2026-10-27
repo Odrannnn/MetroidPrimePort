@@ -21,6 +21,11 @@
 #include "MetroidPrime/Weapons/CFlameThrower.hpp"
 #include "MetroidPrime/Weapons/CWeapon.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#include "port_synthetic_effect.h"
+#endif
+
 const int CBabygothData::skMinProperties = 33;
 
 const CVector3f CBabygoth::skAttackTouchBounds(0.2f, 0.2f, 0.2f);
@@ -1424,6 +1429,13 @@ void CBabygoth::CreateFlameThrower(CStateManager& mgr) {
         x980_flameThrower, GetCurrentAreaId(), GetUniqueId(), CWeapon::kPA_None,
         x570_babyData.GetFlamePlayerSteamTxtr(), x570_babyData.GetFlamePlayerHitSfx(),
         x570_babyData.GetFlamePlayerIceTxtr());
+#ifdef TARGET_PC
+    const SObjectTag fx('PART', PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFlame));
+    if (gpResourceFactory->CanBuild(fx)) {
+      flame->PortSetRemasteredFlame(
+          fx.GetId(), PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFlameCollision));
+    }
+#endif
     mgr.AddObject(*flame);
   }
 }

@@ -1207,8 +1207,13 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CFlameThrower >()
       {"x400_25_particlesActive", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CFlameThrower, x400_25_particlesActive), PES_SETI(CFlameThrower, x400_25_particlesActive)},
       {"x400_26_zTest", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CFlameThrower, x400_26_zTest), PES_SETI(CFlameThrower, x400_26_zTest)},
       {"x400_27_coneCollision", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CFlameThrower, x400_27_coneCollision), PES_SETI(CFlameThrower, x400_27_coneCollision)},
+      {"xPortFlameFxDesc", "rstl::single_ptr<TLockedToken<CGenDescription>>", PortSchemaKind::smart_ptr, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortFlameFxDesc), PES_ADDR(CFlameThrower, xPortFlameFxDesc), nullptr, nullptr},
+      {"xPortFlameFxGen", "rstl::single_ptr<CElementGen>", PortSchemaKind::smart_ptr, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortFlameFxGen), PES_ADDR(CFlameThrower, xPortFlameFxGen), nullptr, nullptr},
+      {"xPortCollisionFxId", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortCollisionFxId), PES_ADDR(CFlameThrower, xPortCollisionFxId), PES_GETI(CFlameThrower, xPortCollisionFxId), PES_SETI(CFlameThrower, xPortCollisionFxId)},
+      {"xPortCollisionWarp", "CFlameThrower::PortCollisionWarp", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortCollisionWarp), PES_ADDR(CFlameThrower, xPortCollisionWarp), nullptr, nullptr},
+      {"xPortCollisionWarpPending", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CFlameThrower::xPortCollisionWarpPending), PES_ADDR(CFlameThrower, xPortCollisionWarpPending), PES_GETI(CFlameThrower, xPortCollisionWarpPending), PES_SETI(CFlameThrower, xPortCollisionWarpPending)},
   };
-  static const PortSchemaClass desc = {"CFlameThrower", "CGameProjectile", fields, 16, 0x7603F246075F6445ull};
+  static const PortSchemaClass desc = {"CFlameThrower", "CGameProjectile", fields, 21, 0x7A4BD0F2B7964E35ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CFlickerBat >() {
@@ -4668,4 +4673,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3394;
+const int PortEntitySchema::kFieldCount = 3399;
