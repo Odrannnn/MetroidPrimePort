@@ -436,7 +436,10 @@
   its "Layer n (hold)" binding is held, like a shift key, and its bindings win over the same
   input's normal ones). Actions are the pad's buttons and stick halves, plus beam and
   visor picks (direct or next/previous), Spring Ball, the port menu, save/load state,
-  screenshot and Original experience. Bindings are layered over the other pages:
+  screenshot, Original experience and Remastered graphics (unbound by default: turns the
+  Remastered import on or off as the Mods page does, saved, and reloads the room; a note at
+  the top of the screen says which; a layer binding such as Layer 1 + a button keeps it from
+  being pressed by accident). Bindings are layered over the other pages:
   binding an action from one kind of device (keyboard & mouse, controller,
   touch) replaces what the other pages bind to it from that kind only, and
   "Removed built-in bindings" drops one without adding another. A profile can

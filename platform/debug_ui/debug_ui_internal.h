@@ -394,6 +394,9 @@ void OpenRemasteredDialog(int which);
 std::string OpenRemasteredPick(int which, const std::string& uri);
 std::string RemasteredPickName(const std::string& uri);
 void DrawModReloadMessage();
+// Asks for a mod reload, again every two seconds until one runs (a reload is
+// refused where the game can't save).
+void ReloadUntilDone();
 extern bool sImportUnloadedMods;
 void FinishRemasteredImport();
 
@@ -413,6 +416,7 @@ void BeginTopToastStack();
 void DrawPhotoUI();
 void DrawResumePrompt();
 void DrawUpdateToast();
+void DrawNoteToast();
 #if defined(PORT_TOUCH_OVERLAY)
 // touch_overlay.cpp: the SDL event filter that feeds it, and its draw
 void InstallTouchOverlay();

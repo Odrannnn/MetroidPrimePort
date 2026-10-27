@@ -16,6 +16,7 @@
 #include "port_remastered_text.h"
 #include "port_savestate.h"
 #include "port_disc.h"
+#include "port_log.h"
 #include "port_pal_languages.h"
 
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
@@ -255,7 +256,7 @@ void DrawBuiltinModToggle(const char* modName, const char* label, bool stale) {
   }
   ImGui::EndDisabled();
   ItemHelp("Off unloads this mod alone; the other mods still load. Takes effect when the mods are reloaded. "
-           "A newly installed room geometry mod may need an application restart.");
+           "On a phone, a room geometry mod installed after the game started needs a restart.");
   if (!modsOn) {
     SameLineAfterHelp();
     ImGui::TextDisabled(sModsEnabled ? "(Original experience is on: no mods load)" : "(mods are off)");
@@ -525,6 +526,39 @@ void DrawRemasteredDebug() {
       ImGui::TreePop();
     }
   }
+}
+
+void ToggleRemastered() {
+  const PortMods::Status& status = PortMods::CurrentStatus();
+  const auto mod = std::find_if(status.mods.begin(), status.mods.end(), [](const PortMods::ModInfo& m) {
+    return m.name == PortRemastered::kImportModName;
+  });
+  if (mod == status.mods.end()) {
+    ShowNote("Remastered: not imported");
+    return;
+  }
+  if (!ModsEnabled()) {
+    ShowNote(sOriginalExperience ? "Remastered: off (Original experience is on)" : "Remastered: off (mods are off)");
+    return;
+  }
+  std::vector<std::string> disabled = PortMods::SplitDisabled(sModsDisabled);
+  const auto found = std::find(disabled.begin(), disabled.end(), mod->name);
+  const bool on = found != disabled.end();
+  if (on) {
+    disabled.erase(found);
+  } else {
+    disabled.push_back(mod->name);
+  }
+  SetModsDisabled(PortMods::JoinDisabled(disabled));
+  PortLog::Write("port: remastered %s\n", on ? "on" : "off");
+  if (on && mod->pendingRestart) {
+    ShowNote("Remastered: on after a restart");
+    return;
+  }
+  if (!PortMods::Suspended()) {
+    ReloadUntilDone();
+  }
+  ShowNote(on ? "Remastered: on" : "Remastered: off");
 }
 
 } // namespace PortDebug

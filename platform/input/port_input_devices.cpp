@@ -671,7 +671,7 @@ void RouteDirectActions(const PortInput::Output& out) {
 // ticks, so they work while the game is paused or the F1 overlay is open.
 bool IsPortAction(Action a) {
   return a == Action::PortMenu || a == Action::SaveState || a == Action::LoadState || a == Action::Screenshot ||
-         a == Action::ToggleOriginal || a == Action::PhotoMode || a == Action::GyroAim ||
+         a == Action::ToggleOriginal || a == Action::ToggleRemastered || a == Action::PhotoMode || a == Action::GyroAim ||
          a == Action::ResetAim;
 }
 
@@ -1272,6 +1272,7 @@ void PollPortActions() {
   if (out.Pressed(Action::Screenshot)) aurora::request_screenshot();
   if (out.Pressed(Action::PhotoMode)) PortPhoto::RequestToggle();
   if (out.Pressed(Action::ToggleOriginal)) PortDebug::SetOriginalExperience(!PortDebug::OriginalExperience());
+  if (out.Pressed(Action::ToggleRemastered)) PortDebug::ToggleRemastered();
 }
 
 } // namespace PortInputDevices

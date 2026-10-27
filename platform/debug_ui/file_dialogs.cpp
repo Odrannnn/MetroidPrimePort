@@ -878,7 +878,7 @@ static std::string sImportModName = PortRemastered::kImportModName;
 static int sReloadAwaited = -1;
 static double sReloadRetry = 0.0;
 
-static void ReloadUntilDone() {
+void ReloadUntilDone() {
   sReloadAwaited = PortSaveState::ModReloads();
   sReloadRetry = ImGui::GetTime() + 2.0;
   PortSaveState::RequestModReload();

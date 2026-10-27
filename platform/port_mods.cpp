@@ -638,7 +638,8 @@ void Initialize() {
         files.push_back(it->path());
       }
     }
-    // Geometry buffers are reserved at process startup. Defer the WHOLE mod if
+    // Geometry buffers are reserved at process startup: always on the desktop, on a
+    // phone only when room geometry was installed then (main.cpp). Defer the WHOLE mod if
     // it arrived later, before even textures/sidecars can register: a partially
     // active Remastered import is not a usable fallback. Keep mods_disabled as
     // saved so the next process loads it. Reuse the file list (no second walk).

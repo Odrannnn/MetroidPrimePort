@@ -574,6 +574,11 @@ bool OriginalExperience();
 void SetOriginalExperience(bool enabled);
 std::string ModsDisabled();
 void SetModsDisabled(const std::string& list);
+// The Remastered import on or off (mods_disabled, saved as on the Mods page), then the mods
+// reload; a note at the top of the screen says which.
+void ToggleRemastered();
+// A note at the top of the screen for a few seconds. Thread-safe.
+void ShowNote(const std::string& text);
 // Starts a Remastered import (port_remastered_import.h) with the mods unloaded
 // while it runs; they load again, the new import included, when it ends.
 // False when one is already running or there is no mods folder.

@@ -962,14 +962,24 @@ int main(int argc, char** argv) {
         PortLog::Write("metroid_prime_port: installed the imported Remastered models\n");
     }
     const bool roomGeometry = PortMods::HasRoomGeometry();
+    // The desktop sets the arena and the frame limits aside without room geometry too, so an
+    // import made or turned on later loads without a restart. Neither costs memory until used:
+    // the arena's pages are touched as the heap fills, and the frame buffers start small and
+    // grow. A phone takes its device buffers at the full limit up front (aurora, issue #165).
+#if defined(__ANDROID__) || defined(SDL_PLATFORM_IOS)
+    const bool reserveRoomGeometry = roomGeometry;
+#else
+    const bool reserveRoomGeometry = true;
+#endif
     uint32_t mem1Size = MEM1_DEFAULT_SIZE;
     {
         const int envMb = port::EnvInt("MP_MEM1_MB", -1);
-        const unsigned long mb = envMb >= 0 ? static_cast<unsigned long>(envMb) : roomGeometry ? kRoomGeoMem1MB : 0;
+        const unsigned long mb =
+            envMb >= 0 ? static_cast<unsigned long>(envMb) : reserveRoomGeometry ? kRoomGeoMem1MB : 0;
         if (mb > MEM1_DEFAULT_SIZE / (1024 * 1024)) {
             mem1Size = static_cast<uint32_t>(std::min(mb, 1024UL) * 1024 * 1024);
             PortLog::Write("port: MEM1 arena raised to %u MB (%s)\n", mem1Size / (1024 * 1024),
-                           envMb >= 0 ? "MP_MEM1_MB" : "room geometry");
+                           envMb >= 0 ? "MP_MEM1_MB" : "room geometry reserve");
         }
     }
     // With room_geo_resident (or MP_ROOM_GEO_RESIDENT=1), a room geometry mod's models stay on
@@ -990,7 +1000,7 @@ int main(int argc, char** argv) {
         residentMiB = static_cast<uint32_t>(
             envMiB >= 0 ? std::clamp(static_cast<unsigned long>(envMiB), 16UL, 2048UL) : kResidentMiB);
     }
-    uint32_t frameBufferScale = !roomGeometry ? 1 : resident ? kResidentFrameBuffers : kRoomGeoFrameBuffers;
+    uint32_t frameBufferScale = !reserveRoomGeometry ? 1 : resident ? kResidentFrameBuffers : kRoomGeoFrameBuffers;
     const int envFrameBuffers = port::EnvInt("MP_FRAME_BUFFERS", -1);
     if (envFrameBuffers >= 0) {
         frameBufferScale = static_cast<uint32_t>(std::clamp(static_cast<unsigned long>(envFrameBuffers), 1UL, 16UL));
@@ -1006,7 +1016,7 @@ int main(int argc, char** argv) {
         PortLog::Write("port: frame buffers at %ux, storage at %ux (%s)\n", frameBufferScale,
                        frameStorageScale != 0 ? frameStorageScale : frameBufferScale,
                        envFrameBuffers >= 0 || envStorageBuffers >= 0 ? "MP_FRAME_BUFFERS/MP_STORAGE_BUFFERS"
-                                                                      : "room geometry");
+                                                                      : "room geometry reserve");
     }
     // The startup compile of the cached and seeded pipelines costs ~950 MiB of process memory
     // (issue #162): Android, and any device short on RAM, builds them on first use instead. An 8 GB

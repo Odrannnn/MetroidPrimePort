@@ -355,6 +355,7 @@ void DrawUI() {
   DrawDiscReadFailedAlert();
   DrawShaderCompilationToast();
   DrawUpdateToast();
+  DrawNoteToast();
   DrawPhotoUI();
   DrawResumePrompt();
 #if defined(PORT_TOUCH_OVERLAY)
