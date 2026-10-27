@@ -980,9 +980,10 @@ void OpenCustomEditor(const PortInput::CustomActionDef* def) {
 
 // The presets, grouped by category, with the search box above them.
 void DrawPresetPicker() {
-  ImGui::SetNextItemWidth(360.f);
+  ImGui::SetNextItemWidth(-FLT_MIN);
   ImGui::InputTextWithHint("##actionsearch", "Search actions", sCustom.search, sizeof(sCustom.search));
-  ImGui::BeginChild("##presets", ImVec2(440.f, 260.f));
+  // The list takes the window's height, less the separator and Cancel below it.
+  ImGui::BeginChild("##presets", ImVec2(0.f, -ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().ItemSpacing.y));
   const char* category = nullptr;
   bool first = true;
   bool shown = false; // the current category's header is open
@@ -1012,10 +1013,14 @@ void DrawPresetPicker() {
 void DrawPresetOptions(const PortCustomActions::Preset& preset) {
   using PortCustomActions::ArgKind;
   const std::string_view key(preset.key);
+  // A list takes the window's height, less the rows below it: the mode, the name,
+  // an error and Save.
+  const int rowsBelow = (preset.hasMode ? 1 : 0) + 2 + (sCustom.error.empty() ? 0 : 1);
+  const ImVec2 listSize(0.f, -rowsBelow * ImGui::GetFrameHeightWithSpacing());
   if (preset.arg == ArgKind::Setting) {
-    ImGui::SetNextItemWidth(360.f);
+    ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::InputTextWithHint("##settingsearch", "Search settings", sCustom.argSearch, sizeof(sCustom.argSearch));
-    ImGui::BeginChild("##settings", ImVec2(440.f, 220.f));
+    ImGui::BeginChild("##settings", listSize);
     const char* section = nullptr;
     for (const PortCustomActions::BoolSetting& setting : PortCustomActions::BoolSettings()) {
       if (!Contains(setting.label, sCustom.argSearch) && !Contains(setting.section, sCustom.argSearch)) continue;
@@ -1027,7 +1032,7 @@ void DrawPresetOptions(const PortCustomActions::Preset& preset) {
     }
     ImGui::EndChild();
   } else if (preset.arg == ArgKind::Item) {
-    ImGui::BeginChild("##items", ImVec2(440.f, 220.f));
+    ImGui::BeginChild("##items", listSize);
     for (const PortConsoleItem& item : PortConsoleItems()) {
       if (ImGui::Selectable(item.label, sCustom.arg == item.key)) sCustom.arg = item.key;
     }
@@ -1043,16 +1048,16 @@ void DrawPresetOptions(const PortCustomActions::Preset& preset) {
       if (slot != PortSaveState::kSlotCount) ImGui::SameLine();
     }
   } else if (preset.arg == ArgKind::Language) {
-    ImGui::BeginChild("##languages", ImVec2(440.f, 180.f));
+    ImGui::BeginChild("##languages", listSize);
     for (const PortCustomActions::Language& language : PortCustomActions::Languages()) {
       if (ImGui::Selectable(language.label, sCustom.arg == language.code)) sCustom.arg = language.code;
     }
     ImGui::EndChild();
   } else if (preset.arg == ArgKind::Room) {
     PortCustomActions::LoadRooms();
-    ImGui::SetNextItemWidth(360.f);
+    ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::InputTextWithHint("##roomsearch", "Search rooms", sCustom.argSearch, sizeof(sCustom.argSearch));
-    ImGui::BeginChild("##rooms", ImVec2(440.f, 220.f));
+    ImGui::BeginChild("##rooms", listSize);
     if (PortCustomActions::Worlds().empty()) ImGui::TextDisabled("Start a game to list the rooms");
     for (const PortCustomActions::World& world : PortCustomActions::Worlds()) {
       // The one level with no front-end name is the ending's, not a place to go.
@@ -1089,7 +1094,7 @@ void DrawPresetOptions(const PortCustomActions::Preset& preset) {
     ImGui::EndChild();
   } else if (preset.arg == ArgKind::Text) {
     const bool command = key == "command";
-    ImGui::SetNextItemWidth(440.f);
+    ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::InputTextWithHint("##argtext", command ? "give Missiles 10" : "Text to show", sCustom.argText,
                              sizeof(sCustom.argText));
     ImGui::SetItemTooltip("%s", command
@@ -1116,7 +1121,7 @@ void DrawPresetOptions(const PortCustomActions::Preset& preset) {
   if (!sCustom.renamed) {
     std::snprintf(sCustom.name, sizeof(sCustom.name), "%s", PortCustomActions::AutoName(draft).c_str());
   }
-  ImGui::SetNextItemWidth(440.f);
+  ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Name").x - ImGui::GetStyle().ItemInnerSpacing.x);
   if (ImGui::InputTextWithHint("Name", "What this action is called", sCustom.name, sizeof(sCustom.name))) {
     sCustom.renamed = sCustom.name[0] != '\0';
   }
@@ -1216,7 +1221,13 @@ void DrawCustomActionPopups() {
     sCustom.error.clear();
     ImGui::OpenPopup("Custom action");
   }
-  if (ImGui::BeginPopupModal("Custom action", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+  // Resizable, opening at most of the screen; a resize is kept for the next time.
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.6f, viewport->Size.y * 0.75f), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(viewport->Size.x, 420.f), std::min(viewport->Size.y, 360.f)),
+                                      viewport->Size);
+  if (ImGui::BeginPopupModal("Custom action", nullptr)) {
     DrawCustomEditor();
     if (!sCustom.open) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
