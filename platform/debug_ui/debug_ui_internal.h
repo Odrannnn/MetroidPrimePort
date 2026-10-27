@@ -146,6 +146,7 @@ struct DriverWorkaround {
   const char* tooltip;
   const char* enable;  // Dawn toggles it turns on, comma-separated, or nullptr
   const char* disable; // and the ones it turns off
+  const char* env = nullptr; // an aurora variable it sets to 1 (unless already set), or nullptr
 };
 inline constexpr DriverWorkaround kDriverWorkarounds[] = {
     {"keep_depth", "Keep depth buffers (Direct3D 11)",
@@ -164,6 +165,10 @@ inline constexpr DriverWorkaround kDriverWorkarounds[] = {
      "Turns the graphics library's own checks back on for one start, so a command the driver\n"
      "rejects is named in the log. Costs performance, so it turns itself off after that start.",
      nullptr, "skip_validation,disable_robustness"},
+    {"no_bc", "Decode compressed textures on the CPU",
+     "Hands the GPU plain textures instead of compressed ones (more video memory).\n"
+     "Try it if textures show as green and magenta blocks.",
+     nullptr, nullptr, "AURORA_NO_BC"},
 };
 inline constexpr size_t kDriverWorkaroundCount = std::size(kDriverWorkarounds);
 // `validation` is for one start only: BeginDriverWorkarounds applies it and unticks it.

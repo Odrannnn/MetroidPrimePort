@@ -615,7 +615,9 @@
   `d3d11_disable_cpu_buffers`; `unmonitored_fence` ("Alternative GPU sync") turns on
   `d3d11_use_unmonitored_fence`; `validation` ("Driver error checks") turns off
   `skip_validation` and `disable_robustness`, so Dawn names a rejected command in the
-  log (slower). The first three are passed only to a Direct3D 11 device; on another
+  log (slower); `no_bc` ("Decode compressed textures on the CPU") sets `AURORA_NO_BC=1`,
+  so the device is made without BC texture compression and CMPR textures are decoded
+  to RGBA8 (Remastered BC replacements are then skipped). The first three are passed only to a Direct3D 11 device; on another
   API the log lists them as `(ignored: not Direct3D 11)`. The log's `Dawn toggles`
   block lists what the device got, each one also as a `driver workaround on|off:` line;
   `MP_DAWN_ENABLE` / `MP_DAWN_DISABLE` apply after them.

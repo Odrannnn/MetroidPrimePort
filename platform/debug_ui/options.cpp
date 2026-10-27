@@ -840,6 +840,14 @@ void BeginDriverWorkarounds(const std::string& userFolder, std::string& enable, 
     if (bits & (1u << i)) {
       append(enable, kDriverWorkarounds[i].enable);
       append(disable, kDriverWorkarounds[i].disable);
+      if (const char* var = kDriverWorkarounds[i].env; var != nullptr && port::EnvString(var) == nullptr) {
+#ifdef _WIN32
+        _putenv_s(var, "1");
+#else
+        setenv(var, "1", 1);
+#endif
+        PortLog::Write("port: driver workaround %s sets %s=1\n", kDriverWorkarounds[i].key, var);
+      }
     }
   }
   // A run on MP_DRIVER_WORKAROUNDS says nothing about the ticked boxes: it leaves the marker alone.
