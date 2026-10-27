@@ -162,7 +162,12 @@ void CPlasmaProjectile::UpdatePlayerEffects(float dt, CStateManager& mgr) {
     switch (GetType()) {
     case kWT_Ice: {
       const ushort freezeSfx = x544_freezeSfx;
-      player.SetFrozenState(mgr, x524_freezeSteamTxtr, freezeSfx, x528_freezeIceTxtr);
+      player.SetFrozenState(mgr, x524_freezeSteamTxtr, freezeSfx, x528_freezeIceTxtr
+#ifdef TARGET_PC
+                            ,
+                            xPortFrozenFxId
+#endif
+      );
       break;
     }
     case kWT_Wave:

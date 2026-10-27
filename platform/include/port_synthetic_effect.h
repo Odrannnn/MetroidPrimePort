@@ -66,7 +66,9 @@ inline constexpr const char* kRidleyBeamElectricEpsm = "5272fe00-f012-472c-92cf-
 inline constexpr const char* kBabygothFlame = "5bfbd5ec-c9b4-45a1-9b25-17f6c8134b47";
 inline constexpr const char* kBabygothFlameCollision = "97564fc0-faba-4473-939d-d131ff72e86f";
 // SLdrBabygothMP1 a57bf368 (+0x400): the frozen VFX of its SPlayerFrozenStateDataShip1 (+0x10); also
-// SLdrIceSheegothMP1 63160959 (+0x3cc) and SLdrThardusMP1 4cd8330b (+0x490).
+// SLdrIceSheegothMP1 63160959 (+0x3cc), SLdrThardusMP1 4cd8330b (+0x490), Metroid Prime's
+// SLdrIceAttack_MP1Typedef ff178a53 (+0x40), ice beam SLdrSecondaryEffect_MP1Typedef c477c0c3
+// (+0x60) and SLdrAEnergyBallMP1 a7efbd95 (+0x310).
 inline constexpr const char* kBabygothFrozenFx = "c23f13f7-8be3-4e93-be16-e12942e4b87f";
 // The Ice Sheegoth's breath (SLdrIceSheegothMP1 0x32c, 0x33c), as Babygoth's: the flame and its
 // collision child.

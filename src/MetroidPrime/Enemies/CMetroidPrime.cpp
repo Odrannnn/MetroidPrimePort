@@ -34,6 +34,10 @@
 #include "Kyoto/Streams/CInputStream.hpp"
 #include "rstl/math.hpp"
 
+#ifdef TARGET_PC
+#include "port_synthetic_effect.h"
+#endif
+
 static const float skJumpDistances[] = {3.f, 7.f, 15.f};
 static const float skHealthConstants[] = {2420.f, 1760.f, 880.f, 0.f};
 static const char* const skDrillerLocators[] = {"driller_LCTR1", "driller_LCTR2"};
@@ -681,6 +685,16 @@ void CMetroidPrime::DoUserAnimEvent(CStateManager& mgr, const CInt32POINode& nod
           CRelAngle::FromDegrees(x930_.x30_).AsRadians(), x930_.x34_texture, x930_.x38_, x930_.x3a_,
           kInvalidAssetId);
       projectile->SetUseWorldRay(true);
+#ifdef TARGET_PC
+      // SLdrIceAttack_MP1Typedef ff178a53 (+0x40) is the frozen VFX of the
+      // SPlayerFrozenStateDataShip1 SLdrMetroidPrimeData_MP1Typedef::Load 0xe3e22c builds
+      // (+0x640); every Remastered Metroid Prime sets it to Babygoth's GENP.
+      const SObjectTag frozenFx('PART',
+                                PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFrozenFx));
+      if (gpResourceFactory->CanBuild(frozenFx)) {
+        projectile->PortSetFrozenFx(frozenFx.GetId());
+      }
+#endif
       mgr.AddObject(projectile);
       break;
     }
@@ -1280,6 +1294,18 @@ void CMetroidPrime::CreateParasiteQueenProjectile(CStateManager& mgr) {
         xa80_[i].GetDamage().GetWeaponMode().GetType() == kWT_Ice ? CWeapon::kPA_None
                                                                   : CWeapon::kPA_PlayerUnFreeze);
     projectile->SetPlayerSustainedDamage(xbc4_[i].first, xbc4_[i].second);
+#ifdef TARGET_PC
+    // CMetroidPrimeDataMP1::LoadParasiteQueenBeams: SLdrSecondaryEffect_MP1Typedef c477c0c3
+    // (+0x60) is the beam's frozen VFX; every Remastered Metroid Prime sets it, to Babygoth's
+    // GENP, on the one beam that carries freeze data, and only the ice beam freezes.
+    if (xa80_[i].GetDamage().GetWeaponMode().GetType() == kWT_Ice) {
+      const SObjectTag frozenFx(
+          'PART', PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFrozenFx));
+      if (gpResourceFactory->CanBuild(frozenFx)) {
+        projectile->PortSetFrozenFx(frozenFx.GetId());
+      }
+    }
+#endif
     mgr.AddObject(*projectile);
   }
 }

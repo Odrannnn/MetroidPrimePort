@@ -8,6 +8,11 @@
 #include "MetroidPrime/ScriptObjects/CHUDBillboardEffect.hpp"
 #include "MetroidPrime/ScriptObjects/CSustainedPlayerDamage.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#include "port_synthetic_effect.h"
+#endif
+
 static EMaterialTypes sSolidMaterial = kMT_Solid;
 static EMaterialTypes sPlayerMaterial = kMT_Player;
 
@@ -130,7 +135,18 @@ void CEnergyBall::Detonate(CStateManager& mgr) {
     }
     case 1: {
       const ushort freezeSfx = x5a0;
+#ifdef TARGET_PC
+      // SLdrAEnergyBallMP1 a7efbd95 (+0x310) is the frozen VFX of the
+      // SPlayerFrozenStateDataShip1 CAEnergyBallMP1GOC::Create 0xefa78c builds; every
+      // Remastered energy ball (Crater 03c-03e) sets it to Babygoth's GENP.
+      const SObjectTag frozenFx('PART',
+                                PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFrozenFx));
+      mgr.Player()->SetFrozenState(mgr, x59c, freezeSfx, x5a4,
+                                   gpResourceFactory->CanBuild(frozenFx) ? frozenFx.GetId()
+                                                                         : kInvalidAssetId);
+#else
       mgr.Player()->SetFrozenState(mgr, x59c, freezeSfx, x5a4);
+#endif
       breakFrozen = false;
       break;
     }

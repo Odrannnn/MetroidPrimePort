@@ -2346,9 +2346,10 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPlasmaProjectile
       {"x548_29_activePlayerPhazon", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CPlasmaProjectile, x548_29_activePlayerPhazon), PES_SETI(CPlasmaProjectile, x548_29_activePlayerPhazon)},
       {"xPortBeam", "PortTickPair<CPlasmaProjectile::SPortBeam>", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CPlasmaProjectile::xPortBeam), PES_ADDR(CPlasmaProjectile, xPortBeam), nullptr, nullptr},
       {"xPortDrawLength", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlasmaProjectile::xPortDrawLength), PES_ADDR(CPlasmaProjectile, xPortDrawLength), nullptr, nullptr},
+      {"xPortFrozenFxId", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPlasmaProjectile::xPortFrozenFxId), PES_ADDR(CPlasmaProjectile, xPortFrozenFxId), PES_GETI(CPlasmaProjectile, xPortFrozenFxId), PES_SETI(CPlasmaProjectile, xPortFrozenFxId)},
       {"xPortBeamElectric", "rstl::single_ptr<CParticleElectric>", PortSchemaKind::smart_ptr, 0, kPortSchemaPrivate, sizeof(CPlasmaProjectile::xPortBeamElectric), PES_ADDR(CPlasmaProjectile, xPortBeamElectric), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CPlasmaProjectile", "CBeamProjectile", fields, 45, 0x7EAFCEF84FDBEA80ull};
+  static const PortSchemaClass desc = {"CPlasmaProjectile", "CBeamProjectile", fields, 46, 0xD942FD352CBCCC83ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CPlayer >() {
@@ -4678,4 +4679,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3404;
+const int PortEntitySchema::kFieldCount = 3405;
