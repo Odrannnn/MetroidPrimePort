@@ -170,7 +170,7 @@ void DrawControlsKeyboardMouse() {
   // Shown on the Quake/Source/Apex scale (0.022 degrees a count per unit), stored in radians.
   float sourceSensitivity = PortMouse::SourceFromRadians(sInput.mouseSensitivity);
   if (ImGui::SliderFloat("Sensitivity", &sourceSensitivity, 0.3f, 30.f, "%.3f",
-                         ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
+                         ImGuiSliderFlags_NoRoundToFormat)) {
     SetMouseSensitivity(PortMouse::RadiansFromSource(sourceSensitivity));
     MarkDirty();
   }
@@ -184,7 +184,7 @@ void DrawControlsKeyboardMouse() {
   if (sInput.mouseSensitivitySplit) {
     float sourceSensitivityY = PortMouse::SourceFromRadians(sInput.mouseSensitivityY);
     if (ImGui::SliderFloat("Vertical sensitivity", &sourceSensitivityY, 0.3f, 30.f, "%.3f",
-                           ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
+                           ImGuiSliderFlags_NoRoundToFormat)) {
       SetMouseSensitivityY(PortMouse::RadiansFromSource(sourceSensitivityY));
       MarkDirty();
     }
@@ -246,8 +246,7 @@ void DrawControlsController() {
   // Shown only with twin stick on, as the pause menu's Stick Aim Speed row.
   if (sInput.twinStick) {
     float stickRate = sInput.stickAimRate;
-    if (ImGui::SliderFloat("Stick aim speed", &stickRate, 100.f, 8100.f, "%.0f px/s",
-                           ImGuiSliderFlags_Logarithmic)) {
+    if (ImGui::SliderFloat("Stick aim speed", &stickRate, 100.f, 8100.f, "%.0f px/s")) {
       SetStickAimRate(stickRate);
     }
     ItemHelp(sInput.stickAimSplit ? "How fast the right stick turns left and right at full tilt."
@@ -262,8 +261,7 @@ void DrawControlsController() {
     ItemHelp("Own speed for looking up and down; Stick aim speed then sets left and right only.");
     if (sInput.stickAimSplit) {
       float stickRateY = sInput.stickAimRateY;
-      if (ImGui::SliderFloat("Vertical stick aim speed", &stickRateY, 100.f, 8100.f, "%.0f px/s",
-                             ImGuiSliderFlags_Logarithmic) &&
+      if (ImGui::SliderFloat("Vertical stick aim speed", &stickRateY, 100.f, 8100.f, "%.0f px/s") &&
           std::isfinite(stickRateY) && stickRateY >= 50.f && stickRateY <= 10000.f) {
         sInput.stickAimRateY = stickRateY;
         MarkDirty();
@@ -383,8 +381,7 @@ void DrawControlsTouchGyro() {
   ImGui::EndDisabled();
   ImGui::BeginDisabled(!(!sInput.touchClassic || sInput.touchAim));
   float touchAimSpeed = sInput.touchAimSpeed;
-  if (ImGui::SliderFloat("Touch aim speed", &touchAimSpeed, 0.5f, 10.f, "%.2f px/dp",
-                         ImGuiSliderFlags_Logarithmic)) {
+  if (ImGui::SliderFloat("Touch aim speed", &touchAimSpeed, 0.5f, 10.f, "%.2f px/dp")) {
     SetTouchAimSpeed(touchAimSpeed);
   }
   if (ImGui::Checkbox("Separate vertical speed##touch", &sInput.touchAimSplit)) {
@@ -393,8 +390,7 @@ void DrawControlsTouchGyro() {
   }
   if (sInput.touchAimSplit) {
     float touchAimSpeedY = sInput.touchAimSpeedY;
-    if (ImGui::SliderFloat("Vertical touch aim speed", &touchAimSpeedY, 0.5f, 10.f, "%.2f px/dp",
-                           ImGuiSliderFlags_Logarithmic)) {
+    if (ImGui::SliderFloat("Vertical touch aim speed", &touchAimSpeedY, 0.5f, 10.f, "%.2f px/dp")) {
       SetTouchAimSpeedY(touchAimSpeedY);
     }
   }
@@ -478,7 +474,7 @@ void DrawControlsTouchGyro() {
   float gyroSensitivity = sInput.gyroSensitivity;
   // The ## suffix keeps its ImGui id apart from the mouse Sensitivity slider.
   if (ImGui::SliderFloat("Sensitivity##gyro", &gyroSensitivity, PortInput::kGyroSensitivityMin,
-                         PortInput::kGyroSensitivityMax, "%.2fx", ImGuiSliderFlags_Logarithmic)) {
+                         PortInput::kGyroSensitivityMax, "%.2fx")) {
     SetGyroSensitivity(gyroSensitivity);
   }
   ItemHelp("How far the camera turns per turn of the pad: at 1.00x a 90 degree turn gives 90. With "
@@ -492,7 +488,7 @@ void DrawControlsTouchGyro() {
   if (sInput.gyroSplit) {
     float gyroSensitivityY = sInput.gyroSensitivityY;
     if (ImGui::SliderFloat("Vertical sensitivity##gyro", &gyroSensitivityY, PortInput::kGyroSensitivityMin,
-                           PortInput::kGyroSensitivityMax, "%.2fx", ImGuiSliderFlags_Logarithmic)) {
+                           PortInput::kGyroSensitivityMax, "%.2fx")) {
       SetGyroSensitivityY(gyroSensitivityY);
     }
   }

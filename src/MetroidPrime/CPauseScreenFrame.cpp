@@ -211,16 +211,14 @@ enum EPortOption {
 };
 #define PORT_OPTION(opt) static_cast< EGameOption >(opt)
 
-// Aim speed steps: 900 px/s (the default) at 10, x9 per 10 steps, so 0 is
-// 100 px/s and 20 is 8100 px/s (the overlay's slider covers 100-8100).
+// Aim speed steps: linear, 400 px/s apart, so 0 is 100 px/s, 2 is 900 px/s
+// (the default) and 20 is 8100 px/s, like the overlay's slider (100-8100).
 static const float kAimSpeedDefault = 900.f;
-static const float kAimSpeedDefaultStep = 10.f;
-static float AimSpeedFromStep(int step) {
-  return kAimSpeedDefault * powf(9.f, (step - kAimSpeedDefaultStep) / 10.f);
-}
+static const float kAimSpeedMin = 100.f;
+static const float kAimSpeedStep = 400.f;
+static float AimSpeedFromStep(int step) { return kAimSpeedMin + kAimSpeedStep * step; }
 static int AimSpeedToStep(float rate) {
-  return static_cast< int >(
-      floorf(kAimSpeedDefaultStep + 10.f * logf(rate / kAimSpeedDefault) / logf(9.f) + 0.5f));
+  return static_cast< int >(floorf((rate - kAimSpeedMin) / kAimSpeedStep + 0.5f));
 }
 
 static const SGameOption skPortVisorOptions[] = {

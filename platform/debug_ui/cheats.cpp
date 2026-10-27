@@ -316,7 +316,7 @@ void DrawFreeCam() {
     PortFreeCam::SetShowPlayer(showPlayer);
   }
   float speed = PortFreeCam::Speed();
-  if (ImGui::SliderFloat("Speed", &speed, 1.f, 100.f, "%.0f m/s", ImGuiSliderFlags_Logarithmic)) {
+  if (ImGui::SliderFloat("Speed", &speed, 1.f, 100.f, "%.0f m/s")) {
     PortFreeCam::SetSpeed(speed);
   }
   PortFreeCam::Pose pose = PortFreeCam::GetPose();
