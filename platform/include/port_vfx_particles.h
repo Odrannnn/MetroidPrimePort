@@ -65,6 +65,11 @@ uint PortVfxEvalVsmt(const CPortVfxData& vfx, int frame, float vsmt[kPortVfxVsmt
 // ITEN (default 1) and the VPMT rows at `frame`, for a swoosh point. The caller has set
 // CParticleGlobals' particle context.
 void PortVfxEvalPoint(const CPortVfxData& vfx, int frame, float& iten, float vpmt[4][4]);
+// The two halves of PortVfxEvalPoint. PortVfxEvalIten keeps `iten` when the element writes no
+// value: an init-only IRND (CREInitialRandom) writes at frame 0 only, as Remastered's init list
+// evaluates it once and its update list leaves it.
+void PortVfxEvalIten(const CPortVfxData& vfx, int frame, float& iten);
+void PortVfxEvalVpmt(const CPortVfxData& vfx, int frame, float vpmt[4][4]);
 
 // A TRSS UV offset (A or B) after pack_texture_transform 0x20e8f0 and the VS unpack: the signed
 // fraction goes out as the u16 trunc((f + 1) / 2 * 65535) and comes back as u16 * (2 / 65535) - 1.

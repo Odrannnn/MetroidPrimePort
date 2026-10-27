@@ -292,6 +292,14 @@ void PortVfxEvalParams(const CPortVfxData& vfx, int frame, float params[7][4]) {
 
 void PortVfxEvalPoint(const CPortVfxData& vfx, int frame, float& iten, float vpmt[4][4]) {
   iten = EvalReal(vfx.iten, frame, 1.f);
+  PortVfxEvalVpmt(vfx, frame, vpmt);
+}
+
+void PortVfxEvalIten(const CPortVfxData& vfx, int frame, float& iten) {
+  iten = EvalReal(vfx.iten, frame, iten);
+}
+
+void PortVfxEvalVpmt(const CPortVfxData& vfx, int frame, float vpmt[4][4]) {
   for (const CPortVfxElem& e : vfx.vpmt) {
     if (e.a >= 4) {
       continue;

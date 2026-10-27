@@ -57,8 +57,8 @@ public:
     std::vector< float > leftRad;  // per node (UpdateBolt 0xb77638 node+0x28 x RADS)
     std::vector< float > rightRad; // per node (node+0x2c x RADS)
     std::vector< std::array< float, 4 > > color; // per node: NCLR x COLR
-    float iten = 1.f;
-    float vpmt[4][4] = {};
+    std::vector< float > iten;                   // per node (the sub-particle AddVar buffer)
+    float vpmt[4][4] = {};                       // per bolt (render indexes PMTR by bolt)
     // The primary line's end points before the bake (the owner's space, unscaled), where
     // CreateNewParticles 0xb76508 places the GPSM and EPSM children, and the children taken.
     PortElectric2::V3 first{};

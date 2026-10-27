@@ -118,6 +118,21 @@ void CParticleElectric2Port::UpdateBolt(Bolt& bolt, int systemFrame) {
     mDesc->x14_COLR->GetValueHdr(frame, colr);
   }
   const size_t nodes = static_cast<size_t>(mNodes);
+  // The AddVar system (desc+0x270) runs next, once per node with the node tween set, into a
+  // per-node buffer: _Init_SubParticle when the bolt is created, else _Update_SubParticle. Render
+  // (UpdateRenderData_Electric2 0x2b8694, GatherSubParticleAddlVar 0x2b9740) gives a segment's
+  // node-i vertices that node's ITEN (+0x8c) and its node-(i+1) vertices the next node's (+0x90),
+  // so an init-only IRND ITEN (C30EEDEF, F0826A58: IRND(2, 10)) is one draw per node, kept for
+  // the bolt's life. PMTR goes out per bolt (indexed by bolt in FUN_002b9868), so VPMT stays one.
+  if (bolt.iten.size() != nodes) {
+    bolt.iten.assign(nodes, 1.f);
+  }
+  if (mDesc->xPortVfx) {
+    for (int i = 0; i < mNodes; ++i) {
+      CParticleGlobals::PortSetSlot2Time(i, mNodes - 1);
+      PortVfxEvalIten(*mDesc->xPortVfx, frame, bolt.iten[size_t(i)]);
+    }
+  }
   bolt.leftRad.resize(nodes);
   bolt.rightRad.resize(nodes);
   bolt.color.resize(nodes);
@@ -148,12 +163,11 @@ void CParticleElectric2Port::UpdateBolt(Bolt& bolt, int systemFrame) {
     }
   }
   CParticleGlobals::PortClearSlot2Time();
-  bolt.iten = 1.f;
   for (auto& row : bolt.vpmt) {
     std::fill(row, row + 4, 0.f);
   }
   if (mDesc->xPortVfx) {
-    PortVfxEvalPoint(*mDesc->xPortVfx, frame, bolt.iten, bolt.vpmt);
+    PortVfxEvalVpmt(*mDesc->xPortVfx, frame, bolt.vpmt);
   }
 }
 
@@ -373,9 +387,10 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
   };
 
   for (const Bolt& bolt : mBolts) {
-    const float iten = PortElectric2::ExposureCompensatedIntensity(bolt.iten, exposure);
     std::vector< std::array< float, 4 > > color(bolt.color.size());
     for (size_t i = 0; i < color.size(); ++i) {
+      const float iten = PortElectric2::ExposureCompensatedIntensity(
+          i < bolt.iten.size() ? bolt.iten[i] : 1.f, exposure);
       for (int c = 0; c < 4; ++c) {
         color[i][size_t(c)] = bolt.color[i][size_t(c)] * (c < 3 ? iten : 1.f) * modu[c];
       }
