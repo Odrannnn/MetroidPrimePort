@@ -1,6 +1,7 @@
 #ifndef _CPARTICLEELECTRIC2PORT
 #define _CPARTICLEELECTRIC2PORT
 
+#include <array>
 #include <vector>
 
 #include "Kyoto/Graphics/CColor.hpp"
@@ -55,7 +56,7 @@ public:
     int endFrame = 1;
     std::vector< float > leftRad;  // per node (UpdateBolt 0xb77638 node+0x28 x RADS)
     std::vector< float > rightRad; // per node (node+0x2c x RADS)
-    float color[4] = {1.f, 1.f, 1.f, 1.f};
+    std::vector< std::array< float, 4 > > color; // per node: NCLR x COLR
     float iten = 1.f;
     float vpmt[4][4] = {};
     // The primary line's end points before the bake (the owner's space, unscaled), where

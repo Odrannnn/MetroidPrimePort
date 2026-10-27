@@ -103,13 +103,24 @@ void CParticleElectric2Port::UpdateBolt(Bolt& bolt, int systemFrame) {
   // lineMgr+0x38). RADS/LRAD/RRAD (desc+0x138/0x128/0x130) and NCLR (desc+0x148) are inside it, so the
   // original evaluates them once per node, with the context time (ctx+0x68) and life (ctx+0x6c,
   // ctx+0x70 = end - start) of the bolt and the node's own tween (ctx+0x80: frame i, life nodes - 1)
-  // alongside. The radii follow that per node: KESP (slot-2 keyframes) reads the node tween, e.g. the
-  // AtomicBeta ELC2's RADS taper 0 -> 1 along the bolt. NCLR stays one colour per bolt (residual:
-  // exact for shipped data, none of whose NCLRs reads slot 2).
+  // alongside, in this order per node: LRAD, RRAD, RADS, NCLR. KESP (slot-2 keyframes) reads the
+  // node tween, e.g. the AtomicBeta ELC2's RADS taper 0 -> 1 along the bolt, and an NCLR that draws
+  // a random (SLCT(IRND, ...)) draws one per node.
+  // Node colour = NCLR modulated by COLR: UpdateRenderState 0xb760e0 builds COLR (lineMgr+0x38)
+  // x the owner's modulate colour (this+0x90) with CColor4f16::Modulate and Modulates every node's
+  // NCLR colour with it (Modulate is a component multiply (unverified: body not decompiled)).
+  // NCLR's GRAD runs on the frame argument (the bolt's age, CCEGradient::GetValue 0x2c8d48) over an
+  // ILPT period read from slot 2's life (nodes - 1), which the port sets as the lifetime around it.
   // CreateNewParticles 0xb76508 calls it right after the bolt starts, so the age is 0 there.
   const int frame = systemFrame - bolt.startFrame;
-  bolt.leftRad.resize(static_cast<size_t>(mNodes));
-  bolt.rightRad.resize(static_cast<size_t>(mNodes));
+  float colr[4] = {1.f, 1.f, 1.f, 1.f};
+  if (mDesc->x14_COLR != nullptr) {
+    mDesc->x14_COLR->GetValueHdr(frame, colr);
+  }
+  const size_t nodes = static_cast<size_t>(mNodes);
+  bolt.leftRad.resize(nodes);
+  bolt.rightRad.resize(nodes);
+  bolt.color.resize(nodes);
   for (int i = 0; i < mNodes; ++i) {
     CParticleGlobals::PortSetSlot2Time(i, mNodes - 1);
     float lrad = 0.f, rrad = 0.f;
@@ -125,29 +136,18 @@ void CParticleElectric2Port::UpdateBolt(Bolt& bolt, int systemFrame) {
         mDesc->xPortLLRD);
     bolt.leftRad[size_t(i)] = radii.left;
     bolt.rightRad[size_t(i)] = radii.right;
-  }
-  CParticleGlobals::PortClearSlot2Time();
-
-  // Node colour = NCLR modulated by COLR: UpdateRenderState 0xb760e0 builds COLR (lineMgr+0x38)
-  // x the owner's modulate colour (this+0x90) with CColor4f16::Modulate and Modulates every node's
-  // NCLR colour with it (Modulate is a component multiply (unverified: body not decompiled)).
-  // Both are per bolt here: NCLR is evaluated with the bolt's age as frame and slot-2 life = nodes
-  // - 1 on every node, so it is the same on each node of a bolt (UpdateBolt 0xb77638, SPEC-grad).
-  float color[4] = {1.f, 1.f, 1.f, 1.f};
-  if (mDesc->xPortNCLR != nullptr) {
-    const int life = bolt.life;
-    CParticleGlobals::SetParticleLifetime(std::max(mNodes - 1, 1));
-    mDesc->xPortNCLR->GetValueHdr(frame, color);
-    CParticleGlobals::SetParticleLifetime(life);
-  }
-  if (mDesc->x14_COLR != nullptr) {
-    float colr[4] = {1.f, 1.f, 1.f, 1.f};
-    mDesc->x14_COLR->GetValueHdr(frame, colr);
+    float color[4] = {1.f, 1.f, 1.f, 1.f};
+    if (mDesc->xPortNCLR != nullptr) {
+      const int life = bolt.life;
+      CParticleGlobals::SetParticleLifetime(std::max(mNodes - 1, 1));
+      mDesc->xPortNCLR->GetValueHdr(frame, color);
+      CParticleGlobals::SetParticleLifetime(life);
+    }
     for (int c = 0; c < 4; ++c) {
-      color[c] *= colr[c];
+      bolt.color[size_t(i)][size_t(c)] = color[c] * colr[c];
     }
   }
-  std::copy(color, color + 4, bolt.color);
+  CParticleGlobals::PortClearSlot2Time();
   bolt.iten = 1.f;
   for (auto& row : bolt.vpmt) {
     std::fill(row, row + 4, 0.f);
@@ -373,10 +373,12 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
   };
 
   for (const Bolt& bolt : mBolts) {
-    float color[4];
     const float iten = PortElectric2::ExposureCompensatedIntensity(bolt.iten, exposure);
-    for (int c = 0; c < 4; ++c) {
-      color[c] = bolt.color[c] * (c < 3 ? iten : 1.f) * modu[c];
+    std::vector< std::array< float, 4 > > color(bolt.color.size());
+    for (size_t i = 0; i < color.size(); ++i) {
+      for (int c = 0; c < 4; ++c) {
+        color[i][size_t(c)] = bolt.color[i][size_t(c)] * (c < 3 ? iten : 1.f) * modu[c];
+      }
     }
     for (const auto& localLine : bolt.lines) {
       std::vector<V3> moved;
@@ -411,10 +413,12 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
       for (int i = 0; i + 1 < n; ++i) {
         const float u0 = float(i) * segLen;
         const float u1 = float(i + 1) * segLen;
-        emit(a[size_t(i)], u0, 0.f, color, bolt.vpmt);
-        emit(b[size_t(i)], u0, 1.f, color, bolt.vpmt);
-        emit(b[size_t(i + 1)], u1, 1.f, color, bolt.vpmt);
-        emit(a[size_t(i + 1)], u1, 0.f, color, bolt.vpmt);
+        const float* c0 = color[std::min(size_t(i), color.size() - 1)].data();
+        const float* c1 = color[std::min(size_t(i + 1), color.size() - 1)].data();
+        emit(a[size_t(i)], u0, 0.f, c0, bolt.vpmt);
+        emit(b[size_t(i)], u0, 1.f, c0, bolt.vpmt);
+        emit(b[size_t(i + 1)], u1, 1.f, c1, bolt.vpmt);
+        emit(a[size_t(i + 1)], u1, 0.f, c1, bolt.vpmt);
       }
     }
   }
