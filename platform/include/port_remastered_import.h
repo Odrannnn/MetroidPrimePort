@@ -194,7 +194,8 @@ inline constexpr int kModels = 22;
 // 132: SteamMP1 GENPs (room-only).
 // 133: visor steam (VFX_VisorSteam 53eceaa4).
 // 134: Metroid Prime's beams' electric (room ELC2s).
-inline constexpr int kEffects = 135;   // KESP kept as the ELC2 node tween (AtomicBeta ELC2 radius)
+// 135: KESP kept as the ELC2 node tween (AtomicBeta ELC2 radius).
+inline constexpr int kEffects = 136;   // GunTurret particle properties (room GENPs)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -229,7 +230,8 @@ inline constexpr int kEffects = 135;   // KESP kept as the ELC2 node tween (Atom
 // 57: .roomfx v8, a matched Steam's Remastered visor steam (SteamMP1).
 // 58: .roomliquid v5, each surface's matched retail Water editor id.
 // 59: .roomfx v9, the Metroid Prime relay's beams' Remastered electric (actor slots).
-inline constexpr int kRooms = 59;
+// 60: GunTurret particle properties (idle, deactivate, targetting, charging, panning).
+inline constexpr int kRooms = 60;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).

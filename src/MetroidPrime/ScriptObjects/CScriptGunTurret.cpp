@@ -278,6 +278,13 @@ void CScriptGunTurret::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid,
                                       GetTransform(), GetUniqueId(),
                                       x478_targettingLight->GetLight(), 0, 1, 0.f));
       SetupCollisionManager(mgr);
+#ifdef TARGET_PC
+    } else if (x258_type == kTC_Gun) {
+      // Remastered's targetting effect has no light (CScriptGunTurretMP1 makes no particle
+      // light at all), and CScriptGunTurretMP1::AcceptScriptMsg sets up every gun's collision
+      // regardless; without it Think's UpdateGunCollisionManager dereferences a null manager.
+      SetupCollisionManager(mgr);
+#endif
     } else if (x258_type == kTC_Base) {
       if (x2d4_data.GetExtensionModelResId() != kInvalidAssetId) {
         x4a4_extensionModel =
@@ -1200,6 +1207,11 @@ void CScriptGunTurret::UpdateGunParticles(float dt, CStateManager& mgr) {
       x478_targettingLight->SetGlobalTranslation(lightPos);
       x478_targettingLight->SetGlobalScale(GetModelScale());
       x478_targettingLight->Update(dt);
+#ifdef TARGET_PC
+      // Retail always has the light (kSM_Registered makes it from this PART); a Remastered
+      // targetting effect has none, so there is no light to update.
+      if (light != nullptr)
+#endif
       if (x478_targettingLight->SystemHasLight()) {
         light->SetLight(x478_targettingLight->GetLight());
       } else {

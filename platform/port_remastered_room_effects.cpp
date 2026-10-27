@@ -840,6 +840,15 @@ constexpr PartSlot kPartSlots[] = {
     // AtomicBetaMP1: the electric effect (ELC2 -> ELSC, LoadAtomicBeta's electricId), ahead
     // of weaponId and the paired particleId. Two different ELC2s take the one retail ELSC by placement.
     {0x87412090, {0xb460f7fc}, 0x77, 482},
+    // GunTurretMP1 (retail GunTurret, CScriptGunTurretData x60-x74): the five GENPs
+    // CScriptGunTurretMP1 builds element gens from, by its UpdateGunParticles states: idle,
+    // deactivate and targetting lights, charging and panning effects. Remastered has no frozen
+    // effect slot (x6c); its visor effect (x78) is an ELC2 and has no PART to take.
+    {0x1704c1f0, {0x72151d8c}, 0x64, 410},
+    {0x1704c1f0, {0xdfdca845}, 0x64, 414},
+    {0x1704c1f0, {0x8648f4bd}, 0x64, 418},
+    {0x1704c1f0, {0x87cf241f}, 0x64, 426},
+    {0x1704c1f0, {0x2107615d}, 0x64, 430},
     // MetroidPrimeRelayMP1's CMetroidPrimeData (CMetroidPrimeRelay.cpp), by the
     // CMetroidPrimeDataMP1 ctor and the SLdr typedef converters: ice attack particles 1-3,
     // x460_particle1, beam 0's contact and pulse effects, beam 2's fourth weapon asset, beam
