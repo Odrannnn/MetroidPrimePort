@@ -1,5 +1,7 @@
 # Metroid Prime — native port
 
+**Make sure to check out the F1 (Or start+back on controller) menu for all the additional features and QoL!**
+
 A native build of **Metroid Prime** for Linux, Windows and Android (plus
 experimental, untested-on-hardware macOS and iPhone/iPad builds), compiled
 from the [PrimeDecomp](https://github.com/PrimeDecomp/prime) decompilation and
@@ -13,8 +15,9 @@ ships no disc image, and neither does any package or release built from it.
 
 ## What it adds over the console release
 
-- **Remastered assets:** — (Experimental) import models, effects and lighting from your own Metroid Prime
-  Remastered dump (F1 > Remastered), with Remastered's thermal visor and a performance mode
+- **Modern controls:** Mouse & Keyboard, Dual stick camera, Gyro controls, Native touch controls for mobile!
+- **Remastered assets:**  (Experimental) import models, effects and lighting from your own Metroid Prime
+  Remastered dump (F1 > Remastered)
 - **Metroid Prime Trilogy:** run Trilogy's Metroid Prime from a Wii disc, with Trilogy's HUD,
   scan visor and radial beam and visor menus
 - **Metroid Dread Samus:** import Samus's suits from your own Metroid Dread dump, first-person
@@ -26,26 +29,22 @@ ships no disc image, and neither does any package or release built from it.
   effects, and a choice of renderer, OpenGL included
 - **Controls:** mouse and twin-stick aim, gyro, lock-on free aim, full rebinding
   and presets, separate Morph Ball binds
-- **Optional tweaks:** Fast Morph, Spring Ball, Toggle
-  Lock-On, Sticky Charge...
+- **Optional tweaks:** Fast Morph, Spring Ball, Toggle Lock-On, Sticky Charge... And so many more!
 - **Skippable cutscenes**
 - **Save states** and **quick resume** after quitting
 - **Saves:** import from and export to USA/PAL GameCube, Wii Trilogy and Dolphin
 - **Photo mode** with free-cam and high-resolution capture
 - **Map and tracker:** reveal the map, plus item, scan and room tracking
 - **Dolphin texture packs**, including HD texture replacements
-- **Mods:** drop-in mod folders that replace disc data, plus
-  [community mods](docs/MODS.md)
-- **Discord Rich Presence** on desktop, and a **touch overlay** with a layout
-  editor on Android and iOS
-- The **F1 overlay** has every setting, with search; the common ones are also in
-  pause > Options
+- **Mods:** drop-in mod folders that replace disc data, plus [community mods](docs/MODS.md)
+- **Discord Rich Presence** on desktop, and a **touch overlay** with a layout editor on Android and iOS
+- The **F1 overlay** has every setting
 - And more..!
 
 ## Randomizer and Archipelago Multiworld
 
-- **Randomizer** — Generate your own randomizer games
-- **Archipelago multiworld** — Generate a game in archipelago with the [Metroid Prime APWorld](https://github.com/UltiNaruto/MetroidAPrime) and host it. Open F1 > Archipelago, enter the server (`host:port`), your
+- **Randomizer** - Generate your own randomizer games
+- **Archipelago multiworld** - Generate a game in archipelago with the [Metroid Prime APWorld](https://github.com/UltiNaruto/MetroidAPrime) and host it. Open F1 > Archipelago, enter the server (`host:port`), your
   slot name and the password if any, and connect; no seed file is needed. Each seed and slot gets its own separate save, checks made
   offline are sent on the next connect, chat with command support, DeathLink.
   
