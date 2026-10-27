@@ -839,6 +839,13 @@ constexpr MatchedEffect kMatchedEffects[] = {
     // keeps the disc's.
     {"c3a53327-731d-4870-8f1e-fdc755bccf13", 0x2D16014C},  // 07BEED38 breastPlate_LCTR
     {"d701c231-cf56-4451-b177-107724371c42", 0xFD17C2C9},  // 07BEED38 breastPlate_LCTR
+    // WallCrawlerSwarm: WallCrawlerSwarmMP1's one effect property (2a0f3c8f)
+    // is LoadWallCrawlerSwarm's part1 (ScriptLoader.cpp), the first of its
+    // four PART slots; every placement, retail and Remastered, agrees. The
+    // script-slot rule misses it because the object's other uuid properties
+    // are not effects. part2 (18B11B28, intro) has no Remastered effect.
+    {"de057194-ef63-4abf-9ed7-b6ddad9486fb", 0x0A621238},  // 00a_Crater_connect part1
+    {"f17e87e4-91ca-4893-b601-1cf5822b8e36", 0x7DFF579C},  // 00F_intro_begin part1 (7 rooms)
     {"#loose-chpr", 0},  // method of the entries below
     // No ROOM, CHPR-set or script reference reaches these, or the counts are not
     // 1:1 (kb topic/unpaired-retail-particles.md). The missile pickup: CHPR a9b8e446 has one
