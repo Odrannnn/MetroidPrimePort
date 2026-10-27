@@ -65,10 +65,16 @@ inline constexpr const char* kRidleyBeamElectricEpsm = "5272fe00-f012-472c-92cf-
 // CFlameThrowerMP1 renders, and its KSSM child that takes the collision warp.
 inline constexpr const char* kBabygothFlame = "5bfbd5ec-c9b4-45a1-9b25-17f6c8134b47";
 inline constexpr const char* kBabygothFlameCollision = "97564fc0-faba-4473-939d-d131ff72e86f";
-// SLdrBabygothMP1 a57bf368 (+0x400): the frozen VFX of its SPlayerFrozenStateDataShip1 (+0x10).
+// SLdrBabygothMP1 a57bf368 (+0x400): the frozen VFX of its SPlayerFrozenStateDataShip1 (+0x10); also
+// SLdrIceSheegothMP1 63160959 (+0x3cc).
 inline constexpr const char* kBabygothFrozenFx = "c23f13f7-8be3-4e93-be16-e12942e4b87f";
+// The Ice Sheegoth's breath (SLdrIceSheegothMP1 0x32c, 0x33c), as Babygoth's: the flame and its
+// collision child.
+inline constexpr const char* kIceSheegothFlame = "34c9a820-9bc9-47a3-a165-204021391714";
+inline constexpr const char* kIceSheegothFlameCollision = "d8d8782e-82dc-4f83-9fde-213fbf225f89";
 inline constexpr const char* kActorEffectGuids[] = {kRidleyBeamElectric, kRidleyBeamElectricGpsm,
                                                     kRidleyBeamElectricEpsm, kBabygothFlame,
-                                                    kBabygothFlameCollision, kBabygothFrozenFx};
+                                                    kBabygothFlameCollision, kBabygothFrozenFx,
+                                                    kIceSheegothFlame, kIceSheegothFlameCollision};
 
 }  // namespace PortRemastered

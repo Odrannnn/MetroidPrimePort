@@ -28,6 +28,11 @@
 #include "MetroidPrime/BodyState/CBodyState.hpp"
 #include "rstl/math.hpp"
 
+#ifdef TARGET_PC
+#include "Kyoto/CResFactory.hpp"
+#include "port_synthetic_effect.h"
+#endif
+
 const int CIceSheegothData::skNumProperties = 37;
 
 const CVector3f CIceSheegoth::skChargingBounds(2.f, 2.f, 2.f);
@@ -1574,6 +1579,18 @@ void CIceSheegoth::CreateFlameThrower(CStateManager& mgr) {
         kMT_CollisionActor, x56c_data.GetFireBreathDamage(), xa80_flameThrowerId,
         GetCurrentAreaId(), GetUniqueId(), CWeapon::kPA_None, x56c_data.GetX1e4(),
         x56c_data.GetX1e8(), x56c_data.GetX1ec());
+#ifdef TARGET_PC
+    const SObjectTag fx('PART', PortRemastered::SyntheticEffectId(PortRemastered::kIceSheegothFlame));
+    if (gpResourceFactory->CanBuild(fx)) {
+      flame->PortSetRemasteredFlame(
+          fx.GetId(), PortRemastered::SyntheticEffectId(PortRemastered::kIceSheegothFlameCollision));
+    }
+    const SObjectTag frozenFx('PART',
+                              PortRemastered::SyntheticEffectId(PortRemastered::kBabygothFrozenFx));
+    if (gpResourceFactory->CanBuild(frozenFx)) {
+      flame->PortSetFrozenFx(frozenFx.GetId());
+    }
+#endif
     mgr.AddObject(*flame);
   }
 }
