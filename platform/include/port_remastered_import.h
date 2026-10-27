@@ -181,7 +181,8 @@ inline constexpr int kModels = 22;
 // 116: Puffer particle C9D453A3 and synthetic puffercloud (#by-hand).
 // 117: enemies' PatternedInfo death particle GENPs (room-only).
 // 118: matched objects' PART property GENPs (room-only).
-inline constexpr int kEffects = 119;   // Metroid Prime relay particle property GENPs (room-only)
+// 119: Metroid Prime relay particle property GENPs (room-only).
+inline constexpr int kEffects = 120;   // MetroidBeta 3ec1f3bd -> 9AEBBD85, 8e1a4b01 -> SWHC 18E0EADC (#by-hand)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

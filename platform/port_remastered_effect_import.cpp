@@ -846,12 +846,15 @@ constexpr MatchedEffect kMatchedEffects[] = {
     // are not effects. part2 (18B11B28, intro) has no Remastered effect.
     {"de057194-ef63-4abf-9ed7-b6ddad9486fb", 0x0A621238},  // 00a_Crater_connect part1
     {"f17e87e4-91ca-4893-b601-1cf5822b8e36", 0x7DFF579C},  // 00F_intro_begin part1 (7 rooms)
-    // MetroidBeta: 8e1a4b01 sits in the slot before the three electric effects
-    // already paired by script slot, as xf4_electricParticleId precedes them in
-    // CMetroidBetaData (CMetroidBeta.cpp); all 10 placements agree. Exo's
-    // CMetroidPrimeData xa1c_particle2 is the same PART and MetroidPrimeRelayMP1
-    // names no counterpart, so Exo takes this effect too.
-    {"8e1a4b01-b461-4968-951e-6aab5fbbd6e3", 0x9AEBBD85},  // MetroidBeta electricParticle
+    // MetroidBeta: SLdrMetroidBetaMP1::Load reads its five effect ids
+    // (4a60c1ab, 55e32683, d74656b0, 29ed4133, e4168360) into consecutive
+    // slots, in CMetroidBetaData's order xf4..x104 (CMetroidBeta.cpp); the two
+    // paired by script slot (xfc, x104) confirm it. All 10 placements agree:
+    // xf4_electricParticleId (PART) is 3ec1f3bd and xf8_electricSwooshEffectId
+    // (SWHC) is the swoosh 8e1a4b01. Exo's CMetroidPrimeData xa1c_particle2 is
+    // the same PART, so Exo takes 3ec1f3bd too.
+    {"3ec1f3bd-e45d-4fac-99ed-488537af39c3", 0x9AEBBD85},  // MetroidBeta electricParticle
+    {"8e1a4b01-b461-4968-951e-6aab5fbbd6e3", 0x18E0EADC},  // MetroidBeta electricSwoosh
     // Puffer: all 71 retail placements put C9D453A3 in both the CPatternedInfo
     // particle slot and LoadPuffer's cloudEffect; all 69 Remastered ones put
     // 813f0267 in the PatternedInfo slot and 78aa5da7 in the cloud slot. The
