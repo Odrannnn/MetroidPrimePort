@@ -185,7 +185,8 @@ inline constexpr int kModels = 22;
 // 120: MetroidBeta 3ec1f3bd -> 9AEBBD85, 8e1a4b01 -> SWHC 18E0EADC (#by-hand).
 // 121: Thardus/FlyingPirate/Elite/Omega slot GENPs, four ELC2 slots (#by-hand).
 // 122: room-only ELC2 slots (AtomicBeta) as ELSCs.
-inline constexpr int kEffects = 123;   // Ridley's x3f0 ELC2 (#by-hand)
+// 124: Ridley's plasma-beam ELC2 (kActorEffectGuids).
+inline constexpr int kEffects = 125;   // its GPSM/EPSM GENPs, resolved under their own ids
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

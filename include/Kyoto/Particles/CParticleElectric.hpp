@@ -58,6 +58,17 @@ public:
   void PortFxDescribe(PortFxInfo& out) const override;
   bool PortIsRemastered() const { return xPortElc2.get() != nullptr; }
   void PortSetSpawnSpread(const CVector3f& spread, const CVector3f& origin) override;
+  // Remastered CParticleElectric2's beam API (an ELC2 only): Beam_AllowEmission 0xb78704,
+  // Beam_SetStartAndEndLocationAndUpdateExistingParticle 0xb782fc, Beam_Reset 0xb784ec.
+  bool PortBeamAllowEmission() const { return x28_currentFrame == 0; }
+  void PortBeamSetStartAndEnd(const CVector3f& start, const CVector3f& end);
+  void PortBeamReset();
+  double PortEmitterTimeSeconds() const { return x30_curTime; }
+  // ResetSystemTimeRecursive (vtable +0xa8): the system clock back to 0.
+  void PortResetSystemTime() {
+    x28_currentFrame = 0;
+    x30_curTime = 0.0;
+  }
 #endif
 
   class CLineManager {
@@ -174,6 +185,7 @@ private:
   // Remastered ELC2 implementation, set when the description carries the PEL2 marker.
   std::unique_ptr< CParticleElectric2Port > xPortElc2;
   void PortElc2Step(bool emitting);
+  void PortElc2PlaceChildren();
   CVector3f xPortSpawnSpread{1.f, 1.f, 1.f};
   CVector3f xPortSpawnOrigin{0.f, 0.f, 0.f};
   // x38_translation with its offset from the parent's translation spread.

@@ -41,6 +41,106 @@ void CParticleElectric::PortElc2Step(bool emitting) {
   ctx.fpos = x198_overrideFPos ? &*x198_overrideFPos : nullptr;
   ctx.fvel = x1a8_overrideFVel ? &*x1a8_overrideFVel : nullptr;
   xPortElc2->Step(x28_currentFrame, emitting, ctx);
+  PortElc2PlaceChildren();
+}
+
+// The GPSM/EPSM half of CreateNewParticles 0xb76508 and UpdateElectricalEffects 0xb757a4: a
+// retired bolt's children are shut down (ShutdownEffect); each new bolt takes the first idle
+// child of each kind, set at the owner's transform of its first (GPSM) or last (EPSM) point
+// (SetExternalDataSet: pos = rot * (scale * p) + translation), and starts its emission.
+void CParticleElectric::PortElc2PlaceChildren() {
+  for (AUTO(it, xPortElc2->RetiredChildren().begin()); it != xPortElc2->RetiredChildren().end(); ++it) {
+    if (it->gpsm != -1) {
+      x400_gpsmGenerators[it->gpsm]->ShutdownEffect();
+    }
+    if (it->epsm != -1) {
+      x410_epsmGenerators[it->epsm]->ShutdownEffect();
+    }
+  }
+  if (!x450_25_haveGPSM && !x450_26_haveEPSM) {
+    return;
+  }
+  const CVector3f scale = CVector3f::ByElementMultiply(xe0_globalScale, xec_localScale);
+  const CTransform4f rotation = xf8_cachedXf.GetRotation();
+  const auto place = [&](rstl::vector< rstl::auto_ptr< CElementGen > >& gens, const PortElectric2::V3& p) {
+    for (int i = 0; i < x154_SCNT; ++i) {
+      CElementGen& gen = *gens[i];
+      if (gen.GetParticleEmission()) {
+        continue;
+      }
+      gen.SetGlobalTranslation(xf8_cachedXf * CVector3f::ByElementMultiply(scale, CVector3f(p.x, p.y, p.z)));
+      gen.SetGlobalOrientation(rotation);
+      gen.SetGlobalScale(xe0_globalScale);
+      gen.SetLocalScale(xec_localScale);
+      gen.SetParticleEmission(true);
+      return i;
+    }
+    return -1;
+  };
+  std::vector< CParticleElectric2Port::Bolt >& bolts = xPortElc2->Bolts();
+  for (size_t i = bolts.size() - size_t(xPortElc2->Created()); i < bolts.size(); ++i) {
+    if (x450_25_haveGPSM) {
+      bolts[i].gpsm = place(x400_gpsmGenerators, bolts[i].first);
+    }
+    if (x450_26_haveEPSM) {
+      bolts[i].epsm = place(x410_epsmGenerators, bolts[i].last);
+    }
+  }
+}
+
+void CParticleElectric::PortBeamSetStartAndEnd(const CVector3f& start, const CVector3f& end) {
+  x178_overrideIPos = start;
+  x198_overrideFPos = end;
+  if (!xPortElc2 || xPortElc2->BoltCount() != 1) {
+    return;
+  }
+  CParticleElectric2Port::Bolt& bolt = xPortElc2->Bolts().front();
+  // _Beam_SetStart/EndLocationAndUpdateExistingParticle 0xb77e90/0xb781b4: a two-node bolt
+  // takes the new end points as they are.
+  if (bolt.lines[0].size() == 2) {
+    bolt.lines[0].front() = PortElectric2::V3{start.GetX(), start.GetY(), start.GetZ()};
+    bolt.lines[0].back() = PortElectric2::V3{end.GetX(), end.GetY(), end.GetZ()};
+  }
+  const CVector3f scale = CVector3f::ByElementMultiply(xe0_globalScale, xec_localScale);
+  if (bolt.gpsm != -1) {
+    x400_gpsmGenerators[bolt.gpsm]->SetGlobalTranslation(xf8_cachedXf * CVector3f::ByElementMultiply(scale, start));
+  }
+  if (bolt.epsm != -1) {
+    x410_epsmGenerators[bolt.epsm]->SetGlobalTranslation(xf8_cachedXf * CVector3f::ByElementMultiply(scale, end));
+  }
+  // _Beam_UpdateStartAndEndPointParticleSystemOrientation 0xb77fd8: GPSM faces along the beam,
+  // EPSM back along it (CQuaternion::LookAt from skForwardVector, max angle 2pi).
+  if (bolt.gpsm != -1 || bolt.epsm != -1) {
+    const CUnitVector3f dir(end - start, CUnitVector3f::kN_Yes);
+    const CUnitVector3f fwd(CVector3f::Forward());
+    const CRelAngle full = CRelAngle::FromRadians(M_2PIF);
+    if (bolt.gpsm != -1) {
+      x400_gpsmGenerators[bolt.gpsm]->SetGlobalOrientation(CQuaternion::LookAt(fwd, dir, full).BuildTransform4f());
+    }
+    if (bolt.epsm != -1) {
+      const CUnitVector3f back(-dir, CUnitVector3f::kN_Yes);
+      x410_epsmGenerators[bolt.epsm]->SetGlobalOrientation(CQuaternion::LookAt(fwd, back, full).BuildTransform4f());
+    }
+  }
+}
+
+// Beam_Reset 0xb784ec: back to frame 0 with no bolts; every child is stopped at once with its
+// particles gone (ShutdownEffectInstantlyWithRecursiveOverride).
+void CParticleElectric::PortBeamReset() {
+  x28_currentFrame = 0;
+  x30_curTime = 0.0;
+  if (x1c_elecDesc->x0_LIFE) {
+    x1c_elecDesc->x0_LIFE->GetValue(0, x2c_LIFE);
+  }
+  if (xPortElc2) {
+    xPortElc2->Reset();
+  }
+  for (int i = 0; i < x400_gpsmGenerators.size(); ++i) {
+    x400_gpsmGenerators[i]->PortDoShutdownBehavior(1);
+  }
+  for (int i = 0; i < x410_epsmGenerators.size(); ++i) {
+    x410_epsmGenerators[i]->PortDoShutdownBehavior(1);
+  }
 }
 #endif
 
@@ -93,6 +193,24 @@ CParticleElectric::CParticleElectric(TToken< CElectricDescription > desc)
 #ifdef TARGET_PC
   if (x1c_elecDesc->xPortElc2) {
     xPortElc2.reset(new CParticleElectric2Port(**x1c_elecDesc));
+    // Remastered builds SCNT GPSM and EPSM generators too, emission off; CreateNewParticles
+    // 0xb76508 places and starts one of each per bolt (PortElc2PlaceChildren).
+    if (x1c_elecDesc->x50_GPSM) {
+      x450_25_haveGPSM = true;
+      x400_gpsmGenerators.reserve(x154_SCNT);
+      for (int i = 0; i < x154_SCNT; ++i) {
+        x400_gpsmGenerators.push_back(rs_new CElementGen(x1c_elecDesc->x50_GPSM->GetToken()));
+        x400_gpsmGenerators.back()->SetParticleEmission(false);
+      }
+    }
+    if (x1c_elecDesc->x60_EPSM) {
+      x450_26_haveEPSM = true;
+      x410_epsmGenerators.reserve(x154_SCNT);
+      for (int i = 0; i < x154_SCNT; ++i) {
+        x410_epsmGenerators.push_back(rs_new CElementGen(x1c_elecDesc->x60_EPSM->GetToken()));
+        x410_epsmGenerators.back()->SetParticleEmission(false);
+      }
+    }
     return;
   }
 #endif
@@ -325,7 +443,14 @@ const bool CParticleElectric::Update(double dt) {
         x1e0_swooshGenerators[it->x0_idx]->SetLocalScale(xec_localScale);
       }
     }
-    if (x450_25_haveGPSM) {
+#ifdef TARGET_PC
+    // An ELC2 places its GPSM/EPSM children per bolt (PortElc2PlaceChildren); Remastered's
+    // MPT_Set* transform calls are no-ops and never move them.
+    const bool placeChildren = !xPortElc2;
+#else
+    const bool placeChildren = true;
+#endif
+    if (x450_25_haveGPSM && placeChildren) {
       for (int i = 0; i < x154_SCNT; ++i) {
         x400_gpsmGenerators[i]->SetGlobalTranslation(translation);
         x400_gpsmGenerators[i]->SetGlobalOrientation(orientation);
@@ -333,7 +458,7 @@ const bool CParticleElectric::Update(double dt) {
         x400_gpsmGenerators[i]->SetLocalScale(xec_localScale);
       }
     }
-    if (x450_26_haveEPSM) {
+    if (x450_26_haveEPSM && placeChildren) {
       for (int i = 0; i < x154_SCNT; ++i) {
         x410_epsmGenerators[i]->SetGlobalTranslation(translation);
         x410_epsmGenerators[i]->SetGlobalOrientation(orientation);
@@ -410,9 +535,7 @@ void CParticleElectric::Render() {
     CGraphics::SetCullMode(kCM_None);
     xPortElc2->Render(x28_currentFrame, CGraphics::GetViewMatrix());
     CGraphics::SetCullMode(kCM_Front);
-    x12c_renderTime = CStopwatch::GetGlobalTime() - startTime;
-    return;
-  }
+  } else
 #endif
   if (!x3e8_electricManagers.empty()) {
     if (x450_29_transformDirty) {
@@ -819,6 +942,7 @@ void CParticleElectric::ForceParticleCreation(int count) {
     ctx.localScale = xec_localScale;
     ctx.modu = x1b8_moduColor;
     xPortElc2->Create(x28_currentFrame, count, ctx);
+    PortElc2PlaceChildren();
     return;
   }
 #endif
@@ -840,6 +964,11 @@ void CParticleElectric::SetOrientation(const CTransform4f& orientation) {
 void CParticleElectric::SetGlobalTranslation(const CVector3f& translation) {
   xa4_globalTranslation = translation;
   x450_29_transformDirty = true;
+#ifdef TARGET_PC
+  if (xPortElc2) {
+    return; // the children are placed per bolt (PortElc2PlaceChildren)
+  }
+#endif
   if (x450_27_haveSSWH) {
     for (AUTO(it, x3e8_electricManagers.begin()); it != x3e8_electricManagers.end(); ++it) {
       x1e0_swooshGenerators[it->x0_idx]->SetGlobalTranslation(xa4_globalTranslation);
@@ -860,6 +989,11 @@ void CParticleElectric::SetGlobalTranslation(const CVector3f& translation) {
 void CParticleElectric::SetGlobalOrientation(const CTransform4f& orientation) {
   xb0_globalOrientation = orientation.GetRotation();
   x450_29_transformDirty = true;
+#ifdef TARGET_PC
+  if (xPortElc2) {
+    return; // the children are placed per bolt (PortElc2PlaceChildren)
+  }
+#endif
   if (x450_27_haveSSWH) {
     for (AUTO(it, x3e8_electricManagers.begin()); it != x3e8_electricManagers.end(); ++it) {
       x1e0_swooshGenerators[it->x0_idx]->SetGlobalOrientation(xb0_globalOrientation);

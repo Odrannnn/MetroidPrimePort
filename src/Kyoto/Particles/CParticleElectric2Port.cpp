@@ -38,7 +38,9 @@ CVector3f ToVec(const V3& v) { return CVector3f(v.x, v.y, v.z); }
 } // namespace
 
 CParticleElectric2Port::CParticleElectric2Port(const CElectricDescription& desc) : mDesc(&desc) {
-  mNodes = std::max(1, IntOr(desc.x10_SSEG, 0, 8));
+  // Ctor 0xb728cc: SSEG (default 8) is clamped to >= 1, then incremented, so a bolt has SSEG + 1
+  // nodes (this+0x158/0x670), as retail's ++x150_SSEG; SSEG 1 is a straight two-node beam.
+  mNodes = std::max(1, IntOr(desc.x10_SSEG, 0, 8)) + 1;
   if (port::EnvFlag("MP_ELC2_LOG")) {
     std::fprintf(stderr, "elc2: created (nodes %d, vfx %d)\n", mNodes, desc.xPortVfx != nullptr);
   }
@@ -240,6 +242,8 @@ void CParticleElectric2Port::CreateBolt(int frame, const Ctx& ctx) {
   mXf = ctx.xf;
   mScale = CVector3f(ctx.globalScale.GetX() * ctx.localScale.GetX(), ctx.globalScale.GetY() * ctx.localScale.GetY(),
                      ctx.globalScale.GetZ() * ctx.localScale.GetZ());
+  bolt.first = lines[0].front();
+  bolt.last = lines[0].back();
   if (!mDesc->xPortXfmdFollow) {
     for (auto& line : lines) {
       for (V3& p : line) {
@@ -250,15 +254,27 @@ void CParticleElectric2Port::CreateBolt(int frame, const Ctx& ctx) {
   bolt.lines = std::move(lines);
   UpdateBolt(bolt, frame);
   mBolts.push_back(std::move(bolt));
+  ++mCreated;
 }
 
 void CParticleElectric2Port::Create(int frame, int count, const Ctx& ctx) {
+  mCreated = 0;
+  mRetired.clear();
   for (int i = 0; i < count; ++i) {
     CreateBolt(frame, ctx);
   }
 }
 
+void CParticleElectric2Port::Reset() {
+  mBolts.clear();
+  mRem = 0.f;
+  mCreated = 0;
+  mRetired.clear();
+}
+
 void CParticleElectric2Port::Step(int frame, bool emitting, const Ctx& ctx) {
+  mCreated = 0;
+  mRetired.clear();
   mModu = ctx.modu;
   mXf = ctx.xf;
   mScale = CVector3f(ctx.globalScale.GetX() * ctx.localScale.GetX(), ctx.globalScale.GetY() * ctx.localScale.GetY(),
@@ -267,6 +283,9 @@ void CParticleElectric2Port::Step(int frame, bool emitting, const Ctx& ctx) {
   for (size_t i = 0; i < mBolts.size();) {
     Bolt& bolt = mBolts[i];
     if (frame >= bolt.endFrame) {
+      if (bolt.gpsm != -1 || bolt.epsm != -1) {
+        mRetired.push_back(Retired{bolt.gpsm, bolt.epsm});
+      }
       mBolts.erase(mBolts.begin() + std::ptrdiff_t(i));
       continue;
     }
@@ -280,6 +299,11 @@ void CParticleElectric2Port::Step(int frame, bool emitting, const Ctx& ctx) {
   }
   float rate = 0.f;
   if (mDesc->x8_GRAT != nullptr && mDesc->x8_GRAT->GetValue(frame, rate)) {
+    for (const Bolt& bolt : mBolts) {
+      if (bolt.gpsm != -1 || bolt.epsm != -1) {
+        mRetired.push_back(Retired{bolt.gpsm, bolt.epsm});
+      }
+    }
     mBolts.clear(); // GetValue true = the element is exhausted
     return;
   }

@@ -1191,6 +1191,12 @@ public:
     if (type == kCmdl && m_io.typeOf(id) == kCmdl) {
       return Model(id);
     }
+    // A Remastered-only GENP the import writes under its own id (a room's or port actor's,
+    // e.g. an ELC2's GPSM/EPSM in kActorEffectGuids).
+    if (type == kPart && m_io.typeOf(id) == kGenp &&
+        std::find(m_io.roomOnly.begin(), m_io.roomOnly.end(), id) != m_io.roomOnly.end()) {
+      return RoomEffectId(id);
+    }
     return 0;
   }
 
@@ -1731,6 +1737,8 @@ bool WantsRemasteredEffects() { return port::EnvFlag("MP_REMASTERED_EFFECTS", tr
 EffectImportResult ImportEffects(const EffectImportIO& io) { return Importer(io).Run(); }
 
 uint32_t RoomEffectId(const EffectGuid& id) { return SyntheticEffectId(EffectGuidString(Swap(id)).c_str()); }
+
+bool EffectIdIs(const EffectGuid& id, const char* text) { return EffectGuidString(Swap(id)) == text; }
 
 std::vector<uint32_t> MatchedRetailEffects(const EffectGuid& id) {
   const std::string text = EffectGuidString(Swap(id));

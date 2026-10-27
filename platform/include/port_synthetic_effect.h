@@ -53,4 +53,15 @@ inline constexpr const char* kSyntheticEffectNames[] = {
     "underwaterbubblesweaponfire",
 };
 
+// Remastered-only effects with no name that a port actor builds itself (no disc PART, no room
+// actor names them). The import writes each under SyntheticEffectId() of its id as it prints
+// (8-4-4-4-12, lower case), as it does the rooms' own effects (RoomEffectId).
+// Ridley's plasma-beam electric (an ELC2), CPlasmaProjectileMP1's electric from CRidleyData x370.
+inline constexpr const char* kRidleyBeamElectric = "c5588467-1dcb-4b76-afaa-675018154a73";
+// Its GPSM and EPSM, Remastered-only GENPs the ELC2 names.
+inline constexpr const char* kRidleyBeamElectricGpsm = "34a60394-d3ee-4aa1-87de-70d3dc7c20cc";
+inline constexpr const char* kRidleyBeamElectricEpsm = "5272fe00-f012-472c-92cf-f7690053b9fa";
+inline constexpr const char* kActorEffectGuids[] = {kRidleyBeamElectric, kRidleyBeamElectricGpsm,
+                                                    kRidleyBeamElectricEpsm};
+
 }  // namespace PortRemastered

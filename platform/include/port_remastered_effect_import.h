@@ -107,6 +107,9 @@ EffectImportResult ImportEffects(const EffectImportIO& io);
 // (in a pak's byte order) as it prints, 8-4-4-4-12 in lower case.
 uint32_t RoomEffectId(const EffectGuid& id);
 
+// Whether `id` (in a pak's byte order) prints as `text` (8-4-4-4-12, lower case).
+bool EffectIdIs(const EffectGuid& id, const char* text);
+
 // All retail PARTs kMatchedEffects pairs with `id` (in a pak's byte order), regardless of
 // pairing method. The rooms step verifies their presence before assigning the source
 // actor's placement and particle variables to a matched retail Effect.
