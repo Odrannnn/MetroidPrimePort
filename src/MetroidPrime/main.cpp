@@ -687,6 +687,13 @@ void CGameGlobalObjects::AddPaksAndFactories() {
   CResFactory& factory = *gpResourceFactory;
   CGraphics::SetViewPointMatrix(CTransform4f::Identity());
   CGraphics::SetModelMatrix(CTransform4f::Identity());
+  // Trilogy's DOL mounts RS5.pak (the Wii scan ring, bracket and cursor models) and
+  // Strings.pak first. Strings.pak holds the text of IDs whose NoARAM.pak copies are
+  // empty, such as STRG_Credits; ARAM paks are searched before NoARAM.pak.
+  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+    factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:RS5"), false, false);
+    factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:Strings"), false, false);
+  }
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:Tweaks"), false, false);
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("NoARAM"), false, false);
   // Mod resources that did not fit in NoARAM.pak (2 GiB file limit).
@@ -738,10 +745,6 @@ void CGameGlobalObjects::AddPaksAndFactories() {
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:SamGunFx"), true, false);
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:MidiData"), false, false);
   factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:GGuiSys"), false, false);
-  // Trilogy's DOL also mounts RS5.pak: the Wii scan ring, bracket and cursor models.
-  if (PortDisc::IsTrilogy(PortDisc::Current())) {
-    factory.GetResLoader().AddPakFileAsync(rstl::string_l("aram:RS5"), false, false);
-  }
 
   factory.GetFactoryMgr().AddFactory('STRG', FStringTableFactory);
   factory.GetFactoryMgr().AddFactory('CMDL', FModelFactory);
