@@ -55,6 +55,12 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.35.0" date="2026-10-27">
+      <description>
+        <p>Player-made custom actions you can bind like any other control, with a resizable editor; a Prime Remastered graphics toggle that needs no restart, on Android too; Remastered particles and effects for many more enemies and bosses (Drones, Gun Turrets, Sheegoths, Thardus, the Parasite Queen, Ridley, Metroid Prime, Atomic Betas, Puffers), the visor steam, death particles and animated intro hangar lighting; Trilogy fixes (Wii combat crosshair and Wii Remote glyphs, crosshair settings on Trilogy's cursor, credits text, Remastered movies on a Trilogy disc, card files in Trilogy's format); linear sensitivity sliders; OpenGL 3.3 GPUs without texture views no longer fall back to software rendering, and a driver workaround to decode compressed textures on the CPU.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.35.0</url>
+    </release>
     <release version="0.34.0" date="2026-10-26">
       <description>
         <p>Metroid Prime Trilogy discs (USA and PAL) run as the base game, with Trilogy's HUD, scan visor, radial beam and visor menus and save import and export; an OpenGL renderer on Linux and Windows; Remastered's thermal visor and a Remastered performance mode; a release-to-release save restore; mirrored room geometry, door-frame lighting and pause screen fixes; and many more Prime Remastered models, effects and shaders.</p>
