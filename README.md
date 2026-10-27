@@ -2,6 +2,9 @@
 
 **Make sure to check out the F1 (Or start+back on controller) menu for all the additional features and QoL!**
 
+**You can load prime remastered models and textures in the game (check F1 > mods), you must provide your
+personal Metroid Prime Remastered dumped image, no assets are provided in this repo**
+
 A native build of **Metroid Prime** for Linux, Windows and Android (plus
 experimental, untested-on-hardware macOS and iPhone/iPad builds), compiled
 from the [PrimeDecomp](https://github.com/PrimeDecomp/prime) decompilation and
