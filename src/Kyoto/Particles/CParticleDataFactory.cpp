@@ -1528,6 +1528,9 @@ CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
   case SBIG('KEWS'): {
     return rs_new CREPortSwooshNodeTime(GetRealElement(in));
   }
+  case SBIG('KESP'): {
+    return rs_new CREPortSlot2Time(GetRealElement(in));
+  }
   case SBIG('PKYF'): {
     // Remastered's KEYF: the loop byte, the key count, the loop start, start and rate, the keys,
     // then the input element.

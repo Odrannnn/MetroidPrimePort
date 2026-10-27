@@ -114,6 +114,16 @@ public:
   // an ulp of it.
   static float xPortSystemTween;
   static void PortSetSystemTime(int frame, int lifetime);
+  // port-only: Remastered's time slot 2 (ctx+0x80), which only CParticleElectric2::UpdateBolt
+  // 0xb77638 writes (node i over node count - 1, the same tween as above); the context ctor
+  // 0x24f06c zeroes it, so it reads 0 everywhere else. KESP keyframes read it.
+  static int xPortSlot2Percentage;
+  static float xPortSlot2Remainder;
+  static void PortSetSlot2Time(int frame, int lifetime);
+  static void PortClearSlot2Time() {
+    xPortSlot2Percentage = 0;
+    xPortSlot2Remainder = 0.f;
+  }
   struct PortSwooshEvalScope {
     const SPortSwooshEval* prev;
     explicit PortSwooshEvalScope(const SPortSwooshEval* eval) : prev(xPortSwooshEval) {

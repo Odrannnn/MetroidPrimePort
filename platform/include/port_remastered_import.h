@@ -193,7 +193,8 @@ inline constexpr int kModels = 22;
 // 131: the Parasite Queen's beam electric.
 // 132: SteamMP1 GENPs (room-only).
 // 133: visor steam (VFX_VisorSteam 53eceaa4).
-inline constexpr int kEffects = 134;   // Metroid Prime's beams' electric (room ELC2s)
+// 134: Metroid Prime's beams' electric (room ELC2s).
+inline constexpr int kEffects = 135;   // KESP kept as the ELC2 node tween (AtomicBeta ELC2 radius)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

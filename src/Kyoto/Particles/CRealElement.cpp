@@ -459,6 +459,25 @@ bool CREPortSwooshNodeTime::GetValue(int frame, float& valOut) const {
   CParticleGlobals::mParticleLifetimePercentageRemainder = remainder;
   return ret;
 }
+
+CREPortSlot2Time::CREPortSlot2Time(CRealElement* a) : x4_a(a) {}
+
+CREPortSlot2Time::~CREPortSlot2Time() { delete x4_a; }
+
+bool CREPortSlot2Time::GetValue(int frame, float& valOut) const {
+  const int percentage = CParticleGlobals::mParticleLifetimePercentage;
+  const float real = CParticleGlobals::mParticleLifetimePercentageReal;
+  const float remainder = CParticleGlobals::mParticleLifetimePercentageRemainder;
+  CParticleGlobals::mParticleLifetimePercentage = CParticleGlobals::xPortSlot2Percentage;
+  CParticleGlobals::mParticleLifetimePercentageReal =
+      float(CParticleGlobals::xPortSlot2Percentage) + CParticleGlobals::xPortSlot2Remainder;
+  CParticleGlobals::mParticleLifetimePercentageRemainder = CParticleGlobals::xPortSlot2Remainder;
+  const bool ret = x4_a->GetValue(frame, valOut);
+  CParticleGlobals::mParticleLifetimePercentage = percentage;
+  CParticleGlobals::mParticleLifetimePercentageReal = real;
+  CParticleGlobals::mParticleLifetimePercentageRemainder = remainder;
+  return ret;
+}
 #endif
 
 bool CREParticleRotationOrLineWidth::GetValue(int, float& valOut) const {

@@ -1,6 +1,6 @@
-// Converter shapes folded to constants: a one-stop GRAD (CCEFastConstant) is a constant colour,
-// KESP (KEYP on the always-zero time slot 2) is its first key, and NCLR is typed as a colour so
-// MDAO takes its two arguments.
+// Converter shapes: a one-stop GRAD (CCEFastConstant) is a constant colour, KESP (KEYP on time
+// slot 2, the ELC2 node tween) becomes the port's KESP around a percent KEYP, and NCLR is typed as a
+// colour so MDAO takes its two arguments.
 #include "port_remastered_effect_convert.h"
 #include "port_retail_check.h"
 #include "port_test.h"
@@ -124,12 +124,18 @@ void TestKesp() {
   PutTexr(out, 0x1234ABCD);
   PutProperty(out, "_END", 4);
   const std::vector<ConvertedPart> parts = Convert(out);
-  std::vector<uint8_t> want = {'S', 'I', 'Z', 'E', 'C', 'N', 'S', 'T'};
+  std::vector<uint8_t> want = {'S', 'I', 'Z', 'E', 'K', 'E', 'S', 'P', 'K', 'E', 'Y', 'P'};
+  Append(want, BE(1));
+  Append(want, BE(0));
+  want.push_back(0);
+  want.push_back(0);
+  Append(want, BE(0));
+  Append(want, BE(0));
+  Append(want, BE(2));
   Append(want, BE(Bits(7.5f)));
-CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, want), "KESP folds to its first key");
-  if (parts.size() == 1) {
-    CHECK_MSG(!Contains(parts[0].part, {'K', 'E', 'S', 'P'}), "no KESP left");
-  }
+  Append(want, BE(Bits(9.0f)));
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, want),
+            "KESP stays a port KESP around a percent KEYP of its keys");
 }
 
 }  // namespace

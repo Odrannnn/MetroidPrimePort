@@ -53,8 +53,8 @@ public:
     int life = 1;
     int startFrame = 0;
     int endFrame = 1;
-    float leftRad = 0.f;
-    float rightRad = 0.f;
+    std::vector< float > leftRad;  // per node (UpdateBolt 0xb77638 node+0x28 x RADS)
+    std::vector< float > rightRad; // per node (node+0x2c x RADS)
     float color[4] = {1.f, 1.f, 1.f, 1.f};
     float iten = 1.f;
     float vpmt[4][4] = {};

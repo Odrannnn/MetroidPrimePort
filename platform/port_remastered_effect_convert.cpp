@@ -173,6 +173,8 @@ const Signatures& ElementsOf(Type type) {
       {F("DFCS"), "rr"},  {F("DFCP"), "rr"},
       // Port-only: a converted KEWS, its KEYP read at the swoosh node key.
       {F("KEWS"), "r"},
+      // Port-only: a converted KESP, its KEYP read at the ELC2 node key (time slot 2).
+      {F("KESP"), "r"},
       // Port-only (CParticleDataFactory under TARGET_PC).
       {F("DIVD"), "rr"},
       // Port-only CREPortTicksToSeconds: Remastered's T2S_, an int element (ticks) as seconds.
@@ -2013,14 +2015,27 @@ public:
       }
       return Element(value.args[1], Type::Real, out, why);
     }
-    // KESP is KEYP on time slot 2, which is always zero (CREKeyframeEmitterSpecific), so it
-    // is its first key: CNST(keys[0]).
+    // KESP is KEYP on time slot 2 (CREKeyframeParticle 0x296430, time type 3): the port-only
+    // KESP around a percent KEYP of its keys, read at the slot-2 key. Only an ELC2's UpdateBolt
+    // 0xb77638 sets that slot (node over node count - 1); elsewhere it is 0, the first key.
     if (value.fourcc == F("KESP") && type == Type::Real && value.args.size() == 1 &&
         value.args[0].kind == EffectValue::Kind::Keys && value.args[0].size >= 26 &&
         ReadLE32(m_data + value.args[0].offset + 18) >= 1 &&
         value.args[0].size - 22 == size_t(ReadLE32(m_data + value.args[0].offset + 18)) * 4) {
-      AppendBE32(out, F("CNST"));
-      AppendBE32(out, ReadLE32(m_data + value.args[0].offset + 22));
+      const uint8_t* p = m_data + value.args[0].offset;
+      const uint32_t count = ReadLE32(p + 18);
+      AppendBE32(out, F("KESP"));
+      AppendBE32(out, F("KEYP"));
+      AppendBE32(out, 1); // percent: the lifetime-key path
+      AppendBE32(out, ReadLE32(p + 4));
+      out.push_back(p[8]);
+      out.push_back(p[9]);
+      AppendBE32(out, ReadLE32(p + 10));
+      AppendBE32(out, ReadLE32(p + 14));
+      AppendBE32(out, count);
+      for (uint32_t i = 0; i < count; ++i) {
+        AppendBE32(out, ReadLE32(p + 22 + size_t(i) * 4));
+      }
       return true;
     }
     if (value.fourcc == F("GRAD") && type == Type::Color) {

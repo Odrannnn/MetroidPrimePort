@@ -71,7 +71,9 @@ CAABox CParticleElectric2Port::Bounds() const {
   V3 lo, hi;
   float rad = 0.f;
   for (const Bolt& b : mBolts) {
-    rad = std::max(rad, std::max(b.leftRad, b.rightRad));
+    for (size_t i = 0; i < b.leftRad.size(); ++i) {
+      rad = std::max(rad, std::max(b.leftRad[i], b.rightRad[i]));
+    }
     for (const auto& l : b.lines) {
       for (const V3& pl : l) {
         const V3 p = mDesc->xPortXfmdFollow ? WorldPoint(pl) : pl;
@@ -100,18 +102,31 @@ void CParticleElectric2Port::UpdateBolt(Bolt& bolt, int systemFrame) {
   // COLR (desc+0x140) is the bolt's own: it is evaluated once before the node loop (into
   // lineMgr+0x38). RADS/LRAD/RRAD (desc+0x138/0x128/0x130) and NCLR (desc+0x148) are inside it, so the
   // original evaluates them once per node, with the context time (ctx+0x68) and life (ctx+0x6c,
-  // ctx+0x70 = end - start) of the bolt and the node's own tween (ctx+0x80, i = node) alongside.
-  // The port keeps one pair of radii and one colour per bolt, from a single evaluation per element
-  // at the bolt's age (this[0x2c] - start) and lifetime, which is exact for the shipped data whose
-  // elements read only the bolt's context (a slot-2 read or a per-node RAND would differ).
+  // ctx+0x70 = end - start) of the bolt and the node's own tween (ctx+0x80: frame i, life nodes - 1)
+  // alongside. The radii follow that per node: KESP (slot-2 keyframes) reads the node tween, e.g. the
+  // AtomicBeta ELC2's RADS taper 0 -> 1 along the bolt. NCLR stays one colour per bolt (residual:
+  // exact for shipped data, none of whose NCLRs reads slot 2).
   // CreateNewParticles 0xb76508 calls it right after the bolt starts, so the age is 0 there.
   const int frame = systemFrame - bolt.startFrame;
-  const float rads = RealOr(mDesc->xPortRADS, frame, 1.f);
-  const float lrad = RealOr(mDesc->xPortLRAD, frame, 0.1f);
-  const float rrad = RealOr(mDesc->xPortRRAD, frame, 0.1f);
-  const PortElectric2::BoltRadii radii = PortElectric2::ComputeBoltRadii(rads, lrad, rrad, mDesc->xPortLLRD);
-  bolt.leftRad = radii.left;
-  bolt.rightRad = radii.right;
+  bolt.leftRad.resize(static_cast<size_t>(mNodes));
+  bolt.rightRad.resize(static_cast<size_t>(mNodes));
+  for (int i = 0; i < mNodes; ++i) {
+    CParticleGlobals::PortSetSlot2Time(i, mNodes - 1);
+    float lrad = 0.f, rrad = 0.f;
+    if (mDesc->xPortLRAD != nullptr) {
+      mDesc->xPortLRAD->GetValue(frame, lrad);
+    }
+    if (mDesc->xPortRRAD != nullptr) {
+      mDesc->xPortRRAD->GetValue(frame, rrad);
+    }
+    const float rads = RealOr(mDesc->xPortRADS, frame, 1.f);
+    const PortElectric2::BoltRadii radii = PortElectric2::ComputeBoltRadii(
+        rads, mDesc->xPortLRAD != nullptr ? &lrad : nullptr, mDesc->xPortRRAD != nullptr ? &rrad : nullptr,
+        mDesc->xPortLLRD);
+    bolt.leftRad[size_t(i)] = radii.left;
+    bolt.rightRad[size_t(i)] = radii.right;
+  }
+  CParticleGlobals::PortClearSlot2Time();
 
   // Node colour = NCLR modulated by COLR: UpdateRenderState 0xb760e0 builds COLR (lineMgr+0x38)
   // x the owner's modulate colour (this+0x90) with CColor4f16::Modulate and Modulates every node's
@@ -386,7 +401,8 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
           validFrame = false;
           break;
         }
-        PortElectric2::Electric2RibbonSidePoints(line[size_t(i)], width, bolt.leftRad, bolt.rightRad,
+        const size_t r = std::min(size_t(i), bolt.leftRad.size() - 1);
+        PortElectric2::Electric2RibbonSidePoints(line[size_t(i)], width, bolt.leftRad[r], bolt.rightRad[r],
                                                  a[size_t(i)], b[size_t(i)]);
       }
       if (!validFrame) {

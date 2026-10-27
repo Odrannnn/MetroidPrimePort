@@ -114,16 +114,20 @@ int main() {
   CHECK_MSG(Near(theta0.y, 20.1f) && Near(theta180.y, 19.75f),
             "SIDE=2 theta 0 uses RRAD and theta 180 uses LRAD");
 
-  // One bolt's half-widths: RADS scales both sides, and LLRD copies LRAD over RRAD (UpdateBolt
-  // 0xb77638). The port evaluates the four elements once per bolt, so both sides come from that
-  // single pair, never from a node of their own.
-  const BoltRadii radii = ComputeBoltRadii(0.5f, 0.2f, 0.1f, false);
+  // One node's half-widths (UpdateBolt 0xb77638): RADS scales both sides, LLRD copies LRAD to
+  // RRAD, and a present RRAD overwrites that copy.
+  const float l = 0.2f, r = 0.1f;
+  const BoltRadii radii = ComputeBoltRadii(0.5f, &l, &r, false);
   CHECK_MSG(Near(radii.left, 0.1f) && Near(radii.right, 0.05f), "RADS scales LRAD and RRAD");
-  const BoltRadii copied = ComputeBoltRadii(0.5f, 0.2f, 0.1f, true);
-  CHECK_MSG(Near(copied.left, 0.1f) && Near(copied.right, 0.1f), "LLRD copies LRAD over RRAD");
-  const BoltRadii defaults = ComputeBoltRadii(1.f, 0.1f, 0.1f, false);
+  const BoltRadii copied = ComputeBoltRadii(0.5f, &l, nullptr, true);
+  CHECK_MSG(Near(copied.left, 0.1f) && Near(copied.right, 0.1f), "LLRD copies LRAD to a missing RRAD");
+  const BoltRadii overwritten = ComputeBoltRadii(0.5f, &l, &r, true);
+  CHECK_MSG(Near(overwritten.left, 0.1f) && Near(overwritten.right, 0.05f), "a present RRAD overwrites the LLRD copy");
+  const BoltRadii defaults = ComputeBoltRadii(1.f, nullptr, nullptr, true);
   CHECK_MSG(Near(defaults.left, 0.1f) && Near(defaults.right, 0.1f),
-            "a bolt with no RADS/LRAD/RRAD is RADS 1 x 0.1 on both sides");
+            "a node with no RADS/LRAD/RRAD is RADS 1 x 0.1 on both sides");
+  const BoltRadii zero = ComputeBoltRadii(0.f, &l, &r, true);
+  CHECK_MSG(Near(zero.left, 0.f) && Near(zero.right, 0.f), "a RADS taper's 0 key gives a zero-width node");
 
   constexpr float rawIntensity = 0.37f;
   bool cancels = true;
