@@ -2396,6 +2396,20 @@ CStateManager::LoadScriptObject(TAreaId aid, EScriptObjectType type, unsigned in
 
   if (loader != nullptr) {
     CEntityInfo info(aid, conns, eid);
+#ifdef TARGET_PC
+    // PORT: a PART property a mod's Remastered match replaces (port_room_effects.h): the
+    // object loads from a patched copy of its properties. Reading them all here leaves
+    // nothing for the skip below.
+    if (PortRoomEffects::HasPatches(eid.value) && bytesLeft != 0) {
+      std::vector< uint8_t > props(bytesLeft);
+      in.ReadBytes(props.data(), bytesLeft);
+      PortRoomEffects::ApplyPatches(eid.value, props.data(), bytesLeft, [](uint32_t part) {
+        return gpResourceFactory->CanBuild(SObjectTag('PART', part));
+      });
+      CMemoryInStream patched(props.data(), bytesLeft);
+      ent = loader(*this, patched, propCount, info);
+    } else
+#endif
     ent = loader(*this, in, propCount, info);
   } else {
     failed = true;

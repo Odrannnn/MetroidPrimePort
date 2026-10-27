@@ -28,6 +28,7 @@ File sFile;
 std::set<uint32_t> sSkips;
 std::map<uint32_t, std::vector<Spawned>> sSpawned;  // by MREA
 std::map<uint32_t, size_t> sSkipped;                // by MREA
+size_t sPatched = 0;                                // property patches applied, this area
 
 }  // namespace
 
@@ -36,6 +37,7 @@ bool Enabled() { return port::EnvFlag("MP_REMASTERED_EFFECT_ACTORS", true); }
 void BeginArea(uint32_t mrea) {
   sLoading = true;
   sMrea = mrea;
+  sPatched = 0;
   sFile = {};
   sSkips.clear();
   sSpawned.erase(mrea);
@@ -61,6 +63,10 @@ void BeginArea(uint32_t mrea) {
 }
 
 void EndArea() {
+  if (sLoading && !sFile.patches.empty()) {
+    PortLog::Write("room effects: %08X: %zu of %zu particle property patch(es) applied\n", sMrea, sPatched,
+                   sFile.patches.size());
+  }
   sLoading = false;
   sFile = {};
   sSkips.clear();
@@ -96,6 +102,18 @@ const PatternedEffect* FindPatternedEffect(uint32_t eid, uint32_t slot) {
     }
   }
   return nullptr;
+}
+
+bool HasPatches(uint32_t eid) {
+  return sLoading && std::any_of(sFile.patches.begin(), sFile.patches.end(), [eid](const PropertyPatch& p) {
+           return (p.id & 0x3FFFFFF) == (eid & 0x3FFFFFF);
+         });
+}
+
+size_t ApplyPatches(uint32_t eid, uint8_t* props, size_t size, bool (*canBuild)(uint32_t part)) {
+  const size_t n = sLoading ? ApplyPatches(sFile.patches, eid, props, size, canBuild) : 0;
+  sPatched += n;
+  return n;
 }
 
 std::vector< SPortExternalVar > ExternalVars(const std::vector< Variable >& vars) {

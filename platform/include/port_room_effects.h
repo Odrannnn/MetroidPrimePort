@@ -50,10 +50,14 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 6 then has u32 patterned, then per record: u32 editor id (layer bits included),
 //   u32 slot, u32 part, u32 offset flag and (when set) f32 offset[3] (see PatternedEffect).
 //   Files without patterned records are still written as version 5 or 4.
+//   version 7 then has u32 patches, then per patch: u32 editor id (layer bits included),
+//   u32 offset, u32 retail value, u32 part (see PropertyPatch). Files without patches are
+//   still written as version 6 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 6;
+constexpr uint32_t kFileVersion = 7;
+constexpr uint32_t kMaxPatchOffset = 0x10000;
 constexpr uint8_t kEffectType = 7;
 constexpr uint32_t kEffectProps = 24;
 constexpr uint32_t kFirstInstance = 0xF000;
@@ -166,6 +170,17 @@ struct PatternedEffect {
   float offset[3] = {};
 };
 
+// A PART asset id property of a retail object the script matcher paired with a Remastered
+// one, replaced by the PART the mod has: `offset` counts bytes of the object's properties from
+// just after its name's NUL (fixed per object type), where the big endian u32 must still be
+// `retail` for the patch to apply (a different disc revision leaves it alone).
+struct PropertyPatch {
+  uint32_t id = 0;
+  uint32_t offset = 0;
+  uint32_t retail = 0;
+  uint32_t part = 0;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -173,6 +188,7 @@ struct File {
   std::vector<Override> overrides;
   std::vector<BarrierGroup> barriers;
   std::vector<PatternedEffect> patterned;
+  std::vector<PropertyPatch> patches;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -209,6 +225,15 @@ const Override* FindOverride(uint32_t eid);
 // The death particle `slot` (PatternedEffect) of the retail object `eid` in the area being
 // loaded, or null.
 const PatternedEffect* FindPatternedEffect(uint32_t eid, uint32_t slot);
+// Whether the retail object `eid` in the area being loaded has property patches.
+bool HasPatches(uint32_t eid);
+// Applies them to `props` (the object's properties from its name on; `size` bytes): finds
+// the name's NUL, then writes each patch's PART (big endian) where the retail value still
+// stands and `canBuild` accepts the PART. Returns how many applied.
+size_t ApplyPatches(uint32_t eid, uint8_t* props, size_t size, bool (*canBuild)(uint32_t part));
+// The same over `patches` (no area needed).
+size_t ApplyPatches(const std::vector<PropertyPatch>& patches, uint32_t eid, uint8_t* props, size_t size,
+                    bool (*canBuild)(uint32_t part));
 // Creates the add-ons of `layer` in area `area` (TAreaId) and adds their editor ids to `ids`,
 // for InitializedInArea.
 void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_t>& ids);

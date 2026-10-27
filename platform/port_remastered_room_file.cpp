@@ -236,9 +236,10 @@ bool PropList(const uint8_t* b, size_t len, std::vector<Prop>* out) {
   return o == len;
 }
 
-bool Room::Nested(const Component& c, std::initializer_list<uint32_t> path, Span& out) const {
+bool Room::Nested(const Component& c, const uint32_t* path, size_t count, Span& out) const {
   Span at = c.raw;
-  for (const uint32_t id : path) {
+  for (size_t i = 0; i < count; ++i) {
+    const uint32_t id = path[i];
     std::vector<Prop> props;
     if (!PropList(Bytes(at), at.size, &props)) {
       return false;

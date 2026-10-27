@@ -500,7 +500,10 @@ public:
   // property list is a nested group, which is not a top level key.
   std::map<uint32_t, Span> Flat(const Component& c) const;
   // A property inside nested groups, named by the groups' ids and then its own.
-  bool Nested(const Component& c, std::initializer_list<uint32_t> path, Span& out) const;
+  bool Nested(const Component& c, std::initializer_list<uint32_t> path, Span& out) const {
+    return Nested(c, path.begin(), path.size(), out);
+  }
+  bool Nested(const Component& c, const uint32_t* path, size_t count, Span& out) const;
   // The `size` bytes at `offset` in the room's string pool (STRP); false when they lie outside it.
   bool String(uint32_t offset, uint32_t size, std::string& out) const {
     if (offset > m_strings.size || size > m_strings.size - offset) {

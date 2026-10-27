@@ -341,8 +341,9 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool patterned = !file.patterned.empty();
-  PutLE32(out, patterned ? 6 : placements ? 5 : 4);
+  const bool patches = !file.patches.empty();
+  const bool patterned = patches || !file.patterned.empty();
+  PutLE32(out, patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -414,7 +415,42 @@ std::vector<uint8_t> Write(const File& file) {
       }
     }
   }
+  if (patches) {
+    PutLE32(out, uint32_t(file.patches.size()));
+    for (const PropertyPatch& p : file.patches) {
+      PutLE32(out, p.id);
+      PutLE32(out, p.offset);
+      PutLE32(out, p.retail);
+      PutLE32(out, p.part);
+    }
+  }
   return out;
+}
+
+size_t ApplyPatches(const std::vector<PropertyPatch>& patches, uint32_t eid, uint8_t* props, size_t size,
+                    bool (*canBuild)(uint32_t part)) {
+  const uint8_t* nul = static_cast<const uint8_t*>(std::memchr(props, 0, size));
+  if (nul == nullptr) {
+    return 0;
+  }
+  const size_t base = size_t(nul - props) + 1;
+  size_t applied = 0;
+  for (const PropertyPatch& p : patches) {
+    if ((p.id & 0x3FFFFFF) != (eid & 0x3FFFFFF) || p.offset > size - base || size - base - p.offset < 4) {
+      continue;
+    }
+    uint8_t* at = props + base + p.offset;
+    const uint32_t value = uint32_t(at[0]) << 24 | uint32_t(at[1]) << 16 | uint32_t(at[2]) << 8 | at[3];
+    if (value != p.retail || (canBuild != nullptr && !canBuild(p.part))) {
+      continue;
+    }
+    at[0] = uint8_t(p.part >> 24);
+    at[1] = uint8_t(p.part >> 16);
+    at[2] = uint8_t(p.part >> 8);
+    at[3] = uint8_t(p.part);
+    ++applied;
+  }
+  return applied;
 }
 
 bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
@@ -607,6 +643,25 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         }
       }
       file.patterned.push_back(p);
+    }
+  }
+  if (version >= 7) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 16) {
+      error = "truncated patch list";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      PropertyPatch p;
+      ReadLE32(data, at, p.id);
+      ReadLE32(data, at, p.offset);
+      ReadLE32(data, at, p.retail);
+      ReadLE32(data, at, p.part);
+      if (p.offset > kMaxPatchOffset) {
+        error = "invalid patch " + std::to_string(i);
+        return false;
+      }
+      file.patches.push_back(p);
     }
   }
   if (at != data.size()) {

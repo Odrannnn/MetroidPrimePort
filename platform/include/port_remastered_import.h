@@ -179,7 +179,9 @@ inline constexpr int kModels = 22;
 // 114: WallCrawlerSwarm part1 paired (0A621238, 7DFF579C; #by-hand).
 // 115: MetroidBeta electricParticle 9AEBBD85 paired (#by-hand).
 // 116: Puffer particle C9D453A3 and synthetic puffercloud (#by-hand).
-inline constexpr int kEffects = 117;   // enemies' PatternedInfo death particle GENPs (room-only)
+// 117: enemies' PatternedInfo death particle GENPs (room-only).
+// 118: matched objects' PART property GENPs (room-only).
+inline constexpr int kEffects = 119;   // Metroid Prime relay particle property GENPs (room-only)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -206,7 +208,10 @@ inline constexpr int kEffects = 117;   // enemies' PatternedInfo death particle 
 // objects in a cycle match by a subset of their retail targets.
 // 50: a retail model on an Actor or Platform that names an animation set stays retail.
 // 51: .roomfx v6, a matched enemy's PatternedInfo death particles and offsets.
-inline constexpr int kRooms = 51;
+// 52: .roomfx v7, a matched object's PART properties (Water splashes, VisorGoo, Burrower).
+// 53: the Metroid Prime relay's nested CMetroidPrimeData particle properties.
+// 54: the unplaced relay pairs with the area's only type 0x84 object.
+inline constexpr int kRooms = 54;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).
