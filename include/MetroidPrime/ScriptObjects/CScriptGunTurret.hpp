@@ -12,6 +12,7 @@
 
 class CCollisionActorManager;
 class CElementGen;
+class CElectricDescription;
 class CScriptGunTurretData {
 public:
   CScriptGunTurretData(CInputStream& in, int propCount);
@@ -249,6 +250,10 @@ private:
   bool x560_29_scriptedStart : 1;
   bool x560_30_needsStopClankSound : 1;
   bool x560_31_frenzyReverse : 1;
+#ifdef TARGET_PC
+  // Remastered's visor electric (CScriptGunTurretMP1 +0x774), given to each projectile.
+  rstl::optional_object< TLockedToken< CElectricDescription > > xPortVisorElectric;
+#endif
 };
 
 CHECK_SIZEOF(CScriptGunTurret, (VERSION >= VERSION_GM8P_00 ? 0x578 : 0x568))

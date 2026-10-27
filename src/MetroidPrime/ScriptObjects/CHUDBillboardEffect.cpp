@@ -189,10 +189,12 @@ void CHUDBillboardEffect::PortUpdateSpawnSpread(const CStateManager& mgr) {
   PortApplySpawnSpread(spread);
 }
 
-// Remastered marks its PARTs; an electric-only billboard has no such flag and stays retail.
+// Remastered marks its PARTs and its ELC2s (the GunTurret visor ELSC): the ctor 0xd7e75c places
+// a generator and an electric alike, so both take the HUD space. Retail effects stay retail.
 bool CHUDBillboardEffect::PortIsRemasteredHUD() const {
-  return x104_26_isElementGen &&
-         static_cast< const CElementGen& >(*xe8_generator).PortIsRemastered();
+  return x104_26_isElementGen
+             ? static_cast< const CElementGen& >(*xe8_generator).PortIsRemastered()
+             : static_cast< const CParticleElectric& >(*xe8_generator).PortIsRemastered();
 }
 
 void CHUDBillboardEffect::PortApplySpawnSpread(const CVector3f& spread) {

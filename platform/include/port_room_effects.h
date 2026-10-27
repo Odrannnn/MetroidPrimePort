@@ -225,7 +225,11 @@ struct Steam {
 // by its constructor (0xe2ec30), and given to the beam's plasma projectile by
 // CreateParasiteQueenProjectile (0xe31518).
 constexpr uint32_t kActorSlotExoBeamElectric = 0;  // to 3, by beam
-constexpr uint32_t kActorSlots = 4;
+// Slot 4 is a GunTurret's visor effect (SLdr +0xc0, de43a94b): an ELC2's ELSC, which
+// CScriptGunTurretMP1 gives its projectiles for the HUD billboard (LaunchProjectile 0xee4bbc,
+// CGameProjectileMP1::ResolveCollisionWithActor 0x1018f28), or a GENP's PART.
+constexpr uint32_t kActorSlotGunTurretVisorEffect = 4;
+constexpr uint32_t kActorSlots = 5;
 struct ActorSlotEffect {
   uint32_t id = 0;
   uint32_t slot = 0;

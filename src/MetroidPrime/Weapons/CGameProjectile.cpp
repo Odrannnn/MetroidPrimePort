@@ -463,7 +463,13 @@ void CGameProjectile::ResolveCollisionWithActor(const CRayCastResult& res, CActo
                                                 CStateManager& mgr) {
   const CVector3f reverseDir = -GetTransform().GetForward().AsNormalized();
   CPlayer* player = TCastToPtr< CPlayer >(act);
-  if (player && x158_visorParticle &&
+#ifdef TARGET_PC
+  // CGameProjectileMP1::ResolveCollisionWithActor (0x01018f28): an electric replaces the particle.
+  const bool hasVisorEffect = x158_visorParticle || xPortVisorElectric;
+#else
+  const bool hasVisorEffect = x158_visorParticle;
+#endif
+  if (player && hasVisorEffect &&
       mgr.GetPlayer()->GetCameraState() == CPlayer::kCS_FirstPerson) {
     const float angle =
         360.f *
@@ -471,6 +477,16 @@ void CGameProjectile::ResolveCollisionWithActor(const CRayCastResult& res, CActo
             reverseDir,
             mgr.GetCameraManager()->GetCurrentCameraTransform(mgr).GetForward().AsNormalized())));
     if (angle <= 45.f) {
+#ifdef TARGET_PC
+      if (xPortVisorElectric) {
+        mgr.AddObject(rs_new CHUDBillboardEffect(
+            rstl::optional_object_null(),
+            rstl::optional_object< TToken< CElectricDescription > >(*xPortVisorElectric),
+            mgr.AllocateUniqueId(), true, rstl::string_l("VisorAcid"),
+            CHUDBillboardEffect::GetNearClipDistance(mgr), CHUDBillboardEffect::GetScaleForPOV(mgr),
+            CColor(1.f, 1.f, 1.f, 1.f), CVector3f(1.f, 1.f, 1.f), CVector3f(0.f, 0.f, 0.f)));
+      } else
+#endif
       mgr.AddObject(rs_new CHUDBillboardEffect(
           rstl::optional_object< TToken< CGenDescription > >(*x158_visorParticle),
           rstl::optional_object_null(), mgr.AllocateUniqueId(), true, rstl::string_l("VisorAcid"),

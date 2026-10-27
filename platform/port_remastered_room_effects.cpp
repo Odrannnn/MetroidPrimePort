@@ -881,6 +881,8 @@ constexpr ActorSlot kActorSlotTable[] = {
     {kMetroidPrimeRelayMP1, {kPrimeData, 0x194f407d, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric + 1},
     {kMetroidPrimeRelayMP1, {kPrimeData, 0x6e48d90d, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric + 2},
     {kMetroidPrimeRelayMP1, {kPrimeData, 0x728f76b5, 0x5d9bd2fe}, 0x84, PortRoomEffects::kActorSlotExoBeamElectric + 3},
+    // GunTurretMP1: the visor effect, an ELC2 or a GENP (retail's visor PART, props 434).
+    {0x1704c1f0, {0xde43a94b}, 0x64, PortRoomEffects::kActorSlotGunTurretVisorEffect},
 };
 
 // The GENP (or other effect) a property path holds, zero when unset or absent. flat caches

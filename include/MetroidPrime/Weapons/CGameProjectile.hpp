@@ -14,6 +14,7 @@
 #include "rstl/vector.hpp"
 
 class CGenDescription;
+class CElectricDescription;
 class CLight;
 class CProjectileTouchResult {
 public:
@@ -113,6 +114,17 @@ protected:
   bool x2e4_26_waterUpdate : 1;
   bool x2e4_27_inWater : 1;
   bool x2e4_28_sendProjectileCollideMsg : 1;
+#ifdef TARGET_PC
+public:
+  // Remastered's visor electric (CGameProjectileMP1 +0x364, set flag +0x37c): when set,
+  // ResolveCollisionWithActor's HUD billboard draws it alone, without the visor particle.
+  void PortSetVisorElectric(const TLockedToken< CElectricDescription >& electric) {
+    xPortVisorElectric = electric;
+  }
+
+protected:
+  rstl::optional_object< TLockedToken< CElectricDescription > > xPortVisorElectric;
+#endif
 };
 CHECK_SIZEOF(CGameProjectile, (VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02 ? 0x310
                                : VERSION >= VERSION_GM8P_00                             ? 0x2f8

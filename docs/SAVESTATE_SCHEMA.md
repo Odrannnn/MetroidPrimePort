@@ -3,7 +3,7 @@
 Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 `platform/generated/port_entity_schema.inc`, its types `platform/include/port_entity_schema.h`.
 
-159 classes (CEntity and every subclass a header defines), 3417 own fields; 2664 of them plain data (`statedump` writes those under `fields` when the object's `kTagFields` block saves them, else under `fields_other`).
+159 classes (CEntity and every subclass a header defines), 3419 own fields; 2664 of them plain data (`statedump` writes those under `fields` when the object's `kTagFields` block saves them, else under `fields_other`).
 
 | kind | fields |
 |---|---|
@@ -16,7 +16,7 @@ Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 | pod | 203 |
 | pointer | 2 |
 | smart_ptr | 208 |
-| container | 185 |
+| container | 187 |
 | state_machine | 1 |
 | body_controller | 1 |
 | anim_data | 14 |
@@ -76,7 +76,7 @@ Written by `tools/gen_entity_schema.py`; do not edit. The table itself is
 
 ## `smart_ptr` / `container` templates
 
-`rstl::single_ptr` 109, `rstl::reserved_vector` 79, `rstl::vector` 59, `TLockedToken` 48, `rstl::optional_object` 38, `rstl::auto_ptr` 22, `TToken` 21, `TCachedToken` 6, `rstl::basic_string` 5, `rstl::list` 4, `rstl::ncrc_ptr` 2
+`rstl::single_ptr` 109, `rstl::reserved_vector` 79, `rstl::vector` 59, `TLockedToken` 48, `rstl::optional_object` 40, `rstl::auto_ptr` 22, `TToken` 21, `TCachedToken` 6, `rstl::basic_string` 5, `rstl::list` 4, `rstl::ncrc_ptr` 2
 
 ## Not in the table
 

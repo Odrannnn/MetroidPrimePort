@@ -1352,8 +1352,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CGameProjectile >
       {"x2e4_26_waterUpdate", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CGameProjectile, x2e4_26_waterUpdate), PES_SETI(CGameProjectile, x2e4_26_waterUpdate)},
       {"x2e4_27_inWater", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CGameProjectile, x2e4_27_inWater), PES_SETI(CGameProjectile, x2e4_27_inWater)},
       {"x2e4_28_sendProjectileCollideMsg", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CGameProjectile, x2e4_28_sendProjectileCollideMsg), PES_SETI(CGameProjectile, x2e4_28_sendProjectileCollideMsg)},
+      {"xPortVisorElectric", "rstl::optional_object<TLockedToken<CElectricDescription>>", PortSchemaKind::container, 0, kPortSchemaPrivate, sizeof(CGameProjectile::xPortVisorElectric), PES_ADDR(CGameProjectile, xPortVisorElectric), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CGameProjectile", "CWeapon", fields, 21, 0x527700CD217679CCull};
+  static const PortSchemaClass desc = {"CGameProjectile", "CWeapon", fields, 22, 0xE0D89A236592AAACull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CGrenadeLauncher >() {
@@ -3324,8 +3325,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CScriptGunTurret 
       {"x560_29_scriptedStart", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CScriptGunTurret, x560_29_scriptedStart), PES_SETI(CScriptGunTurret, x560_29_scriptedStart)},
       {"x560_30_needsStopClankSound", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CScriptGunTurret, x560_30_needsStopClankSound), PES_SETI(CScriptGunTurret, x560_30_needsStopClankSound)},
       {"x560_31_frenzyReverse", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CScriptGunTurret, x560_31_frenzyReverse), PES_SETI(CScriptGunTurret, x560_31_frenzyReverse)},
+      {"xPortVisorElectric", "rstl::optional_object<TLockedToken<CElectricDescription>>", PortSchemaKind::container, 0, kPortSchemaPrivate, sizeof(CScriptGunTurret::xPortVisorElectric), PES_ADDR(CScriptGunTurret, xPortVisorElectric), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CScriptGunTurret", "CPhysicsActor", fields, 54, 0x5938E96CADB66767ull};
+  static const PortSchemaClass desc = {"CScriptGunTurret", "CPhysicsActor", fields, 55, 0xF19E78212DA6B53Dull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CScriptHUDMemo >() {
@@ -4691,4 +4693,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3417;
+const int PortEntitySchema::kFieldCount = 3419;
