@@ -13,10 +13,10 @@ macro(_aurora_dependency_version name value doc)
 endmacro()
 
 # Dependency versions
-_aurora_dependency_version(AURORA_DAWN_VERSION "v20261027.153325" "Dawn prebuilt version tag (https://github.com/Odrannnn/dawn/releases, branch mpp)"
-        "v20260523.201736" "v20260603.191052" "v20260618.032059" "v20260807.225922" "v20261025.182847" "v20261025.204802" "v20261025.224144" "v20261026.114446" "v20261026.185535") # Previous versions
-_aurora_dependency_version(AURORA_DAWN_REF "59d485b83b95ad075b0b812e0ce33fc2012e827b" "Dawn commit ref (https://github.com/Odrannnn/dawn)"
-        "a04c63840d530f771de754a6991da392e109e0a6" "9aa45f938d4b36626722bbfdc2f18447179337e6" "13abc3bc8ea2d3c2050f9e77a12d012108ceee24" "266c1cf8de969a364afa4fa49311631fc99a881e" "1155e0ed531126f33a1279afa029349651ca1c93" "738a656da3a19d51a1d553814febebe9468a2757" "f3a9fa72535b5a333766bafcd48187bc4c055b2b" "4195093a6be1134c4e5873752e60d0b997b4bd78" "fef22023bf097ca371a9af17e2134cb631fe8912") # Previous versions
+_aurora_dependency_version(AURORA_DAWN_VERSION "v20261027.212404" "Dawn prebuilt version tag (https://github.com/Odrannnn/dawn/releases, branch mpp)"
+        "v20260523.201736" "v20260603.191052" "v20260618.032059" "v20260807.225922" "v20261025.182847" "v20261025.204802" "v20261025.224144" "v20261026.114446" "v20261026.185535" "v20261027.153325") # Previous versions
+_aurora_dependency_version(AURORA_DAWN_REF "bfa890082bf20bc10e0a3bfe122cf0bfa7f4da61" "Dawn commit ref (https://github.com/Odrannnn/dawn)"
+        "a04c63840d530f771de754a6991da392e109e0a6" "9aa45f938d4b36626722bbfdc2f18447179337e6" "13abc3bc8ea2d3c2050f9e77a12d012108ceee24" "266c1cf8de969a364afa4fa49311631fc99a881e" "1155e0ed531126f33a1279afa029349651ca1c93" "738a656da3a19d51a1d553814febebe9468a2757" "f3a9fa72535b5a333766bafcd48187bc4c055b2b" "4195093a6be1134c4e5873752e60d0b997b4bd78" "fef22023bf097ca371a9af17e2134cb631fe8912" "59d485b83b95ad075b0b812e0ce33fc2012e827b") # Previous versions
 _aurora_dependency_version(AURORA_SDL3_VERSION "3.4.10" "SDL3 prebuilt version tag (https://github.com/libsdl-org/SDL/releases)")
 _aurora_dependency_version(AURORA_SDL3_REF "refs/tags/release-3.4.10" "SDL3 commit ref (https://github.com/libsdl-org/SDL)")
 _aurora_dependency_version(AURORA_NOD_VERSION "v2.0.0-alpha.12" "nod version tag (https://github.com/encounter/nod/releases)"
@@ -34,6 +34,14 @@ set(_aurora_dawn_sha256_v20261027.153325_darwin-arm64 95adf40ca331e847a1a8c25481
 set(_aurora_dawn_sha256_v20261027.153325_darwin-x86_64 244ce4bcecc40c3f7e8350de8e63b1f11db17d8ceed8d6c60c8c088ee6986b87)
 set(_aurora_dawn_sha256_v20261027.153325_ios-arm64 d058b020ef61540968c799b129340b6d1db02742b85d76a5298c987d403c54b9)
 set(_aurora_dawn_sha256_v20261027.153325_android-aarch64 76e607e72df34506c670ddf85d03010d15fc8ff2b7d6992c87af669490ba14e9)
+set(_aurora_dawn_sha256_v20261027.212404_windows-amd64 304d1ecc6ac6bed459a37f67ad98982f343af18497f4d9eee1fb4a0003c1b2d0)
+set(_aurora_dawn_sha256_v20261027.212404_windows-arm64 ced0de5bbfeaa4ebe9218c235c620f741fa1bd8f5541cac28fe0a469a9e5b7cb)
+set(_aurora_dawn_sha256_v20261027.212404_linux-x86_64 7217046aa59ab2c78fbc1e48531687295e44469cae07e3e8127431d3bf8724ec)
+set(_aurora_dawn_sha256_v20261027.212404_linux-aarch64 59df322bbf7e39d705b863ac5b299f02a931c65980f3cf899a210abba3c4c5ae)
+set(_aurora_dawn_sha256_v20261027.212404_darwin-arm64 3486bf516e7e0d1ad5e889d140b62b17689de076caacc4a9a597cb239f74ecda)
+set(_aurora_dawn_sha256_v20261027.212404_darwin-x86_64 0d4d06d0dfc2ca57bfbecddd2c6a4d421c2bff227ebc149e8fcb0c67b9ea084e)
+set(_aurora_dawn_sha256_v20261027.212404_ios-arm64 c101305a6748fb52246465cd9e8d2df27756ab39da1802f0cfca49275d666e70)
+set(_aurora_dawn_sha256_v20261027.212404_android-aarch64 209b0785794c124b7d845d0a688f68a8a0ef16a2a5b2b5566ff598eb986b3345)
 set(_aurora_nod_sha256_v2.0.0-alpha.12_windows-x86_64 c9dfecf8e52066a5222f3cb1cad18d0740c958ce65bf60cb84e780a3856ed881)
 set(_aurora_nod_sha256_v2.0.0-alpha.12_windows-arm64 24f3a5d2aea299415438917d0078b48731af66f95ff17a6cf6a47ea6993b6c0f)
 set(_aurora_nod_sha256_v2.0.0-alpha.12_linux-x86_64 920adb1d2386c8728e0521f8d52809057c04bd46913433a0000ee0931d08d69f)
