@@ -403,7 +403,7 @@ std::string CardQueueExport(const std::filesystem::path& folder, const std::stri
         sCardExportQueue.clear();
         return "Could not read " + PortGci::PathString(file.filename()) + ".";
       }
-      // A Trilogy disc's files go out as the GameCube release's.
+      // Named by the format's game code (a Trilogy disc's keep R3ME/R3MP).
       PortGci::Header header;
       std::string error;
       if (!PortGci::ParseHeader(bytes.data(), bytes.size(), header, error)) {

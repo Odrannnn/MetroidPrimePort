@@ -46,14 +46,23 @@ const char* GameCode() { return sGameCode; }
 
 const char* CardRegion() { return sGameCode[3] == 'P' ? "EUR" : "USA"; }
 
-// Trilogy's (R3ME) saves have PAL's layout.
-ExportFormat NativeExport() {
-  return PortSaveConvert::NativeFormat(sGameCode[3] == 'P' || std::memcmp(sGameCode, "R3M", 3) == 0);
+bool OnTrilogyDisc() { return std::memcmp(sGameCode, "R3M", 3) == 0; }
+
+// A Trilogy disc's (R3ME/R3MP) saves have PAL's container but the Trilogy's
+// own relay, door and scan order.
+ExportFormat NativeExport() { return PortSaveConvert::NativeFormat(sGameCode[3] == 'P', OnTrilogyDisc()); }
+
+const char* GameCodeOf(ExportFormat format) {
+  if (format == ExportFormat::TriGci)
+    return OnTrilogyDisc() ? sGameCode : "R3ME";
+  return format == ExportFormat::PalGci ? "GM8P" : "GM8E";
 }
 
-const char* GameCodeOf(ExportFormat format) { return format == ExportFormat::PalGci ? "GM8P" : "GM8E"; }
-
-const char* CardRegionOf(ExportFormat format) { return format == ExportFormat::PalGci ? "EUR" : "USA"; }
+const char* CardRegionOf(ExportFormat format) {
+  if (format == ExportFormat::TriGci)
+    return OnTrilogyDisc() ? CardRegion() : "USA";
+  return format == ExportFormat::PalGci ? "EUR" : "USA";
+}
 
 std::string PathString(const fs::path& path) {
   const auto u8 = path.u8string();

@@ -22,15 +22,20 @@
 // Formats read: USA GameCube (GM8E01, 1.00 to 1.02 share one layout), real PAL
 // GameCube (GM8P01, one 3-block "MetroidPrime" with two copies), the port's own
 // earlier PAL saves (GM8P01, one block, "MetroidPrime A"/"B": the USA container
-// holding PAL worlds), and the Wii Trilogy's save.bin or data.bin.
-// Formats written: USA and real PAL, and the Trilogy's save.bin (into an
+// holding PAL worlds), the port's card files for a Trilogy disc (R3ME/R3MP:
+// PAL's container holding the Trilogy's own worlds, as that disc's game orders
+// them), and the Wii Trilogy's save.bin or data.bin.
+// Formats written: USA, real PAL, the Trilogy disc's card files, and the
+// Trilogy's save.bin (into an
 // existing one: the console signs data.bin, which only the Wii can do).
 namespace PortSaveConvert {
 
-enum class Layout { Usa, Pal, Wii };
-enum class Format { Unknown, UsaGci, PalGci, PalLegacyGci, WiiSave, WiiDataBin };
+// TriGc: the Trilogy's worlds (the Wii tables) in a GameCube stream, its scans
+// keyed by id and category as on GameCube.
+enum class Layout { Usa, Pal, Wii, TriGc };
+enum class Format { Unknown, UsaGci, PalGci, PalLegacyGci, WiiSave, WiiDataBin, TriGci };
 
-// "USA", "PAL", "PAL (earlier port save)", "Wii".
+// "USA", "PAL", "PAL (earlier port save)", "Wii", "Trilogy (GameCube card)".
 const char* FormatName(Format format);
 
 // One scan: its id and the category the game files it under. The Trilogy keys
@@ -125,8 +130,8 @@ uint32_t Crc32(const uint8_t* data, size_t size);
 void AesCbcDecrypt(const uint8_t key[16], const uint8_t iv[16], const uint8_t* in, size_t size, uint8_t* out);
 
 Format Detect(const uint8_t* data, size_t size);
-// The GCI format the mounted disc's game reads natively.
-Format NativeFormat(bool pal);
+// The GCI format the mounted disc's game reads natively (TriGci for a Trilogy disc).
+Format NativeFormat(bool pal, bool trilogy = false);
 
 // Parses any readable format. `art` receives the source's 5120 banner/icon
 // bytes when it is a GCI.
@@ -135,7 +140,8 @@ bool Read(const uint8_t* data, size_t size, Format& format, Save& out, std::vect
 // Maps the ids onto `to`'s tables (no-op when already there).
 void Retarget(Save& save, Layout to, Stats& stats);
 // `art`: banner, icon and palette bytes (5120) or empty for a blank banner.
-// `now`: the stamp for the file; 0 means the current time.
+// `now`: the stamp for the file; 0 means the current time. `pal`: PAL's
+// container, for a Layout::Pal or Layout::TriGc save.
 bool WriteGci(const Save& save, bool pal, const std::vector<uint8_t>& art, int64_t now,
               std::vector<uint8_t>& gci, Stats& stats, std::string& error);
 
@@ -145,7 +151,7 @@ struct Conversion {
   std::vector<uint8_t> gci;
   uint32_t newest = 0; // the newest slot's timestamp, to choose between several files
 };
-// Reads `data` in any format and writes it as `target` (UsaGci or PalGci).
+// Reads `data` in any format and writes it as `target` (UsaGci, PalGci or TriGci).
 bool ConvertTo(const uint8_t* data, size_t size, Format target, const std::vector<uint8_t>& art,
                Conversion& out, std::string& error);
 // The same, to the mounted disc's GCI.

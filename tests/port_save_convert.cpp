@@ -66,8 +66,9 @@ Save SyntheticSave(Layout layout) {
   Save save;
   save.layout = layout;
   save.system.present = true;
-  save.system.lead = layout == Layout::Pal ? Lead::Pal : Lead::Usa;
-  save.system.leadBytes.assign(layout == Layout::Pal ? 82 : 162, 0);
+  const bool palContainer = layout != Layout::Usa;
+  save.system.lead = palContainer ? Lead::Pal : Lead::Usa;
+  save.system.leadBytes.assign(palContainer ? 82 : 162, 0);
   for (size_t i = 0; i < save.system.leadBytes.size(); ++i)
     save.system.leadBytes[i] = uint8_t(i * 7 + 1);
   save.system.fps = 2;
@@ -76,7 +77,7 @@ Save SyntheticSave(Layout layout) {
   save.system.logScan = 77;
   save.system.flags = {true, false, true, false, true};
   save.system.autoMapper = 2;
-  save.system.palField = layout == Layout::Pal ? 5 : 0;
+  save.system.palField = palContainer ? 5 : 0;
   Slot& s = save.slots[1];
   s.present = true;
   s.timestamp = 0x12345678;
@@ -105,7 +106,7 @@ Save SyntheticSave(Layout layout) {
   s.music = 50;
   s.hud = 200;
   s.helmet = 150;
-  s.flags = {false, true, true, false, true, layout == Layout::Pal};
+  s.flags = {false, true, true, false, true, palContainer};
   for (uint32_t i = 0; i < 32; ++i) {
     s.hintState[i] = i & 3;
     s.hintTime[i] = i * 1000;
@@ -137,7 +138,7 @@ bool RoundTrip(Save& save, bool pal, const char* what) {
     CHECK_MSG(false, std::string(what) + ": read: " + error);
     return false;
   }
-  CHECK_MSG(format == NativeFormat(pal), std::string(what) + ": format detected");
+  CHECK_MSG(format == NativeFormat(pal, save.layout == Layout::TriGc), std::string(what) + ": format detected");
   if (!WriteGci(back, pal, art, 1000000000, gci2, stats, error)) {
     CHECK_MSG(false, std::string(what) + ": rewrite: " + error);
     return false;
@@ -177,6 +178,38 @@ void TestSynthetic() {
   RoundTrip(usa, false, "synthetic USA");
   Save pal = SyntheticSave(Layout::Pal);
   RoundTrip(pal, true, "synthetic PAL");
+  Save tri = SyntheticSave(Layout::TriGc);
+  RoundTrip(tri, true, "synthetic Trilogy card");
+
+  // A Trilogy disc's card file orders its relays by the Trilogy's tables, not
+  // PAL's: its Chozo list has one more relay (0x2C01FB) part way through, so
+  // with PAL's order every later relay would read one slot off.
+  {
+    constexpr uint32_t kChozo = 0x83f6ff6f;
+    const std::set<uint32_t> relays = {0x00310063, 0x003402DF, 0x003D0004};
+    Save src = SyntheticSave(Layout::Usa);
+    World& w = src.slots[1].worlds[kChozo];
+    w.present = true;
+    w.relays = relays;
+    std::vector<uint8_t> gci;
+    Stats stats;
+    std::string error;
+    CHECK_MSG(WriteGci(src, false, {}, 1000000000, gci, stats, error), "USA with Chozo relays: " + error);
+    Conversion conv;
+    CHECK_MSG(ConvertTo(gci.data(), gci.size(), Format::TriGci, {}, conv, error) && !conv.stats.Any(),
+              "USA -> Trilogy card: " + error);
+    Format format;
+    Save back;
+    CHECK_MSG(Read(conv.gci.data(), conv.gci.size(), format, back, nullptr, error) && format == Format::TriGci &&
+                  back.layout == Layout::TriGc,
+              "Trilogy card reads back as one: " + error);
+    CHECK_MSG(back.slots[1].worlds[kChozo].relays == relays, "Trilogy card keeps the Chozo relays");
+    // The same stream read with PAL's tables would name other relays.
+    std::memcpy(conv.gci.data(), "GM8P", 4);
+    CHECK_MSG(Read(conv.gci.data(), conv.gci.size(), format, back, nullptr, error) && format == Format::PalGci &&
+                  back.slots[1].worlds[kChozo].relays != relays,
+              "Trilogy card's relay order is not PAL's");
+  }
 
   // A PAL save is told from the port's earlier PAL saves by its name, not its size.
   std::vector<uint8_t> head(0x40 + 0x2000, 0);

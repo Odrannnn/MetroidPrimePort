@@ -121,7 +121,7 @@ identify as **GM8E01, disc 0, revision 0, 1 or 2** (USA 1.00, 1.01 or 1.02), **G
 `MP1` directory is the disc's root (with the rest of the disc still visible) and `rs5mp1_p.dol` its
 DOL. That data is the PAL revision's, so it runs like a PAL disc (PAL skips and script fixes, except
 PAL's extra Main Quarry lock, which Trilogy lacks). The front end plays Trilogy's own Metroid Prime
-menu movies from `fe/Video/mp1`. Saves are a PAL-layout `R3ME` (USA) or `R3MP` (PAL) file, apart from the GameCube ones. The two
+menu movies from `fe/Video/mp1`. Saves are an `R3ME` (USA) or `R3MP` (PAL) file, apart from the GameCube ones: PAL's container, with relays, doors and scans in the Trilogy's own order (a GameCube save is converted, not copied). The two
 Trilogy discs have the same Metroid Prime world data; the PAL one differs in its DOL build, its
 `Strings.pak` and some movies.
 PAL support is experimental: a PAL disc runs the same 1.00 code on its own data, at 60 Hz, with every port

@@ -65,6 +65,7 @@ Tab TabOf(Layout layout) {
   case Layout::Pal:
     return {lay::pal::kWorlds, std::size(lay::pal::kWorlds)};
   case Layout::Wii:
+  case Layout::TriGc:
     return {lay::wii::kWorlds, std::size(lay::wii::kWorlds)};
   default:
     return {lay::usa::kWorlds, std::size(lay::usa::kWorlds)};
@@ -100,8 +101,8 @@ LayerKey KeyOf(const lay::WorldEntry& w, const lay::AreaEntry& a, u32 i) {
 // The scan bits of a slot, in stream order: the union over the worlds, sorted
 // by id (stable), duplicates removed. The Trilogy keys by id only.
 const std::vector<std::pair<u32, u32>>& ScanList(Layout layout) {
-  static std::vector<std::pair<u32, u32>> lists[3];
-  static bool built[3] = {};
+  static std::vector<std::pair<u32, u32>> lists[4];
+  static bool built[4] = {};
   auto& list = lists[int(layout)];
   if (!built[int(layout)]) {
     built[int(layout)] = true;
@@ -590,7 +591,7 @@ std::vector<uint8_t> LeadFor(const System& s, bool pal) {
 }
 
 std::vector<uint8_t> WriteSystem(const System& s, Layout layout) {
-  const bool pal = layout == Layout::Pal;
+  const bool pal = layout == Layout::Pal || layout == Layout::TriGc;
   const size_t total = pal ? kPalSystem : kUsaSystem;
   std::vector<uint8_t> lead = LeadFor(s, pal);
   BitWriter w(total * 8);
@@ -713,7 +714,8 @@ bool ReadUsaContainer(const uint8_t* save, size_t size, Layout layout, int flags
   return true;
 }
 
-bool ReadPalContainer(const uint8_t* gci, size_t size, Save& out, std::string& error) {
+// `layout`: Pal, or TriGc for a Trilogy disc's card file (the same container).
+bool ReadPalContainer(const uint8_t* gci, size_t size, Layout layout, Save& out, std::string& error) {
   if (size < kHeader + 3 * kBlock) {
     error = "the save is cut short";
     return false;
@@ -732,10 +734,10 @@ bool ReadPalContainer(const uint8_t* gci, size_t size, Save& out, std::string& e
     pick = port::ReadBE32(copies[0] + 4) == port::ReadBE32(copies[1] + 4) ? 0 : 1;
   }
   const uint8_t* c = copies[pick];
-  out.layout = Layout::Pal;
-  ReadSystem(c + 0xF, kPalSystem, kPalLead, Lead::Pal, true, true, Layout::Pal, out.system);
+  out.layout = layout;
+  ReadSystem(c + 0xF, kPalSystem, kPalLead, Lead::Pal, true, true, layout, out.system);
   size_t off = kPalSlotBase;
-  const SlotFmt fmt{Layout::Pal, false, 6};
+  const SlotFmt fmt{layout, false, 6};
   for (int i = 0; i < 3; ++i) {
     if (c[0xC + i] == 0)
       continue;
@@ -861,6 +863,8 @@ const char* FormatName(Format format) {
   case Format::WiiSave:
   case Format::WiiDataBin:
     return "Wii";
+  case Format::TriGci:
+    return "Trilogy (GameCube card)";
   default:
     return "unknown";
   }
@@ -942,7 +946,9 @@ bool DecryptDataBin(const uint8_t* d, size_t size, std::vector<uint8_t>& saveBin
   return false;
 }
 
-Format NativeFormat(bool pal) { return pal ? Format::PalGci : Format::UsaGci; }
+Format NativeFormat(bool pal, bool trilogy) {
+  return trilogy ? Format::TriGci : pal ? Format::PalGci : Format::UsaGci;
+}
 
 Format Detect(const uint8_t* d, size_t size) {
   if (d == nullptr)
@@ -962,9 +968,10 @@ Format Detect(const uint8_t* d, size_t size) {
       return size >= kHeader + 3 * kBlock ? Format::PalGci : Format::Unknown;
     }
   }
-  // The port's card files for a Trilogy disc (R3ME/R3MP) hold PAL's layout.
+  // The port's card files for a Trilogy disc (R3ME/R3MP): PAL's container, with
+  // the relays, doors and scans ordered by the Trilogy's own SAVW tables.
   if (size >= kHeader + 3 * kBlock && d[0] == 'R' && d[1] == '3' && d[2] == 'M' && (d[3] == 'E' || d[3] == 'P'))
-    return Format::PalGci;
+    return Format::TriGci;
   return Format::Unknown;
 }
 
@@ -993,7 +1000,8 @@ bool Read(const uint8_t* data, size_t size, Format& format, Save& out, std::vect
     break;
   }
   case Format::PalGci:
-    ok = ReadPalContainer(data, size, out, error);
+  case Format::TriGci:
+    ok = ReadPalContainer(data, size, format == Format::TriGci ? Layout::TriGc : Layout::Pal, out, error);
     break;
   case Format::WiiSave:
     ok = ReadWii(data, size, out, error);
@@ -1134,7 +1142,7 @@ void Retarget(Save& save, Layout to, Stats& stats) {
 
 bool WriteGci(const Save& save, bool pal, const std::vector<uint8_t>& art, int64_t now,
               std::vector<uint8_t>& gci, Stats& stats, std::string& error) {
-  const Layout want = pal ? Layout::Pal : Layout::Usa;
+  const Layout want = !pal ? Layout::Usa : save.layout == Layout::TriGc ? Layout::TriGc : Layout::Pal;
   if (save.layout != want) {
     error = "the save is not in the target layout";
     return false;
@@ -1143,6 +1151,9 @@ bool WriteGci(const Save& save, bool pal, const std::vector<uint8_t>& art, int64
     now = int64_t(std::time(nullptr));
   const size_t blocks = pal ? 3 : 1;
   gci = MakeHeader(pal, blocks, now);
+  // Named for a Trilogy disc so it reads back as one; the card sets R3ME or R3MP.
+  if (want == Layout::TriGc)
+    std::memcpy(gci.data(), "R3ME", 4);
   gci.resize(kHeader + blocks * kBlock, 0);
   uint8_t* sector0 = gci.data() + kHeader;
   PutComment(sector0, pal, now);
@@ -1191,11 +1202,12 @@ bool WriteGci(const Save& save, bool pal, const std::vector<uint8_t>& art, int64
 bool ConvertTo(const uint8_t* data, size_t size, Format target, const std::vector<uint8_t>& art,
                Conversion& out, std::string& error) {
   out = Conversion{};
-  if (target != Format::UsaGci && target != Format::PalGci) {
+  if (target != Format::UsaGci && target != Format::PalGci && target != Format::TriGci) {
     error = std::string("cannot write ") + FormatName(target) + " saves";
     return false;
   }
-  const bool pal = target == Format::PalGci;
+  const bool pal = target != Format::UsaGci;
+  const Layout layout = target == Format::TriGci ? Layout::TriGc : pal ? Layout::Pal : Layout::Usa;
   Save save;
   std::vector<uint8_t> sourceArt;
   if (!Read(data, size, out.from, save, &sourceArt, error))
@@ -1204,7 +1216,7 @@ bool ConvertTo(const uint8_t* data, size_t size, Format target, const std::vecto
     if (s.present)
       out.newest = std::max(out.newest, s.timestamp);
   }
-  Retarget(save, pal ? Layout::Pal : Layout::Usa, out.stats);
+  Retarget(save, layout, out.stats);
   return WriteGci(save, pal, sourceArt.empty() ? art : sourceArt, 0, out.gci, out.stats, error);
 }
 
