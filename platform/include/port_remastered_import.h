@@ -238,7 +238,9 @@ inline constexpr int kEffects = 138;   // Drone laser and scanner particles (roo
 // 63: roomenv version 29, the suns' links and timelines (the intro's fill suns fade out).
 inline constexpr int kRooms = 63;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
-inline constexpr int kText = 1;        // port_remastered_text, and the font (port_remastered_font)
+// kText: port_remastered_text, and the font (port_remastered_font).
+// 2: text/.disc, the disc the tables were merged from (kTextDiscName).
+inline constexpr int kText = 2;
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).
 // 10: shell.bin, the silhouette-shell textures (port_shell_file.h).
 inline constexpr int kHud = 17;        // port_remastered_hud, port_remastered_map, envfx.bin, shell.bin
@@ -653,6 +655,11 @@ inline constexpr int kImportVersion = 38 + ImportStage::kConverter + ImportStage
                                       ImportStage::kText + ImportStage::kHud + ImportStage::kMovies +
                                       ImportStage::kGallery;
 inline constexpr const char* kImportStampName = ".import-version";
+// In the import's text folder: the PortDisc::Name of the disc its tables are copies of. They hold
+// that disc's strings and image ids, so the mod scan serves them only on that disc (a GameCube
+// import's STRG_Main on Trilogy names GameCube-only icons, and Trilogy's map reads more strings).
+inline constexpr const char* kTextFolder = "text";
+inline constexpr const char* kTextDiscName = ".disc";
 
 // ~/.switch/prod.keys if it is there, else empty.
 std::string DefaultKeysPath();

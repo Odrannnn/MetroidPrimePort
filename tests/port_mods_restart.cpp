@@ -40,7 +40,10 @@ bool GeneratedBallLooks() { return false; }
 bool OriginalExperience() { return true; }
 }
 namespace PortRemastered { std::string InstalledModFolder() { return {}; } }
-namespace PortDisc { Version Current() { return Version::Usa100; } }
+namespace PortDisc {
+Version Current() { return Version::Usa100; }
+const char* Name(Version) { return "USA 1.00"; }
+}
 namespace PortRoomGeo { bool BuffersReady() { return ready; } void Reset() {} }
 namespace PortRoomEnv { bool ParseFileName(const std::string&, uint32_t&) { return false; } void Reset() {} }
 namespace PortRoomLiquid { bool ParseFileName(const std::string&, uint32_t&) { return false; } void Reset() {} }

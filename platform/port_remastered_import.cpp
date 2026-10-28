@@ -17,7 +17,6 @@ constexpr const char* kTrashPrefix = PortRemasteredStorage::kTrashPrefix;
 constexpr const char* kMarkerName = "import-complete";
 constexpr const char* kRoomFolder = "roomenv";
 constexpr const char* kGeometryFolder = "roomgeo";
-constexpr const char* kTextFolder = "text";
 constexpr const char* kFontFolder = "font";
 constexpr const char* kFontName = "deface.sdfont";
 constexpr const char* kHudFolder = "hud";
@@ -3492,6 +3491,11 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     }
     if (textTables == 0) {
       fs::remove(textFolder, ec);
+    } else {
+      const std::string disc = PortDisc::Name(PortDisc::Current());
+      if (!writeFile(textFolder / kTextDiscName, std::vector<uint8_t>(disc.begin(), disc.end()))) {
+        AddLine(std::string("text/") + kTextDiscName + ": cannot write");
+      }
     }
     made["text"].counts["tables"] = textTables;
     made["text"].counts["strings"] = textStrings;

@@ -634,6 +634,14 @@ void Initialize() {
       continue;
     }
     const size_t modIndex = sStatus.mods.size() - 1;
+    // An import's text tables are copies of the disc it was made from (kTextDiscName): on
+    // another disc, or with no record of it (an older import), the disc's own tables stay.
+    bool textFits = true;
+    int textLeftOut = 0;
+    if (info.import) {
+      std::ifstream discStamp(modDir / PortRemastered::kTextFolder / PortRemastered::kTextDiscName);
+      textFits = discStamp.is_open() && port::ReadAllText(discStamp) == PortDisc::Name(PortDisc::Current());
+    }
     std::vector<fs::path> files;
     for (fs::recursive_directory_iterator it(modDir, fs::directory_options::skip_permission_denied, ec), end;
          !ec && it != end; it.increment(ec)) {
@@ -763,6 +771,11 @@ void Initialize() {
           Message(info.name + ": " + relative + " is too big; ignored");
           continue;
         }
+        if (!textFits && type == 0x53545247 && // 'STRG'
+            PathString(file.parent_path().filename()) == PortRemastered::kTextFolder) {
+          ++textLeftOut;
+          continue;
+        }
         loose[{type, id}] = {type, id, PathString(file), size, info.name};
         sResourceProviders[{type, id}] = PathString(modDir);
         looseMod[{type, id}] = modIndex;
@@ -792,6 +805,10 @@ void Initialize() {
         continue;
       }
       replaced[entry] = {PathString(file), size, modIndex};
+    }
+    if (textLeftOut != 0) {
+      Message(info.name + ": its text was imported from another disc; this disc's text is used (" +
+              std::to_string(textLeftOut) + " table(s) left out; import Remastered again with this disc for its text)");
     }
     info.textures = int(native.size());
     for (auto& [id, path] : native) {
