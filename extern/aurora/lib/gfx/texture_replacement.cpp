@@ -1685,8 +1685,22 @@ ReplacementRegistration register_virtual_replacement(std::string_view path, Virt
     return {};
   }
 
+  return register_virtual_replacement(ReplacementKey{*parsed}, path, source, options);
+}
+
+ReplacementRegistration register_virtual_replacement(ReplacementKey replacementKey, std::string_view path,
+                                                     VirtualFileSource source, ReplacementOptions options) {
+  if (source.read == nullptr) {
+    return {};
+  }
+  if (std::holds_alternative<TexturePointerKey>(replacementKey) &&
+      std::get<TexturePointerKey>(replacementKey).data == nullptr) {
+    return {};
+  }
+  const size_t slash = path.rfind('/');
+  const auto filename = slash == std::string_view::npos ? path : path.substr(slash + 1);
+
   std::lock_guard lk(s_registryMutex);
-  ReplacementKey replacementKey{*parsed};
   ReplacementRegistration registration{
       .id = s_nextRegistrationId++,
       .key = replacementKey,
@@ -1703,11 +1717,13 @@ ReplacementRegistration register_virtual_replacement(std::string_view path, Virt
       .source = source,
       .virtualReadState = std::make_shared<VirtualReadState>(),
   });
-  ++s_sourceEntryCount;
   const auto snapshot = snapshot_entry(replacementKey, entries.back());
   queue_thumbnail_load(snapshot);
   erase_cache_locked(replacementKey);
-  gx::clear_static_texture_cache();
+  if (is_source_key(replacementKey)) {
+    ++s_sourceEntryCount;
+    gx::clear_static_texture_cache();
+  }
   return registration;
 }
 

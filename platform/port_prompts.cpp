@@ -31,6 +31,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -118,6 +119,49 @@ constexpr PromptKey kKeys[] = {
     // same GC textures (and keys above) apply there (#220).
 };
 constexpr size_t kKeyCount = sizeof(kKeys) / sizeof(kKeys[0]);
+
+// The same prompt art by asset id, sorted by id. CTexture binds these by
+// pointer (BindTexture), which holds whatever the content: the hashes above
+// miss on any disc whose art differs by a pixel. Covers GC USA and Trilogy's
+// Metroid1.pak (whose stick dash frames are not on the GC disc).
+struct PromptAsset {
+  uint32_t id;
+  uint32_t prompt;
+};
+constexpr PromptAsset kAssets[] = {
+    {0x04361847, PAD_BUTTON_B},       {0x05AF9CAA, PAD_BUTTON_A},       {0x08A2E4B9, PAD_TRIGGER_R},
+    {0x12A12131, PROMPT_CSTICK_DOWN}, {0x13A7E65D, PROMPT_STICK},       {0x1A29C0E6, PROMPT_CSTICK},
+    {0x2176CFF9, PAD_BUTTON_X},       {0x217C015A, PROMPT_STICK},       {0x2A13C23E, PROMPT_CSTICK},
+    {0x2B97F6A0, PROMPT_STICK},       {0x34E79314, PAD_TRIGGER_L},      {0x3A446C61, PROMPT_STICK},
+    {0x3DBB2482, PAD_BUTTON_A},       {0x4050F102, PROMPT_STICK_LEFT},  {0x409AA72E, PROMPT_CSTICK_RIGHT},
+    {0x46434ED3, PAD_TRIGGER_L},      {0x4A414F04, PROMPT_STICK},       {0x5400AEEF, PROMPT_CSTICK},
+    {0x56705CA9, PROMPT_STICK},       {0x5D9F9796, PROMPT_CSTICK_UP},   {0x5F556002, PAD_BUTTON_DOWN},
+    {0x63E1497C, PROMPT_CSTICK},      {0x6CBE6EF2, PAD_TRIGGER_Z},      {0x6D22966B, PAD_BUTTON_START},
+    {0x778CCD6A, PROMPT_STICK_RIGHT}, {0x7946C4C5, PROMPT_CSTICK_LEFT}, {0x833BEE04, PAD_BUTTON_B},
+    {0x8ADA8184, PAD_BUTTON_RIGHT},   {0x8B0C22A7, PROMPT_STICK_LEFT},  {0x951546A8, PROMPT_CSTICK_DOWN},
+    {0x9530337E, PAD_TRIGGER_R},      {0x95EB0B4C, PROMPT_STICK_UP},    {0x99F6C3B4, PROMPT_STICK},
+    {0x9C8A7FD1, PROMPT_CSTICK},      {0x9E9624C9, PROMPT_STICK},       {0xA91A7703, PROMPT_CSTICK_UP},
+    {0xA9798329, PROMPT_CSTICK_LEFT}, {0xAB6B9842, PROMPT_CSTICK},      {0xB306E26F, PAD_BUTTON_LEFT},
+    {0xBBED079B, PROMPT_STICK},       {0xBCD01ECF, PROMPT_STICK_RIGHT}, {0xC042EC91, PAD_BUTTON_UP},
+    {0xC6C483AC, PROMPT_STICK},       {0xCD7B1ACA, PROMPT_CSTICK_RIGHT}, {0xD717196D, PROMPT_STICK},
+    {0xD979433D, PAD_TRIGGER_R},      {0xDFEF9E78, PROMPT_STICK},       {0xEA2A1C5C, PAD_BUTTON_Y},
+    {0xF13452F8, PROMPT_DPAD},        {0xF2425B21, PAD_TRIGGER_R},      {0xFA931047, PROMPT_STICK_DOWN},
+};
+
+const PromptAsset* FindAsset(uint32_t id) {
+  const auto it = std::lower_bound(std::begin(kAssets), std::end(kAssets), id,
+                                   [](const PromptAsset& asset, uint32_t value) { return asset.id < value; });
+  return it != std::end(kAssets) && it->id == id ? &*it : nullptr;
+}
+constexpr bool AssetsSorted() {
+  for (size_t i = 1; i < std::size(kAssets); ++i) {
+    if (kAssets[i - 1].id >= kAssets[i].id) {
+      return false;
+    }
+  }
+  return true;
+}
+static_assert(AssetsSorted(), "kAssets must be sorted by id");
 
 // The actions to resolve bindings for, resolved once per action rather than
 // once per texture.
@@ -716,6 +760,65 @@ std::string IconStemForPrompt(uint32_t prompt, const char* device) {
   }
 }
 
+// The icon file for `stem` at width x height, or an empty string. Prefers the
+// binding generated at exactly this texture's size, then the unsuffixed one. A
+// single stem can serve textures of different sizes - the C-stick prompts are
+// one 32x32 and one 64x32 - and a mismatch is not scaled by the game: it reads
+// 64x32 of pixels out of 32x32 of data and draws the right-hand half as noise.
+// tools/make_prompt_glyphs.py writes the sized variants for exactly this reason.
+std::string FindIconForSize(const std::string& stem, uint32_t width, uint32_t height) {
+  char sized[160];
+  std::snprintf(sized, sizeof(sized), "%s_%ux%u.dds", stem.c_str(), width, height);
+  std::string path = FindIconFile(sized);
+  return path.empty() ? FindIconFile(stem + ".dds") : path;
+}
+
+// Prompt textures bound by asset id (BindTexture), keyed by their CTexture.
+struct BoundPrompt {
+  uint32_t prompt;
+  uint32_t width;
+  uint32_t height;
+  aurora::texture::ReplacementRegistration handle{};
+  bool registered = false;
+};
+std::unordered_map<const void*, BoundPrompt> sBound;
+// Each action's stem as Poll last resolved it, by kActions index.
+std::string sActionStems[std::size(kActions)];
+
+const std::string& ActionStem(uint32_t prompt) {
+  for (size_t i = 0; i < std::size(kActions); ++i) {
+    if (kActions[i].prompt == prompt) {
+      return sActionStems[i];
+    }
+  }
+  static const std::string kNone;
+  return kNone;
+}
+
+void ApplyBound(const void* owner, BoundPrompt& bound, const std::string& stem) {
+  if (bound.registered) {
+    aurora::texture::unregister_replacement(bound.handle);
+    bound.handle = {};
+    bound.registered = false;
+  }
+  if (stem.empty()) {
+    return;
+  }
+  const std::string iconPath = FindIconForSize(stem, bound.width, bound.height);
+  uint32_t iconWidth = 0;
+  uint32_t iconHeight = 0;
+  if (iconPath.empty() || !IconDimensions(iconPath, iconWidth, iconHeight) || iconWidth != bound.width ||
+      iconHeight != bound.height) {
+    return;
+  }
+  const std::string* path = StablePath(iconPath);
+  bound.handle = aurora::texture::register_virtual_replacement(
+      aurora::texture::TexturePointerKey{owner}, *path,
+      aurora::texture::VirtualFileSource{&ReadIconBytes, const_cast<std::string*>(path)},
+      aurora::texture::ReplacementOptions{.priority = 2});
+  bound.registered = bound.handle.id != 0;
+}
+
 void Apply(size_t index, const std::string& stem) {
   Registration& reg = sRegistrations[index];
   if (reg.registered) {
@@ -732,18 +835,7 @@ void Apply(size_t index, const std::string& stem) {
   char keyName[80];
   std::snprintf(keyName, sizeof(keyName), "tex1_%ux%u_%016llx_%s.dds", key.width, key.height,
                 static_cast<unsigned long long>(key.hash), key.format);
-  // Prefer the binding generated at exactly this texture's size, then the
-  // unsuffixed one. A single stem can serve textures of different sizes - the
-  // C-stick prompts here are one 32x32 and one 64x32 - and a mismatch is not
-  // scaled by the game: it reads 64x32 of pixels out of 32x32 of data and draws
-  // the right-hand half as noise. tools/make_prompt_glyphs.py writes the sized
-  // variants for exactly this reason.
-  char sized[160];
-  std::snprintf(sized, sizeof(sized), "%s_%ux%u.dds", stem.c_str(), key.width, key.height);
-  reg.iconPath = FindIconFile(sized);
-  if (reg.iconPath.empty()) {
-    reg.iconPath = FindIconFile(stem + ".dds");
-  }
+  reg.iconPath = FindIconForSize(stem, key.width, key.height);
   if (reg.iconPath.empty()) {
     // Nothing generated for this action, so nothing is registered. Note that
     // what stays on screen is not necessarily "the game's own art": the static
@@ -850,9 +942,19 @@ void Poll() {
   }
   sLastDevice = device;
   sLastResolveNs = nowNs != 0 ? nowNs : 1;
-  for (const PromptAction& action : kActions) {
+  for (size_t a = 0; a < std::size(kActions); ++a) {
+    const PromptAction& action = kActions[a];
     const std::string stem = IconStemForPrompt(action.prompt, device);
     size_t applied = 0;
+    if (stem != sActionStems[a]) {
+      sActionStems[a] = stem;
+      for (auto& [owner, bound] : sBound) {
+        if (bound.prompt == action.prompt) {
+          ApplyBound(owner, bound, stem);
+          ++applied;
+        }
+      }
+    }
     for (size_t i = 0; i < kKeyCount; ++i) {
       if (kKeys[i].prompt != action.prompt) {
         continue;
@@ -874,6 +976,30 @@ void Poll() {
   }
 }
 bool KeyboardActive() { return sActiveInput.load(std::memory_order_relaxed) == ActiveInput::Keyboard; }
+
+bool IsPromptAsset(uint32_t id) { return FindAsset(id) != nullptr; }
+
+bool BindTexture(const void* owner, uint32_t id, uint32_t width, uint32_t height) {
+  UnbindTexture(owner);
+  const PromptAsset* asset = FindAsset(id);
+  if (!sEnabled || asset == nullptr || owner == nullptr) {
+    return false;
+  }
+  BoundPrompt& bound = sBound[owner] = BoundPrompt{.prompt = asset->prompt, .width = width, .height = height};
+  ApplyBound(owner, bound, ActionStem(asset->prompt));
+  return true;
+}
+
+void UnbindTexture(const void* owner) {
+  const auto found = sBound.find(owner);
+  if (found == sBound.end()) {
+    return;
+  }
+  if (found->second.registered) {
+    aurora::texture::unregister_replacement(found->second.handle);
+  }
+  sBound.erase(found);
+}
 
 void NoteTouchInput(bool xboxLayout) {
   sActiveInput.store(xboxLayout ? ActiveInput::TouchXbox : ActiveInput::TouchGameCube,

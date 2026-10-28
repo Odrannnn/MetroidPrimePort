@@ -144,6 +144,7 @@ private:
   mutable bool mPortTexelsChanged; // written in place since the last Load
   mutable EClampMode mPortClampT;  // mClampMode is the S axis's
   int mPortLayerBandHeight;        // a PAL font's packed height, once unpacked
+  bool mPortPrompt;                // bound to a prompt icon (port_prompts.h)
 
 public:
   void PortSetNativeId(uint id);

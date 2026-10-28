@@ -11,6 +11,7 @@
 #include "port_disc.h"
 #include "port_log.h"
 #include "port_mods.h"
+#include "port_prompts.h"
 #include "port_skip_cutscenes.h"
 
 #include <dolphin/ar.h>
@@ -230,17 +231,7 @@ namespace {
 // as on a GC disc (#220). RS5's other assets (beam/visor select, scan rings)
 // stay.
 bool PortSkipRS5Button(const CPakFile& pak, const CAssetId asset) {
-  static const uint kButtons[] = {
-      0x04361847, 0x05AF9CAA, 0x08A2E4B9, 0x13A7E65D, 0x1A29C0E6, 0x2176CFF9, 0x217C015A, 0x2B97F6A0,
-      0x34E79314, 0x3A446C61, 0x3DBB2482, 0x4050F102, 0x409AA72E, 0x46434ED3, 0x4A414F04, 0x5400AEEF,
-      0x56705CA9, 0x5D9F9796, 0x5F556002, 0x63E1497C, 0x6CBE6EF2, 0x6D22966B, 0x778CCD6A, 0x7946C4C5,
-      0x833BEE04, 0x8ADA8184, 0x8B0C22A7, 0x951546A8, 0x9530337E, 0x95EB0B4C, 0x99F6C3B4, 0x9C8A7FD1,
-      0x9E9624C9, 0xAB6B9842, 0xB306E26F, 0xBBED079B, 0xBCD01ECF, 0xC042EC91, 0xC6C483AC, 0xD717196D,
-      0xD979433D, 0xDFEF9E78, 0xEA2A1C5C, 0xF13452F8, 0xF2425B21, 0xFA931047,
-  };
-  const uint id = asset;
-  const uint* end = kButtons + sizeof(kButtons) / sizeof(kButtons[0]);
-  if (!std::binary_search(kButtons, end, id))
+  if (!PortPrompts::IsPromptAsset(asset))
     return false;
   if (!PortDisc::IsTrilogy(PortDisc::Current()))
     return false;

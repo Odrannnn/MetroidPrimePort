@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 // Binding-aware button prompt icons.
 //
 // The game draws each prompt from a fixed texture, so a shipped replacement can
@@ -34,4 +36,15 @@ void Poll();
 // (true for the twin-stick Xbox arrangement, false for the GameCube one), so the
 // in-game prompts follow the input the player actually reached for.
 void NoteTouchInput(bool xboxLayout);
+
+// True when `id` is one of the disc's prompt textures (any version, Trilogy's
+// Metroid1.pak included). Trilogy's loader skips RS5.pak's Wii art for these.
+bool IsPromptAsset(uint32_t id);
+
+// Binds the icon for the prompt texture `id` to the CTexture `owner` (a
+// TexturePointerKey, so the texture's user data must be `owner`), following the
+// binding from then on. False when `id` is no prompt or the module is off.
+// Content hashes stay as a fallback for prompt art that is not bound this way.
+bool BindTexture(const void* owner, uint32_t id, uint32_t width, uint32_t height);
+void UnbindTexture(const void* owner);
 } // namespace PortPrompts

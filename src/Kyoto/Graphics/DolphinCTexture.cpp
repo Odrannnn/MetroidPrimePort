@@ -24,6 +24,7 @@
 
 #include "Kyoto/CFrameDelayedKiller.hpp"
 #include "port_mods.h"
+#include "port_prompts.h"
 #endif
 
 int CTexture::sCurrentFrameCount = 0;
@@ -59,6 +60,7 @@ CTexture::CTexture(ETexelFormat fmt, const short w, const short h, int mips)
 , mPortTexelsChanged(false)
 , mPortClampT(kCM_Repeat)
 , mPortLayerBandHeight(0)
+, mPortPrompt(false)
 #endif
 {
   InitBitmapBuffers(fmt, w, h, mips);
@@ -90,6 +92,7 @@ CTexture::CTexture(CInputStream& in, EAutoMipmap automip, EBlackKey blackKey)
 , mPortTexelsChanged(false)
 , mPortClampT(kCM_Repeat)
 , mPortLayerBandHeight(0)
+, mPortPrompt(false)
 #endif
 {
   mTexelFormat = ETexelFormat(in.Get< uint >());
@@ -143,6 +146,9 @@ CTexture::~CTexture() {
   if (mPortNativeId != 0) {
     PortMods::UnbindTexture(this);
   }
+  if (mPortPrompt) {
+    PortPrompts::UnbindTexture(this);
+  }
 #endif
   UncountMemory();
 }
@@ -153,6 +159,8 @@ CTexture::~CTexture() {
 // data: the texel buffer moves when the texture is swapped out to ARAM and back, this does not.
 void CTexture::PortSetNativeId(uint id) {
   mPortNativeId = PortMods::BindTexture(this, id) ? id : 0;
+  // A prompt's icon follows the player's binding (port_prompts.h), over a mod's art.
+  mPortPrompt = PortPrompts::BindTexture(this, id, GetWidth(), GetHeight());
 }
 
 // Blank rows at the bottom for new glyph cells (the bitmap font's accents).
@@ -321,7 +329,7 @@ void CTexture::Load(GXTexMapID tex, EClampMode clamp) const {
 #endif
     GXInitTexObjData(&mTexObj, ptr);
 #ifdef TARGET_PC
-    if (mPortNativeId != 0) {
+    if (mPortNativeId != 0 || mPortPrompt) {
       // InitTextureObjects rebuilds the object, so name the owner again on every load.
       GXInitTexObjUserData(&mTexObj, const_cast< CTexture* >(this));
     }
