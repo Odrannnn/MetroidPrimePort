@@ -19,8 +19,11 @@ finish-args:
   # --device=all covers hidraw.
   - --device=all
   - --share=ipc
+  # x11, not fallback-x11: the game picks SDL's x11 driver whenever DISPLAY is set
+  # (Dawn's OpenGL backend fails eglInitialize on Wayland), and fallback-x11 hides
+  # DISPLAY on every Wayland desktop. Wayland stays for SDL_VIDEODRIVER=wayland.
   - --socket=wayland
-  - --socket=fallback-x11
+  - --socket=x11
   # The disc image lives wherever the user keeps it; it is read-only to us.
   - --filesystem=home:ro
   # The update check (api.github.com) and Archipelago servers.
@@ -75,6 +78,11 @@ modules:
       # The first version used bare "extern/aurora/LICENSE" and died with
       # "install: cannot stat" - the file is tracked and present, just not
       # relative to where the script runs.
+      # Dawn's OpenGL/GLES backends dlopen the unversioned "libEGL.so", which only
+      # the SDK has; the runtime ships libEGL.so.1 (libglvnd). Without this link the
+      # GL fallback finds no adapter and the game ends up on the Null backend.
+      - mkdir -p /app/lib
+      - ln -s /usr/lib/$(gcc -print-multiarch)/libEGL.so.1 /app/lib/libEGL.so
       - install -Dm644 ../extern/aurora/LICENSE /app/share/licenses/metroid-prime-port/aurora.txt
       - install -Dm644 ../extern/musyx/LICENSE /app/share/licenses/metroid-prime-port/musyx.txt
       - install -Dm644 ../extern/astcenc/LICENSE.txt /app/share/licenses/metroid-prime-port/astcenc.txt
