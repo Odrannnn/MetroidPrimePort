@@ -57,7 +57,7 @@
   <releases>
     <release version="0.35.1" date="2026-10-28">
       <description>
-        <p>Bugfixes: GameCube controllers through a Wii U/Mayflash adapter now work on Windows and read raw like a console (no deadzone, origin at plug-in, X+Y+Start for 3 s recalibrates); Trilogy shows GameCube button art for the active input on the map and pause screens, its map text and legend layout match the disc, and a GameCube-made Remastered import no longer crashes Trilogy on the map or pause screen; an optional GameCube crosshair style on Trilogy, and no doubled crosshair under free aim; Dread's shoulder pads sit in its idle pose; the Linux release binary is much smaller, with its debug info shipped separately.</p>
+        <p>Bugfixes: GameCube controllers through a Wii U/Mayflash adapter now work on Windows and read raw like a console (no deadzone, origin at plug-in, X+Y+Start for 3 s recalibrates); Trilogy shows GameCube button art for the active input on the map and pause screens, its map text and legend layout match the disc, and a GameCube-made Remastered import no longer crashes Trilogy on the map or pause screen; an optional GameCube crosshair style on Trilogy, and no doubled crosshair under free aim; Dread's shoulder pads sit in its idle pose; mouse aim no longer snaps back under Xwayland; the Flatpak's OpenGL fallback works; the touch map button no longer flickers while looking around; the Linux release binary is much smaller, with its debug info shipped separately.</p>
       </description>
       <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.35.1</url>
     </release>
