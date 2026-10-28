@@ -19,7 +19,6 @@ constexpr const char* kRoomFolder = "roomenv";
 constexpr const char* kGeometryFolder = "roomgeo";
 constexpr const char* kFontFolder = "font";
 constexpr const char* kFontName = "deface.sdfont";
-constexpr const char* kHudFolder = "hud";
 constexpr const char* kMapFolder = "map";
 // The disc's own folder: a mod's file there is opened in place of the disc's.
 constexpr const char* kMovieFolder = "Video";
@@ -3603,6 +3602,12 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         continue;
       }
       ++hudFrames;
+    }
+    if (hudFrames != 0) {
+      const std::string disc = PortDisc::Name(PortDisc::Current());
+      if (!writeFile(hudFolder / kHudDiscName, std::vector<uint8_t>(disc.begin(), disc.end()))) {
+        AddLine(std::string("hud/") + kHudDiscName + ": cannot write");
+      }
     }
     // The map screen's compass, which the game draws itself (port_map_icons.h).
     int compassModels = 0;

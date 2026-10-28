@@ -636,11 +636,19 @@ void Initialize() {
     const size_t modIndex = sStatus.mods.size() - 1;
     // An import's text tables are copies of the disc it was made from (kTextDiscName): on
     // another disc, or with no record of it (an older import), the disc's own tables stay.
+    // Its HUD frames likewise (kHudDiscName): one built from another disc's frame names assets
+    // this disc lacks, and the game aborts loading it.
     bool textFits = true;
+    bool hudFits = true;
     int textLeftOut = 0;
+    int hudLeftOut = 0;
     if (info.import) {
-      std::ifstream discStamp(modDir / PortRemastered::kTextFolder / PortRemastered::kTextDiscName);
-      textFits = discStamp.is_open() && port::ReadAllText(discStamp) == PortDisc::Name(PortDisc::Current());
+      const auto madeOn = [&](const char* folder, const char* stamp) {
+        std::ifstream discStamp(modDir / folder / stamp);
+        return discStamp.is_open() && port::ReadAllText(discStamp) == PortDisc::Name(PortDisc::Current());
+      };
+      textFits = madeOn(PortRemastered::kTextFolder, PortRemastered::kTextDiscName);
+      hudFits = madeOn(PortRemastered::kHudFolder, PortRemastered::kHudDiscName);
     }
     std::vector<fs::path> files;
     for (fs::recursive_directory_iterator it(modDir, fs::directory_options::skip_permission_denied, ec), end;
@@ -742,6 +750,9 @@ void Initialize() {
         continue;
       }
       if (PortHudBars::ParseFileName(name, id)) {
+        if (!hudFits) {
+          continue;  // the bars of a frame left out below
+        }
         sHudBars[id] = PathString(file);
         continue;
       }
@@ -774,6 +785,11 @@ void Initialize() {
         if (!textFits && type == 0x53545247 && // 'STRG'
             PathString(file.parent_path().filename()) == PortRemastered::kTextFolder) {
           ++textLeftOut;
+          continue;
+        }
+        if (!hudFits && type == 0x46524D45 && // 'FRME'
+            PathString(file.parent_path().filename()) == PortRemastered::kHudFolder) {
+          ++hudLeftOut;
           continue;
         }
         loose[{type, id}] = {type, id, PathString(file), size, info.name};
@@ -809,6 +825,10 @@ void Initialize() {
     if (textLeftOut != 0) {
       Message(info.name + ": its text was imported from another disc; this disc's text is used (" +
               std::to_string(textLeftOut) + " table(s) left out; import Remastered again with this disc for its text)");
+    }
+    if (hudLeftOut != 0) {
+      Message(info.name + ": its HUD was imported from another disc; this disc's HUD is used (" +
+              std::to_string(hudLeftOut) + " frame(s) left out; import Remastered again with this disc for its HUD)");
     }
     info.textures = int(native.size());
     for (auto& [id, path] : native) {

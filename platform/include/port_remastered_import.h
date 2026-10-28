@@ -243,7 +243,8 @@ inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels
 inline constexpr int kText = 2;
 // 9: envfx.bin, the EnvironmentFX flake textures (port_envfx_file.h).
 // 10: shell.bin, the silhouette-shell textures (port_shell_file.h).
-inline constexpr int kHud = 17;        // port_remastered_hud, port_remastered_map, envfx.bin, shell.bin
+// 18: hud/.disc, the disc the frames were rebuilt from (kHudDiscName).
+inline constexpr int kHud = 18;        // port_remastered_hud, port_remastered_map, envfx.bin, shell.bin
 inline constexpr int kMovies = 0;      // port_remastered_movie
 inline constexpr int kGallery = 0;     // the gallery pictures (port_gallery)
 }  // namespace ImportStage
@@ -660,6 +661,11 @@ inline constexpr const char* kImportStampName = ".import-version";
 // import's STRG_Main on Trilogy names GameCube-only icons, and Trilogy's map reads more strings).
 inline constexpr const char* kTextFolder = "text";
 inline constexpr const char* kTextDiscName = ".disc";
+// In the import's hud folder, the same record for its frames (FRME, .hudbars): each is rebuilt
+// from that disc's frame, and the discs' frames differ (Trilogy's pause screen names models the
+// GameCube's lacks, and the reverse), so another disc keeps its own.
+inline constexpr const char* kHudFolder = "hud";
+inline constexpr const char* kHudDiscName = kTextDiscName;
 
 // ~/.switch/prod.keys if it is there, else empty.
 std::string DefaultKeysPath();
