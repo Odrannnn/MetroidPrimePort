@@ -96,4 +96,13 @@ bool BindPosePosition(const Bcmdl& model, const std::vector<Mat4>& world, const 
                       const BcmdlSubmesh& submesh, uint32_t vertex, float out[3],
                       std::string* error);
 
+// One joint's local transform at `frame` of a Dread skeletal animation (.bcskla, magic "MANM",
+// v1.10; layout from mercury-engine-data-structures formats/bcskla.py). Tracks are keyed by the
+// CRC-64 of the joint name, case kept; a track has nine channels (pos, euler, scale), each a
+// constant or Hermite keys (time, value, slope). Fills pose.pos/euler/scale and sets found when
+// the animation has a track for `joint`; leaves them alone otherwise. False (and *error) on
+// bad data.
+bool SampleBcskla(const uint8_t* data, size_t size, const std::string& joint, float frame, BcmdlJoint& pose,
+                  bool& found, std::string* error);
+
 } // namespace PortDread

@@ -2,6 +2,7 @@
 
 #include <zlib.h>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -577,6 +578,124 @@ bool BindPoseModelPositions(const Bcmdl& model, const std::vector<Mat4>& world,
     if (!BindPosePosition(model, world, mesh, sm, v, &out[3 * size_t(v)], error)) {
       return false;
     }
+  }
+  return true;
+}
+
+bool SampleBcskla(const uint8_t* data, size_t size, const std::string& joint, float frame, BcmdlJoint& pose,
+                  bool& found, std::string* error) {
+  found = false;
+  Span s(data, size);
+  auto fail = [&]() {
+    if (error != nullptr) {
+      *error = "bcskla: " + s.error();
+    }
+    return false;
+  };
+  uint32_t magic = 0, tracks = 0;
+  if (!s.U32(0, magic, "magic") || !s.U32(16, tracks, "track count")) {
+    return fail();
+  }
+  if (magic != 0x4D4E414Du) {  // "MANM"
+    s.Fail("not a MANM file");
+    return fail();
+  }
+  // CRC-64 (ECMA-182, reflected, ~0 in, no final xor) of the name as written.
+  static const auto kTable = [] {
+    std::array<uint64_t, 256> t{};
+    for (uint32_t i = 0; i < 256; ++i) {
+      uint64_t c = i;
+      for (int k = 0; k < 8; ++k) {
+        c = (c & 1) ? (c >> 1) ^ 0xC96C5795D7870F42ull : c >> 1;
+      }
+      t[i] = c;
+    }
+    return t;
+  }();
+  uint64_t want = ~uint64_t(0);
+  for (char ch : joint) {
+    want = kTable[(want ^ uint8_t(ch)) & 0xFF] ^ (want >> 8);
+  }
+  for (uint32_t k = 0; k < tracks; ++k) {
+    const uint64_t o = 0x18 + uint64_t(k) * 0x30;
+    uint64_t hash = 0;
+    uint32_t flags = 0;
+    if (!s.U64(o, hash, "track") || !s.U32(o + 8, flags, "track flags")) {
+      return fail();
+    }
+    if (hash != want) {
+      continue;
+    }
+    // Channel i at base + 4i: a constant, or (flag bit i) an offset from base to its keys:
+    // u16 timing type (0: u16 times, 8: u8 times), u16 count, the times, 4-aligned, then
+    // count (value, slope) pairs.
+    const uint64_t base = o + 12;
+    float v[9];
+    for (int i = 0; i < 9; ++i) {
+      const uint64_t at = base + 4 * uint64_t(i);
+      if ((flags & (1u << i)) == 0) {
+        if (!s.F32(at, v[i], "channel")) {
+          return fail();
+        }
+        continue;
+      }
+      uint32_t rel = 0;
+      uint16_t timing = 0, count = 0;
+      if (!s.U32(at, rel, "channel offset") || !s.U16(base + rel, timing, "keys") ||
+          !s.U16(base + rel + 2, count, "keys")) {
+        return fail();
+      }
+      if (count == 0 || (timing != 0 && timing != 8)) {
+        s.Fail("unknown key layout");
+        return fail();
+      }
+      const uint64_t times = base + rel + 4, width = timing == 0 ? 2 : 1;
+      const uint64_t values = (times + width * count + 3) & ~uint64_t(3);
+      auto key = [&](uint32_t n, float& t, float& val, float& slope) {
+        if (timing == 0) {
+          uint16_t u = 0;
+          if (!s.U16(times + 2 * uint64_t(n), u, "key time")) {
+            return false;
+          }
+          t = float(u);
+        } else {
+          uint8_t u = 0;
+          if (!s.U8(times + n, u, "key time")) {
+            return false;
+          }
+          t = float(u);
+        }
+        return s.F32(values + 8 * uint64_t(n), val, "key") && s.F32(values + 8 * uint64_t(n) + 4, slope, "key");
+      };
+      float t0, v0, d0;
+      if (!key(0, t0, v0, d0)) {
+        return fail();
+      }
+      v[i] = v0;
+      for (uint32_t n = 1; n < count && frame > t0; ++n) {
+        float t1, v1, d1;
+        if (!key(n, t1, v1, d1)) {
+          return fail();
+        }
+        if (frame <= t1) {
+          const float h = t1 - t0, u = h > 0.f ? (frame - t0) / h : 0.f, u2 = u * u, u3 = u2 * u;
+          v[i] = (2 * u3 - 3 * u2 + 1) * v0 + (u3 - 2 * u2 + u) * h * d0 + (-2 * u3 + 3 * u2) * v1 +
+                 (u3 - u2) * h * d1;
+          break;
+        }
+        v[i] = v1;
+        t0 = t1;
+        v0 = v1;
+        d0 = d1;
+      }
+    }
+    for (int a = 0; a < 3; ++a) {
+      pose.pos[a] = v[a];
+      pose.euler[a] = v[3 + a];
+      pose.scale[a] = v[6 + a];
+    }
+    found = true;
+    return true;
   }
   return true;
 }

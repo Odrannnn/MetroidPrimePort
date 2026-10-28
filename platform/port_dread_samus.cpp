@@ -703,6 +703,40 @@ bool Import(const Io& io, Result& result, std::string& error) {
     out.assign(pkgData.begin() + e->start, pkgData.begin() + e->end);
     return true;
   };
+  // The shoulder pads in Dread's idle pose (#221). Dread animates its *ShoulderPad* joints
+  // (children of the chest) in every animation; Prime has no such joint, so the pads ride the
+  // chest rigidly and the T-pose bind leaves them ~6 cm high and flared out. Their local
+  // transforms at the first frame of Dread's own idle animations go in instead: the left arm
+  // hangs (relaxalt01_loop), the right one holds the cannon forward (relaxfront), as Prime's
+  // Samus does. Joints an animation lacks keep the bind.
+  auto padPose = [&](const PortDread::Bcmdl& model) {
+    std::vector<PortDread::BcmdlJoint> pose;
+    for (const char* side : {"L01_", "R01_"}) {
+      const std::string path = std::string("actors/characters/samus/animations/") +
+                               (side[0] == 'L' ? "relaxalt01_loop" : "relaxfront") + ".bcskla";
+      std::vector<uint8_t> anim;
+      if (!pkgFile(path, anim)) {
+        log("dread: " + path + " is not in samus.pkg; the pads keep the bind pose");
+        continue;
+      }
+      for (const PortDread::BcmdlJoint& joint : model.joints) {
+        if (joint.name.rfind(side, 0) != 0 || joint.name.find("ShoulderPad") == std::string::npos) {
+          continue;
+        }
+        PortDread::BcmdlJoint p = joint;
+        bool found = false;
+        std::string why;
+        if (!PortDread::SampleBcskla(anim.data(), anim.size(), joint.name, 0.f, p, found, &why)) {
+          log("dread: " + path + ": " + why);
+          break;
+        }
+        if (found) {
+          pose.push_back(std::move(p));
+        }
+      }
+    }
+    return pose;
+  };
 
   // Suit materials, one per BSMAT path; null where the BSMAT does not build (not mp_samuspbr,
   // a texture missing): its meshes are left out.
@@ -920,6 +954,8 @@ bool Import(const Io& io, Result& result, std::string& error) {
     PortDread::ReskinOptions ro;
     ro.retail = haveVotes ? &retailSkin : nullptr;
     ro.repose = false;
+    ro.mesh_pose = padPose(model->second);
+    log("dread: " + label + ": " + std::to_string(ro.mesh_pose.size()) + " shoulder-pad joints in the idle pose");
     PortDread::ReskinResult reskin;
     if (!PortDread::ReskinToPrime(model->second, skeleton->second, ro, reskin, &why)) {
       failTarget("re-skin: " + why);

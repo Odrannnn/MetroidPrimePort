@@ -91,6 +91,7 @@ struct ReskinStats {
   size_t anchors = 0;           // joints reposed onto a Prime joint (pinned and/or aimed)
   size_t follows = 0;           // joints that follow another's translation
   size_t carried = 0;           // joints carried rigidly by their parent
+  size_t posed = 0;             // joints ReskinOptions::mesh_pose moves (with their subtrees)
   size_t verts_table = 0, verts_vote = 0, verts_mixed = 0;
 };
 
@@ -120,6 +121,11 @@ struct ReskinOptions {
   // stay at Dread's proportions, only fitted, bound to ReskinResult::skeleton (votes still
   // look up retail vertices from the reposed positions, which match the retail body).
   bool repose = true;
+  // Joints posed for the mesh alone, matched by name: each one's pos/euler/scale replaces the
+  // bind's local transform when the vertices are placed in Dread's model space (its children
+  // follow), so the vertices weighted to it come out where that pose puts them. The fit, the
+  // repose and the skeleton keep the bind.
+  std::vector<BcmdlJoint> mesh_pose;
 };
 
 // Fit, repose and re-weight `model` onto `skeleton`. Fails (false, *error) when the skeleton or

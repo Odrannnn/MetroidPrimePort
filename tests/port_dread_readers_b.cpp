@@ -736,6 +736,83 @@ void TestRealData() {
   }
 }
 
+uint64_t NameCrc(const std::string& s) {
+  uint64_t c = ~uint64_t(0);
+  for (char ch : s) {
+    c ^= uint8_t(ch);
+    for (int k = 0; k < 8; ++k) {
+      c = (c & 1) ? (c >> 1) ^ 0xC96C5795D7870F42ull : c >> 1;
+    }
+  }
+  return c;
+}
+
+void TestSyntheticBcskla() {
+  // Two tracks: "Other", then "Pad" with pos.x keyed (u8 times 0, 10; values 1, 3, flat) and
+  // euler.z keyed (u16 times 0, 4; values 0, 2, slopes 0.5).
+  Buf b;
+  b.u32(0x4D4E414Du);
+  b.u32(0);
+  b.u32(0);
+  b.f32(11.f);
+  b.u32(2);
+  b.u32(0);
+  auto track = [&](const char* name, uint32_t flags) {
+    b.u64(NameCrc(name));
+    b.u32(flags);
+    const size_t base = b.pos();
+    for (int i = 0; i < 9; ++i) {
+      b.f32(i < 6 ? float(i + 1) * 10.f : 1.f);
+    }
+    return base;
+  };
+  track("Other", 0);
+  const size_t base = track("Pad", 1u | (1u << 5));
+  auto patch = [&](size_t at, uint32_t v) {
+    for (int i = 0; i < 4; ++i) {
+      b.b[at + i] = uint8_t(v >> (8 * i));
+    }
+  };
+  patch(base, uint32_t(b.pos() - base));
+  b.u16(8), b.u16(2), b.u8(0), b.u8(10), b.align(4);
+  b.f32(1.f), b.f32(0.f), b.f32(3.f), b.f32(0.f);
+  patch(base + 20, uint32_t(b.pos() - base));
+  b.u16(0), b.u16(2), b.u16(0), b.u16(4);
+  b.f32(0.f), b.f32(0.5f), b.f32(2.f), b.f32(0.5f);
+
+  BcmdlJoint p;
+  bool found = false;
+  std::string err;
+  CHECK_MSG(SampleBcskla(b.b.data(), b.b.size(), "Pad", 5.f, p, found, &err), err);
+  CHECK(found);
+  CHECK(Near(p.pos[0], 2.f) && Near(p.pos[1], 20.f) && Near(p.euler[0], 40.f) && Near(p.scale[2], 1.f));
+  // Hermite at u = 1 (the last key) and past it: the last value.
+  CHECK(Near(p.euler[2], 2.f));
+  CHECK(SampleBcskla(b.b.data(), b.b.size(), "Pad", 2.f, p, found, &err));
+  CHECK(Near(p.euler[2], 1.f));  // symmetric keys, equal slopes: the midpoint
+  CHECK(SampleBcskla(b.b.data(), b.b.size(), "Pad", 0.f, p, found, &err));
+  CHECK(Near(p.pos[0], 1.f));
+  CHECK(SampleBcskla(b.b.data(), b.b.size(), "pad", 0.f, p, found, &err) && !found);  // case kept
+  CHECK(!SampleBcskla(b.b.data(), 40, "Pad", 0.f, p, found, &err));                  // truncated
+}
+
+void TestRealBcskla() {
+  const char* env = std::getenv("PORT_DREAD_SAMUS_PKG_DIR");
+  if (env == nullptr || *env == '\0') {
+    return;
+  }
+  std::vector<uint8_t> data;
+  const std::string path = std::string(env) + "/actors/characters/samus/animations/relaxalt01_loop.bcskla";
+  if (!CHECK_MSG(ReadFile(path, data), "cannot read " + path)) {
+    return;
+  }
+  BcmdlJoint p;
+  bool found = false;
+  std::string err;
+  CHECK_MSG(SampleBcskla(data.data(), data.size(), "L01_ShoulderPad", 0.f, p, found, &err), err);
+  CHECK(found && Near3(p.pos, 19.923f, 27.503f, 11.217f, 2e-3f) && Near3(p.euler, 0.1948f, 0.0150f, -0.1244f, 2e-4f));
+}
+
 } // namespace
 
 int main() {
@@ -743,5 +820,7 @@ int main() {
   TestBadBcmdl();
   TestSyntheticBsmat();
   TestRealData();
+  TestSyntheticBcskla();
+  TestRealBcskla();
   return PORT_TEST_RESULT();
 }

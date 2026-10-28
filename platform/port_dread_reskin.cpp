@@ -115,6 +115,38 @@ M3 AxialScale(const V3& u, double k) {
   return r;
 }
 
+// Inverse by cofactors; identity when singular.
+M3 Inverse(const M3& a) {
+  const auto& m = a.m;
+  M3 c;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      const int i1 = (i + 1) % 3, i2 = (i + 2) % 3, j1 = (j + 1) % 3, j2 = (j + 2) % 3;
+      c.m[j][i] = m[i1][j1] * m[i2][j2] - m[i1][j2] * m[i2][j1];  // transposed: the adjugate
+    }
+  }
+  const double det = m[0][0] * c.m[0][0] + m[0][1] * c.m[1][0] + m[0][2] * c.m[2][0];
+  if (std::fabs(det) < 1e-12) {
+    return M3::I();
+  }
+  for (auto& row : c.m) {
+    for (double& x : row) {
+      x /= det;
+    }
+  }
+  return c;
+}
+
+M3 Transpose(const M3& a) {
+  M3 r;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      r.m[i][j] = a.m[j][i];
+    }
+  }
+  return r;
+}
+
 // ---- the joint table ----
 //
 // Names: "{S}" expands to L and R (Dread's side prefix), "{s}" to the same side in Prime's
@@ -692,6 +724,68 @@ bool ReskinToPrime(const Bcmdl& model, const PrimeSkeleton& skel, const ReskinOp
   for (size_t j = 0; j < nj; ++j) {
     dhead[j] = {world[j].m[0][3], world[j].m[1][3], world[j].m[2][3]};
   }
+  // options.mesh_pose: per joint the move from its world bind to its posed world, for the
+  // vertices only (posed[j] * world[j]^-1); unposed joints (and their subtrees) have none.
+  std::vector<JointXf> meshPose(nj);
+  {
+    std::vector<int> pose(nj, -1);
+    for (size_t i = 0; i < options.mesh_pose.size(); ++i) {
+      const int j = model.FindJoint(options.mesh_pose[i].name);
+      if (j >= 0) {
+        pose[size_t(j)] = int(i);
+      }
+    }
+    auto toXf = [](const Mat4& m, M3& lin, V3& t) {
+      for (int r = 0; r < 3; ++r) {
+        for (int k = 0; k < 3; ++k) {
+          lin.m[r][k] = m.m[r][k];
+        }
+        t[r] = m.m[r][3];
+      }
+    };
+    std::vector<Mat4> posed(nj);
+    std::vector<uint8_t> state(nj, 0);  // 0 todo, 1 busy, 2 done
+    std::function<void(size_t)> place = [&](size_t j) {
+      if (state[j] != 0) {
+        return;  // done, or a cycle (ComputeWorldBind already refused those)
+      }
+      state[j] = 1;
+      const int par = model.joints[j].parent;
+      bool moved = pose[j] >= 0;
+      Mat4 parentPosed = Mat4::Identity();
+      if (par >= 0) {
+        place(size_t(par));
+        moved = moved || meshPose[size_t(par)].done;
+        parentPosed = posed[size_t(par)];
+      }
+      if (!moved) {
+        posed[j] = world[j];
+      } else {
+        BcmdlJoint local = model.joints[j];
+        if (pose[j] >= 0) {
+          const BcmdlJoint& p = options.mesh_pose[size_t(pose[j])];
+          std::copy(p.pos, p.pos + 3, local.pos);
+          std::copy(p.euler, p.euler + 3, local.euler);
+          std::copy(p.scale, p.scale + 3, local.scale);
+        }
+        posed[j] = par >= 0 ? parentPosed * JointLocalMatrix(local) : JointLocalMatrix(local);
+        M3 pl, wl;
+        V3 pt, wt;
+        toXf(posed[j], pl, pt);
+        toXf(world[j], wl, wt);
+        JointXf& x = meshPose[j];
+        x.lin = Mul(pl, Inverse(wl));
+        x.nrm = Transpose(Inverse(x.lin));
+        x.t = Sub(pt, Apply(x.lin, wt));
+        x.done = true;  // = this joint moves
+        ++out.stats.posed;
+      }
+      state[j] = 2;
+    };
+    for (size_t j = 0; j < nj; ++j) {
+      place(j);
+    }
+  }
 
   // ---- 1. fit ----
   std::vector<std::pair<V3, V3>> pairs;  // (Dread, Prime)
@@ -1025,6 +1119,20 @@ bool ReskinToPrime(const Bcmdl& model, const PrimeSkeleton& skel, const ReskinOp
           ap = Add(ap, Mul(tp, p.second / wsum));
           an = Add(an, Mul(Apply(r, bn), p.second));
           at = Add(at, Mul(Apply(r, bt), p.second));
+        }
+        bp = ap;
+        bn = an;
+        bt = at;
+      }
+      // Posed joints, blended by the same weights (unposed ones stay put).
+      if (std::any_of(jw.begin(), jw.end(), [&](const auto& p) { return meshPose[size_t(p.first)].done; })) {
+        V3 ap = {0, 0, 0}, an = {0, 0, 0}, at = {0, 0, 0};
+        for (const auto& p : jw) {
+          const JointXf& x = meshPose[size_t(p.first)];
+          const double w = p.second / wsum;
+          ap = Add(ap, Mul(x.done ? XfPoint(x, bp) : bp, w));
+          an = Add(an, Mul(x.done ? Apply(x.nrm, bn) : bn, w));
+          at = Add(at, Mul(x.done ? Apply(x.lin, bt) : bt, w));
         }
         bp = ap;
         bn = an;

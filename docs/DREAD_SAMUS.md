@@ -95,6 +95,12 @@ Remastered import's PBR shader path.
 
 ## After an update
 
+Version 11 sets the shoulder pads as Dread's idle animations hold them
+(the left arm hanging, the right holding the cannon forward) instead of in its
+T-pose bind, where they rode high and flared out. Prime has no pad joint, so
+they stay fixed to the chest in that pose; they do not lift with the arms as in
+Dread.
+
 Version 10 pushes the first-person cannon's glowing core (Dread's lights sit
 on the barrel axis and show only through its slits) out onto the inside of the
 shell, so seen through the open back the lights line its edge rather than
