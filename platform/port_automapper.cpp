@@ -353,9 +353,15 @@ rstl::wstring PortLegendText() {
   }
   const PortDebug::EMapPickups mode = PortMapPickups::Mode();
   // Entries go two to a line so the legend stays clear of the Key/Legend prompt.
+  // The GameCube disc's legend ends in a newline: the first entry starts its
+  // row there rather than leaving a blank one above.
   int entries = 0;
   auto entry = [&](uint32_t id, const wchar_t* label) {
-    text.append(entries % 2 == 0 ? L"\n" : L"   ", -1);
+    if (entries % 2 != 0) {
+      text.append(L"   ", -1);
+    } else if (entries != 0 || text.size() == 0 || text[text.size() - 1] != L'\n') {
+      text.append(L"\n", -1);
+    }
     ++entries;
     text.append(L"&image=", -1);
     text.append(CStringExtras::ConvertToUNICODE(
@@ -394,9 +400,11 @@ struct SPortLegendFit {
 };
 SPortLegendFit sPortLegendFit;
 
+// A trailing newline's empty row is not counted: the GameCube disc's legend
+// ends in one, and the Key/Legend prompt sits where that row would be.
 static int PortTextRows(const rstl::wstring& text) {
   int rows = 1;
-  for (size_t i = 0; i < text.size(); ++i) {
+  for (size_t i = 0; i + 1 < text.size(); ++i) {
     if (text[i] == L'\n') {
       ++rows;
     }

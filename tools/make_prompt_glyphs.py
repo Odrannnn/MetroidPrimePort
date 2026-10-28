@@ -276,9 +276,14 @@ def make_icon(name, width=SIZE, height=SIZE):
     tile = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     stem = name[:-4] if name.endswith(".png") else name
     if stem in COMPOSITES:
-        # Four keys at the height of one: as tall as the inset, and wider.
+        # Four keys at the height of one: as tall as the inset, and wider, but
+        # inside what the game shows of a 64x32 stick texture. The map draws it
+        # with "SI,0.6,1.0": only the middle 60% of the width, starting right
+        # where the quad does and with the text right after it. Wider, the
+        # cluster's outer keys are cut and touch the text; 4px clear each side.
         icon = make_cluster(COMPOSITES[stem])
-        fit = min(width / icon.width, size / icon.height)
+        shown = width if width == height else int(width * 0.6) - 8
+        fit = min(shown / icon.width, size / icon.height)
         icon = icon.resize((max(1, round(icon.width * fit)), max(1, round(icon.height * fit))),
                            Image.LANCZOS)
         tile.alpha_composite(icon, ((width - icon.width) // 2, (height - icon.height) // 2))

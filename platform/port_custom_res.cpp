@@ -80,10 +80,12 @@ bool BuildText(uint32_t id, Resource& out) {
   return true;
 }
 
-// A 16x16 RGBA8 TXTR (format 9, one mip): 4x4 tiles of 32 AR bytes then 32 GB
-// bytes, for the map legend's swatches.
+// A 32x32 RGBA8 TXTR (format 9, one mip): 4x4 tiles of 32 AR bytes then 32 GB
+// bytes, for the map legend's swatches. 32x32 as the disc's own swatches are: a
+// text image is as wide and tall as its texture, so the same size puts the
+// " - " after it in the disc's column and gives its row the disc's height.
 bool BuildLegend(uint32_t id, Resource& out) {
-  constexpr int kSize = 16;
+  constexpr int kSize = 32;
   uint8_t px[kSize][kSize][4] = {};
   auto put = [&](int x, int y, uint32_t rgb) {
     px[y][x][0] = uint8_t(rgb >> 16);
