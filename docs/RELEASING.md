@@ -154,7 +154,11 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
      unversioned); the AppImage keeps the name `MetroidPrime-x86_64.AppImage`.
      The same run's `metroid_prime_port-linux-aarch64` artifact gives
      `metroid-prime-port-X-linux-aarch64.tar.gz` and `MetroidPrime-aarch64.AppImage`
-     the same way.
+     the same way. Each artifact also holds the binary's split-off debug info,
+     `metroid-prime-port-linux-<arch>.debug`: attach it as
+     `metroid-prime-port-X-linux-<arch>.debug`, so a crash log's
+     `metroid_prime_port+0x…` offsets stay readable with
+     `addr2line -fCi -e metroid-prime-port-X-linux-<arch>.debug 0x…`.
    - Windows: run `windows.yml`, `gh run download <id> -n metroid_prime_port-windows`,
      drop CI's `user/` folder (log, `dawn_cache.db`, `pipeline_cache.db`), and zip
      the rest as `metroid-prime-port-X-windows-x86_64.zip`. The same run's
@@ -169,8 +173,8 @@ version Flatpak reports; `tools/make_flatpak.sh` stops if the two differ.
      the unsigned `MetroidPrimePort.ipa` under that name (`docs/IOS.md` points at it).
 
    Every release ships all ten assets (AppImage and tarball, each x86_64 and
-   aarch64, Flatpak, Windows x86_64 and arm64, macOS, APK, IPA); start all the
-   builds together.
+   aarch64, Flatpak, Windows x86_64 and arm64, macOS, APK, IPA), plus the two
+   Linux `.debug` files; start all the builds together.
 3. Crash soak the release commit before tagging:
    `python3 tools/mpsoak.py --evidence-dir build/s-release-<date>/soak`; every
    row in `summary.tsv` must be `ok` (a `warn` only after reading it), exit 0.

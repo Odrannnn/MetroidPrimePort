@@ -113,6 +113,20 @@ jobs:
             echo "unexpected shared libraries:" $extra >&2
             exit 1
           fi
+      # The debug info is most of the binary (~400 MB of ~430) and nothing reads it
+      # at run time: the crash log gives "module+0xoffset" (port_crash.cpp). It is
+      # split off into a .debug file, shipped beside the release, that addr2line
+      # takes for those offsets; the symbol table stays in the binary.
+      - name: Split off the debug info
+        run: |
+          bin=build/port-gcc/metroid_prime_port
+          dbg=build/release/metroid-prime-port-linux-${{ matrix.arch }}.debug
+          mkdir -p build/release
+          objcopy --only-keep-debug --compress-debug-sections=zlib "$bin" "$dbg"
+          strip --strip-debug "$bin"
+          objcopy --add-gnu-debuglink="$dbg" "$bin"
+          "$bin" --version
+          ls -l "$bin" "$dbg"
       - name: Package
         run: |
           export APPIMAGE_EXTRACT_AND_RUN=1
@@ -131,3 +145,4 @@ jobs:
           path: |
             build/release/MetroidPrime-${{ matrix.arch }}.AppImage
             build/release/metroid-prime-port-linux-${{ matrix.arch }}.tar.gz
+            build/release/metroid-prime-port-linux-${{ matrix.arch }}.debug
