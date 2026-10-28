@@ -301,18 +301,20 @@ See [`docs/DREAD_SAMUS.md`](DREAD_SAMUS.md) for the import and its limits.
 Texture packs replace the game's textures with Aurora-format images named
 `tex1_<w>x<h>_<texhash>[_<tluthash>]_<fmt>.dds` or `.png`.
 
-- **Built-in set:** embedded in the executable (`<executable dir>/textures` only in a build
-  without embedding, or on Android). `MP_TEXTURES` points at another folder, overriding it.
+- **Built-in folder:** the executable no longer carries a texture pack. `MP_TEXTURES` points at
+  a folder of replacements, and a build that keeps `textures/` next to the executable reads that
+  one (`<executable dir>/textures`); both are the layer under your pack, and whatever else a build
+  carries inside the executable is only the button-prompt icons.
 - **Your own pack:** put it in `user_textures` in the [user folder](#installing-mods), or wherever
-  `MP_USER_TEXTURES` points, so updates never touch it. It is layered over the built-in set, with
+  `MP_USER_TEXTURES` points, so updates never touch it. It is layered over the folder above, with
   the same folder rules. The overlay's Mods page has a Reload button.
 - **Android:** Mods > Texture pack > Choose texture pack folder opens the system folder picker
   and copies the folder's `.png`/`.dds` files into the data folder (pick it again after changing
   it; Remove deletes the copy). The copy lands in `user_textures.new` and is swapped in on the
   next frame, or at the next start if the app closed first.
 
-Priorities: built-in 0, user pack 1, binding icons 2, so a remapped action still shows its
-binding.
+Priorities: built-in folder 0, user pack 1, binding icons 2, so a remapped action still shows
+its binding.
 
 ### Button prompts
 
@@ -361,7 +363,7 @@ What the importer gets:
 | --- | --- | --- |
 | `MP_MODS` | `<user>/mods` | The mods folder. |
 | `MP_USER_PATH` | — | The user folder (moves the mods folder and a desktop Remastered import with it). |
-| `MP_TEXTURES` | built-in | Folder of texture replacements overriding the built-in set. |
+| `MP_TEXTURES` | built-in folder | Folder of texture replacements overriding `<executable dir>/textures`. |
 | `MP_USER_TEXTURES` | `<user>/user_textures` | Your own texture pack. |
 | `MP_TEXTURE_DEVICE` | last input | Forces the button-prompt set by folder name. |
 | `MP_DUMP_TEXTURES` | off | `1` dumps every source texture to `<cachePath>/texture_dumps`. |

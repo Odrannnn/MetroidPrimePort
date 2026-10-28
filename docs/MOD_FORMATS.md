@@ -234,18 +234,19 @@ size and contents, then write a replacement with the same stem into the device f
   `DPadU`...) in `index.tsv` and the textures the game's text draws inline (`&image=` tags, the
   HUD hints) in `strg_images.tsv`; that is how the prompt table was completed. It needs
   libxxhash, numpy and PIL.
-- The prompt table in `platform/port_prompts.cpp` is the authority on which textures are claimed,
-  and every hash in it should be one that appears in a dump from the screen that shows it - two
-  rows were transcribed into the wrong action and that is how the pause menu's Exit prompt ended
-  up drawing the C-stick's glyph.
+- The prompt table in `platform/port_prompts.cpp` is the authority on which textures are claimed:
+  it lists the game's prompt art by asset id, and each id should be one a dump from the screen
+  that shows it carries - two rows were transcribed into the wrong action and that is how the
+  pause menu's Exit prompt ended up drawing the C-stick's glyph.
 
-### Generated sets
+### Generated icons
 
-`tools/make_prompt_glyphs.py <dir>` builds a set for every prompt in the table (xbox,
-playstation, switch, keyboard) into `<dir>/<device>/`, compositing the CC0 icons vendored in
-`tools/prompt_icons/` (Kenney's Input Prompts pack); the keyboard set labels the keys the port
-binds by default. The build copies `textures/` next to the executable, so a built binary picks
-the replacements up without a manual copy. Two details matter:
+`tools/make_prompt_glyphs.py <dir>` writes one icon per input that can be bound (every key,
+mouse button, and pad button, stick and D-pad, whole and per direction) into `<dir>/bindings/`,
+compositing the CC0 icons vendored in `tools/prompt_icons/` (Kenney's Input Prompts pack). The
+names are the port's stems for the inputs, not the game's texture names, so the same set serves
+every screen. The build copies `textures/` next to the executable (or embeds it), so a built
+binary picks the replacements up without a manual copy. Two details matter:
 
 - the icon must keep the game's inset (the glyph is only about 22px in the 32x32 buttons and 28px
   in the 64x32 stick and D-pad art, and a full-bleed icon reads as a square);
@@ -270,11 +271,11 @@ Aurora's virtual-replacement callback rather than shipped as a fixed set.
 - A keyboard follows its key bindings (the main key, else the second key); a pad follows its
   button mapping, so a remapped button or a preset shows the button it now uses.
 - Letters, digits, punctuation, the named keys, the keypad (its digits share the main row's art)
-  and all five mouse buttons have icons; a binding without one leaves the static set in place.
+  and all five mouse buttons have icons; a binding without one leaves the game's own art.
 - A GameCube pad (adapter or NSO) on its default mapping keeps the game's own art, and only an
   action moved to another button gets a GameCube icon, named after the button's default action.
-- The binding icons register above the static set, so reloading that set never hides them. The
-  chosen icon is logged when it changes ("prompt A keyboard_x").
+- The chosen icon is logged when it changes ("prompt A keyboard_x"), and so is an action going
+  back to the game's own art.
 
 `MP_SMOKE_BIND_A=<scancode>` (negative for mouse buttons, -3 is middle) rebinds the A action once,
 for checking this without going through the Controls > Remap page; it needs a

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Generate per-device button-prompt replacements for Metroid Prime.
+"""Generate the button-prompt replacements the port registers as bindings change.
 
 The game's prompts are individual textures: 32x32 buttons (A, B, X, Y, Start,
-L, R) and 64x32 stick, C-stick, D-pad and Z art, each listed with its hash in
-kKeys in platform/port_prompts.cpp (found with tools/extract_textures.py, whose
-index.tsv carries the developers' names such as LStickN or DPadR). Each device
-gets its own icon for every action, so the in-game prompt matches the pad (or
-keyboard) in use. The keyboard icons label the keys the port binds by default
-(A action is X, B action is Z, the sticks WASD and IJKL, the D-pad the arrows).
-The bindings/ set holds one icon per key and pad input, which the port swaps
-in when an action is rebound.
+L, R) and 64x32 stick, C-stick, D-pad and Z art, each listed by asset id in
+kAssets in platform/port_prompts.cpp (found with tools/extract_textures.py,
+whose index.tsv carries the developers' names such as LStickN or DPadR).
+Nothing here is keyed by the game's art: the output is one icon per input that
+can be bound (every key, mouse button and pad button, stick and D-pad), written
+into a single bindings/ folder. The port picks the icon for whatever the input
+in use is bound to for each prompt, so the in-game prompt follows a rebind and
+the device; an action with no icon of its own keeps the game's art.
 
 Icons come from Kenney's "Input Prompts" pack, which is CC0; the ones used are
 vendored in tools/prompt_icons/ (see the README there). Run with an output
@@ -26,7 +26,6 @@ dumps come out flipped). The icon is inset to match the game's own art: the
 centred 28px square.
 """
 import os
-import re
 import struct
 import sys
 from PIL import Image
@@ -35,65 +34,10 @@ SIZE = 32
 ICON_SIZE = 22
 INSET = (SIZE - ICON_SIZE) // 2
 ICONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompt_icons")
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORT_PROMPTS = os.path.join(ROOT, "platform", "port_prompts.cpp")
 OUT = sys.argv[1] if len(sys.argv) > 1 else "textures"
 
-# Icon per device and action. The keyboard set is the fallback used when a
-# binding has no icon of its own, so it labels the port's default keys.
-#
-# Z is the right shoulder in every default pad mapping Aurora ships, so the pad
-# sets give it the bumper. There is no "gamecube" set on purpose: the game's own
-# art already is the GameCube set.
-#
-# Y is the pause screen's Zoom. The Switch labels are positional, as in
-# PAD_ICONS: SDL3 names buttons by position, so A is the bottom face button,
-# which a Switch pad labels B.
 DIRECTIONS = ("up", "down", "left", "right")
 
-
-def pad_sticks_and_dpad(prefix):
-    """The control stick (left), the C-stick (right) and the D-pad, whole and
-    per direction, for a pad whose Kenney icons start with `prefix`."""
-    icons = {"stick": f"{prefix}_stick_l.png", "cstick": f"{prefix}_stick_r.png",
-             "dpad": f"{prefix}_dpad.png"}
-    for d in DIRECTIONS:
-        icons[f"stick_{d}"] = f"{prefix}_stick_l_{d}.png"
-        icons[f"cstick_{d}"] = f"{prefix}_stick_r_{d}.png"
-        icons[f"dpad_{d}"] = f"{prefix}_dpad_{d}.png"
-    return icons
-
-
-DEVICE_ICONS = {
-    "xbox": {"a": "xbox_button_color_a.png", "b": "xbox_button_color_b.png",
-             "x": "xbox_button_color_x.png", "y": "xbox_button_color_y.png",
-             "start": "xbox_button_start.png",
-             "l": "xbox_lt.png", "r": "xbox_rt.png", "z": "xbox_rb.png",
-             **pad_sticks_and_dpad("xbox")},
-    "playstation": {"a": "playstation_button_color_cross.png",
-                    "b": "playstation_button_color_circle.png",
-                    "x": "playstation_button_color_square.png",
-                    "y": "playstation_button_color_triangle.png",
-                    "start": "playstation3_button_start.png",
-                    "l": "playstation_trigger_l2.png", "r": "playstation_trigger_r2.png",
-                    "z": "playstation_trigger_r1.png",
-                    **pad_sticks_and_dpad("playstation")},
-    # Nintendo pads map by label (pad.cpp's Pro Controller default), so A is A.
-    "switch": {"a": "switch_button_a.png", "b": "switch_button_b.png",
-               "x": "switch_button_x.png", "y": "switch_button_y.png",
-               "start": "switch_button_plus.png",
-               "l": "switch_button_zl.png", "r": "switch_button_zr.png",
-               "z": "switch_button_r.png",
-               **pad_sticks_and_dpad("switch")},
-    # The sticks and the D-pad on their default keys: WASD, IJKL and the arrows.
-    "keyboard": {"a": "keyboard_x.png", "b": "keyboard_z.png", "x": "keyboard_c.png",
-                 "y": "keyboard_v.png", "start": "keyboard_enter.png",
-                 "l": "keyboard_q.png", "r": "keyboard_e.png", "z": "keyboard_f.png",
-                 "stick": "keyboard_wasd", "cstick": "keyboard_ijkl", "dpad": "keyboard_arrows",
-                 **{f"stick_{d}": f"keyboard_{k}.png" for d, k in zip(DIRECTIONS, "wsad")},
-                 **{f"cstick_{d}": f"keyboard_{k}.png" for d, k in zip(DIRECTIONS, "ikjl")},
-                 **{f"dpad_{d}": f"keyboard_arrow_{d}.png" for d in DIRECTIONS}},
-}
 
 # Key clusters drawn as an inverted T of the keys' own icons (up on top; left,
 # down, right below). The pack's keyboard_arrows is a small unlabelled glyph
@@ -162,46 +106,6 @@ PAD_ICONS = {
     },
 }
 PAD_ICONS["standard"] = PAD_ICONS["xbox"]
-
-# PAD_BUTTON_* / PAD_TRIGGER_* / PROMPT_* to the action name used above.
-ACTION_FOR_BUTTON = {
-    "PAD_BUTTON_A": "a",
-    "PAD_BUTTON_B": "b",
-    "PAD_BUTTON_X": "x",
-    "PAD_BUTTON_Y": "y",
-    "PAD_BUTTON_START": "start",
-    "PAD_TRIGGER_L": "l",
-    "PAD_TRIGGER_R": "r",
-    "PAD_TRIGGER_Z": "z",
-    "PROMPT_STICK": "stick",
-    "PROMPT_CSTICK": "cstick",
-    "PROMPT_DPAD": "dpad",
-    **{f"PROMPT_STICK_{d.upper()}": f"stick_{d}" for d in DIRECTIONS},
-    **{f"PROMPT_CSTICK_{d.upper()}": f"cstick_{d}" for d in DIRECTIONS},
-    **{f"PAD_BUTTON_{d.upper()}": f"dpad_{d}" for d in DIRECTIONS},
-}
-
-
-def read_prompt_keys():
-    """Parse the prompt texture table out of platform/port_prompts.cpp.
-
-    Keeping the table in one place means a texture only has to be identified
-    once, in the C++ where it is used.
-    """
-    pattern = re.compile(
-        r"\{\s*((?:PAD|PROMPT)_\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*0x([0-9a-fA-F]+)ull\s*,\s*\"(\w+)\"\s*\}")
-    with open(PORT_PROMPTS) as f:
-        keys = pattern.findall(f.read())
-    if not keys:
-        raise SystemExit(f"no prompt keys found in {PORT_PROMPTS}")
-    missing = sorted({k[0] for k in keys} - set(ACTION_FOR_BUTTON))
-    if missing:
-        raise SystemExit(f"no icon mapping for: {', '.join(missing)}")
-    return [(ACTION_FOR_BUTTON[button], int(w), int(h), hsh, fmt) for button, w, h, hsh, fmt in keys]
-
-
-def texture_name(w, h, hsh, fmt):
-    return f"tex1_{w}x{h}_{hsh}_{fmt}.dds"
 
 # One icon per input that can be bound, written to <out>/bindings/<stem>.dds.
 # The port registers the icon for whichever input is bound to a prompt's
@@ -294,16 +198,6 @@ def make_icon(name, width=SIZE, height=SIZE):
 
 
 def main():
-    keys = read_prompt_keys()
-    for device, icons in DEVICE_ICONS.items():
-        d = os.path.join(OUT, device)
-        os.makedirs(d, exist_ok=True)
-        for action, w, h, hsh, fmt in keys:
-            if action not in icons:
-                continue  # this device has no icon for that action
-            write_dds(make_icon(icons[action], w, h), os.path.join(d, texture_name(w, h, hsh, fmt)))
-        print(f"{device}: {len(keys)} textures -> {d}")
-
     bindings = os.path.join(OUT, "bindings")
     os.makedirs(bindings, exist_ok=True)
     padCount = 0
@@ -313,7 +207,7 @@ def main():
     # size first and falls back to the unsuffixed 32x32 file. Without this a
     # 64x32 slot gets 32x32 bytes: the game does not scale the image, it reads
     # 64x32 of pixels out of half the data and draws the rest as noise.
-    sizes = sorted({(w, h) for _, w, h, _, _ in keys})
+    sizes = [(32, 32), (64, 32)]
     for device, icons in PAD_ICONS.items():
         for key, icon in icons.items():
             for w, h in sizes:
@@ -327,11 +221,10 @@ def main():
         if stem not in COMPOSITES and not os.path.exists(src):
             missing.append(stem)
             continue
-        # At every size in the table, not just 32x32. The key stems serve the
-        # same actions as the pad stems, so the two 64x32 rows need 64x32 key
-        # art; writing only 32x32 made Apply fall back to it, refuse it on size,
-        # and leave the key showing the static set for the default bindings -
-        # so a rebound Z still read "F" on the map.
+        # At both sizes, not just 32x32. The key stems serve the same prompt
+        # textures as the pad stems, so the 64x32 ones need 64x32 key art;
+        # writing only 32x32 left the port refusing the file on size, so a
+        # rebound Z still read "F" on the map, or nothing replaced the art.
         for w, h in sizes:
             suffix = "" if (w, h) == (SIZE, SIZE) else f"_{w}x{h}"
             write_dds(make_icon(stem + ".png", w, h),

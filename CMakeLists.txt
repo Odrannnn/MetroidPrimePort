@@ -597,12 +597,15 @@ if(MP_EMBED_RESOURCES)
     target_sources(metroid_prime_port PRIVATE "${MP_EMBED_SOURCE}")
     target_compile_definitions(metroid_prime_port PRIVATE MP_EMBED_RESOURCES)
 else()
-    # Keep the HD texture replacements next to the executable, which is where the
-    # port looks for them by default, so a built binary picks them up without a
-    # manual copy. Regenerate them with tools/make_prompt_glyphs.py. The generated
-    # sets are cleared first: copy_directory only adds, and an icon the generator
-    # no longer writes would otherwise keep replacing a texture it no longer claims
-    # (two retired legend hashes kept drawing L/R over the map's [M] and [S] icons).
+    # Keep the prompt icons next to the executable, which is where the port looks
+    # for them by default, so a built binary picks them up without a manual copy.
+    # Regenerate them with tools/make_prompt_glyphs.py. The folders are cleared
+    # first: copy_directory only adds, and a file an older build or generator left
+    # would otherwise keep replacing a texture it no longer claims (two retired
+    # legend hashes kept drawing L/R over the map's [M] and [S] icons). The old
+    # per-device sets (keyboard, playstation, switch, xbox) are in the list for the
+    # same reason: a stale copy beside the executable would still register by
+    # filename and replace the prompts the port now serves itself.
     set(PORT_TEXTURE_SETS bindings keyboard playstation switch xbox)
     list(TRANSFORM PORT_TEXTURE_SETS PREPEND "$<TARGET_FILE_DIR:metroid_prime_port>/textures/")
     add_custom_command(TARGET metroid_prime_port POST_BUILD

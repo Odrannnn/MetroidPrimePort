@@ -52,78 +52,10 @@ enum : uint32_t {
   PROMPT_DPAD,
 };
 
-// The prompt textures the port can re-icon. Each names the game action it
-// stands for, and the hash identifies the game's own texture under Aurora's
-// name for it. Every one here is the game's prompt art, identified from the
-// disc by tools/extract_textures.py: the PAK name (in brackets) where it has
-// one, else the &image= text that draws it. One action often has several, as
-// the screens draw pressed and released frames and some hints have their own.
-struct PromptKey {
-  uint32_t prompt;  // a PADButton or a PROMPT_*
-  uint32_t width;
-  uint32_t height;
-  uint64_t hash;
-  const char* format;
-};
-constexpr PromptKey kKeys[] = {
-    {PAD_BUTTON_A, 32, 32, 0xbb21e8755f36b2f0ull, "5"},   // AButtonIn
-    {PAD_BUTTON_A, 32, 32, 0x7a49be0e828a6d9aull, "14"},  // AButtonOut, the scan box's and message screen's model
-    {PAD_BUTTON_B, 32, 32, 0xe6dbfd18d4666ee7ull, "5"},   // BButtonIn
-    {PAD_BUTTON_B, 32, 32, 0xcf85aefc93af603full, "14"},  // BButtonOut
-    {PAD_BUTTON_X, 32, 32, 0x818890ce3f3a949bull, "5"},   // XButtonOut, "Press X to ... Morph Ball"
-    {PAD_BUTTON_X, 32, 32, 0xe14785826e0e103full, "5"},   // XButtonOut on the PAL disc (same asset, other art)
-    {PAD_BUTTON_Y, 32, 32, 0x281ae5aa517797edull, "5"},   // YButtonOut, the pause and map screens
-    {PAD_BUTTON_START, 32, 32, 0x1ff9d2b310c0b706ull, "14"},  // StartButtonOut, the pause Return
-    {PAD_TRIGGER_L, 32, 32, 0x3f419d4a7ba3cff3ull, "5"},  // LTriggerOut
-    {PAD_TRIGGER_L, 32, 32, 0xc39b2f9c2eac777bull, "5"},  // LTriggerIn
-    {PAD_TRIGGER_R, 32, 32, 0x178b7311fda3f949ull, "5"},  // RTriggerOut
-    {PAD_TRIGGER_R, 32, 32, 0xac602ce1291cbd26ull, "5"},  // RTriggerIn
-    {PAD_TRIGGER_R, 32, 32, 0x07165bfca0d0908full, "14"}, // the hints' released R
-    {PAD_TRIGGER_Z, 64, 32, 0x0f4cb495c960bcfaull, "14"}, // the map legend's Z
-    // The control stick. The map screen draws the frame for the way the stick
-    // is pushed; the diagonals take the stick's own icon.
-    {PROMPT_STICK, 64, 32, 0x2d26352b420db007ull, "5"},        // LStickN
-    {PROMPT_STICK_UP, 64, 32, 0x54e47b41b25b4651ull, "5"},     // LstickU
-    {PROMPT_STICK_DOWN, 64, 32, 0x6861ed79f30dd9a8ull, "5"},   // LStickD
-    {PROMPT_STICK_LEFT, 64, 32, 0xaf41768a5da09b20ull, "5"},   // LStickL
-    {PROMPT_STICK_RIGHT, 64, 32, 0x7380195f13489f63ull, "5"},  // LStickR
-    {PROMPT_STICK, 64, 32, 0x01eb5601a6874bf0ull, "5"},        // LStickUL
-    {PROMPT_STICK, 64, 32, 0x2c8c84d6511fa2f0ull, "5"},        // LStickUR
-    {PROMPT_STICK, 64, 32, 0x88393aacfa3ddee3ull, "5"},        // LStickDL
-    {PROMPT_STICK, 64, 32, 0x271c18e5d246591cull, "5"},        // LStickDR
-    {PROMPT_STICK_LEFT, 64, 32, 0xb5ebd7c20f7fa1b4ull, "5"},   // "stick while holding L to strafe"
-    {PROMPT_STICK_RIGHT, 64, 32, 0x625f670e544215d1ull, "5"},
-    // The C-stick, as the map screen draws it...
-    {PROMPT_CSTICK, 64, 32, 0xe14dc493b5513d14ull, "5"},        // CStickN
-    {PROMPT_CSTICK_UP, 64, 32, 0x3d7b8d8eb4875357ull, "5"},     // CStickU
-    {PROMPT_CSTICK_DOWN, 64, 32, 0xcc677b23b7799be0ull, "5"},   // CStickD
-    {PROMPT_CSTICK_LEFT, 64, 32, 0x49172cec707109fbull, "5"},   // CStickL
-    {PROMPT_CSTICK_RIGHT, 64, 32, 0x8180dbd4c4b1b5d5ull, "5"},  // CStickR
-    {PROMPT_CSTICK, 64, 32, 0xd27581e24408939dull, "5"},        // CStickUL
-    {PROMPT_CSTICK, 64, 32, 0x100fd48145e9ead5ull, "5"},        // CStickUR
-    {PROMPT_CSTICK, 64, 32, 0x17ea7b8c686aa635ull, "5"},        // CStickDL
-    {PROMPT_CSTICK, 64, 32, 0x00b675706b74fb84ull, "5"},        // CStickDR
-    // ...and the smaller set the beam hints draw.
-    {PROMPT_CSTICK, 64, 32, 0x82e1b4c9930dd504ull, "5"},
-    {PROMPT_CSTICK_UP, 64, 32, 0xda1128c0321ef299ull, "5"},     // Power Beam
-    {PROMPT_CSTICK_DOWN, 64, 32, 0xafc88c5fcca46ce6ull, "5"},   // Ice Beam
-    {PROMPT_CSTICK_LEFT, 64, 32, 0xefec72330b49fd16ull, "5"},   // Plasma Beam
-    {PROMPT_CSTICK_RIGHT, 64, 32, 0x85c74de9df341b80ull, "5"},  // Wave Beam
-    // The D-pad, which the visor hints draw.
-    {PROMPT_DPAD, 64, 32, 0x31c74326a7e8fd1full, "5"},        // DPadN
-    {PAD_BUTTON_UP, 64, 32, 0xdfdffa485095ee03ull, "5"},      // DPadU, Combat Visor
-    {PAD_BUTTON_DOWN, 64, 32, 0x112b6136175108bbull, "5"},    // DPadD, Thermal Visor
-    {PAD_BUTTON_LEFT, 64, 32, 0x8c1d5fec98c638efull, "5"},    // DPadL, Scan Visor
-    {PAD_BUTTON_RIGHT, 64, 32, 0x43a63656a5767a1dull, "5"},   // DPadR, X-Ray Visor
-    // On Trilogy the loader skips RS5.pak's Wii art for these ids, so the
-    // same GC textures (and keys above) apply there (#220).
-};
-constexpr size_t kKeyCount = sizeof(kKeys) / sizeof(kKeys[0]);
-
-// The same prompt art by asset id, sorted by id. CTexture binds these by
-// pointer (BindTexture), which holds whatever the content: the hashes above
-// miss on any disc whose art differs by a pixel. Covers GC USA and Trilogy's
-// Metroid1.pak (whose stick dash frames are not on the GC disc).
+// The game's prompt art by asset id, sorted by id. CTexture binds these by
+// pointer (BindTexture), which holds whatever the content: matching on a texel
+// hash missed on any disc whose art differs by a pixel. Covers GC USA and
+// Trilogy's Metroid1.pak (whose stick dash frames are not on the GC disc).
 struct PromptAsset {
   uint32_t id;
   uint32_t prompt;
@@ -358,21 +290,15 @@ const char* SuffixForSdlButton(int button) {
   }
 }
 
-struct Registration {
-  std::string iconPath;
-  std::string activeStem;
-  aurora::texture::ReplacementRegistration handle{};
-  bool registered = false;
-};
-Registration sRegistrations[kKeyCount];
 std::string sBindingsDir;
 bool sEnabled = false;
 
-// Which input the player last used. The prompts, and the static texture set
-// (PortTextures asks ActiveDevice too), follow that rather than whatever happens
-// to be plugged in, so switching between a keyboard, a pad and the touch overlay
-// swaps the icons over. Pad is the starting state: with no pad connected the pad
-// device resolves to "keyboard" anyway.
+// Which input the player last used. The prompts, and the device folder a
+// texture pack is read from (PortTextures asks ActiveDevice too), follow that
+// rather than whatever happens to be plugged in, so switching between a
+// keyboard, a pad and the touch overlay swaps the icons over. Pad is the
+// starting state: with no pad connected the pad device resolves to "keyboard"
+// anyway.
 enum class ActiveInput { Pad, Keyboard, TouchXbox, TouchGameCube };
 std::atomic< ActiveInput > sActiveInput{ActiveInput::Pad};
 // Within Keyboard, whether a key rather than the mouse was used last. When the
@@ -595,7 +521,7 @@ std::string KeyClusterStem(const int (&keys)[4]) {
 }
 
 // The icon stem for whatever is bound to `button` on `device`, or empty when
-// the port has no icon for it (in which case the static set stays in place).
+// the port has no icon for it (in which case the game's own art shows).
 // Both follow the bindings in use (PortInputDevices::PromptButtonInput), so a
 // remapped button shows the key or button it was remapped to.
 std::string IconStemForButton(PADButton button, const char* device) {
@@ -812,6 +738,8 @@ void ApplyBound(const void* owner, BoundPrompt& bound, const std::string& stem) 
     return;
   }
   const std::string* path = StablePath(iconPath);
+  // Above the user's texture pack (priority 1): a remapped action still shows
+  // the key or button it is bound to, whatever art the pack has for it.
   bound.handle = aurora::texture::register_virtual_replacement(
       aurora::texture::TexturePointerKey{owner}, *path,
       aurora::texture::VirtualFileSource{&ReadIconBytes, const_cast<std::string*>(path)},
@@ -819,64 +747,12 @@ void ApplyBound(const void* owner, BoundPrompt& bound, const std::string& stem) 
   bound.registered = bound.handle.id != 0;
 }
 
-void Apply(size_t index, const std::string& stem) {
-  Registration& reg = sRegistrations[index];
-  if (reg.registered) {
-    aurora::texture::unregister_replacement(reg.handle);
-    reg.handle = {};
-    reg.registered = false;
-  }
-  reg.activeStem = stem;
-  if (stem.empty()) {
-    return;
-  }
-
-  const PromptKey& key = kKeys[index];
-  char keyName[80];
-  std::snprintf(keyName, sizeof(keyName), "tex1_%ux%u_%016llx_%s.dds", key.width, key.height,
-                static_cast<unsigned long long>(key.hash), key.format);
-  reg.iconPath = FindIconForSize(stem, key.width, key.height);
-  if (reg.iconPath.empty()) {
-    // Nothing generated for this action, so nothing is registered. Note that
-    // what stays on screen is not necessarily "the game's own art": the static
-    // per-device set in <textures>/<device>/ is registered separately, by
-    // filename, so if it has a file for this texture then that is what shows -
-    // art for the default bindings. Saying "the game's own art" here would be
-    // wrong in the common case.
-    //
-    // activeStem is deliberately NOT cleared. Poll() skips a key whose stem
-    // already matches, so clearing it made Poll re-run Apply on this key every
-    // single frame: a stat, a DDS open and a stderr line, 60 times a second,
-    // for the rest of the session. Two runs of the map screen logged 4200 of
-    // them. Leaving the stem recorded means one attempt and then silence.
-    return;
-  }
-  // Last line of defence, in case a sized file is ever wrong: refuse art whose
-  // dimensions do not match the texture it is standing in for. As above,
-  // activeStem is left recorded so Poll does not retry, and as above what
-  // remains on screen is the static device set if it has one, not necessarily
-  // the game's own art.
-  uint32_t iconWidth = 0;
-  uint32_t iconHeight = 0;
-  if (!IconDimensions(reg.iconPath, iconWidth, iconHeight) ||
-      (iconWidth != key.width || iconHeight != key.height)) {
-    return;
-  }
-  // Above the static device set (priority 0) and the user's texture pack (1).
-  // At equal priority the newest registration wins, so a reload of the static
-  // set (a pad unplugged, say) buried the binding icons, and Poll does not
-  // re-apply a stem that has not changed.
-  reg.handle = aurora::texture::register_virtual_replacement(
-      keyName, aurora::texture::VirtualFileSource{&ReadIconBytes, const_cast<std::string*>(StablePath(reg.iconPath))},
-      aurora::texture::ReplacementOptions{.priority = 2});
-  reg.registered = reg.handle.id != 0;
-}
 } // namespace
 
 namespace PortPrompts {
-// "gamecube" has no static set, which is deliberate: the game's own prompt art
-// already is the GameCube set, so only a remapped GC pad button gets an icon
-// (GameCubeStemForButton).
+// "gamecube" gets no icons of its own, which is deliberate: the game's own
+// prompt art already is the GameCube set, so only a remapped GC pad button gets
+// an icon (GameCubeStemForButton).
 const char* ActiveDevice() {
   // Read once: it is asked every frame, and nothing sets it while the game runs.
   static const char* const env = port::EnvString("MP_TEXTURE_DEVICE");
@@ -905,8 +781,8 @@ const char* ActiveDevice() {
 
 void Initialize(const char* textureRoot) {
   const bool embedded = textureRoot == nullptr && !PortEmbedded::Under("textures/bindings/").empty();
-  // Tracked even without generated icons, since the static set and rumble
-  // (KeyboardActive) follow it too.
+  // Tracked even without generated icons, since a texture pack's device
+  // folder and rumble (KeyboardActive) follow it too.
   SDL_AddEventWatch(active_input_watch, nullptr);
   if (!embedded && (textureRoot == nullptr || textureRoot[0] == '\0')) {
     return;
@@ -945,33 +821,20 @@ void Poll() {
   for (size_t a = 0; a < std::size(kActions); ++a) {
     const PromptAction& action = kActions[a];
     const std::string stem = IconStemForPrompt(action.prompt, device);
-    size_t applied = 0;
-    if (stem != sActionStems[a]) {
-      sActionStems[a] = stem;
-      for (auto& [owner, bound] : sBound) {
-        if (bound.prompt == action.prompt) {
-          ApplyBound(owner, bound, stem);
-          ++applied;
-        }
-      }
+    if (stem == sActionStems[a]) {
+      continue;
     }
-    for (size_t i = 0; i < kKeyCount; ++i) {
-      if (kKeys[i].prompt != action.prompt) {
-        continue;
+    sActionStems[a] = stem;
+    size_t applied = 0;
+    for (auto& [owner, bound] : sBound) {
+      if (bound.prompt == action.prompt) {
+        ApplyBound(owner, bound, stem);
+        ++applied;
       }
-      const std::string& current = sRegistrations[i].activeStem;
-      if (stem.empty() && current.empty()) {
-        continue;
-      }
-      if (!stem.empty() && stem == current) {
-        continue;
-      }
-      Apply(i, stem);
-      ++applied;
     }
     if (applied != 0) {
       PortLog::Write("metroid_prime_port: prompt %s %s\n", action.label,
-                     stem.empty() ? "(back to the static icon)" : stem.c_str());
+                     stem.empty() ? "(the game's own art)" : stem.c_str());
     }
   }
 }

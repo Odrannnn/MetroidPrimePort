@@ -1349,16 +1349,16 @@ int main(int argc, char** argv) {
     // (tex1_<w>x<h>_<texhash>[_<tluthash>]_<format>.dds/.png); a per-device
     // subfolder is selected from the connected controller. Aurora also accepts
     // Dolphin format names such as CMPR and RGBA8.
-    // MP_TEXTURES wins. Otherwise a build that carries the set (MP_EMBED_RESOURCES)
-    // passes no folder, so PortTextures/PortPrompts use the built-in copy and a stale
-    // `textures` folder left in an old install is ignored; any other build reads the
-    // folder next to the executable.
+    // MP_TEXTURES wins. Otherwise a build that carries the prompt icons
+    // (MP_EMBED_RESOURCES) passes no folder, so PortPrompts uses the copy inside the
+    // executable and a stale `textures` folder left in an old install is ignored;
+    // any other build reads the folder next to the executable.
     const char* textures = port::EnvString("MP_TEXTURES");
     if (textures == nullptr || textures[0] == '\0') {
         textures = PortEmbedded::Under("textures/").empty() ? DefaultTexturesPath() : nullptr;
     }
-    // The user's own pack, over the built-in set. Kept in the user folder, under
-    // a name updates never replace (the built-in set is read-only in an AppImage or
+    // The user's own pack, over the built-in folder. Kept in the user folder, under
+    // a name updates never replace (the built-in folder is read-only in an AppImage or
     // Flatpak, and re-copied on every Android launch).
     std::string userTextures;
     if (const char* env = port::EnvString("MP_USER_TEXTURES"); env != nullptr && env[0] != '\0') {
