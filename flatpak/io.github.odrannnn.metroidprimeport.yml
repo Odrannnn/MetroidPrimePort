@@ -177,6 +177,9 @@ modules:
 
       - type: archive
         url: https://files.twilitrealm.dev/freetype-2.14.3.tar.gz
+        mirror-urls:
+          - https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.gz
+          - https://downloads.sourceforge.net/project/freetype/freetype2/2.14.3/freetype-2.14.3.tar.gz
         sha256: e61b31ab26358b946e767ed7eb7f4bb2e507da1cfefeb7a8861ace7fd5c899a1
         dest: freetype
 
