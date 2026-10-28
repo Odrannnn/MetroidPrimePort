@@ -9,7 +9,11 @@
   read by SDL through libusb. On Windows, install the WinUSB driver for the
   adapter once with [Zadig](https://zadig.akeo.ie/) ("WUP-028"; Options > List
   All Devices); the Windows package ships `libusb-1.0.dll`, without which the
-  adapter is not seen. On Linux the device needs a udev rule giving your user
+  adapter is not seen. Pads on it read as on a console: the stick and
+  trigger values the pad sends, less the rest position taken when the pad is
+  plugged in (hold X+Y+Start for 3 seconds to take it again), with no
+  deadzone besides the game's own; the stick deadzone slider does not apply,
+  and remapping a stick or trigger puts that pad back on the ordinary path. On Linux the device needs a udev rule giving your user
   access, the same one Dolphin documents. A Mayflash adapter switched to PC
   mode shows up as ordinary controllers instead, one per port, without any
   driver.

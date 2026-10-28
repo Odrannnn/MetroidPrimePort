@@ -40,6 +40,10 @@ struct GameController {
   uint8_t m_ledBlue = 0xFF;
   bool m_isColorDirty = true;
   bool m_hasRgbLed = false;
+  // Wii U adapter pads on raw axes: the console origin and the X+Y+Start hold.
+  std::array<uint8_t, 6> m_gcOrigin{};
+  bool m_gcOriginValid = false;
+  uint64_t m_gcRecalibrateStart = 0;
 };
 
 GameController* get_controller_for_player(uint32_t player) noexcept;
