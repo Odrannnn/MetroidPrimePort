@@ -681,8 +681,11 @@
   The opacity is the crosshair's alpha, so 100% draws it at full strength (the
   game's own alpha is 19%).
   Original experience ignores both.
-- Crosshair style (Video > Display, `crosshair_style`, `MP_CROSSHAIR_STYLE`, `classic`
-  or `remastered`, default `classic`; console `crosshair style ...`): `remastered` draws
+- Crosshair style (Video > Display, `crosshair_style`, `MP_CROSSHAIR_STYLE`, `classic`,
+  `remastered` or `gamecube`, default `classic`; console `crosshair style ...`): `classic` is the
+  disc's own crosshair, Trilogy's aiming cursor on a Trilogy disc. `gamecube` draws the GameCube
+  crosshair in place of that cursor, turned down the pointer ray so it marks the aim (issue #219);
+  on a GameCube disc it is `classic`. `remastered` draws
   Remastered's combat aiming cursor in place of the ring, built by the port (no Remastered
   assets): a small soft centre dot and three tapered spikes turned 120 degrees apart (one up,
   two down), tips toward the centre. Like Remastered's, the dot and spikes shrink with the
@@ -1182,7 +1185,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   console's movement-restricting free-look mode. While locked on (aim follows the
   target) the crosshair shrinks away as in the original and returns on release
   (issue #112). On a Trilogy disc Trilogy's own aiming cursor is the crosshair and the
-  GC one stays closed (issue #219). `MP_DISABLE_MOUSE_CROSSHAIR=1`
+  GC one stays closed unless Crosshair style is `gamecube` or `remastered` (issue #219). `MP_DISABLE_MOUSE_CROSSHAIR=1`
   opts out. The Controls > Mouse settings sub-tab exposes inversion, weapon-button and crosshair toggles.
 - Crosshair size (Controls > Mouse settings and pause Options > Controller, persisted as
   `crosshair_size`, 25-100 percent, default 50): scales the free-aim crosshair

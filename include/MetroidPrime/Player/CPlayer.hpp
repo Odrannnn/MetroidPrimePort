@@ -387,7 +387,7 @@ public:
   bool MouseLookIsFree(const CStateManager& mgr) const;
   // port: lock-on free aim, a combat lock a pointer moves under.
   bool PortLockFreeAim(const CStateManager& mgr) const;
-  // port: whether the free-aim crosshair is forced open (never on a Trilogy disc).
+  // port: whether the free-aim crosshair is forced open (not over Trilogy's own cursor).
   bool PortAimCrosshairsOpen(const CStateManager& mgr) const;
   // port: direct aim, locked onto an empty orbit point (keeps the camera pitch).
   bool PortEmptyLockKeepsPitch(const CStateManager& mgr) const;

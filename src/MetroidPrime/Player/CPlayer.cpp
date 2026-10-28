@@ -932,12 +932,16 @@ bool CPlayer::PortLockFreeAim(const CStateManager& mgr) const {
          mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan;
 }
 
-// The port's free-aim crosshair. On a Trilogy disc the retained GC crosshair this opens is
-// drawn at the view centre (fn_80238C88 at +0xF0, the pointer ray at distance 0) beside
-// Trilogy's own aiming cursor, which already marks the aim: two crosshairs (issue #219). There
-// only the show-crosshairs input opens it, as on the Wii.
+// The port's free-aim crosshair. On a Trilogy disc with the Classic style, Trilogy's aiming
+// cursor marks the aim and the retained GC crosshair, drawn at the view centre (fn_80238C88 at
+// +0xF0, the pointer ray at distance 0), would be a second one (issue #219): there only the
+// show-crosshairs input opens it, as on the Wii. The GameCube and Remastered styles draw from
+// the open crosshair in place of Trilogy's cursor.
 bool CPlayer::PortAimCrosshairsOpen(const CStateManager& mgr) const {
-  if (PortDisc::IsTrilogy(PortDisc::Current())) return false;
+  if (PortDisc::IsTrilogy(PortDisc::Current()) &&
+      PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_Classic) {
+    return false;
+  }
   return (PortDebug::AimCrosshair() && MouseLookIsFree(mgr)) || PortLockFreeAim(mgr);
 }
 

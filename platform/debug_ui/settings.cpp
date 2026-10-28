@@ -196,10 +196,14 @@ const SettingKey kSettingKeys[] = {
          sCrosshairStyle = PortDebug::kCrosshairStyle_Classic;
        } else if (value == "remastered") {
          sCrosshairStyle = PortDebug::kCrosshairStyle_Remastered;
+       } else if (value == "gamecube") {
+         sCrosshairStyle = PortDebug::kCrosshairStyle_GameCube;
        }
      },
      [](std::ostream& out) {
-       out << (sCrosshairStyle == PortDebug::kCrosshairStyle_Remastered ? "remastered" : "classic");
+       out << (sCrosshairStyle == PortDebug::kCrosshairStyle_Remastered ? "remastered"
+               : sCrosshairStyle == PortDebug::kCrosshairStyle_GameCube ? "gamecube"
+                                                                         : "classic");
      },
      false, "remastered", "classic"},
     {"hud_opacity_xray", [](const std::string& value) { ReadHudOpacity(PortDebug::kHudOpacityXRay, value); },

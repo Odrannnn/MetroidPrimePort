@@ -203,15 +203,16 @@ void DrawVideoDisplay() {
   ImGui::SetItemTooltip("The crosshair in the middle of the screen (free aim, mouse aim, twin "
                         "stick). 100%% is full strength; the game's own crosshair is much fainter (19%%).");
   {
-    static const char* const kStyles[] = {"Classic", "Remastered"};
+    static const char* const kStyles[] = {"Classic", "Remastered", "GameCube"};
     int style = static_cast< int >(sCrosshairStyle);
-    if (ImGui::Combo("Crosshair style", &style, kStyles, 2)) {
+    if (ImGui::Combo("Crosshair style", &style, kStyles, 3)) {
       sCrosshairStyle = static_cast< PortDebug::ECrosshairStyle >(style);
       MarkDirty();
     }
     ImGui::SetItemTooltip(
         "Classic: the game's own crosshair model. Remastered: rings and three spikes in\n"
-        "the Remastered design. Original experience uses Classic.");
+        "the Remastered design. GameCube: on a Trilogy disc, the GameCube crosshair in place\n"
+        "of Trilogy's aiming cursor (Classic on a GameCube disc). Original experience uses Classic.");
   }
   if (ImGui::Checkbox("Custom crosshair colour", &sCrosshairCustomColor)) {
     MarkDirty();

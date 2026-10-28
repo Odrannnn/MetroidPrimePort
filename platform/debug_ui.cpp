@@ -490,6 +490,8 @@ void EnsureInitialized() {
       sCrosshairStyle = PortDebug::kCrosshairStyle_Classic;
     } else if (std::strcmp(style, "remastered") == 0) {
       sCrosshairStyle = PortDebug::kCrosshairStyle_Remastered;
+    } else if (std::strcmp(style, "gamecube") == 0) {
+      sCrosshairStyle = PortDebug::kCrosshairStyle_GameCube;
     }
   }
   sMenuStandardButtons = port::EnvFlag("MP_MENU_STANDARD_BUTTONS", sMenuStandardButtons);

@@ -720,7 +720,7 @@ void CCompoundTargetReticle::Draw(const CStateManager& mgr, bool hideLockon) con
       if (xPortTri) {
         PortTriDrawNext(rot);
         PortTriDrawLocked(rot);
-        PortTriDrawCrosshairs(rot);
+        PortTriDrawCrosshairs(rot, mgr);
         PortTriDrawScan(rot, mgr);
         PortTriDrawAiming(rot, mgr);
         PortTriDrawOffScreen(rot, mgr);
@@ -2217,6 +2217,8 @@ void CCompoundTargetReticle::PortTriDrawLocked(const CMatrix3f& rot) const {
 }
 // fn_802383C4: the pointer's near position is the 1.25-depth plane (80015CD4).
 void CCompoundTargetReticle::PortTriDrawAiming(const CMatrix3f& rot, const CStateManager& mgr) const {
+  // The GameCube style's crosshair (PortTriDrawCrosshairs) replaces the cursor.
+  if (PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_GameCube) return;
   const bool remastered = PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_Remastered;
   if (!remastered && x258_aimArmAlpha <= 0.f) return;
   const CTransform4f cam = PortReticleCameraXf(mgr);
@@ -2256,16 +2258,23 @@ void CCompoundTargetReticle::PortTriDrawOffScreen(const CMatrix3f& rot, const CS
       PortTriColor(0xffffffff), .18f * pulse);
 }
 // fn_80238C88: retained GC asset, flags7 and replaced alpha, separately from new aiming.
-void CCompoundTargetReticle::PortTriDrawCrosshairs(const CMatrix3f& rot) const {
+void CCompoundTargetReticle::PortTriDrawCrosshairs(const CMatrix3f& rot, const CStateManager& mgr) const {
   if (x28_noDrawTicks > 0 || x1e8_crosshairsScale <= 0.f) return;
   // The Remastered style replaces this model too (PortTriDrawAiming draws it).
   if (PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_Remastered) return;
+  CTransform4f xf(rot, xf4_targetPos);
+  if (PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_GameCube) {
+    // In place of the aiming cursor: the model (built out along its Y) turned down the
+    // pointer ray as drawn, so it marks the aim where the cursor would.
+    const CTransform4f cam = PortReticleCameraXf(mgr);
+    const CVector3f eye = cam.GetTranslation();
+    xf = CTransform4f::LookAt(eye, eye + PortTriPointerDir(cam, mgr, true), cam.GetUp());
+  }
   const_cast< TCachedToken< CModel >& >(x34_crosshairs).TryCache();
   if (const CModel* model = x34_crosshairs.GetObject()) {
     CColor color = PortTriXhairColor(gpTweakTargeting->x1c0_crosshairsColor);
     color.SetAlpha(PortTriAlphaU8(255.f * PortTriXhairAlpha(x1e8_crosshairsScale)));
-    gpRender->SetModelMatrix(CTransform4f(rot, xf4_targetPos) *
-                             CTransform4f::Scale(x1e8_crosshairsScale * PortTriXhairSize()));
+    gpRender->SetModelMatrix(xf * CTransform4f::Scale(x1e8_crosshairsScale * PortTriXhairSize()));
     model->Draw(CModelFlags(CModelFlags::kT_Additive, 0, CModelFlags::kF_Nothing, color));
   }
 }

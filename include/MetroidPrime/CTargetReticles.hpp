@@ -146,7 +146,7 @@ private:
   void PortTriDrawLocked(const CMatrix3f& rot) const;
   void PortTriDrawAiming(const CMatrix3f& rot, const CStateManager& mgr) const;
   void PortTriDrawOffScreen(const CMatrix3f& rot, const CStateManager& mgr) const;
-  void PortTriDrawCrosshairs(const CMatrix3f& rot) const;
+  void PortTriDrawCrosshairs(const CMatrix3f& rot, const CStateManager& mgr) const;
   static bool PortTriOffScreen(const CStateManager& mgr);
   TCachedToken< CModel > x38c_aimCenter, x398_aimArm, x3a4_lockArm, x3b0_lockTech,
       x3bc_lockBrackets, x3c8_lockBase, x3d4_offScreen;

@@ -241,8 +241,9 @@ const int kCrosshairOpacityMin = 0;
 const int kCrosshairOpacityMax = 100;
 int CrosshairOpacity();
 // The centre crosshair's look: the game's model, or a procedural take on Remastered's design
-// (crosshair_style=, MP_CROSSHAIR_STYLE). Classic under Original experience.
-enum ECrosshairStyle { kCrosshairStyle_Classic, kCrosshairStyle_Remastered };
+// (crosshair_style=, MP_CROSSHAIR_STYLE). Classic under Original experience. GameCube is the
+// GC crosshair in place of Trilogy's aiming cursor on a Trilogy disc, Classic on a GC disc.
+enum ECrosshairStyle { kCrosshairStyle_Classic, kCrosshairStyle_Remastered, kCrosshairStyle_GameCube };
 ECrosshairStyle CrosshairStyle();
 void SetCrosshairStyle(ECrosshairStyle style);
 bool CrosshairColor(float rgb[3]);

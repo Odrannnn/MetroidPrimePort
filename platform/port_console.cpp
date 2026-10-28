@@ -2655,16 +2655,17 @@ void CmdHudOpacity() {
 void CmdCrosshair() {
   if (sCmd.args.size() > 1 && sCmd.args[1] == "style") {
     const std::string style = sCmd.args.size() > 2 ? sCmd.args[2] : "";
-    if (style != "classic" && style != "remastered") {
-      return Finish("usage: crosshair style classic|remastered");
+    if (style != "classic" && style != "remastered" && style != "gamecube") {
+      return Finish("usage: crosshair style classic|remastered|gamecube");
     }
     PortDebug::SetCrosshairStyle(style == "remastered" ? PortDebug::kCrosshairStyle_Remastered
+                                 : style == "gamecube" ? PortDebug::kCrosshairStyle_GameCube
                                                        : PortDebug::kCrosshairStyle_Classic);
     return Finish();
   }
   const int value = sCmd.args.size() > 1 ? std::atoi(sCmd.args[1].c_str()) : 0;
   if (value < PortDebug::kCrosshairSizeMin || value > PortDebug::kCrosshairSizeMax) {
-    return Finish("usage: crosshair <25..100> | crosshair style classic|remastered");
+    return Finish("usage: crosshair <25..100> | crosshair style classic|remastered|gamecube");
   }
   PortDebug::SetCrosshairSize(value);
   Finish();
