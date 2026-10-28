@@ -1181,7 +1181,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
 - Mouse mode requests the GC aiming crosshair without holding R or entering the
   console's movement-restricting free-look mode. While locked on (aim follows the
   target) the crosshair shrinks away as in the original and returns on release
-  (issue #112). `MP_DISABLE_MOUSE_CROSSHAIR=1`
+  (issue #112). On a Trilogy disc Trilogy's own aiming cursor is the crosshair and the
+  GC one stays closed (issue #219). `MP_DISABLE_MOUSE_CROSSHAIR=1`
   opts out. The Controls > Mouse settings sub-tab exposes inversion, weapon-button and crosshair toggles.
 - Crosshair size (Controls > Mouse settings and pause Options > Controller, persisted as
   `crosshair_size`, 25-100 percent, default 50): scales the free-aim crosshair

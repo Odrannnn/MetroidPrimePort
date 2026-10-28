@@ -263,12 +263,6 @@ Aurora's virtual-replacement callback rather than shipped as a fixed set.
   the stick, C-stick and D-pad whole and per direction), which covers the front end, the pause
   and map screens and the HUD hints (the visor hints' D-pad arrows, the beam hints' C-stick, the
   strafe and R animations).
-- Trilogy's hints draw Wii Remote and Nunchuk art instead (A, B, C, Z, −, + and the Nunchuk
-  stick); those rows stand for the action each does here (C is X, Z is L, − the D-pad, + the
-  C-stick). With a GameCube pad they show its own A, B, X and L, since the Wii art is not the pad
-  in hand; original experience keeps the disc's art. The stick frames' hashes came from a
-  `MP_DUMP_TEXTURES` run: `extract_textures.py` (which also takes an extracted disc directory)
-  names those wrongly.
 - The sticks follow their axis bindings: a pad shows the stick that drives the axis (so Southpaw
   swaps them) or, for an axis driven by buttons, those buttons; a keyboard shows the key for a
   direction frame and, for the whole stick, the WASD, IJKL or arrow cluster when the four keys

@@ -2,6 +2,7 @@
 
 #include "port_console.h"
 #include "port_debug.h"
+#include "port_disc.h"
 #include "port_dread_samus_mod.h"
 #include "port_hints.h"
 #include "port_mouse.h"
@@ -931,6 +932,15 @@ bool CPlayer::PortLockFreeAim(const CStateManager& mgr) const {
          mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan;
 }
 
+// The port's free-aim crosshair. On a Trilogy disc the retained GC crosshair this opens is
+// drawn at the view centre (fn_80238C88 at +0xF0, the pointer ray at distance 0) beside
+// Trilogy's own aiming cursor, which already marks the aim: two crosshairs (issue #219). There
+// only the show-crosshairs input opens it, as on the Wii.
+bool CPlayer::PortAimCrosshairsOpen(const CStateManager& mgr) const {
+  if (PortDisc::IsTrilogy(PortDisc::Current())) return false;
+  return (PortDebug::AimCrosshair() && MouseLookIsFree(mgr)) || PortLockFreeAim(mgr);
+}
+
 bool CPlayer::PortEmptyLockKeepsPitch(const CStateManager& mgr) const {
   return MouseControlsAllowed(mgr) && x304_orbitState == kOS_OrbitPoint;
 }
@@ -971,8 +981,7 @@ void CPlayer::UpdateMouseAim(CStateManager& mgr) {
     // pitch-down under free mouse look, and CheckPostGrapple reads a zero jump
     // timer in the air as a grapple jump, which blocked the sideways dash.
     x3ec_freeLookPitchAngle = PortDebug::AimPitch();
-    x9c4_25_showCrosshairs =
-        (PortDebug::AimCrosshair() && MouseLookIsFree(mgr)) || PortLockFreeAim(mgr);
+    x9c4_25_showCrosshairs = PortAimCrosshairsOpen(mgr);
   }
 }
 
@@ -1619,8 +1628,7 @@ void CPlayer::UpdateFreeLookState(const CFinalInput& input, float dt, CStateMana
     x3e4_freeLookYawAngle = 0.f;
     x3e8_horizFreeLookAngleVel = 0.f;
     x3f0_vertFreeLookAngleVel = 0.f;
-    x9c4_25_showCrosshairs =
-        (PortDebug::AimCrosshair() && MouseLookIsFree(mgr)) || PortLockFreeAim(mgr);
+    x9c4_25_showCrosshairs = PortAimCrosshairsOpen(mgr);
     return;
   }
   if (x304_orbitState == kOS_ForcedOrbitObject || IsMorphBallTransitioning() ||
@@ -3697,8 +3705,7 @@ void CPlayer::DoPostCameraStuff(float dt, CStateManager& mgr) {
     if (PortDebug::MouseAim() && PortDebug::MouseGameplayActive()) x490_gun->CancelMouseInput(mgr);
     PortDebug::SetMouseGameplayActive(false);
   } else {
-    x9c4_25_showCrosshairs =
-        (PortDebug::AimCrosshair() && MouseLookIsFree(mgr)) || PortLockFreeAim(mgr);
+    x9c4_25_showCrosshairs = PortAimCrosshairsOpen(mgr);
     if (PortDebug::AimInitialized()) x3ec_freeLookPitchAngle = PortDebug::AimPitch();
   }
   UpdateArmAndGunTransforms(dt, mgr);
