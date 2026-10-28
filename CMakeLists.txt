@@ -576,6 +576,11 @@ if(MP_EMBED_RESOURCES)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     file(GLOB_RECURSE MP_EMBED_INPUTS CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/textures/*")
+    # A deleted texture leaves every remaining input older than the output, so the
+    # file list itself is an input; file(CONFIGURE) rewrites it only when it changes.
+    string(JOIN "\n" MP_EMBED_LIST ${MP_EMBED_INPUTS})
+    set(MP_EMBED_LIST_FILE "${CMAKE_CURRENT_BINARY_DIR}/generated/port_embedded_inputs.txt")
+    file(CONFIGURE OUTPUT "${MP_EMBED_LIST_FILE}" CONTENT "${MP_EMBED_LIST}\n" @ONLY)
     set(MP_EMBED_SEED "${CMAKE_CURRENT_SOURCE_DIR}/assets/initial_pipeline_cache.db")
     set(MP_EMBED_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/port_embedded_data.cpp")
     add_custom_command(
@@ -585,7 +590,7 @@ if(MP_EMBED_RESOURCES)
             "${MP_EMBED_SOURCE}"
             --dir "${CMAKE_CURRENT_SOURCE_DIR}/textures" textures
             --file "${MP_EMBED_SEED}" initial_pipeline_cache.db
-        DEPENDS ${MP_EMBED_INPUTS} "${MP_EMBED_SEED}"
+        DEPENDS ${MP_EMBED_INPUTS} "${MP_EMBED_LIST_FILE}" "${MP_EMBED_SEED}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/embed_resources.py"
         COMMENT "Embedding textures and the pipeline cache seed"
         VERBATIM)
