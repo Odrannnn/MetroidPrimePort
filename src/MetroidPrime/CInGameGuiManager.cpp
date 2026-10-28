@@ -357,8 +357,11 @@ void CInGameGuiManager::Draw(const CStateManager& mgr) const {
   if (!GetIsGameDraw()) {
     gpRender->SetRequestRGBA6(true);
   }
-  // Re-published below if the minimap is drawn this frame.
-  PortDebug::SetMinimapRect(false, false, 0.f, 0.f, 0.f, 0.f);
+  // Set below if the minimap is drawn this frame, published whole when the draw ends.
+  struct MinimapFrameScope {
+    MinimapFrameScope() { PortDebug::BeginMinimapFrame(); }
+    ~MinimapFrameScope() { PortDebug::EndMinimapFrame(); }
+  } minimapFrameScope;
 #ifdef TARGET_PC
   // Draw the HUD lag/bob blended to the presented time; the tick state is
   // restored when the draw ends.

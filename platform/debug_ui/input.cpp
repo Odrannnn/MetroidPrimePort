@@ -57,6 +57,10 @@ bool sMinimapValid = false;
 bool sMinimapDrawn = false;
 float sMinimapRect[4] = {};
 std::chrono::steady_clock::time_point sMinimapStamp;
+// The HUD draw in progress (game thread only); EndMinimapFrame publishes it whole.
+bool sMinimapPendingValid = false;
+bool sMinimapPendingDrawn = false;
+float sMinimapPendingRect[4] = {};
 std::atomic< int > sMapTapPending{0};
 bool sMapTapHeld = false;
 // Drag to pan the map screen (Android): the overlay sends dp deltas and the view
@@ -910,15 +914,26 @@ void RequestSaveStateHotkey(int which) {
 }
 
 // Game thread, once per HUD draw (valid=false when the minimap isn't shown).
+void BeginMinimapFrame() {
+  sMinimapPendingValid = false;
+  sMinimapPendingDrawn = false;
+}
+
 void SetMinimapRect(bool valid, bool drawn, float x0, float y0, float x1, float y1) {
+  sMinimapPendingDrawn = drawn;
+  sMinimapPendingValid = valid && std::isfinite(x0) && std::isfinite(y0) && std::isfinite(x1) &&
+                         std::isfinite(y1);
+  sMinimapPendingRect[0] = x0;
+  sMinimapPendingRect[1] = y0;
+  sMinimapPendingRect[2] = x1;
+  sMinimapPendingRect[3] = y1;
+}
+
+void EndMinimapFrame() {
   std::lock_guard lock(sMinimapMutex);
-  sMinimapDrawn = drawn;
-  sMinimapValid = valid && std::isfinite(x0) && std::isfinite(y0) && std::isfinite(x1) &&
-                  std::isfinite(y1);
-  sMinimapRect[0] = x0;
-  sMinimapRect[1] = y0;
-  sMinimapRect[2] = x1;
-  sMinimapRect[3] = y1;
+  sMinimapValid = sMinimapPendingValid;
+  sMinimapDrawn = sMinimapPendingDrawn;
+  std::copy(sMinimapPendingRect, sMinimapPendingRect + 4, sMinimapRect);
   sMinimapStamp = std::chrono::steady_clock::now();
 }
 

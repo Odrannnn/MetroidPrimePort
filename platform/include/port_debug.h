@@ -814,7 +814,13 @@ bool SpringBallRequested();
 void RequestSaveStateHotkey(int which);
 bool TouchMapTap();
 void SetTouchMapTap(bool on);
+// Game thread, once per HUD draw: BeginMinimapFrame clears the frame's rect,
+// SetMinimapRect sets it, EndMinimapFrame publishes it. Readers (the overlay's UI
+// thread) only see whole frames; a read between the clear and the set hid the
+// map button while looking around.
+void BeginMinimapFrame();
 void SetMinimapRect(bool valid, bool drawn, float x0, float y0, float x1, float y1);
+void EndMinimapFrame();
 bool MinimapRect(float* out4, bool* drawn = nullptr);
 void RequestMapTap();
 // Pad poll hook: true for the one poll where a requested tap reads Z held.
