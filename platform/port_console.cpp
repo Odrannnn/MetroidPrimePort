@@ -1409,7 +1409,13 @@ void CmdHint() {
   Finish();
 }
 
-void CmdMemo() {
+void CmdMemo(CStateManager& mgr) {
+  uint32_t strg = 0;
+  if (sCmd.args.size() == 3 && sCmd.args[1] == "pause" && ParseHex(sCmd.args[2], strg)) {
+    // The boxed memo a paused HUDMemo shows, as for "Map data acquired" (CMessageScreen).
+    mgr.ShowPausedHUDMemo(CAssetId(strg), 0.f);
+    return Finish();
+  }
   std::wstring wide;
   for (size_t i = 1; i < sCmd.args.size(); ++i) {
     if (i > 1) {
@@ -4072,8 +4078,8 @@ const CommandSpec kCommands[] = {
      "god [on|off]               the player takes no damage (no argument: show)"},
     {"hint", nullptr, [](CStateManager&) { CmdHint(); },
      "hint show                  show the hint the game would show next"},
-    {"memo", nullptr, [](CStateManager&) { CmdMemo(); },
-     "memo <text>                show text as a HUD message"},
+    {"memo", nullptr, [](CStateManager& mgr) { CmdMemo(mgr); },
+     "memo <text> | pause <strg> show text as a HUD message, or a string table as the boxed one"},
     {"strg", nullptr, [](CStateManager&) { CmdStrg(); },
      "strg <id> [index]          a string table as the game loads it (mods included)"},
     {"language", nullptr, [](CStateManager&) { CmdLanguage(); },
