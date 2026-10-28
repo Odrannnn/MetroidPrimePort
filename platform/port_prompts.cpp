@@ -114,9 +114,8 @@ constexpr PromptKey kKeys[] = {
     {PAD_BUTTON_DOWN, 64, 32, 0x112b6136175108bbull, "5"},    // DPadD, Thermal Visor
     {PAD_BUTTON_LEFT, 64, 32, 0x8c1d5fec98c638efull, "5"},    // DPadL, Scan Visor
     {PAD_BUTTON_RIGHT, 64, 32, 0x43a63656a5767a1dull, "5"},   // DPadR, X-Ray Visor
-    // Trilogy's Wii Remote and Nunchuk art is left alone: the same texture
-    // means different actions on different screens (- is the visor in the
-    // hints but Move on the map, A+2 the map legend), so no one action fits (#220).
+    // On Trilogy the loader skips RS5.pak's Wii art for these ids, so the
+    // same GC textures (and keys above) apply there (#220).
 };
 constexpr size_t kKeyCount = sizeof(kKeys) / sizeof(kKeys[0]);
 
