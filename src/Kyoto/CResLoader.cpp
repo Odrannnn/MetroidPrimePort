@@ -19,13 +19,14 @@
 #include <dolphin/os.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <map>
-#include <strings.h>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 #endif
 
@@ -239,7 +240,11 @@ bool PortSkipRS5Button(const CPakFile& pak, const CAssetId asset) {
   // "aram:RS5.pak"
   const char* base = strrchr(name, ':');
   base = base ? base + 1 : name;
-  return strncasecmp(base, "RS5.", 4) == 0;
+  constexpr std::string_view rs5 = "RS5.";
+  return std::strlen(base) >= rs5.size() &&
+         std::equal(rs5.begin(), rs5.end(), base, [](char a, char b) {
+           return a == std::toupper(static_cast<unsigned char>(b));
+         });
 }
 } // namespace
 #endif
