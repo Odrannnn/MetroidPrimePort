@@ -143,6 +143,11 @@ modules:
         url: https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.10.tar.gz
         sha256: 0dc11d980ba17250200718fa4e28011da293f27ed92f92203afffe396811f307
         dest: sdl-src
+      # FetchContent skips PATCH_COMMAND for a FETCHCONTENT_SOURCE_DIR_* source,
+      # so Aurora's SDL patches (AuroraSDL3Provider.cmake) are applied here.
+      - type: shell
+        commands:
+          - for p in extern/aurora/cmake/patches/apply-sdl3-*.cmake; do cmake -DSDL_SOURCE_DIR=sdl-src -P "$p" || exit 1; done
 
       # The rest of Aurora's dependencies, transcribed from
       # extern/aurora/extern/CMakeLists.txt. Ten of the eleven digests are the
