@@ -18,6 +18,8 @@ extern uint sPortLegendKey;
 bool PortLegendReady();
 // The settings the legend depends on, as one key: a change means a rebuild.
 uint PortLegendKey();
+// The disc's legend text (Trilogy builds its own from what Samus has).
+rstl::wstring PortLegendBase();
 // The disc's legend text plus the port's lines.
 rstl::wstring PortLegendText();
 // Sets the legend pane's text and fits the pane to its rows.

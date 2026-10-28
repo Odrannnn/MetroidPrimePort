@@ -58,8 +58,17 @@
 #include "port_map_marks.h"
 #include "port_map_pickups.h"
 #include "port_automapper.h"
+#include "port_disc.h"
 
 static const char* const skFRME_MapScreen = "FRME_MapScreen";
+
+// Trilogy nudges the map screen's panes from code (@ fn_8037A578): `offset`
+// is in the widget's own space.
+static void PortTrilogyMove(CGuiWidget* widget, const CVector3f& offset) {
+  CTransform4f xf = widget->GetO2PTransform();
+  xf.SetTranslation(xf * offset);
+  widget->SetO2PTransform(xf);
+}
 
 static inline const rstl::vector< CGameHintInfo::CGameHint >& GetGameHints() {
   return gpMemoryCard->GetHints();
@@ -695,9 +704,13 @@ void CAutoMapper::ProcessControllerInput(const CFinalInput& frameInput,
       string.append(strTable->GetString(0x2e), -1);
       x300_textpane_instructions->TextSupport().SetText(string);
 
+      // Trilogy draws the C-stick (Z + Nunchuk) art unsquashed and puts both zoom
+      // buttons before the text (@ fn_80024E74).
+      const bool trilogy = PortDisc::IsTrilogy(PortDisc::Current());
       string.assign(imagePrefix, -1);
       string.append(CStringExtras::ConvertToUNICODE(rstl::string(
-          CBasics::Stringize("SI,0.6,1.0,%8.8X", gpTweakPlayerRes->x48_cStick[x2e8_rStickPos]))));
+          CBasics::Stringize(trilogy ? "SI,1.0,1.0,%8.8X" : "SI,0.6,1.0,%8.8X",
+                             gpTweakPlayerRes->x48_cStick[x2e8_rStickPos]))));
       string.append(imageSuffix, -1);
       string.append(strTable->GetString(0x2f), -1);
       x304_textpane_instructions1->TextSupport().SetText(string);
@@ -706,11 +719,16 @@ void CAutoMapper::ProcessControllerInput(const CFinalInput& frameInput,
       string.append(CStringExtras::ConvertToUNICODE(rstl::string(
           CBasics::Stringize("%8.8X", gpTweakPlayerRes->x70_lTrigger[x2ec_lTriggerPos]))));
       string.append(imageSuffix, -1);
-      string.append(strTable->GetString(0x30), -1);
+      if (!trilogy) {
+        string.append(strTable->GetString(0x30), -1);
+      }
       string.append(imagePrefix, -1);
       string.append(CStringExtras::ConvertToUNICODE(rstl::string(
           CBasics::Stringize("%8.8X", gpTweakPlayerRes->x7c_rTrigger[x2f0_rTriggerPos]))));
       string.append(imageSuffix, -1);
+      if (trilogy) {
+        string.append(strTable->GetString(0x30), -1);
+      }
       x308_textpane_instructions2->TextSupport().SetText(string);
     }
   }
@@ -1529,11 +1547,20 @@ void CAutoMapper::Update(float dt, const CStateManager& mgr) {
         PortSetLegend(mapLegend, PortLegendText());
       } else {
         sPortLegendKey = ~0u;
-        PortSetLegend(mapLegend, rstl::wstring(gpStringTable->GetString(0x31)));
+        PortSetLegend(mapLegend, PortLegendBase());
       }
 #else
       mapLegend->TextSupport().SetText(rstl::wstring(gpStringTable->GetString(0x31)));
 #endif
+      // Trilogy moves its frame's panes (@ fn_80027E94).
+      if (PortDisc::IsTrilogy(PortDisc::Current())) {
+        PortTrilogyMove(leftPane, CVector3f(-1.f, 0.5f, 0.f));
+        PortTrilogyMove(x300_textpane_instructions, CVector3f(-1.f, 0.f, 0.f));
+        PortTrilogyMove(x304_textpane_instructions1, CVector3f(-1.f, 0.f, 0.f));
+        PortTrilogyMove(x308_textpane_instructions2, CVector3f(-1.5f, 0.f, 0.f));
+        mapLegend->SetO2PTransform(mapLegend->GetO2PTransform() *
+                                   CTransform4f::Translate(0.f, 0.f, 0.6f));
+      }
 
       x30c_basewidget_leftPane = x2c_frmeInitialized->FindWidget("basewidget_leftPane");
       x310_basewidget_yButtonPane = x2c_frmeInitialized->FindWidget("basewidget_yButtonPane");

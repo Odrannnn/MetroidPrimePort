@@ -46,6 +46,7 @@
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
+#include "MetroidPrime/Player/CPlayerState.hpp"
 
 #include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
@@ -60,6 +61,7 @@
 #include <utility>
 #include <vector>
 
+#include "port_disc.h"
 #include "port_debug.h"
 #include "port_pointer.h"
 #include "port_pointer_menu.h"
@@ -317,8 +319,35 @@ uint PortLegendKey() {
   return mode | (PortDebug::MapPickupKinds() ? 8u : 0u) | (PortDebug::MapExtraUi() ? 16u : 0u);
 }
 
+rstl::wstring PortLegendBase() {
+  if (!PortDisc::IsTrilogy(PortDisc::Current()) || gpStringTable->GetStringCount() <= 0x7a + 6) {
+    return rstl::wstring(gpStringTable->GetString(0x31));
+  }
+  // Trilogy builds it from lines that say ??? for a door colour whose beam or
+  // Missiles Samus doesn't have yet (@ fn_80027BF8). Its lines are kept past
+  // 1.00's end of STRG_Main, Trilogy's 0x70 at 0x76.
+  const CPlayerState& state = *gpGameState->PlayerState();
+  const auto line = [](int label, bool have, int name) {
+    rstl::wstring out(L"\n", -1);
+    out.append(gpStringTable->GetString(label + 6), -1);
+    out.append(gpStringTable->GetString((have ? name : 0x7a) + 6), -1);
+    return out;
+  };
+  // The Frigate's map says ??? for Missiles whatever Samus has.
+  const bool missiles = gpGameState->CurrentWorldAssetId() != 0x158EFE17 &&
+                        state.HasPowerUp(CPlayerState::kIT_Missiles);
+  rstl::wstring text(gpStringTable->GetString(0x70 + 6));
+  text.append(line(0x71, state.HasPowerUp(CPlayerState::kIT_WaveBeam), 0x72));
+  text.append(line(0x73, state.HasPowerUp(CPlayerState::kIT_IceBeam), 0x74));
+  text.append(line(0x75, state.HasPowerUp(CPlayerState::kIT_PlasmaBeam), 0x76));
+  text.append(line(0x77, missiles, 0x78));
+  text.append(L"\n", -1);
+  text.append(gpStringTable->GetString(0x79 + 6), -1);
+  return text;
+}
+
 rstl::wstring PortLegendText() {
-  rstl::wstring text(gpStringTable->GetString(0x31));
+  rstl::wstring text(PortLegendBase());
   if (!PortDebug::MapExtraUi()) {
     return text;
   }

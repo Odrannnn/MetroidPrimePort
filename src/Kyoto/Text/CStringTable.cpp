@@ -367,7 +367,10 @@ void CStringTable::PortRemapImportedImageTextureIds() {
 static void PortRemapPalTable(uint id, CStringTable& table, const CStringTable* slideShow) {
   std::vector< int > from;
   const CStringTable* extra = NULL;
-  if (id == 0x0552A456 && table.GetStringCount() == 104) {  // STRG_Main
+  // Trilogy's Strings.pak copies (mounted first) are the PAL tables with
+  // strings added at the end, so they take the same remap.
+  const int count = table.GetStringCount();
+  if (id == 0x0552A456 && (count == 104 || count == 123)) {  // STRG_Main
     extra = slideShow;
     for (int i = 0; i < 110; ++i) {
       if (i <= 38) {
@@ -382,7 +385,11 @@ static void PortRemapPalTable(uint id, CStringTable& table, const CStringTable* 
         from.push_back(i - 6);
       }
     }
-  } else if (id == 0x500EC6A0 && table.GetStringCount() == 110) {  // STRG_PauseScreen
+    // Kept past 1.00's end: Trilogy's map legend lines (Any Beam .. ???).
+    for (int i = 104; i < count; ++i) {
+      from.push_back(i);
+    }
+  } else if (id == 0x500EC6A0 && (count == 110 || count == 130)) {  // STRG_PauseScreen
     for (int i = 0; i < 100; ++i) {
       // PAL adds the item/scan counters at 9-10 and an empty string at 27.
       from.push_back(i <= 8 ? i : i <= 24 ? i + 2 : i + 3);
@@ -392,7 +399,7 @@ static void PortRemapPalTable(uint id, CStringTable& table, const CStringTable* 
     from.push_back(105);
     from.push_back(103);
     from.push_back(104);
-  } else if (id == 0x19C3F7F7 && table.GetStringCount() == 29) {  // STRG_MemoryCard
+  } else if (id == 0x19C3F7F7 && (count == 29 || count == 30)) {  // STRG_MemoryCard
     // PAL's card-full texts for a save over an existing one are empty.
     for (int i = 0; i < 29; ++i) {
       from.push_back(i == 9 || i == 10 ? 6 : i);
