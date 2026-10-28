@@ -55,8 +55,8 @@ jobs:
       # The x64 runner has OpenSSL installed; the arm64 one does not. vcpkg
       # builds it there, as static libraries on the DLL runtime (/MD, CMake's
       # default), like the x64 runner's. Cached until the vcpkg tree changes.
+      # Both runners take libusb from vcpkg (below).
       - name: Locate vcpkg
-        if: matrix.arch == 'arm64'
         id: vcpkg
         shell: pwsh
         run: |
@@ -88,6 +88,30 @@ jobs:
         shell: pwsh
         run: '"OPENSSL_ROOT_DIR=$env:GITHUB_WORKSPACE/openssl-arm64/arm64-windows-static-md" >> $env:GITHUB_ENV'
 
+      # SDL reaches a GameCube adapter in Wii U mode (057E:0337, Nintendo's
+      # own and Mayflash's) only through libusb (issue #222). SDL loads
+      # libusb-1.0.dll at run time, so the package ships it and the game
+      # still starts without it; the adapter also needs the WinUSB driver
+      # (Zadig), as in Dolphin.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: libusb
+        with:
+          path: libusb
+          key: libusb-${{ matrix.arch }}-windows-${{ steps.vcpkg.outputs.rev }}
+
+      - name: Build libusb
+        if: steps.libusb.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          & "${{ steps.vcpkg.outputs.root }}/vcpkg.exe" install libusb:${{ matrix.arch }}-windows --x-install-root=libusb
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg failed to build libusb' }
+
+      - name: Point CMake at libusb
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE/libusb/${{ matrix.arch }}-windows".Replace('\', '/')
+          "LIBUSB_ROOT=$root" >> $env:GITHUB_ENV
+
       # Configure downloads and unpacks about a dozen dependencies. Keep the
       # unpacked sources and the stamps that say they are current; the build
       # directories beside them are left out, since ccache covers those.
@@ -118,6 +142,15 @@ jobs:
           -DAURORA_SDL3_LINKAGE=static
           -DAURORA_NOD_LINKAGE=static
           -DOPENSSL_USE_STATIC_LIBS=TRUE
+          -DLibUSB_LIBRARY=${{ env.LIBUSB_ROOT }}/lib/libusb-1.0.lib
+          -DLibUSB_INCLUDE_PATH=${{ env.LIBUSB_ROOT }}/include/libusb-1.0
+
+      # SDL drops libusb without an error when it cannot use it.
+      - name: Check SDL has libusb
+        shell: pwsh
+        run: |
+          $config = Get-ChildItem -Recurse build-win/_deps/sdl-build -Filter SDL_build_config.h | Select-Object -First 1
+          if (-not $config -or -not (Select-String -Path $config.FullName -Pattern '#define SDL_LIBUSB_DYNAMIC "libusb-1\.0\.dll"')) { throw 'SDL was configured without libusb: GameCube adapters in Wii U mode would not work' }
 
       # Build, the port's tests, the TLS log and the GX FIFO regressions.
       - uses: ./.github/actions/build-and-test
@@ -178,6 +211,9 @@ jobs:
           Copy-Item ffmpeg-min/out/ffmpeg.exe dist/
           Copy-Item ffmpeg-min/out/COPYING.LGPLv2.1 dist/licenses/ffmpeg-LGPL-2.1.txt
           Copy-Item ffmpeg-min/out/ffmpeg-build.txt dist/licenses/ffmpeg.txt
+          # libusb is LGPL and loaded at run time: the DLL and its licence.
+          Copy-Item "$env:LIBUSB_ROOT/bin/libusb-1.0.dll" dist/
+          Copy-Item "$env:LIBUSB_ROOT/share/libusb/copyright" dist/licenses/libusb.txt
           # The runner's OpenSSL is linked in, and its licence is not in _deps.
           $license = @("$root/license.txt", "$root/LICENSE.txt") | Where-Object { Test-Path $_ } | Select-Object -First 1
           if ($license) { Copy-Item $license dist/licenses/openssl.txt }
