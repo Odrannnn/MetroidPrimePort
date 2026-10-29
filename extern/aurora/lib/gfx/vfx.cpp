@@ -734,11 +734,10 @@ R"(  } else if ((FEAT & 536870912u) != 0u) {
     let gain = 10.0 - 9.0 * fade;
     rgb = vec3f(
               gain * sc.r,
-              gain * (sc.g + 40.0 * rim * (edge * (2.0 * mask - 0.1) + 0.1) + 10.5 * rg + 2.8 * in.mesh.z + 3.0 * high) +
-                  0.5,
+              gain * (sc.g + 40.0 * rim * (edge * (2.0 * mask - 0.1) + 0.1) + 10.5 * rg + 2.8 * in.mesh.z + 3.0 * high +
+                      0.5),
               gain * (sc.b + 40.0 * rim * (edge * (10.0 * mask - 0.5) + 0.5) + 28.0 * rg + 5.95000029 * in.mesh.z +
-                      12.0 * high) +
-                  0.9) *
+                      12.0 * high + 0.9)) *
           vc.rgb * M;
     x = fade * (1.0 + in.mesh.y * (c.y - 1.0)) * 0.75;
   } else if ((FEAT & 1073741824u) != 0u) {
