@@ -197,8 +197,13 @@ bool WriteSlot(int slot, const Header& header, const std::vector< uint8_t >& blo
     if (!file)
       return false;
     file.write(data.data(), static_cast< std::streamsize >(data.size()));
-    if (!file)
+    file.flush();
+    file.close();
+    if (!file) {
+      std::error_code ignored;
+      fs::remove(temp, ignored);
       return false;
+    }
   }
   std::error_code ec;
   fs::rename(temp, path, ec);
@@ -617,6 +622,13 @@ void WriteMarker() {
     return;
   std::ofstream file(path, std::ios::binary | std::ios::trunc);
   file << sMarker;
+  file.flush();
+  file.close();
+  if (!file) {
+    // Without the marker a crash goes undetected, so the user is told once per
+    // failure.
+    PortLog::Write("[savestate] cannot write the crash marker %s\n", PortGci::PathString(path).c_str());
+  }
 }
 
 void RemoveMarker() {

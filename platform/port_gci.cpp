@@ -27,6 +27,10 @@
 #endif
 #include <windows.h>
 #include <shlobj.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 namespace fs = std::filesystem;
@@ -107,6 +111,49 @@ fs::path TempOf(const fs::path& path) {
   return temp;
 }
 
+// Pushes the temporary file's bytes to the disk, so a rename of it cannot land
+// before its data does.
+bool SyncFile(const fs::path& file) {
+#if defined(_WIN32)
+  const HANDLE handle = CreateFileW(file.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  const bool ok = FlushFileBuffers(handle) != 0;
+  CloseHandle(handle);
+  return ok;
+#else
+  const int fd = open(file.c_str(), O_RDONLY);
+  if (fd < 0) {
+    return false;
+  }
+  // A file system that cannot sync (EINVAL, ENOTSUP) still gets the write; only
+  // an I/O error fails.
+  const bool ok = fsync(fd) == 0 || errno == EINVAL || errno == ENOTSUP;
+  close(fd);
+  return ok;
+#endif
+}
+
+// Pushes the rename itself to the disk. Best effort: some file systems cannot
+// sync a directory, and the rename has happened either way.
+void SyncDirectory(const fs::path& file) {
+#if !defined(_WIN32)
+  fs::path dir = file.parent_path();
+  if (dir.empty()) {
+    dir = ".";
+  }
+  const int fd = open(dir.c_str(), O_RDONLY);
+  if (fd >= 0) {
+    fsync(fd);
+    close(fd);
+  }
+#else
+  (void)file; // the rename in CommitTemp is MOVEFILE_WRITE_THROUGH
+#endif
+}
+
 bool WriteTemp(const fs::path& path, const std::vector<uint8_t>& data, std::string& error) {
   const fs::path temp = TempOf(path);
   std::ofstream out(temp, std::ios::binary | std::ios::trunc);
@@ -118,11 +165,26 @@ bool WriteTemp(const fs::path& path, const std::vector<uint8_t>& data, std::stri
     error = "cannot write " + PathString(path);
     return false;
   }
+  if (!SyncFile(temp)) {
+    std::error_code ignored;
+    fs::remove(temp, ignored);
+    error = "cannot flush " + PathString(path) + " to disk";
+    return false;
+  }
   return true;
 }
 
 bool CommitTemp(const fs::path& path, std::string& error) {
   const fs::path temp = TempOf(path);
+#if defined(_WIN32)
+  // std::filesystem::rename is MoveFileExW(REPLACE_EXISTING); add write-through.
+  if (!MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    std::error_code ignored;
+    fs::remove(temp, ignored);
+    error = "cannot write " + PathString(path);
+    return false;
+  }
+#else
   std::error_code ec;
   fs::rename(temp, path, ec);
   if (ec) {
@@ -131,6 +193,8 @@ bool CommitTemp(const fs::path& path, std::string& error) {
     fs::remove(temp, ignored);
     return false;
   }
+  SyncDirectory(path);
+#endif
   return true;
 }
 

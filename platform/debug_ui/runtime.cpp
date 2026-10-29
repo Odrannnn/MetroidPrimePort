@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -649,7 +650,13 @@ void RestoreGameOptions() {
   }
   uchar bytes[128] = {};
   for (size_t i = 0; i < kGameOptionsBytes; ++i) {
-    const unsigned long value = std::strtoul(sGameOptions.substr(i * 2, 2).c_str(), nullptr, 16);
+    const std::string digits = sGameOptions.substr(i * 2, 2);
+    // strtoul alone would take a sign, a space or "0x" inside the pair.
+    if (!std::isxdigit(static_cast< unsigned char >(digits[0])) ||
+        !std::isxdigit(static_cast< unsigned char >(digits[1]))) {
+      return;
+    }
+    const unsigned long value = std::strtoul(digits.c_str(), nullptr, 16);
     bytes[i] = static_cast< uchar >(value);
   }
   CMemoryInStream in(bytes, sizeof(bytes));
