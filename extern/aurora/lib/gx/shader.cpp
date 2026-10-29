@@ -1004,6 +1004,13 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     mapStage[1] = -1;
     mapStage[3] = -1;
   }
+  // Kind 47 (Remastered's frozen-enemy icy material) samples its maps at coordinates of its own
+  // (see icy below), so its normal map does not go through the generic tangent-space path.
+  const bool icy = config.pbrKind == 47 && mapStage[1] != -1 && mapStage[2] != -1 && config.lineMode == 0;
+  const int icyNormalStage = icy ? mapStage[2] : -1;
+  if (icy) {
+    mapStage[2] = -1;
+  }
   // Glass (kind 8) also samples map 7, a copy of what is behind it on screen. The
   // shadow's stage samples map 7 too, so a shadowed surface goes without.
   // 3c66aaef (layered + MNMP) binds its macro normal as map 7, which is not a scene copy.
@@ -1020,7 +1027,8 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   };
   vtxOutAttrs += fmt::format("\n    @location({}) pbr_pos: vec3f,", vtxOutIdx++);
   vtxOutAttrs += fmt::format("\n    @location({}) pbr_nrm: vec3f,", vtxOutIdx++);
-  vtxXfrAttrs += "\n    out.pbr_pos = mv_pos;\n    out.pbr_nrm = mv_nrm;";
+  vtxXfrAttrs += icy ? "\n    out.pbr_pos = icy_vpos;\n    out.pbr_nrm = icy_vnrm;"
+                     : "\n    out.pbr_pos = mv_pos;\n    out.pbr_nrm = mv_nrm;";
   // The backlight's height fade of a skinned draw, from the bind pose (see bind_pos_active):
   // saturate(bind y * scale + offset), or -1 where the draw has none.
   vtxOutAttrs += fmt::format("\n    @location({}) pbr_bty: f32,", vtxOutIdx++);
@@ -1302,6 +1310,42 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     }
   }
   std::string kinds = "\n      var pbr_kglow = vec3f(0.0);\n      var pbr_kns = 1.0;\n      var pbr_knoise = 0.0;";
+  if (icy) {
+    // Kind 47, RenderIcy's fragment stage (Remastered shader 004_0), worked in Remastered's world
+    // space R = (-x, z, y) of the game's: pbr_shield[4..6] turn view space into the game's world.
+    // The normal map (NMAP) and METL are read at 8x the model's coordinates; TCH0 at 0.2x, pushed
+    // along the view by METL's AO times CCH0.w (pbr_shield[2]). CCH1 (pbr_shield[3]) tints it.
+    // The tilted normal is not renormalised, as in the binary.
+    const auto mapOf = [&](int stage) { return underlying(config.tevStages[stage].texMapId); };
+    kinds += fmt::format(R"""(
+      let icy_s4 = ubuf.pbr_shield[4].xyz;
+      let icy_s5 = ubuf.pbr_shield[5].xyz;
+      let icy_s6 = ubuf.pbr_shield[6].xyz;
+      let icy_gn = vec3f(dot(icy_s4, pbr_ngs), dot(icy_s5, pbr_ngs), dot(icy_s6, pbr_ngs));
+      let icy_n = vec3f(-icy_gn.x, icy_gn.z, icy_gn.y);
+      let icy_gv = vec3f(dot(icy_s4, in.pbr_pos), dot(icy_s5, in.pbr_pos), dot(icy_s6, in.pbr_pos));
+      let icy_v1 = vec3f(-icy_gv.x, icy_gv.z, icy_gv.y);
+      let icy_uv = tex{0}_uv;
+      let icy_nm = textureSample(tex{1}, tex{1}_samp, icy_uv * 8.0).xy * 1.9921875 - 1.0;
+      let icy_nz = sqrt(1.0 - clamp(dot(icy_nm, icy_nm), 0.0, 1.0));
+      let icy_mt = textureSample(tex{2}, tex{2}_samp, icy_uv * 8.0);
+      var icy_np = icy_n * icy_nz + vec3f(icy_n.y, -icy_n.x, 0.0) * icy_nm.y + vec3f(0.0, 0.0, 1.0) * icy_nm.x;
+      icy_np = select(icy_np, -icy_np, icy_nm.x < -icy_n.z * icy_nz);
+      let icy_nv = clamp(dot(-normalize(icy_v1), icy_np), 0.0, 1.0);
+      let icy_ip = 1.0 / dot(icy_n, icy_v1);
+      let icy_h = icy_mt.x * ubuf.pbr_shield[2].w;
+      let icy_r = inverseSqrt(icy_n.x * icy_n.x + icy_n.y * icy_n.y);
+      let icy_uvt = vec2f(icy_v1.z * icy_ip * icy_h + icy_uv.x * 0.2,
+                          (icy_n.y * icy_r * icy_v1.x - icy_n.x * icy_r * icy_v1.y) * icy_ip * icy_h + icy_uv.y * 0.2);
+      let icy_tc = textureSample(tex{3}, tex{3}_samp, icy_uvt).rgb;
+      let icy_alb = select(icy_tc, srgb_dec(icy_tc), ubuf.pbr_shield[7].x > 0.5) * ubuf.pbr_shield[3].rgb;
+      let icy_gp = vec3f(-icy_np.x, icy_np.z, icy_np.y);
+      let icy_vn = icy_s4 * icy_gp.x + icy_s5 * icy_gp.y + icy_s6 * icy_gp.z;
+      pbr_base = icy_alb;)""",
+                         underlying(config.tevStages[mapStage[0]].texCoordId), mapOf(icyNormalStage),
+                         mapOf(mapStage[1]), mapOf(mapStage[0]));
+    orm = fmt::format("textureSample(tex{0}, tex{0}_samp, icy_uv * 8.0)", mapOf(mapStage[1]));
+  }
   if (layered) {
     // Kind 1 lays the second layer on what faces up: the weight is the first layer's own
     // normal along world up, lifted by the vertex alpha.
@@ -1763,6 +1807,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
                           macroStage, tangents2 ? "pbr_t2" : "pbr_t", tangents2 ? "pbr_b2" : "pbr_b");
   }
   normal += liquid;
+  if (icy) {
+    normal += "\n      pbr_n = icy_vn;";
+  }
   // And what is seen of it: its own colour in the room's light where it is looked into,
   // the surroundings' reflection where it is seen at a grazing angle (Schlick, pbr_param.w
   // at the normal), and more opaque the more it reflects. pbr_param.z is the opacity seen
@@ -2550,6 +2597,13 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       let inv_b = max({0}.rgb, vec3f(0.0)) * ubuf.pbr_model_diffuse.rgb;
       let inv_a = {2};)""",
                          base, config.pbrKind == 36 ? "\n      let inv_c = ubuf.pbr_model_coverage.x;" : "", InvAlphaExpr);
+  }
+  if (icy) {
+    // Kind 47's glow: a rim, NdotV^CCH0.x x CCH0.y, darkening a 0.3 base lifted by a tenth of the
+    // albedo, at the inverse of the exposure (pbr_ei); CCH1.w is the opacity.
+    liquid += R"""(
+      pbr_glow = (pow(icy_nv, max(ubuf.pbr_shield[2].x, 0.001)) * ubuf.pbr_shield[2].y * -0.3 + icy_alb * 0.1 + 0.3) * pbr_ei;
+      pbr_alpha = ubuf.pbr_shield[3].w;)""";
   }
   // In pieces: MSVC rejects one string literal over 16 KB (adjacent ones join).
   std::string source = fmt::format(R"""(
@@ -3732,6 +3786,45 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
       "\n    let nrm_tmp = vec4f({}, 0.0) * ubuf.nrm_mtx[in_pnmtxidx];"
       "\n    let mv_nrm = select(nrm_tmp, normalize(nrm_tmp), dot(nrm_tmp, nrm_tmp) > 1e-10);",
       vtx_attr(config, GX_VA_NRM));
+  if (config.pbr != 0 && config.pbrKind == 47 && config.lineMode == 0) {
+    // Kind 47, RenderIcy's vertex stage (Remastered 0xfc4794): in Remastered's world space R = (-x, z, y)
+    // (pbr_shield[4..6] turn view space into the game's world), each vertex goes out along its normal by
+    // c.x times the distance to the nearest point of a jittered grid at c.z x its xy, then along the freeze
+    // direction d by c.y |sin 20 y| where the normal faces d, its normal bent toward d as far.
+    // c = pbr_shield[0] (0.1k, 0.2k, 2, 0), k the freeze's ramp; d = pbr_shield[1].xyz.
+    vtxXfrAttrsPre += R"""(
+    let icy_c = ubuf.pbr_shield[0];
+    let icy_d = ubuf.pbr_shield[1].xyz;
+    let icy_gw = vec3f(dot(ubuf.pbr_shield[4], vec4f(mv_pos, 1.0)), dot(ubuf.pbr_shield[5], vec4f(mv_pos, 1.0)),
+                       dot(ubuf.pbr_shield[6], vec4f(mv_pos, 1.0)));
+    let icy_gn = vec3f(dot(ubuf.pbr_shield[4].xyz, mv_nrm), dot(ubuf.pbr_shield[5].xyz, mv_nrm),
+                       dot(ubuf.pbr_shield[6].xyz, mv_nrm));
+    let icy_p = vec3f(-icy_gw.x, icy_gw.z, icy_gw.y);
+    let icy_n = vec3f(-icy_gn.x, icy_gn.z, icy_gn.y);
+    let icy_pf = icy_p.xy * icy_c.z;
+    let icy_cell = floor(icy_pf);
+    var icy_s = 10.0;
+    for (var icy_j = -1; icy_j <= 1; icy_j++) {
+      for (var icy_i = -1; icy_i <= 1; icy_i++) {
+        let icy_g = icy_cell + vec2f(f32(icy_i), f32(icy_j));
+        let icy_f = icy_g + fract(vec2f(sin(icy_g.x * 12.9898 + icy_g.y * 78.233),
+                                        sin(icy_g.y * 12.9898 + icy_g.x * 78.233)) * 43758.5469);
+        icy_s = min(icy_s, length(icy_f - icy_pf));
+      }
+    }
+    let icy_p1 = icy_p + icy_n * (icy_c.x * icy_s);
+    let icy_w = max(0.0, dot(icy_n, icy_d));
+    let icy_n2 = icy_n + (icy_d - icy_n) * icy_w;
+    let icy_ic = icy_w * icy_c.y * abs(sin(icy_p1.y * 20.0));
+    let icy_dr = icy_p1 + icy_d * icy_ic - icy_p;
+    let icy_dg = vec3f(-icy_dr.x, icy_dr.z, icy_dr.y);
+    let icy_ng = vec3f(-icy_n2.x, icy_n2.z, icy_n2.y);
+    let icy_vpos = mv_pos + ubuf.pbr_shield[4].xyz * icy_dg.x + ubuf.pbr_shield[5].xyz * icy_dg.y +
+                   ubuf.pbr_shield[6].xyz * icy_dg.z;
+    let icy_vnrm = ubuf.pbr_shield[4].xyz * icy_ng.x + ubuf.pbr_shield[5].xyz * icy_ng.y +
+                   ubuf.pbr_shield[6].xyz * icy_ng.z;
+    out.pos = vec4f(icy_vpos, 1.0) * ubuf.proj;)""";
+  }
   if (config.actorDecal != 0 && config.lineMode == 0) {
     // Remastered's projected actor shadow (gfx/actor_shadow.hpp): the fragment stage needs the view-space
     // position, and the decal sits 0.015 m toward the camera so it wins LEQUAL against the surface it paints.

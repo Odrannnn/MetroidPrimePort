@@ -498,6 +498,12 @@ protected:
   CVector3f x540_iceDeathExplosionOffset;
   rstl::optional_object< TCachedToken< CGenDescription > > x54c_iceDeathExplosionParticle;
   CVector3f x55c_moveScale;
+#ifdef TARGET_PC
+  // Remastered's freeze direction (+0x71c) and the scene clock at the freeze (+0x728), which
+  // RenderIcy reads (kb topic/frozen-enemy-icy-render.md).
+  CVector3f xPortFreezeDir;
+  float xPortFreezeTime;
+#endif
 };
 NESTED_CHECK_SIZEOF(CPatterned, CPatternNode, 0x24)
 CHECK_SIZEOF(CPatterned, (VERSION >= VERSION_GM8P_00 ? 0x578 : 0x568))

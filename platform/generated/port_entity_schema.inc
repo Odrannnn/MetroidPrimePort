@@ -2247,8 +2247,10 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPatterned >() {
       {"x540_iceDeathExplosionOffset", "CVector3f", PortSchemaKind::math, 0, kPortSchemaPrivate, sizeof(CPatterned::x540_iceDeathExplosionOffset), PES_ADDR(CPatterned, x540_iceDeathExplosionOffset), nullptr, nullptr},
       {"x54c_iceDeathExplosionParticle", "rstl::optional_object<TCachedToken<CGenDescription>>", PortSchemaKind::container, 0, kPortSchemaPrivate, sizeof(CPatterned::x54c_iceDeathExplosionParticle), PES_ADDR(CPatterned, x54c_iceDeathExplosionParticle), nullptr, nullptr},
       {"x55c_moveScale", "CVector3f", PortSchemaKind::math, 0, kPortSchemaPrivate, sizeof(CPatterned::x55c_moveScale), PES_ADDR(CPatterned, x55c_moveScale), nullptr, nullptr},
+      {"xPortFreezeDir", "CVector3f", PortSchemaKind::math, 0, kPortSchemaPrivate, sizeof(CPatterned::xPortFreezeDir), PES_ADDR(CPatterned, xPortFreezeDir), nullptr, nullptr},
+      {"xPortFreezeTime", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPatterned::xPortFreezeTime), PES_ADDR(CPatterned, xPortFreezeTime), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CPatterned", "CAi", fields, 112, 0x764620E9E2317F89ull};
+  static const PortSchemaClass desc = {"CPatterned", "CAi", fields, 114, 0xFEFBF8874819644Aull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CPhazonHealingNodule >() {
@@ -4696,4 +4698,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3422;
+const int PortEntitySchema::kFieldCount = 3424;

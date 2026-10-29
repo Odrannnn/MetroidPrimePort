@@ -420,6 +420,9 @@ public:
   static void SetBlendMode(ERglBlendMode mode, ERglBlendFactor src, ERglBlendFactor dst,
                            ERglLogicOp op);
   static void SetCullMode(ERglCullMode cullMode);
+#ifdef TARGET_PC
+  static ERglCullMode GetCullMode() { return mCullMode; }
+#endif
   static void SetTevStates(uchar);
 
   static void SetUseVideoFilter(const bool b);
