@@ -326,12 +326,20 @@ void TestMasterTrigger() {
   std::vector<PortRoomEnv::WorldVolume> none;
   const SceneryScripts idle = MasterScripts(po.room, {0, 0, 0}, none);
   CHECK_MSG(none.empty() && idle.links.empty() && idle.unresolved.count(hint) == 1, "an inactive trigger has no volume");
-  // And one that does not detect the camera.
+  // One that detects the player only: a volume that tests the player.
+  Fixture player = f;
+  player.comps[0].props = Props().AddU32(kPropTriggerFlags, 1).b;
+  const Parsed pp(player);
+  std::vector<PortRoomEnv::WorldVolume> walked;
+  const SceneryScripts feet = MasterScripts(pp.room, {0, 0, 0}, walked);
+  CHECK_MSG(walked.size() == 1 && walked[0].detect == PortRoomEnv::kRoomVolumePlayer && feet.links.count(hint) == 1,
+            "a player trigger has a volume that tests the player");
+  // And one that detects neither.
   Fixture blind = f;
-  blind.comps[0].props = Props().AddU32(kPropTriggerFlags, 1).b;
+  blind.comps[0].props = Props().AddU32(kPropTriggerFlags, 0).b;
   const Parsed pb(blind);
   const SceneryScripts deaf = MasterScripts(pb.room, {0, 0, 0}, none);
-  CHECK_MSG(none.empty() && deaf.links.empty(), "a trigger that misses the camera has no volume");
+  CHECK_MSG(none.empty() && deaf.links.empty(), "a trigger that detects nothing has no volume");
 }
 
 void TestMasterCameraWater() {

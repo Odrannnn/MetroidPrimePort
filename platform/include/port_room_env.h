@@ -1,6 +1,7 @@
 #pragma once
 
 #include "port_clustered_lights.h"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -161,6 +162,17 @@
 //         camera volumes), u8 detect (bit 0 the player, bit 1 the camera), u8 pad[3]. The room's
 //         own TriggerMP1s that switch its hints (see RoomVolume); link senders
 //         kSenderRoomVolume + k name its entries.
+// Version 31 adds, at the end, the world's environment variables (EnvironmentVar*, see EnvVar):
+//   u32 worldVolumes, u8 detect[worldVolumes] (as a room volume's; older files: the camera)
+//   u32 vars
+//   var: u8 guid[16], u32 nameLength, char name[nameLength], s32 value, u32 flags, s32 min, s32 max
+//   u32 ops
+//   op: u32 sender, u8 state, u8 op (kEnvSet / kEnvAdd / kEnvSub), u8 pad[2], s32 value, u8 var[16]
+//   u32 branches
+//   branch: u8 var[16], u8 relop, u8 flags (kEnvOnLoad / kEnvOnChange / kEnvSkipUnchanged),
+//           u8 pad[2], s32 value, u32 query (the master's query component)
+//   Every room of a world carries the world's vars and branches; link senders kSenderEnvQuery + b
+//   name its branches.
 // The tonemap is Remastered's: the exposure value without auto exposure, the radiance
 // that comes out as middle grey once exposed, and how far the curve's toe and shoulder
 // are pulled in.
@@ -242,6 +254,10 @@ constexpr uint32_t kMaxWorldVolumes = 0x10000;
 // 1 as it comes out. Right after the world volumes, below kSenderCameraWaterItem.
 constexpr uint32_t kSenderRoomVolume = kSenderWorldVolume + kMaxWorldVolumes;
 constexpr uint32_t kMaxRoomVolumes = 0x10000;
+// An EnvironmentVarQuery branch that holds (see EnvBranch): kSenderEnvQuery + b is entry b of the
+// file's branch table, state 0. Right after the room volumes.
+constexpr uint32_t kSenderEnvQuery = kSenderRoomVolume + kMaxRoomVolumes;
+constexpr uint32_t kMaxEnvBranches = 0x10000;
 // The camera going under water as the player holds item k (an EItemType) or not: a master's
 // InventoryActivator fired by its camera water proxy. kSenderCameraWaterItem + k, state 0 with
 // the item, 1 without; nothing as the camera comes out.
@@ -250,6 +266,7 @@ constexpr uint32_t kCameraWaterItems = 64;
 // A sender that is no retail script object (keeps its high bits).
 inline bool PseudoSender(uint32_t sender) { return sender >= kSenderWorldVolume; }
 static_assert(kSenderRoomVolume + kMaxRoomVolumes <= kSenderCameraWaterItem, "room volumes overlap the item senders");
+static_assert(kSenderEnvQuery + kMaxEnvBranches <= kSenderCameraWaterItem, "env branches overlap the item senders");
 
 struct GradeLink {
   uint32_t sender = 0;
@@ -478,21 +495,67 @@ struct FluidHint {
   std::vector<GradeLink> links;
 };
 
-// A box of the world the camera is inside or not (version 22).
-struct WorldVolume {
-  float centre[3] = {};
-  float half[3] = {};
-  float axes[9] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f};
-};
-bool InsideWorldVolume(const WorldVolume& volume, const float pos[3]);
-bool SameWorldVolumes(const std::vector<WorldVolume>& a, const std::vector<WorldVolume>& b);
-
 // A room's own TriggerMP1 box (version 30), in the area's space. A TriggerMP1 that detects the
 // player tests the player's bounds against its box (overlap); one that detects the camera, the
 // camera's position (inside). The camera goes by the oriented box, as the .roomgeo's camera
 // volumes do, the player's bounds by the box's axis-aligned bounds.
 constexpr uint8_t kRoomVolumePlayer = 1;
 constexpr uint8_t kRoomVolumeCamera = 2;
+
+// A box of the world the camera (or, version 31, the player) is inside or not (version 22).
+// Tested as a RoomVolume, by `detect`.
+struct WorldVolume {
+  float centre[3] = {};
+  float half[3] = {};
+  float axes[9] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f};
+  uint8_t detect = kRoomVolumeCamera;
+  uint8_t pad[3] = {};
+};
+bool InsideWorldVolume(const WorldVolume& volume, const float pos[3]);
+bool SameWorldVolumes(const std::vector<WorldVolume>& a, const std::vector<WorldVolume>& b);
+
+// A world's environment variable (version 31): an integer the master declares (its META), which
+// EnvironmentVarModifiers change and EnvironmentVarQueries test. One table for the world, by guid.
+// flags bit 0: value is kept >= min, bit 1: <= max.
+constexpr uint32_t kEnvVarMin = 1;
+constexpr uint32_t kEnvVarMax = 2;
+struct EnvVar {
+  std::array<uint8_t, 16> guid{};
+  std::string name;
+  int32_t value = 0;
+  uint32_t flags = 0;
+  int32_t min = 0;
+  int32_t max = 0;
+};
+// A modifier fired by a trigger volume: as `sender` sends `state`, `var` is set to, raised by or
+// lowered by `value`.
+constexpr uint8_t kEnvSet = 0;
+constexpr uint8_t kEnvAdd = 1;
+constexpr uint8_t kEnvSub = 2;
+struct EnvOp {
+  uint32_t sender = 0;
+  uint8_t state = 0;
+  uint8_t op = kEnvSet;
+  int32_t value = 0;
+  std::array<uint8_t, 16> var{};
+};
+// One criteria connection of an EnvironmentVarQuery: it holds when `value` relop the var's value
+// (0 ==, 1 !=, 2 <, 3 <=; 4 var < value, 5 var <= value). The query tests it as the world loads an
+// area (kEnvOnLoad) and as a modifier changes the var (kEnvOnChange; with kEnvSkipUnchanged, only
+// when the value moved). A branch that holds drives kSenderEnvQuery + its index.
+constexpr uint8_t kEnvOnLoad = 1;
+constexpr uint8_t kEnvOnChange = 2;
+constexpr uint8_t kEnvSkipUnchanged = 4;
+struct EnvBranch {
+  std::array<uint8_t, 16> var{};
+  uint8_t relop = 0;
+  uint8_t flags = 0;
+  int32_t value = 0;
+  uint32_t query = 0;
+};
+bool EnvBranchHolds(const EnvBranch& branch, int32_t value);
+// `current` after `op`, clamped as the var's flags say.
+int32_t ApplyEnvOp(const EnvVar& var, int32_t current, uint8_t op, int32_t value);
 struct RoomVolume {
   float centre[3] = {};
   float half[3] = {};
@@ -516,9 +579,12 @@ struct WorldVolumeState {
   std::vector<uint64_t> entered, exited;
   uint64_t seq = 0;
   void Clear();
-  // The camera at `pos` now: the volumes it went into or came out of since the last call, in
+  // The camera at `pos` now, the player's bounds `playerMin`..`playerMax` (left out when
+  // `hasPlayer` is false): the volumes they went into or came out of since the last call, in
   // volume order. A table of another size starts over.
   void Update(const std::vector<WorldVolume>& volumes, const float pos[3], std::vector<Event>& out);
+  void Update(const std::vector<WorldVolume>& volumes, const float pos[3], const float playerMin[3],
+              const float playerMax[3], bool hasPlayer, std::vector<Event>& out);
   // What an area loaded now has to hear to be where the others are: each volume's last entry,
   // and its exit when it came out after it, oldest first.
   void Replay(std::vector<Event>& out) const;
@@ -536,6 +602,9 @@ struct File {
   float worldShift[3] = {};              // version 23
   float envFxIntensity = 1.f;            // version 26: EnvironmentFX colour intensity
   std::vector<RoomVolume> roomVolumes;   // version 30
+  std::vector<EnvVar> envVars;           // version 31
+  std::vector<EnvOp> envOps;             // version 31
+  std::vector<EnvBranch> envBranches;    // version 31
   float contrast = 0.f;
   float bloomThreshold = 0.9f;
   std::vector<float> bloomTints; // RGBA; empty: the room has no bloom
@@ -905,8 +974,14 @@ void SetFluid(bool player, bool camera, uint64_t items);
 // Once a frame: where the camera is. Going into or out of one of the world's volumes (the table
 // of the last loaded area's file that has one) drives the hints of every loaded area linked to
 // kSenderWorldVolume + k; an area that loads later hears the entries and exits so far
-// (WorldVolumeState::Replay).
-void SetCameraPoint(const float pos[3]);
+// (WorldVolumeState::Replay). Volumes that detect the player test its world-space bounds
+// `playerMin`..`playerMax` (none when `hasPlayer` is false). Live entries and exits also run the
+// file's environment variable ops (EnvOp), never replayed ones.
+void SetCameraPoint(const float pos[3], const float playerMin[3], const float playerMax[3], bool hasPlayer);
+inline void SetCameraPoint(const float pos[3]) {
+  const float none[3] = {};
+  SetCameraPoint(pos, none, none, false);
+}
 // Once a frame for each loaded area `mrea`: the camera and the player's bounds in that area's
 // own space. The player or camera going into or out of one of its room volumes drives the hints
 // of that area linked to kSenderRoomVolume + k. Every volume starts outside, so one already

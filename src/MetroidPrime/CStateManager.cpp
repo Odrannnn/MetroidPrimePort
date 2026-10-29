@@ -3211,13 +3211,24 @@ void CStateManager::PortCaptureProbeFace() const {
     // game camera, as the room geometry's camera volumes see it).
     const CVector3f eye = x870_cameraManager->GetCurrentCameraTransform(*this).GetTranslation();
     const float at[3] = {eye.GetX(), eye.GetY(), eye.GetZ()};
-    PortRoomEnv::SetCameraPoint(at);
-    // Each room's own trigger volumes, in the area's space as its script objects are: the
-    // camera's position and the player's touch bounds (what a TriggerMP1 tests).
+    // The player's touch bounds (what a TriggerMP1 that detects the player tests), world space.
     rstl::optional_object< CAABox > touch;
     if (x84c_player != nullptr) {
       touch = x84c_player->GetTouchBounds();
     }
+    float worldLo[3] = {}, worldHi[3] = {};
+    if (touch.valid()) {
+      const CAABox& box = touch.data();
+      worldLo[0] = box.GetMinPoint().GetX();
+      worldLo[1] = box.GetMinPoint().GetY();
+      worldLo[2] = box.GetMinPoint().GetZ();
+      worldHi[0] = box.GetMaxPoint().GetX();
+      worldHi[1] = box.GetMaxPoint().GetY();
+      worldHi[2] = box.GetMaxPoint().GetZ();
+    }
+    PortRoomEnv::SetCameraPoint(at, worldLo, worldHi, touch.valid());
+    // Each room's own trigger volumes, in the area's space as its script objects are: the
+    // camera's position and the player's touch bounds.
     for (int i = 0; i < x850_world->GetNumAreas(); ++i) {
       const CGameArea& area = *x850_world->GetArea(TAreaId(i));
       if (!area.IsLoaded()) {

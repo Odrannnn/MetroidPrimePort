@@ -15,7 +15,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 30;
+constexpr uint32_t kVersion = 31;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -36,6 +36,9 @@ constexpr size_t kGridHeaderSize = 60;
 constexpr size_t kPointSize = 24;
 constexpr uint32_t kMaxGrids = 64;
 constexpr uint32_t kMaxGridSize = 1024;
+constexpr uint32_t kMaxEnvVars = 4096;
+constexpr uint32_t kMaxEnvVarName = 1024;
+constexpr uint32_t kMaxEnvOps = 65536;
 
 using port::ReadLE32;
 using port::ReadLEFloat;
@@ -1141,6 +1144,92 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       }
     }
   }
+  if (version >= 31) {
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t detects = ReadLE32(data.data() + at);
+    at += 4;
+    if (detects != out.worldVolumes.size() || data.size() - at < detects) {
+      error = "cut short";
+      return false;
+    }
+    for (uint32_t i = 0; i < detects; ++i) {
+      out.worldVolumes[i].detect = data[at++] & (kRoomVolumePlayer | kRoomVolumeCamera);
+    }
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t vars = ReadLE32(data.data() + at);
+    at += 4;
+    if (vars > kMaxEnvVars) {
+      error = "cut short";
+      return false;
+    }
+    out.envVars.resize(vars);
+    for (EnvVar& v : out.envVars) {
+      if (data.size() - at < 20) {
+        error = "cut short";
+        return false;
+      }
+      std::copy(data.begin() + at, data.begin() + at + 16, v.guid.begin());
+      const uint32_t length = ReadLE32(data.data() + at + 16);
+      at += 20;
+      if (length > kMaxEnvVarName || data.size() - at < size_t(length) + 16) {
+        error = "cut short";
+        return false;
+      }
+      v.name.assign(reinterpret_cast<const char*>(data.data() + at), length);
+      at += length;
+      v.value = int32_t(ReadLE32(data.data() + at));
+      v.flags = ReadLE32(data.data() + at + 4);
+      v.min = int32_t(ReadLE32(data.data() + at + 8));
+      v.max = int32_t(ReadLE32(data.data() + at + 12));
+      at += 16;
+    }
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t ops = ReadLE32(data.data() + at);
+    at += 4;
+    constexpr size_t kOpBytes = 4 + 4 + 4 + 16;
+    if (ops > kMaxEnvOps || (data.size() - at) / kOpBytes < ops) {
+      error = "cut short";
+      return false;
+    }
+    out.envOps.resize(ops);
+    for (EnvOp& op : out.envOps) {
+      op.sender = ReadLE32(data.data() + at);
+      op.state = data[at + 4];
+      op.op = data[at + 5];
+      op.value = int32_t(ReadLE32(data.data() + at + 8));
+      std::copy(data.begin() + at + 12, data.begin() + at + 28, op.var.begin());
+      at += kOpBytes;
+    }
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t branches = ReadLE32(data.data() + at);
+    at += 4;
+    constexpr size_t kBranchBytes = 16 + 4 + 4 + 4;
+    if (branches > kMaxEnvBranches || (data.size() - at) / kBranchBytes < branches) {
+      error = "cut short";
+      return false;
+    }
+    out.envBranches.resize(branches);
+    for (EnvBranch& b : out.envBranches) {
+      std::copy(data.begin() + at, data.begin() + at + 16, b.var.begin());
+      b.relop = data[at + 16];
+      b.flags = data[at + 17];
+      b.value = int32_t(ReadLE32(data.data() + at + 20));
+      b.query = ReadLE32(data.data() + at + 24);
+      at += kBranchBytes;
+    }
+  }
   out.data = std::move(data);
   return true;
 }
@@ -1204,6 +1293,11 @@ void WorldVolumeState::Clear() {
 }
 
 void WorldVolumeState::Update(const std::vector<WorldVolume>& volumes, const float pos[3], std::vector<Event>& out) {
+  Update(volumes, pos, nullptr, nullptr, false, out);
+}
+
+void WorldVolumeState::Update(const std::vector<WorldVolume>& volumes, const float pos[3], const float playerMin[3],
+                              const float playerMax[3], bool hasPlayer, std::vector<Event>& out) {
   if (inside.size() != volumes.size()) {
     Clear();
     inside.assign(volumes.size(), 0);
@@ -1211,7 +1305,13 @@ void WorldVolumeState::Update(const std::vector<WorldVolume>& volumes, const flo
     exited.assign(volumes.size(), 0);
   }
   for (size_t i = 0; i < volumes.size(); ++i) {
-    const bool now = InsideWorldVolume(volumes[i], pos);
+    const WorldVolume& w = volumes[i];
+    RoomVolume r;
+    std::copy(w.centre, w.centre + 3, r.centre);
+    std::copy(w.half, w.half + 3, r.half);
+    std::copy(w.axes, w.axes + 9, r.axes);
+    r.detect = w.detect;
+    const bool now = InsideRoomVolume(r, pos, playerMin, playerMax, hasPlayer);
     if (now == (inside[i] != 0)) {
       continue;
     }
@@ -1219,6 +1319,37 @@ void WorldVolumeState::Update(const std::vector<WorldVolume>& volumes, const flo
     (now ? entered : exited)[i] = ++seq;
     out.push_back({uint32_t(i), now ? 0 : 1});
   }
+}
+
+bool EnvBranchHolds(const EnvBranch& branch, int32_t value) {
+  const int32_t c = branch.value;
+  switch (branch.relop) {
+  case 0: return c == value;
+  case 1: return c != value;
+  case 2: return c < value;
+  case 3: return c <= value;
+  case 4: return value < c;
+  case 5: return value <= c;
+  default: return false;
+  }
+}
+
+int32_t ApplyEnvOp(const EnvVar& var, int32_t current, uint8_t op, int32_t value) {
+  int64_t next = current;
+  switch (op) {
+  case kEnvSet: next = value; break;
+  case kEnvAdd: next = int64_t(current) + value; break;
+  case kEnvSub: next = int64_t(current) - value; break;
+  default: return current;
+  }
+  if ((var.flags & kEnvVarMin) != 0 && next < var.min) {
+    next = var.min;
+  }
+  if ((var.flags & kEnvVarMax) != 0 && next > var.max) {
+    next = var.max;
+  }
+  next = std::clamp<int64_t>(next, INT32_MIN, INT32_MAX);
+  return int32_t(next);
 }
 
 void WorldVolumeState::Replay(std::vector<Event>& out) const {

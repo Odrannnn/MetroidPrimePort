@@ -259,8 +259,8 @@ bool ReadComponentConnections(const Room& room, size_t i, std::vector<Connection
     const size_t count = ReadLE16(b + o);
     o += 2;
     bool ok = true;
-    // Two optional strings, then a fixed tail.
-    auto block = [&]() {
+    // Two optional payloads (a type, then its property list and a sized extra), then a fixed tail.
+    auto block = [&](Connection& c) {
       if (!has(4)) {
         return false;
       }
@@ -272,7 +272,26 @@ bool ReadComponentConnections(const Room& room, size_t i, std::vector<Connection
       if (!has(2) || (o += 2, !has(ReadLE16(b + o - 2)))) {
         return false;
       }
-      o += ReadLE16(b + o - 2);
+      const size_t len = ReadLE16(b + o - 2);
+      std::vector<Prop> props;
+      if ((present == kEnvCriteria || present == kEnvModifierPayload) && PropList(b + o, len, &props)) {
+        const bool criteria = present == kEnvCriteria;
+        (criteria ? c.hasCriteria : c.hasPayload) = true;
+        for (const Prop& p : props) {
+          if (p.data.size != 4) {
+            continue;
+          }
+          const uint32_t v = ReadLE32(b + o + p.data.start);
+          if (criteria && p.id == kPropCriteriaValue) {
+            c.criteriaValue = int32_t(v);
+          } else if (criteria && p.id == kPropCriteriaOp) {
+            c.criteriaOp = v;
+          } else if (!criteria && p.id == kPropModifierPayloadValue) {
+            c.payloadValue = int32_t(v);
+          }
+        }
+      }
+      o += len;
       if (!has(4)) {
         return false;
       }
@@ -292,7 +311,7 @@ bool ReadComponentConnections(const Room& room, size_t i, std::vector<Connection
       Connection c{i, ReadLE32(b + o), ReadLE32(b + o + 4), {}};
       std::memcpy(c.target.data(), b + o + 8, 16);
       o += 26;
-      ok = block() && block() && has(19);
+      ok = block(c) && block(c) && has(19);
       o += 19;
       mine.push_back(c);
     }
@@ -309,6 +328,92 @@ std::vector<Connection> ReadConnections(const Room& room) {
     if (ReadComponentConnections(room, i, mine, end)) {
       out.insert(out.end(), mine.begin(), mine.end());
     }
+  }
+  return out;
+}
+
+bool EnvModifierOp(const Room& room, const Component& modifier, const Connection& c, PortRoomEnv::EnvOp& op) {
+  const bool payload = c.action == kActionEnvSetPayload || c.action == kActionEnvAddPayload ||
+                       c.action == kActionEnvSubPayload;
+  const bool own = c.action == kActionEnvSet || c.action == kActionEnvAdd || c.action == kActionEnvSub;
+  if (!payload && !own) {
+    return false;
+  }
+  const auto f = room.Flat(modifier);
+  const auto var = f.find(kPropModifierVar);
+  if (var == f.end() || var->second.size != 16) {
+    return false;
+  }
+  std::memcpy(op.var.data(), room.Bytes(var->second), 16);
+  op.op = c.action == kActionEnvSetPayload || c.action == kActionEnvSet   ? PortRoomEnv::kEnvSet
+          : c.action == kActionEnvAddPayload || c.action == kActionEnvAdd ? PortRoomEnv::kEnvAdd
+                                                                          : PortRoomEnv::kEnvSub;
+  if (payload) {
+    op.value = c.payloadValue;  // an empty (or absent) payload is 0
+  } else {
+    const auto value = f.find(kPropModifierValue);
+    op.value = value != f.end() && value->second.size == 4 ? int32_t(ReadLE32(room.Bytes(value->second))) : 0;
+  }
+  return true;
+}
+
+std::vector<PortRoomEnv::EnvVar> ReadEnvVars(const Room& room) {
+  // META: fields not followed yet, up to the first `ffff 00000000`; then u16 count, and per
+  // variable guid[16], u32 name length, name, u32 n and n bytes skipped, u32 value, u32 flags,
+  // u32 min if flags & 1, u32 max if flags & 2 (NGameArea::get_meta_data_from_stream).
+  std::vector<PortRoomEnv::EnvVar> out;
+  const Span& meta = room.Meta();
+  if (meta.size == 0) {
+    return out;
+  }
+  const uint8_t* const b = room.Bytes(meta);
+  const size_t n = meta.size;
+  static constexpr uint8_t kMark[] = {0xff, 0xff, 0, 0, 0, 0};
+  const uint8_t* const mark = std::search(b, b + n, kMark, kMark + sizeof kMark);
+  if (mark == b + n) {
+    return out;
+  }
+  size_t o = size_t(mark - b) + sizeof kMark;
+  auto has = [&](size_t k) { return o <= n && n - o >= k; };
+  if (!has(2)) {
+    return out;
+  }
+  const size_t count = ReadLE16(b + o);
+  o += 2;
+  for (size_t i = 0; i < count; ++i) {
+    PortRoomEnv::EnvVar v;
+    if (!has(20)) {
+      return {};
+    }
+    std::memcpy(v.guid.data(), b + o, 16);
+    const size_t nameLen = ReadLE32(b + o + 16);
+    o += 20;
+    if (nameLen > 1024 || !has(nameLen)) {
+      return {};
+    }
+    v.name.assign(reinterpret_cast<const char*>(b + o), nameLen);
+    o += nameLen;
+    if (!has(4) || (o += 4, !has(ReadLE32(b + o - 4)))) {
+      return {};
+    }
+    o += ReadLE32(b + o - 4);
+    if (!has(8)) {
+      return {};
+    }
+    v.value = int32_t(ReadLE32(b + o));
+    v.flags = ReadLE32(b + o + 4);
+    o += 8;
+    for (const uint32_t bit : {PortRoomEnv::kEnvVarMin, PortRoomEnv::kEnvVarMax}) {
+      if ((v.flags & bit) == 0) {
+        continue;
+      }
+      if (!has(4)) {
+        return {};
+      }
+      (bit == PortRoomEnv::kEnvVarMin ? v.min : v.max) = int32_t(ReadLE32(b + o));
+      o += 4;
+    }
+    out.push_back(std::move(v));
   }
   return out;
 }
@@ -1082,6 +1187,37 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     roomVolumeOf[comp] = index;
     return index;
   };
+  // A room's own variable modifiers, fired by a TriggerMP1 no retail object stands for (as
+  // 07_Intro_Reactor's): by its room volume. A matched trigger's, or another sender's, is not
+  // followed.
+  for (const Connection& c : conns) {
+    const int t = room.ByGuid(c.target);
+    if (t < 0) {
+      continue;
+    }
+    int modifier = comps[size_t(t)].type == kEnvModifier ? t : -1;
+    for (size_t k = 0; modifier < 0 && comps[size_t(t)].type == kEntity && k < comps.size(); ++k) {
+      if (comps[k].type == kEnvModifier && comps[k].entity == t) {
+        modifier = int(k);
+      }
+    }
+    PortRoomEnv::EnvOp op;
+    if (modifier < 0 || !EnvModifierOp(room, comps[size_t(modifier)], c, op)) {
+      continue;
+    }
+    const int s = entityOf(int(c.sender));
+    const int volume = comps[c.sender].type == kTriggerMP1 && (c.event == kEventEntered || c.event == kEventExited) &&
+                               (s < 0 || match[size_t(s)] < 0)
+                           ? roomVolumeFor(c.sender)
+                           : -1;
+    if (volume < 0) {
+      ++result.envUnresolved;
+      continue;
+    }
+    op.sender = PortRoomEnv::kSenderRoomVolume + uint32_t(volume);
+    op.state = uint8_t(c.event == kEventEntered ? 0 : 1);
+    result.envOps.push_back(op);
+  }
   for (const Ent& e : ents) {
     const auto v = votes.find(e.layer);
     if (v != votes.end() && !e.baseLayer) {
@@ -1489,14 +1625,21 @@ SceneryScripts MasterScripts(const Room& room, const Vec3& shift, std::vector<Po
     }
     const Component& c = comps[comp];
     const auto f = room.Flat(c);
-    const auto flags = f.find(kPropTriggerFlags);
+    const auto prop = f.find(kPropTriggerFlags);
+    uint32_t flags = 1;  // absent: DetectPlayer
+    if (prop != f.end() && prop->second.size == 4) {
+      flags = ReadLE32(room.Bytes(prop->second));
+    }
+    const uint8_t detect = uint8_t(((flags & 0x1) != 0 ? PortRoomEnv::kRoomVolumePlayer : 0) |
+                                   ((flags & kTriggerDetectCamera) != 0 ? PortRoomEnv::kRoomVolumeCamera : 0));
     Vec3 pos, rot, scale;
     int index = -1;
-    // Only an active trigger sees the camera, and nothing here activates one.
-    if (flags != f.end() && flags->second.size == 4 && (ReadLE32(room.Bytes(flags->second)) & kTriggerDetectCamera) != 0 &&
-        room.Active(c) && room.Xform(c, pos, rot, scale) && volumes.size() < PortRoomEnv::kMaxWorldVolumes) {
+    // Only an active trigger sees the player or the camera, and nothing here activates one.
+    if (detect != 0 && room.Active(c) && room.Xform(c, pos, rot, scale) &&
+        volumes.size() < PortRoomEnv::kMaxWorldVolumes) {
       PortRoomEnv::WorldVolume v;
       CameraBox(pos, rot, scale, v.centre, v.half, v.axes);
+      v.detect = detect;
       for (int i = 0; i < 3; ++i) {
         v.centre[i] += float(shift[size_t(i)]);
       }
@@ -1504,6 +1647,35 @@ SceneryScripts MasterScripts(const Room& room, const Vec3& shift, std::vector<Po
       volumes.push_back(v);
     }
     volumeOf[comp] = index;
+    return index;
+  };
+  // An EnvironmentVarQuery's criteria connection, as a branch: its index, -1 when it does not read.
+  std::map<const Connection*, int> branchOf;
+  const auto branchFor = [&](const Connection& c) -> int {
+    const auto known = branchOf.find(&c);
+    if (known != branchOf.end()) {
+      return known->second;
+    }
+    const auto f = room.Flat(comps[c.sender]);
+    const auto var = f.find(kPropQueryVar);
+    const auto flag = [&](uint32_t id) {
+      const auto p = f.find(id);
+      return p != f.end() && p->second.size >= 1 && room.Bytes(p->second)[0] != 0;
+    };
+    int index = -1;
+    if (var != f.end() && var->second.size == 16 && c.hasCriteria && c.criteriaOp <= 5 &&
+        result.envBranches.size() < PortRoomEnv::kMaxEnvBranches) {
+      PortRoomEnv::EnvBranch b;
+      std::memcpy(b.var.data(), room.Bytes(var->second), 16);
+      b.relop = uint8_t(c.criteriaOp);
+      b.value = c.criteriaValue;
+      b.flags = uint8_t((flag(kPropQueryOnLoad) ? PortRoomEnv::kEnvOnLoad : 0) |
+                        (flag(kPropQueryOnChange) ? PortRoomEnv::kEnvOnChange : 0) |
+                        (flag(kPropQuerySkipUnchanged) ? PortRoomEnv::kEnvSkipUnchanged : 0));
+      index = int(result.envBranches.size());
+      result.envBranches.push_back(b);
+    }
+    branchOf[&c] = index;
     return index;
   };
   for (const int hint : hints) {
@@ -1538,6 +1710,8 @@ SceneryScripts MasterScripts(const Room& room, const Vec3& shift, std::vector<Po
                    volumeFor(c->sender) >= 0) {
           links.push_back({PortRoomEnv::kSenderWorldVolume + uint32_t(volumeFor(c->sender)),
                            uint8_t(c->event == kEventEntered ? 0 : 1), act});
+        } else if (sender.type == kEnvQuery && c->event == kEventEnvQueryTrue && act != 0 && branchFor(*c) >= 0) {
+          links.push_back({PortRoomEnv::kSenderEnvQuery + uint32_t(branchFor(*c)), 0, act});
         } else if (sender.type == kRelay && c->event == kEventRelayFired && sender.entity >= 0 && depth < 6 &&
                    std::find(seen.begin(), seen.end(), sender.entity) == seen.end()) {
           seen.push_back(sender.entity);
@@ -1556,6 +1730,34 @@ SceneryScripts MasterScripts(const Room& room, const Vec3& shift, std::vector<Po
       result.unresolved[hint] = bad;
       result.unresolvedHow[hint] = how;
     }
+  }
+  // The world's variables, and the master's triggers that change them.
+  result.envVars = ReadEnvVars(room);
+  for (const Connection& c : conns) {
+    const int t = room.ByGuid(c.target);
+    if (t < 0) {
+      continue;
+    }
+    int modifier = comps[size_t(t)].type == kEnvModifier ? t : -1;
+    for (size_t k = 0; modifier < 0 && comps[size_t(t)].type == kEntity && k < comps.size(); ++k) {
+      if (comps[k].type == kEnvModifier && comps[k].entity == t) {
+        modifier = int(k);
+      }
+    }
+    PortRoomEnv::EnvOp op;
+    if (modifier < 0 || !EnvModifierOp(room, comps[size_t(modifier)], c, op)) {
+      continue;
+    }
+    const int volume = comps[c.sender].type == kTriggerMP1 && (c.event == kEventEntered || c.event == kEventExited)
+                           ? volumeFor(c.sender)
+                           : -1;
+    if (volume < 0) {
+      ++result.envUnresolved;
+      continue;
+    }
+    op.sender = PortRoomEnv::kSenderWorldVolume + uint32_t(volume);
+    op.state = uint8_t(c.event == kEventEntered ? 0 : 1);
+    result.envOps.push_back(op);
   }
   return result;
 }

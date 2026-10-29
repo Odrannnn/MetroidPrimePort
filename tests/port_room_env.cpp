@@ -1283,6 +1283,61 @@ void TestWorldVolumes() {
     const RoomVolume& bad = file.roomVolumes[1];
     CHECK_MSG(bad.half[0] < 0.f && !PortRoomEnv::InsideRoomVolume(bad, in, touchLo, touchHi, true),
               "room volumes: a bad box detects nothing");
+    CHECK_MSG(file.worldVolumes[0].detect == PortRoomEnv::kRoomVolumeCamera && file.envVars.empty() &&
+                  file.envOps.empty() && file.envBranches.empty(),
+              "env vars: before version 31 world volumes see the camera, and no variables");
+
+    // Version 31: what each world volume detects, then the world's variables, ops and branches.
+    std::vector<uint8_t> v31 = v30;
+    v31[4] = 31;
+    CHECK_MSG(!PortRoomEnv::Parse(std::vector<uint8_t>(v31), file, error), "env vars: cut short");
+    Put32(v31, 2);
+    v31.insert(v31.end(), {PortRoomEnv::kRoomVolumePlayer, 0xff});
+    Put32(v31, 1);
+    std::array<uint8_t, 16> guid{};
+    for (size_t i = 0; i < guid.size(); ++i) guid[i] = uint8_t(0x35 + i);
+    v31.insert(v31.end(), guid.begin(), guid.end());
+    const std::string name = "ZIM_Fog";
+    Put32(v31, uint32_t(name.size()));
+    v31.insert(v31.end(), name.begin(), name.end());
+    for (uint32_t f : {0u, 3u, 0u, 3u}) Put32(v31, f); // value, flags, min, max
+    Put32(v31, 1);
+    Put32(v31, PortRoomEnv::kSenderWorldVolume + 1);
+    v31.insert(v31.end(), {1, PortRoomEnv::kEnvAdd, 0, 0});
+    Put32(v31, uint32_t(-2));
+    v31.insert(v31.end(), guid.begin(), guid.end());
+    Put32(v31, 3);
+    for (int k = 0; k < 3; ++k) {
+      v31.insert(v31.end(), guid.begin(), guid.end());
+      v31.insert(v31.end(), {uint8_t(k), uint8_t(PortRoomEnv::kEnvOnLoad | PortRoomEnv::kEnvSkipUnchanged), 0, 0});
+      Put32(v31, uint32_t(k));
+      Put32(v31, 39);
+    }
+    CHECK_MSG(!PortRoomEnv::Parse(std::vector<uint8_t>(v31.begin(), v31.end() - 4), file, error),
+              "env vars: branch cut short");
+    CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(v31), file, error) && file.roomVolumes.size() == 2 &&
+                  file.worldVolumes.size() == 2,
+              "env vars: version 31 read back");
+    CHECK_MSG(file.worldVolumes[0].detect == PortRoomEnv::kRoomVolumePlayer &&
+                  file.worldVolumes[1].detect == (PortRoomEnv::kRoomVolumePlayer | PortRoomEnv::kRoomVolumeCamera),
+              "env vars: world volume detect, unknown bits dropped");
+    CHECK_MSG(file.envVars.size() == 1 && file.envVars[0].guid == guid && file.envVars[0].name == name &&
+                  file.envVars[0].value == 0 && file.envVars[0].flags == 3 && file.envVars[0].max == 3,
+              "env vars: variable");
+    CHECK_MSG(file.envOps.size() == 1 && file.envOps[0].sender == PortRoomEnv::kSenderWorldVolume + 1 &&
+                  file.envOps[0].state == 1 && file.envOps[0].op == PortRoomEnv::kEnvAdd &&
+                  file.envOps[0].value == -2 && file.envOps[0].var == guid,
+              "env vars: op");
+    CHECK_MSG(file.envBranches.size() == 3 && file.envBranches[2].relop == 2 && file.envBranches[2].value == 2 &&
+                  file.envBranches[2].query == 39 && file.envBranches[1].var == guid &&
+                  file.envBranches[0].flags == (PortRoomEnv::kEnvOnLoad | PortRoomEnv::kEnvSkipUnchanged),
+              "env vars: branches");
+    std::vector<uint8_t> wrongCount = v30;
+    wrongCount[4] = 31;
+    Put32(wrongCount, 1); // not the file's two world volumes
+    wrongCount.push_back(1);
+    for (int k = 0; k < 3; ++k) Put32(wrongCount, 0);
+    CHECK_MSG(!PortRoomEnv::Parse(std::move(wrongCount), file, error), "env vars: detect count must match");
   }
   const float inB[3] = {10.f, 1.5f, 0.f}, outB[3] = {11.5f, 0.f, 0.f};
   CHECK_MSG(PortRoomEnv::InsideWorldVolume(b, inB) && !PortRoomEnv::InsideWorldVolume(b, outB), "volumes: turned box");
@@ -1318,6 +1373,62 @@ void TestWorldVolumes() {
   state.Replay(events);
   CHECK_MSG(events.empty(), "volumes: cleared");
 }
+// CScriptEnvironmentVarQuery / CScriptEnvironmentVarModifier: the criteria relations, and the
+// modifier's set/add/sub clamped by the variable's range.
+void TestEnvVars() {
+  using PortRoomEnv::EnvBranch;
+  using PortRoomEnv::EnvVar;
+  const auto holds = [](uint8_t relop, int32_t criteria, int32_t value) {
+    EnvBranch b;
+    b.relop = relop;
+    b.value = criteria;
+    return PortRoomEnv::EnvBranchHolds(b, value);
+  };
+  CHECK_MSG(holds(0, 1, 1) && !holds(0, 1, 2), "env vars: relop 0 ==");
+  CHECK_MSG(holds(1, 1, 2) && !holds(1, 1, 1), "env vars: relop 1 !=");
+  CHECK_MSG(holds(2, 1, 2) && !holds(2, 1, 1) && !holds(2, 2, 1), "env vars: relop 2 criteria < var");
+  CHECK_MSG(holds(3, 1, 1) && holds(3, 1, 2) && !holds(3, 2, 1), "env vars: relop 3 criteria <= var");
+  CHECK_MSG(holds(4, 2, 1) && !holds(4, 1, 1) && !holds(4, 1, 2), "env vars: relop 4 var < criteria");
+  CHECK_MSG(holds(5, 1, 1) && holds(5, 2, 1) && !holds(5, 1, 2), "env vars: relop 5 var <= criteria");
+  CHECK_MSG(!holds(6, 1, 1), "env vars: an unknown relop never holds");
+
+  EnvVar free;
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(free, 5, PortRoomEnv::kEnvSet, -3) == -3, "env vars: set");
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(free, 5, PortRoomEnv::kEnvAdd, 2) == 7, "env vars: add");
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(free, 5, PortRoomEnv::kEnvSub, 7) == -2, "env vars: sub, unclamped");
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(free, INT32_MAX, PortRoomEnv::kEnvAdd, 1) == INT32_MAX,
+            "env vars: no wrap past int32");
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(free, 5, 9, 1) == 5, "env vars: an unknown op keeps the value");
+  EnvVar fog; // Intro's ZIM_Fog: 0..3
+  fog.flags = PortRoomEnv::kEnvVarMin | PortRoomEnv::kEnvVarMax;
+  fog.max = 3;
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(fog, 2, PortRoomEnv::kEnvAdd, 5) == 3, "env vars: clamped to max");
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(fog, 1, PortRoomEnv::kEnvSub, 4) == 0, "env vars: clamped to min");
+  EnvVar low = fog;
+  low.flags = PortRoomEnv::kEnvVarMin; // min only
+  CHECK_MSG(PortRoomEnv::ApplyEnvOp(low, 1, PortRoomEnv::kEnvAdd, 9) == 10 &&
+                PortRoomEnv::ApplyEnvOp(low, 1, PortRoomEnv::kEnvSub, 9) == 0,
+            "env vars: one bound only");
+
+  // Tallon Intro's ZIM_Fog query: one criteria per value, all onLoad. At load the variable is
+  // 0, so only the value-0 branches hold.
+  std::vector<EnvBranch> intro;
+  for (int32_t value : {0, 0, 0, 1, 1, 1, 2, 2}) {
+    EnvBranch b;
+    b.value = value;
+    b.flags = PortRoomEnv::kEnvOnLoad | PortRoomEnv::kEnvOnChange | PortRoomEnv::kEnvSkipUnchanged;
+    intro.push_back(b);
+  }
+  size_t held = 0;
+  for (size_t i = 0; i < intro.size(); ++i) {
+    if ((intro[i].flags & PortRoomEnv::kEnvOnLoad) != 0 && PortRoomEnv::EnvBranchHolds(intro[i], 0)) {
+      CHECK_MSG(intro[i].value == 0, "env vars: onLoad at 0 holds only value 0");
+      ++held;
+    }
+  }
+  CHECK_MSG(held == 3, "env vars: onLoad at 0 fires the three value-0 branches");
+}
+
 // CPostFXManager::UpdateTonemapping 0xaffb18: L from the readback, and the start.
 void TestExposureAverage() {
   constexpr float kGrey = 0.2158605f;
@@ -1381,6 +1492,7 @@ void TestCameraCube() {
 int main() {
   TestCameraCube();
   TestWorldVolumes();
+  TestEnvVars();
   TestTileSection();
   TestBrdfLut();
   TestPowerBomb();

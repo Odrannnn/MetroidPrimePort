@@ -514,6 +514,8 @@ public:
   }
   // Where each resource id in the load units' lists (HEAD/LUNT/LRES) sits, in property byte order.
   const std::vector<size_t>& Listed() const { return m_listed; }
+  // The META chunk of the trailing form (FOOT) after the root one; size 0 when there is none.
+  const Span& Meta() const { return m_meta; }
   // Whether these 16 bytes occur anywhere in the room besides `at`.
   bool NamedElsewhere(size_t at) const {
     const uint8_t* id = m_d->data() + at;
@@ -539,6 +541,7 @@ private:
   std::vector<Component> m_comps;
   std::map<Id16, size_t> m_byGuid;
   Span m_strings;
+  Span m_meta;
   std::vector<size_t> m_listed;
   Blit m_blit;
 };
@@ -725,7 +728,45 @@ struct Connection {
   uint32_t event;
   uint32_t action;
   Id16 target;  // a component's guid
+  // The payload blocks: an IntCompareEventCriteria (kEnvCriteria: kPropCriteriaValue, kPropCriteriaOp)
+  // and an EnvironmentVarModifier's int (kEnvModifierPayload: kPropModifierPayloadValue), 0 when absent.
+  bool hasCriteria = false;
+  int32_t criteriaValue = 0;
+  uint32_t criteriaOp = 0;
+  bool hasPayload = false;
+  int32_t payloadValue = 0;
 };
+
+// Environment variables (kb topic/environment-var-query.md): an EnvironmentVarModifier sets, adds
+// to or subtracts from a world variable; an EnvironmentVarQuery sends kEventEnvQueryTrue on each
+// link whose criteria hold, on load and on change.
+constexpr uint32_t kEnvQuery = 0x4c183ebb;     // CEnvironmentVarQueryGOC
+constexpr uint32_t kEnvModifier = 0xf05bc9c3;  // EnvironmentVarModifier
+constexpr uint32_t kEnvCriteria = 0x96bcd2cf;  // IntCompareEventCriteria
+constexpr uint32_t kEnvModifierPayload = 0xc2add041;
+constexpr uint32_t kPropCriteriaValue = 0x68922137;
+constexpr uint32_t kPropCriteriaOp = 0x7ed94084;
+constexpr uint32_t kPropModifierPayloadValue = 0xe845edf4;
+constexpr uint32_t kPropModifierVar = 0xf2ccf18b;
+constexpr uint32_t kPropModifierValue = 0x789cebf4;
+constexpr uint32_t kPropQueryVar = 0xb11580e1;
+constexpr uint32_t kPropQueryOnLoad = 0x6bdef762;
+constexpr uint32_t kPropQueryOnChange = 0xdbe12b90;
+constexpr uint32_t kPropQuerySkipUnchanged = 0x7600c5bb;
+constexpr uint32_t kEventEnvQueryTrue = 0xfddbd7d4;
+// The modifier's actions: with the payload's value, or with its own (kPropModifierValue).
+constexpr uint32_t kActionEnvSetPayload = 0xf375af0f;
+constexpr uint32_t kActionEnvAddPayload = 0x1f0bf742;
+constexpr uint32_t kActionEnvSubPayload = 0xe39dfd33;
+constexpr uint32_t kActionEnvSet = 0xd00fd1eb;
+constexpr uint32_t kActionEnvAdd = 0xdd131cd6;
+constexpr uint32_t kActionEnvSub = 0x1e431630;
+// The op a connection into an EnvironmentVarModifier (`modifier`) asks for; false when its action
+// is none of the modifier's or the modifier names no variable.
+bool EnvModifierOp(const Room& room, const Component& modifier, const Connection& c, PortRoomEnv::EnvOp& op);
+// The world master's declared variables (the trailing form's META chunk); empty when it has none
+// or they do not read.
+std::vector<PortRoomEnv::EnvVar> ReadEnvVars(const Room& room);
 
 std::vector<Connection> ReadConnections(const Room& room);
 std::vector<int> ReadEntityLinks(const Room& room, size_t i);
@@ -759,6 +800,12 @@ struct SceneryScripts {
   size_t scriptUnresolved = 0;    // connections into the script not traced
   // The room's own TriggerMP1s that switch its hints (kSenderRoomVolume + index), area space.
   std::vector<PortRoomEnv::RoomVolume> roomVolumes;
+  // Environment variable ops (a room's: its room volumes' senders; the master's: world volumes'),
+  // and the master's query branches (kSenderEnvQuery + index) and declared variables.
+  std::vector<PortRoomEnv::EnvOp> envOps;
+  std::vector<PortRoomEnv::EnvBranch> envBranches;
+  std::vector<PortRoomEnv::EnvVar> envVars;
+  size_t envUnresolved = 0;  // connections into a modifier not traced (a Relay's, say)
   // A float driver of a material variable (see kRealNumberDriver): by the entity of each actor it
   // feeds. The importer checks that the actor's model binds the variable to a parameter it can
   // drive; the start links are in `links` under `driverStart`.

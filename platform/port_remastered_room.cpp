@@ -261,8 +261,8 @@ private:
   std::string WriteRoom(const RoomData& r, const std::map<std::string, Placement>& placed, const Vec3& shift,
                         const float tonemap[5], const BloomData& bloom, const std::vector<GradeData>& worldGrades,
                         const std::vector<BacklightData>& worldBacklights, const std::vector<FogData>& worldFogs,
-                        const std::vector<PortRoomEnv::WorldVolume>& worldVolumes, const Match& m, int& written,
-                        std::string& matched);
+                        const std::vector<PortRoomEnv::WorldVolume>& worldVolumes, const SceneryScripts& master,
+                        const Match& m, int& written, std::string& matched);
 
   const RoomPak& m_master;
   const std::vector<RoomPak>& m_rooms;
@@ -3223,8 +3223,8 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
                               const float tonemap[5], const BloomData& worldBloom,
                               const std::vector<GradeData>& worldGrades,
                               const std::vector<BacklightData>& worldBacklights, const std::vector<FogData>& worldFogs,
-                              const std::vector<PortRoomEnv::WorldVolume>& worldVolumes, const Match& m, int& written,
-                              std::string& matched) {
+                              const std::vector<PortRoomEnv::WorldVolume>& worldVolumes,
+                              const SceneryScripts& master, const Match& m, int& written, std::string& matched) {
   matched.clear();
   char head[96];
   PairRetailModels(r, *m.area);
@@ -3385,7 +3385,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 30);
+  AppendLE32(out, 31);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3706,6 +3706,46 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   if (!scripts.roomVolumes.empty()) {
     Log("  " + r.name + ": " + std::to_string(scripts.roomVolumes.size()) + " room trigger volume(s) switch hints");
   }
+  // Version 31: what each world volume detects, the world's variables, the modifiers the world's
+  // and this room's triggers fire, and the master's query branches.
+  AppendLE32(out, uint32_t(worldVolumes.size()));
+  for (const PortRoomEnv::WorldVolume& v : worldVolumes) {
+    out.push_back(v.detect);
+  }
+  AppendLE32(out, uint32_t(master.envVars.size()));
+  for (const PortRoomEnv::EnvVar& v : master.envVars) {
+    out.insert(out.end(), v.guid.begin(), v.guid.end());
+    AppendLE32(out, uint32_t(v.name.size()));
+    out.insert(out.end(), v.name.begin(), v.name.end());
+    AppendLE32(out, uint32_t(v.value));
+    AppendLE32(out, v.flags);
+    AppendLE32(out, uint32_t(v.min));
+    AppendLE32(out, uint32_t(v.max));
+  }
+  AppendLE32(out, uint32_t(master.envOps.size() + scripts.envOps.size()));
+  for (const std::vector<PortRoomEnv::EnvOp>* ops : {&master.envOps, &scripts.envOps}) {
+    for (const PortRoomEnv::EnvOp& op : *ops) {
+      AppendLE32(out, op.sender);
+      out.push_back(op.state);
+      out.push_back(op.op);
+      out.insert(out.end(), 2, 0);
+      AppendLE32(out, uint32_t(op.value));
+      out.insert(out.end(), op.var.begin(), op.var.end());
+    }
+  }
+  AppendLE32(out, uint32_t(master.envBranches.size()));
+  for (const PortRoomEnv::EnvBranch& b : master.envBranches) {
+    out.insert(out.end(), b.var.begin(), b.var.end());
+    out.push_back(b.relop);
+    out.push_back(b.flags);
+    out.insert(out.end(), 2, 0);
+    AppendLE32(out, uint32_t(b.value));
+    AppendLE32(out, b.query);
+  }
+  if (!scripts.envOps.empty() || scripts.envUnresolved != 0) {
+    Log("  " + r.name + ": " + std::to_string(scripts.envOps.size()) + " environment variable op(s), " +
+        std::to_string(scripts.envUnresolved) + " modifier connection(s) not followed");
+  }
   if (!fogs.empty() || !regions.empty()) {
     Log("  " + r.name + ": " + std::to_string(fogs.size()) + " fog hint(s), " + std::to_string(regions.size()) +
         " fog region(s), " + std::to_string(transitions.size()) + " transition(s)");
@@ -3884,6 +3924,9 @@ bool Writer::Run(uint32_t mlvl, int& written, std::string& error) {
   Log("world: " + std::to_string(m_worldSkies.size()) + " sky model(s), " + std::to_string(grades.size()) + " grade(s), " + std::to_string(backlights.size()) +
       " backlight(s), " + std::to_string(fogs.size()) + " fog hint(s), " + std::to_string(volumes.size()) +
       " camera volume(s)");
+  Log("world: " + std::to_string(masterScripts.envVars.size()) + " environment variable(s), " +
+      std::to_string(masterScripts.envOps.size()) + " op(s), " + std::to_string(masterScripts.envBranches.size()) +
+      " query branch(es), " + std::to_string(masterScripts.envUnresolved) + " modifier connection(s) not followed");
   // Every room is matched before any is written: two rooms matching one area
   // would write the same files, so only the closer match (the first, on a tie)
   // is written and the other is logged as a clash.
@@ -3927,7 +3970,8 @@ bool Writer::Run(uint32_t mlvl, int& written, std::string& error) {
       continue;
     }
     std::string matched;
-    Log(WriteRoom(r, placed, shift, tonemap, bloom, grades, backlights, fogs, volumes, m, written, matched));
+    Log(WriteRoom(r, placed, shift, tonemap, bloom, grades, backlights, fogs, volumes, masterScripts, m, written,
+                  matched));
     if (!matched.empty()) {
       seen[matched] = r.name;
     }

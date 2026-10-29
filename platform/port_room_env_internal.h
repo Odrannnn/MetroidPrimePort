@@ -379,6 +379,15 @@ extern uint8_t sExposureSwap; // ExposureHints::SwapState of the frame
 extern uint64_t sItems;
 extern std::vector<WorldVolume> sWorldVolumes; // the world's camera volumes (SetCameraPoint)
 extern WorldVolumeState sWorldVolumeState;
+// The world's environment variables as they stand (EnvVar: its declaration, `value` its default),
+// by guid; filled as areas load, emptied by ResetGrades.
+struct EnvVarLive {
+  EnvVar var;
+  int32_t value = 0;
+};
+extern std::vector<EnvVarLive> sEnvVars;
+// The ops of the world volumes' triggers, from the file that set sWorldVolumes.
+extern std::vector<EnvOp> sWorldEnvOps;
 extern std::unordered_set<uint32_t> sGradeLuts;
 extern bool sLastValid;
 extern bool sLastFound;
@@ -410,6 +419,12 @@ void DriveGrades(uint32_t mrea, Area& area, uint32_t sender, int state);
 void DriveCameraWaterItems(uint32_t mrea, Area& area, uint64_t items);
 void StartGrades(uint32_t mrea, Area& area, bool playerFluid, bool cameraWater);
 void ReplayWorldVolumes(uint32_t mrea, Area& area);
+// Adds the area's declared environment variables the table lacks, then drives its onLoad branches
+// that hold.
+void LoadEnvVars(uint32_t mrea, Area& area);
+// Runs the ops of `ops` that `sender` fires on `state`, then the onChange branches of every loaded
+// area for each var changed.
+void RunEnvOps(const std::vector<EnvOp>& ops, uint32_t sender, int state);
 bool LoadTiming();
 double MsSince(std::chrono::steady_clock::time_point t);
 Loaded ReadRoomFile(const std::string& path);
