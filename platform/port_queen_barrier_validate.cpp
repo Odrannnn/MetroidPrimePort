@@ -50,7 +50,9 @@ bool ValidatePart(const std::vector<uint8_t>& part, uint32_t feature,
   if (!mat || mat->size() < 24) return fail("missing VMAT");
   const uint32_t version = Word(*mat, 8), textures = Word(*mat, 20);
   // Exact exposure policy: neither verified barrier recipe emits AlreadyExposed.
-  if ((version != 2 && version != 3) || Word(*mat, 12) != feature || Word(*mat, 16) > 7 || textures == 0 || textures > 4 ||
+  // The converter's ModelBackCull bit (1 << 17) is a draw-state flag and leaves the layout unchanged.
+  constexpr uint32_t kModelBackCull = 1u << 17;
+  if ((version != 2 && version != 3) || (Word(*mat, 12) & ~kModelBackCull) != feature || Word(*mat, 16) > 7 || textures == 0 || textures > 4 ||
       mat->size() != 24 + 44 * textures + 184 + (version == 3 ? 8 : 0)) return fail("invalid VMAT layout or feature");
   for (uint32_t i = 0; i < textures; ++i) {
     size_t at = 24 + 44 * i;

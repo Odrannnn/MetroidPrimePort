@@ -561,6 +561,17 @@ void TestVmat() {
   };
   Reject(Part(RefractionPart(), vmat), kRefract, kRefractVars, "invalid VMAT layout or feature",
          "refraction VMAT carrying bit 30");
+  // The converter's ModelBackCull bit (17) is draw state only: both recipes carry it.
+  for (const uint32_t feature : {kRefract, kGlow}) {
+    const Patch backCull = [feature](const char* fourcc, Bytes& value) {
+      if (std::strcmp(fourcc, "VMAT") == 0) SetWord(value, kVmatFeatures, feature | (1u << 17));
+    };
+    if (feature == kRefract) {
+      Accept(Part(RefractionPart(), backCull), kRefract, kRefractVars, "refraction VMAT with back-cull");
+    } else {
+      Accept(Part(GlowPart(), backCull), kGlow, kGlowVars, "glow VMAT with back-cull");
+    }
+  }
   {
     auto part = RefractionPart();
     part[0].second = Counted(VmatPayload(1, kRefract, 0, 2));

@@ -237,7 +237,8 @@ inline constexpr int kEffects = 139;   // Queen barrier shield/glow models back-
 // 61: a GunTurret's visor effect (actor slot 4: ELC2 or GENP).
 // 62: a Drone's laser particles and its scanner effect (actor slot 5).
 // 63: roomenv version 29, the suns' links and timelines (the intro's fill suns fade out).
-inline constexpr int kRooms = 63;
+// 64: the Queen barrier group survives its effects' back-cull bit (effects 139 dropped it).
+inline constexpr int kRooms = 64;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

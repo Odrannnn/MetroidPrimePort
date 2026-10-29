@@ -2845,7 +2845,9 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
           const fs::path texture = staging / PathFromString(Hex8(id) + ".TXTR");
           return fs::is_regular_file(texture, ec) && !ec && fs::file_size(texture, ec) > 0 && !ec;
         };
-        return PortQueenBarrier::ValidatePart(bytes, feature, vars, dependency, reason);
+        if (PortQueenBarrier::ValidatePart(bytes, feature, vars, dependency, reason)) return true;
+        PortLog::Write("remastered import: barrier effect %s: %s\n", Hex8(part).c_str(), reason.c_str());
+        return false;
       };
       io.matched = [&](const std::array<uint8_t, 16>& genp) {
         std::vector<uint32_t> out;
