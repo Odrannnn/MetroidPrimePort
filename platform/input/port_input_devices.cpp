@@ -342,7 +342,8 @@ void BindBeamChords(Profile& p) {
     if (!anyKey && !lshiftTaken) keyShifts.push_back(Make(Device::Key, SDL_SCANCODE_LSHIFT));
     bool anyPad = false;
     for (const Input& in : padShifts) anyPad = anyPad || (in.Valid() && in.device == Device::PadButton);
-    if (!anyPad && !PortDebug::TouchActive() && !PadButtonBoundBesidesL(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) {
+    // Also with the touch overlay on: its buttons are touch inputs, so a pad played beside it keeps LB.
+    if (!anyPad && !PadButtonBoundBesidesL(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)) {
       padShifts.push_back(NativeInput(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER));
     }
   }
@@ -1182,6 +1183,23 @@ PADStatus Synthesize(const PortInput::Output& out) {
   return s;
 }
 
+// Twin stick aims with the right stick, so the R trigger's free look (a stand-still mode) only
+// gets in the way, most of all with Fire moved onto RT: out of the Morph Ball, where R is the
+// Spider Ball, the controller's R trigger stops pressing R and pulling the R analog. Free look on
+// any other input (a stick click, a key) stays.
+static void ApplyTwinStickFreeAim(Profile& p, uint16_t contexts) {
+  if (!PortDebug::TwinStick() || (contexts & PortInput::kCtxMorphBall) != 0) return;
+  const auto rTrigger = [](const Input& in) {
+    if (in.device == Device::PadAxis) return in.code == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
+    return in.device == Device::PadButton &&
+           (in.code == PAD_RAW_BUTTON_TRIGGER_RIGHT || in.code == PAD_RAW_BUTTON_TRIGGER_RIGHT_CLICK);
+  };
+  for (Binding& b : p.bindings) {
+    if (b.action != Action::PadR && b.action != Action::RAnalog) continue;
+    if (std::any_of(b.inputs.begin(), b.inputs.begin() + b.count, rTrigger)) b.blocked |= PortInput::kCtxGameplay;
+  }
+}
+
 SPoll Poll(unsigned mouseHeld, bool focused) {
   static Profile sProfile;
   static PortInput::Runtime sRuntime;
@@ -1192,6 +1210,8 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   BuildProfile(next);
   ApplyMenuButtons(next);
   PortInput::ApplyBallButtons(next);
+  const uint16_t contexts = GameContexts();
+  ApplyTwinStickFreeAim(next, contexts);
   if (!sInit || next != sProfile) {
     UpdatePromptBindings(next);
     sProfile = std::move(next);
@@ -1202,7 +1222,6 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   PortInput::RawState raw;
   FillRawState(raw, mouseHeld, focused);
   sClockMs += static_cast< double >(PortDebug::TickPeriod()) * 1000.0;
-  const uint16_t contexts = GameContexts();
   const PortInput::Output& out =
       sRuntime.Poll(raw, contexts, sClockMs, QuietContexts(sRuntime.ActiveContexts(), contexts));
   SPoll r;
