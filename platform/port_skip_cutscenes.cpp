@@ -96,6 +96,20 @@ std::vector< uint8_t > HallOfTheEldersOps() {
   return std::move(w.ops);
 }
 
+const uint32_t kDeckAlphaElevator = 0xAE1EC8BD;
+
+// The Frigate's item loss: retail takes Samus's suit items away when the
+// elevator cinematic's fourth camera (00050115) ends, by a Reset of spawn
+// point 00050140. randomprime's skip object only sends that spawn point
+// SetToZero (teleport), so a skip before that camera left her every item
+// until the Landing Site (issue #233). Reset teleports as well.
+std::vector< uint8_t > DeckAlphaElevatorOps() {
+  OpWriter w;
+  w.conn(3, 0x00050001, 9 /* Zero */, 13 /* SetToZero */, 0x00050140);
+  w.conn(4, 0x00050001, 9, 10 /* Reset */, 0x00050140);
+  return std::move(w.ops);
+}
+
 const uint32_t kArtifactTemple = 0x2398E906;
 
 // Randomized games' Artifact Temple (applied after the patches above): the
@@ -189,6 +203,15 @@ bool PatchScripts(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector
       out.swap(hall);
     else
       PortLog::Write("skippable cutscenes: Hall of the Elders control release doesn't match, left as is\n");
+  }
+  if (skipped && mreaId == kDeckAlphaElevator && !Forced()) {
+    // Randomized games keep randomprime's skip as it is.
+    const std::vector< uint8_t > ops = DeckAlphaElevatorOps();
+    std::vector< uint8_t > reset;
+    if (ApplyOps(out.data(), out.size(), ops.data(), ops.size(), reset) == 0)
+      out.swap(reset);
+    else
+      PortLog::Write("skippable cutscenes: Frigate item loss on skip doesn't match, left as is\n");
   }
   const bool apGame = PortAp::RandomizedGame();
   if (skipped && mreaId == kLandingSite && apGame) {
