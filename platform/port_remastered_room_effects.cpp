@@ -1030,12 +1030,20 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       if (replacedPart) {
         part = own;
       }
+      // A retail object drawing another PART still plays this GENP in Remastered: Lava Lake's
+      // five spurts draw EA96EF9F, the parent of the big spit, where Remastered's actors play
+      // the spit's GENP itself with their own variables. The object takes the mod's PART for
+      // it; without the variables its colours fall back to white.
+      const bool pairedPart = !replacedPart && !paired.empty() && (part >> 24) != 0xFE;
+      if (pairedPart) {
+        part = paired.front();
+      }
       const bool ownPart = part != 0 && (part >> 24) == 0xFE && part != own;
       // CEffectMP1GOC::Create (0xd9e460) passes every entity's own placement.
       // Apply it whenever we have its converted GENP: either a synthetic PART,
       // or a paired replacement whose presence io.matched verified. A carried
       // retail-id fallback from io.effect is not proof of converted source data.
-      const bool sourcePlacement = replacedPart || ownPart;
+      const bool sourcePlacement = replacedPart || pairedPart || ownPart;
       if (!sourcePlacement && (part == 0 || part != own || vars.empty())) {
         ++keptOwn;
         continue;
