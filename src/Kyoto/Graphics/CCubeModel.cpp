@@ -580,6 +580,16 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
     const f32 gain = PortRoomEnv::UnlitGain(frameExposed);
     values[3] = values[4] = values[5] = gain;
   }
+  if (kind > 45.5f && kind < 46.5f) {
+    // ChozoLore 9d53cf06: FS002 multiplies its premultiplied glow by no exposure of its own, so
+    // Remastered's tonemap exposes it at the frame's 2^(3 - EV), as a bare unlit surface
+    // (kb topic/post-output.md). The glow is BCLR x CCH1.y x ... x DIFC.rgb: DIFC (row 7) carries
+    // the exposure GlowScale (tone row 0 w) leaves; the alpha is not exposed.
+    const f32 gain = PortRoomEnv::UnlitGain(frameExposed);
+    shield[28] *= gain;
+    shield[29] *= gain;
+    shield[30] *= gain;
+  }
   if (sPortSky) {
     // Unlit (1) and a sky (16), keeping the material's other flags: the backlight's place
     // holds the gain (see GXSetPBRMaterial).
