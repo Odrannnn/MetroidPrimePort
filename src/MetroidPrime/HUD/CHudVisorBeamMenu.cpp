@@ -321,9 +321,11 @@ void CHudVisorBeamMenu::UpdateMenuWidgetTransform(int idx, CGuiWidget& widget, f
                       (1.f - t) * gpTweakGui->GetVisorBeamMenuItemActiveScale();
 #ifdef TARGET_PC
   // @ fn_800E8CCC: Trilogy places the items by its own tables, lbl_80471080 (visor) and
-  // lbl_80471090 (beam).
+  // lbl_80471090 (beam). Trilogy draws only the selected item (at the centre), so that
+  // layout never shows there; without the radial menus every owned item shows, so they
+  // take GC's D-pad / C-stick directions (Power and Combat up), not Power at the bottom.
   static const int skTrilogyItemSlots[2][4] = {{2, 1, 0, 3}, {2, 3, 0, 1}};
-  if (PortDisc::IsTrilogy(PortDisc::Current())) {
+  if (PortDisc::IsTrilogy(PortDisc::Current()) && PortDebug::RadialMenus()) {
     idx = skTrilogyItemSlots[x4_type][idx];
   } else
 #endif
