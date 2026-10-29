@@ -254,6 +254,7 @@ extern std::string sDiscPath;
 extern std::string sRemasteredImagePath;
 extern std::string sRemasteredKeysPath;
 extern std::string sRemasteredSkip;
+extern std::string sRemasteredHide;
 
 std::string SettingsFilePath();
 bool ParseBool(const std::string& value);

@@ -577,6 +577,10 @@ bool OriginalExperience();
 void SetOriginalExperience(bool enabled);
 std::string ModsDisabled();
 void SetModsDisabled(const std::string& list);
+// The parts of the Remastered import the mods load without (remastered_hide, comma separated,
+// PortMods::kImportParts); MP_REMASTERED_HIDE overrides the saved list for this run.
+std::string RemasteredHidden();
+void SetRemasteredHidden(const std::string& list);
 // The Remastered import on or off (mods_disabled, saved as on the Mods page), then the mods
 // reload; a note at the top of the screen says which.
 void ToggleRemastered();

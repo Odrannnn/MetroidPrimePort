@@ -518,6 +518,10 @@ void DrawMods() {
       const bool wanted = ModsEnabled() && on;
       restartRequired = restartRequired || (wanted && mod.pendingRestart);
       changed = changed || (wanted != mod.enabled && !(wanted && mod.pendingRestart));
+      changed = changed || (mod.enabled && mod.import && !PortMods::SameImportParts(mod.hidden, RemasteredHidden()));
+      // Left out, the room geometry no longer needs the buffers a restart would reserve.
+      changed = changed || (wanted && mod.pendingRestart && mod.import &&
+                            PortMods::ImportPartHidden(RemasteredHidden(), "geometry"));
     }
   }
   if (PortMods::Suspended()) {

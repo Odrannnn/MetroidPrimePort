@@ -26,6 +26,7 @@ namespace {
 bool ready = false;
 bool modsOn = true;
 std::string disabled;
+std::string hidden;
 int overlays = 0;
 int discRegistrations = 0;
 int frameBufferReserves = 0;
@@ -36,6 +37,7 @@ void Check(bool ok, const char* what) {
 namespace PortDebug {
 bool ModsEnabled() { return modsOn; }
 std::string ModsDisabled() { return disabled; }
+std::string RemasteredHidden() { return hidden; }
 bool GeneratedBallLooks() { return false; }
 bool OriginalExperience() { return true; }
 }
@@ -127,6 +129,20 @@ int main() {
   scan(); // a world/mod reload cannot turn this into a partially active mod
   Check(PortMods::CurrentStatus().mods[0].pendingRestart && discRegistrations == 0, "reload bypassed deferral");
   Check(frameBufferReserves == 0, "deferred mod asked for the frame buffers");
+  hidden = "lighting, geometry"; // left out, the geometry needs no restart; the rest loads
+  scan();
+  Check(PortMods::CurrentStatus().mods[0].enabled && !PortMods::CurrentStatus().mods[0].pendingRestart &&
+        !PortMods::RoomGeometryLoaded() && frameBufferReserves == 0 &&
+        !PortMods::ResourceProvider(0x434d444c, 2).empty() && PortMods::NativeTextureCount() == 1,
+        "hidden geometry still deferred the mod");
+  hidden = "models,effects,hud";
+  ready = true;
+  scan();
+  Check(PortMods::RoomGeometryLoaded() && PortMods::ResourceProvider(0x434d444c, 2).empty() &&
+        PortMods::NativeTextureCount() == 1 && !PortMods::EnvFxPath().empty(),
+        "hidden models loaded, or textures or root HUD files left out");
+  hidden.clear();
+  frameBufferReserves = 0;
   ready = true;
   scan();
   Check(PortMods::CurrentStatus().mods[0].enabled && !PortMods::CurrentStatus().mods[0].pendingRestart,

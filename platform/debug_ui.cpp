@@ -289,6 +289,9 @@ std::string sRemasteredKeysPath;
 // The parts the panel leaves out of an import, comma separated (remastered_skip):
 // hud, text, effects, movies, gallery, geometry.
 std::string sRemasteredSkip;
+// The parts of the installed import the mods load without (remastered_hide), comma separated:
+// PortMods::kImportParts.
+std::string sRemasteredHide;
 
 std::string SettingsFilePath() {
   const std::string& dir = PortPaths::UserFolder();

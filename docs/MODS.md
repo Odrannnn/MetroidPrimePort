@@ -149,6 +149,14 @@ exists). Prime Remastered > Import then asks only for the image.
 - "What to import" leaves parts out of the next import (room geometry, particle effects, HUD,
   text, movies, gallery), kept as `remastered_skip` in the settings file. The `MP_REMASTERED_*`
   [switches](#import-switches) can still leave out a part the panel keeps.
+- "Parts to use", under the section's switch, picks which parts of the installed import load
+  (room geometry, room lighting, particle effects, models, HUD, font, text, map, movies); the
+  disc's own stands in for each part left out, and nothing is imported again. It applies at the
+  next mod reload. Converted textures always load: they have ids of their own, used only by the
+  models that name them. Kept as `remastered_hide` in the settings file (the parts left out,
+  comma-separated: `geometry`, `lighting`, `effects`, `models`, `hud`, `font`, `text`, `map`,
+  `movies`); `MP_REMASTERED_HIDE` overrides it for one run. With room geometry left out the
+  import loads without the restart room geometry otherwise needs on a phone started without it.
 
 From a terminal, `metroid_prime_port --import-remastered <image.nsp|image.xci> [key file]` does
 the same on every core without starting the game, installs at once and prints the folder it

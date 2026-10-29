@@ -1122,6 +1122,11 @@ void SetOriginalExperience(bool enabled) {
 
 std::string ModsDisabled() { return Loaded(sModsDisabled); }
 void SetModsDisabled(const std::string& list) { StoreSetting(sModsDisabled, list); }
+std::string RemasteredHidden() {
+  const char* env = std::getenv("MP_REMASTERED_HIDE");
+  return env != nullptr ? std::string(env) : Loaded(sRemasteredHide);
+}
+void SetRemasteredHidden(const std::string& list) { StoreSetting(sRemasteredHide, list); }
 
 bool Invulnerable() {
   EnsureInitialized();

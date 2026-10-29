@@ -7,6 +7,7 @@
 #include "port_bytes.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -433,6 +434,26 @@ std::string JoinDisabled(const std::vector<std::string>& names) {
     list += name;
   }
   return list;
+}
+
+bool ImportPartHidden(const std::string& list, const char* part) {
+  const size_t length = std::strlen(part);
+  for (size_t at = 0; at < list.size();) {
+    const size_t comma = std::min(list.find(',', at), list.size());
+    size_t begin = at;
+    size_t end = comma;
+    while (begin < end && std::isspace(static_cast<unsigned char>(list[begin]))) {
+      ++begin;
+    }
+    while (end > begin && std::isspace(static_cast<unsigned char>(list[end - 1]))) {
+      --end;
+    }
+    if (end - begin == length && list.compare(begin, length, part) == 0) {
+      return true;
+    }
+    at = comma + 1;
+  }
+  return false;
 }
 
 } // namespace PortMods

@@ -29,8 +29,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -273,6 +275,60 @@ void DrawBuiltinModToggle(const char* modName, const char* label, bool stale) {
     ImGui::TextColored(ThemeWarnColor(), "Not loaded: reload the mods to apply.");
   }
 }
+
+// Which parts of the installed import the mods load (remastered_hide): the disc's own stands in
+// for each part left out, without importing again. Applies at the next reload.
+void DrawRemasteredParts() {
+  const PortMods::Status& status = PortMods::CurrentStatus();
+  const auto mod = std::find_if(status.mods.begin(), status.mods.end(), [](const PortMods::ModInfo& m) {
+    return m.name == PortRemastered::kImportModName;
+  });
+  if (mod == status.mods.end() || !ImGui::TreeNode("Parts to use")) {
+    return;
+  }
+  struct Part {
+    const char* key;
+    const char* label;
+    const char* help;
+  };
+  static constexpr Part kParts[] = {
+      {"geometry", "Room geometry", "Remastered's rooms. Off: the disc's rooms (no restart needed to load them)."},
+      {"lighting", "Room lighting", "Remastered's room lighting, fog and colour grade."},
+      {"effects", "Particle effects", "Remastered's particles, beams and room effects."},
+      {"models", "Models", "Remastered's characters, creatures, items and objects."},
+      {"hud", "HUD", "Remastered's visor and HUD."},
+      {"font", "Font", "Remastered's sharp font."},
+      {"text", "Text", "Remastered's text tables."},
+      {"map", "Map", "Remastered's map."},
+      {"movies", "Movies", "Remastered's movies."},
+  };
+  static_assert(std::size(kParts) == std::size(PortMods::kImportParts));
+  const std::string hidden = Loaded(sRemasteredHide);
+  std::string next;
+  bool edited = false;
+  for (const Part& part : kParts) {
+    bool on = !PortMods::ImportPartHidden(hidden, part.key);
+    edited |= ImGui::Checkbox(part.label, &on);
+    ItemHelp(part.help);
+    if (!on) {
+      next += next.empty() ? "" : ",";
+      next += part.key;
+    }
+  }
+  if (edited) {
+    SetRemasteredHidden(next);
+  }
+  if (std::getenv("MP_REMASTERED_HIDE") != nullptr) {
+    ImGui::TextDisabled("(MP_REMASTERED_HIDE is set: it decides for this run)");
+  } else if (mod->enabled && !PortMods::SameImportParts(mod->hidden, next)) {
+    ImGui::TextColored(ThemeWarnColor(), "Reload the mods to apply.");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Reload mods")) {
+      PortSaveState::RequestModReload();
+    }
+  }
+  ImGui::TreePop();
+}
 } // namespace
 
 // The port's own mods, each with its import: Prime Remastered's models and Dread's Samus.
@@ -292,6 +348,7 @@ void DrawBuiltinMods() {
     ImGui::Indent();
     DrawBuiltinModToggle(PortRemastered::kImportModName, "Use the Remastered models",
                          PortMods::StaleRemasteredImport() != nullptr);
+    DrawRemasteredParts();
     DrawRemasteredWarning();
     ImGui::SeparatorText("Import");
     DrawRemasteredImport();

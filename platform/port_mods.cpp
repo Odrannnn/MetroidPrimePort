@@ -247,6 +247,60 @@ bool IsDocument(const std::string& name) {
          EndsWith(lower, ".png") || EndsWith(lower, ".jpg") || EndsWith(lower, ".ini") || lower == "license";
 }
 
+// The kImportParts entry a file of a Remastered import belongs to, by its folder and then its
+// type; nullptr for one that always loads (textures, material cubes, the gallery).
+const char* ImportPartOf(const fs::path& relative) {
+  const std::string name = PathString(relative.filename());
+  uint32_t type = 0;
+  uint32_t id = 0;
+  // By type first, as the scan's geometry check: room geometry in any folder.
+  if (PortRoomGeo::ParseFileName(name, id) || PortRoomLiquid::ParseFileName(name, id)) {
+    return "geometry";
+  }
+  if (relative.has_parent_path()) {
+    const std::string folder = Lower(PathString(*relative.begin()));
+    if (folder == "roomgeo") {
+      return "geometry";
+    }
+    if (folder == "roomenv") {
+      return PortRoomEffects::ParseFileName(name, id) ? "effects" : "lighting";
+    }
+    if (folder == PortRemastered::kHudFolder) {
+      return "hud";
+    }
+    if (folder == PortRemastered::kTextFolder) {
+      return "text";
+    }
+    if (folder == "font" || folder == "map") {
+      return folder == "font" ? "font" : "map";
+    }
+    return folder == "video" ? "movies" : nullptr;
+  }
+  if (name == "effectids.map") {
+    return "effects";
+  }
+  if (name == PortRetailPlacement::kFileName) {
+    return "models";
+  }
+  if (!ParseLooseName(name, type, id)) {
+    return nullptr;
+  }
+  switch (type) {
+  case 0x54585452: // 'TXTR'
+    return nullptr;
+  case 0x50415254: // 'PART'
+  case 0x454C5343: // 'ELSC'
+  case 0x53574843: // 'SWHC'
+  case 0x57505343: // 'WPSC'
+  case 0x43525343: // 'CRSC'
+  case 0x44505343: // 'DPSC'
+  case 0x56454346: // 'VECF'
+    return "effects";
+  default:
+    return "models";
+  }
+}
+
 struct Replacement {
   std::string hostPath;
   uint64_t size = 0;
@@ -649,7 +703,18 @@ void Initialize() {
       };
       textFits = madeOn(PortRemastered::kTextFolder, PortRemastered::kTextDiscName);
       hudFits = madeOn(PortRemastered::kHudFolder, PortRemastered::kHudDiscName);
+      info.hidden = PortDebug::RemasteredHidden();
     }
+    // The parts the import leaves out, before the geometry check below: with its room geometry
+    // left out, an import loads without the reserved buffers.
+    const auto hiddenPart = [&](const fs::path& path) {
+      if (info.hidden.empty()) {
+        return false;
+      }
+      const char* part = ImportPartOf(path.lexically_relative(modDir));
+      return part != nullptr && ImportPartHidden(info.hidden, part);
+    };
+    int partsLeftOut = 0;
     std::vector<fs::path> files;
     for (fs::recursive_directory_iterator it(modDir, fs::directory_options::skip_permission_denied, ec), end;
          !ec && it != end; it.increment(ec)) {
@@ -666,8 +731,15 @@ void Initialize() {
         continue;
       }
       if (it->is_regular_file(ec)) {
+        if (hiddenPart(it->path())) {
+          ++partsLeftOut;
+          continue;
+        }
         files.push_back(it->path());
       }
+    }
+    if (partsLeftOut > 0) {
+      Message(info.name + ": " + std::to_string(partsLeftOut) + " files left out (" + info.hidden + ")");
     }
     // Geometry buffers are reserved at process startup (main.cpp) unless MP_FRAME_BUFFERS
     // pins them at 1. Defer the WHOLE mod then, before even textures/sidecars can register:

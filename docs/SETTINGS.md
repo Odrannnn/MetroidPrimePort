@@ -964,7 +964,10 @@
   (`dread_first_person_cannon`, on by default; off keeps Prime's arm cannon,
   `DREAD_SAMUS.md`); the Remastered import's "What to import" (`remastered_skip`: the
   parts left out, comma-separated from `geometry`, `effects`, `hud`, `text`,
-  `movies` and `gallery`; `MODS.md`); the
+  `movies` and `gallery`; `MODS.md`); its "Parts to use" (`remastered_hide`:
+  the installed parts the mods load without, comma-separated from `geometry`,
+  `lighting`, `effects`, `models`, `hud`, `font`, `text`, `map` and `movies`;
+  `MP_REMASTERED_HIDE` overrides it; `MODS.md`); the
   Randomizer page's options (`rando_settings`, one line of JSON;
   `RANDOMIZER.md`); and Archipelago's "Staggered suit damage" (`ap_suit_damage`:
   0 Default, 1 Progressive, the default, 2 Additive), set by hand to match the

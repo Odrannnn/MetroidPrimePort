@@ -155,6 +155,7 @@ struct ModInfo {
   int textures = 0;  // <id>.dds images
   bool import = false;       // made by the Remastered import (stamp present, or its folder name)
   bool importStale = false;  // ... and by an older importer than this build's
+  std::string hidden;        // an import's parts the last scan left out (remastered_hide), as set
 };
 
 struct Status {
@@ -267,5 +268,21 @@ bool RoomEnvLoaded();
 // Folder names the settings disable, '/'-separated (no folder name has one).
 std::vector<std::string> SplitDisabled(const std::string& list);
 std::string JoinDisabled(const std::vector<std::string>& names);
+
+// The parts of an installed Remastered import a scan can leave out, kept as a comma-separated list
+// (remastered_hide; MP_REMASTERED_HIDE overrides it): the disc's own asset stands in for each
+// file left out. Textures and material cubes always load: they have ids of their own, and load
+// only for a model that names them. Unlike remastered_skip, nothing is re-imported.
+inline constexpr const char* kImportParts[] = {"geometry", "lighting", "effects", "models", "hud",
+                                               "font",     "text",     "map",     "movies"};
+bool ImportPartHidden(const std::string& list, const char* part);
+inline bool SameImportParts(const std::string& a, const std::string& b) {
+  for (const char* part : kImportParts) {
+    if (ImportPartHidden(a, part) != ImportPartHidden(b, part)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 } // namespace PortMods
