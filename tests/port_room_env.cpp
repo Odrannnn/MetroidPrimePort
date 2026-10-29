@@ -1338,6 +1338,44 @@ void TestWorldVolumes() {
     wrongCount.push_back(1);
     for (int k = 0; k < 3; ++k) Put32(wrongCount, 0);
     CHECK_MSG(!PortRoomEnv::Parse(std::move(wrongCount), file, error), "env vars: detect count must match");
+    // Version 32 adds to each volume whether the trigger is active at load, and the script
+    // that switches it (its own links); the version 31 section follows the volumes.
+    std::vector<uint8_t> v32 = v26;
+    v32[4] = 32;
+    Put32(v32, 2);
+    for (int k = 0; k < 2; ++k) {
+      for (float f : b.centre) PutFloat(v32, f);
+      for (float f : b.half) PutFloat(v32, k == 0 ? f : std::numeric_limits<float>::quiet_NaN());
+      for (float f : b.axes) PutFloat(v32, f);
+      v32.insert(v32.end(), {uint8_t(k == 0 ? 3 : 1), 0, 0, 0});
+      // The first starts off, switched on by 0x172 state 2 and toggled by 0x173 state 0; the
+      // second is on at load with nothing switching it.
+      v32.insert(v32.end(), {uint8_t(k == 0 ? 0 : 1), 0, 0, 0});
+      Put32(v32, k == 0 ? 2 : 0);
+      if (k == 0) {
+        Put32(v32, 0x172);
+        v32.insert(v32.end(), {2, uint8_t(PortRoomGeo::kShow), 0, 0});
+        Put32(v32, 0x173);
+        v32.insert(v32.end(), {0, uint8_t(PortRoomGeo::kToggle), 0, 0});
+      }
+    }
+    Put32(v32, 2);                      // version 31's section: what the two world volumes detect
+    v32.insert(v32.end(), {1, 1});      // then no variables, ops or branches
+    for (uint32_t empty : {0u, 0u, 0u}) Put32(v32, empty);
+    const size_t inTail = v26.size() + 4 + 64 + 4;  // inside the first volume's version 32 tail
+    CHECK_MSG(!PortRoomEnv::Parse(std::vector<uint8_t>(v32.begin(), v32.begin() + inTail), file, error),
+              "room volumes: version 32 tail cut short");
+    CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(v32), file, error) && file.roomVolumes.size() == 2 &&
+                  file.envBranches.empty(),
+              "room volumes: version 32 read back");
+    const RoomVolume& off = file.roomVolumes[0];
+    CHECK_MSG(off.detect == (PortRoomEnv::kRoomVolumePlayer | PortRoomEnv::kRoomVolumeCamera) && !off.on &&
+                  off.links.size() == 2 && off.links[0].sender == 0x172 && off.links[0].state == 2 &&
+                  off.links[0].action == PortRoomGeo::kShow && off.links[1].sender == 0x173 &&
+                  off.links[1].state == 0 && off.links[1].action == PortRoomGeo::kToggle,
+              "room volumes: version 32 off at load with the links that switch it");
+    CHECK_MSG(file.roomVolumes[1].on && file.roomVolumes[1].links.empty(),
+              "room volumes: version 32 a trigger on at load has no links");
   }
   const float inB[3] = {10.f, 1.5f, 0.f}, outB[3] = {11.5f, 0.f, 0.f};
   CHECK_MSG(PortRoomEnv::InsideWorldVolume(b, inB) && !PortRoomEnv::InsideWorldVolume(b, outB), "volumes: turned box");

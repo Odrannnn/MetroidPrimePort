@@ -80,6 +80,7 @@ struct Area {
   bool pendingWater = false;
   std::vector<std::pair<uint32_t, int>> queued; // sender, state
   std::vector<uint8_t> roomInside; // by file.roomVolumes entry: the player or camera is in it
+  std::vector<uint8_t> roomActive; // by file.roomVolumes entry: its trigger is switched on
   uint32_t serial = 0;  // of this load, which the worker's jobs for it carry
   std::vector<GpuCube> cubes;
   std::vector<GpuVolume> volumes; // one a grid

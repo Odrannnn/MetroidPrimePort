@@ -15,7 +15,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 31;
+constexpr uint32_t kVersion = 32;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -1122,7 +1122,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       return false;
     }
     out.roomVolumes.resize(volumes);
-    for (uint32_t i = 0; i < volumes; ++i, at += kVolumeBytes) {
+    for (uint32_t i = 0; i < volumes; ++i) {
       RoomVolume& v = out.roomVolumes[i];
       float* const fields[3] = {v.centre, v.half, v.axes};
       const size_t counts[3] = {3, 3, 9};
@@ -1141,6 +1141,28 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       if (!ok) {
         v = RoomVolume{};
         v.half[0] = v.half[1] = v.half[2] = -1.f;
+      }
+      at += kVolumeBytes;
+      if (version >= 32) {
+        // Whether the trigger is active at load, and the script that switches it (its own links).
+        if (data.size() - at < 8) {
+          error = "cut short";
+          return false;
+        }
+        v.on = data[at] != 0;
+        const uint32_t links = ReadLE32(data.data() + at + 4);
+        at += 8;
+        if (links > kMaxGradeLinks || (data.size() - at) / 8 < links) {
+          error = "cut short";
+          return false;
+        }
+        v.links.resize(links);
+        for (GradeLink& link : v.links) {
+          link.sender = ReadLE32(data.data() + at);
+          link.state = data[at + 4];
+          link.action = data[at + 5];
+          at += 8;
+        }
       }
     }
   }

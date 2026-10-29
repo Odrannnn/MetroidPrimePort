@@ -242,7 +242,8 @@ inline constexpr int kEffects = 139;   // Queen barrier shield/glow models back-
 // 64: the Queen barrier group survives its effects' back-cull bit (effects 139 dropped it).
 // 65: roomenv version 30, room trigger volumes (room-local TriggerMP1 player/camera detect) drive the room's hints.
 // 66: roomenv version 31, environment variables (the master's META vars, trigger modifiers, query branches).
-inline constexpr int kRooms = 66;
+// 67: roomenv version 32, a room trigger volume's own active bit and the script links that switch it.
+inline constexpr int kRooms = 67;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

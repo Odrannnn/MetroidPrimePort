@@ -3385,7 +3385,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 31);
+  AppendLE32(out, 32);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3702,9 +3702,36 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     }
     out.push_back(v.detect);
     out.insert(out.end(), 3, 0);
+    // Version 31: whether the trigger is active at load, and the script that switches it.
+    out.push_back(v.on ? 1 : 0);
+    out.insert(out.end(), 3, 0);
+    AppendLE32(out, uint32_t(v.links.size()));
+    for (const PortRoomEnv::GradeLink& link : v.links) {
+      AppendLE32(out, link.sender & 0x3ffffff);  // as CEntity sends it: no layer bits
+      out.push_back(link.state);
+      out.push_back(link.action);
+      out.insert(out.end(), 2, 0);
+    }
   }
   if (!scripts.roomVolumes.empty()) {
-    Log("  " + r.name + ": " + std::to_string(scripts.roomVolumes.size()) + " room trigger volume(s) switch hints");
+    std::string note = std::to_string(scripts.roomVolumes.size()) + " room trigger volume(s) switch hints";
+    for (size_t k = 0; k < scripts.roomVolumes.size(); ++k) {
+      const PortRoomEnv::RoomVolume& v = scripts.roomVolumes[k];
+      if (!v.on || !v.links.empty()) {
+        note += "; volume " + std::to_string(k) + (v.on ? " on" : " off at load");
+        for (const PortRoomEnv::GradeLink& link : v.links) {
+          char text[48];
+          std::snprintf(text, sizeof text, ", %s by %08X state %d",
+                        link.action == PortRoomGeo::kShow       ? "on"
+                        : link.action == PortRoomGeo::kHide     ? "off"
+                        : link.action == PortRoomGeo::kToggle   ? "toggle"
+                                                                : "?",
+                        link.sender & 0x3ffffff, link.state);
+          note += text;
+        }
+      }
+    }
+    Log("  " + r.name + ": " + note);
   }
   // Version 31: what each world volume detects, the world's variables, the modifiers the world's
   // and this room's triggers fire, and the master's query branches.

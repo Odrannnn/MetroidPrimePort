@@ -1816,8 +1816,11 @@ std::string FogInfo() {
     for (size_t i = 0; i < area.file.roomVolumes.size(); ++i) {
       const RoomVolume& v = area.file.roomVolumes[i];
       const bool inside = i < area.roomInside.size() && area.roomInside[i] != 0;
-      std::snprintf(line, sizeof(line), "%08X room volume %zu: %s detect %s%s centre %.1f %.1f %.1f half %.1f %.1f %.1f\n",
-                    sViewArea, i, inside ? "inside " : "outside", (v.detect & kRoomVolumePlayer) != 0 ? "player" : "",
+      const bool active = i < area.roomActive.size() ? area.roomActive[i] != 0 : v.on;
+      std::snprintf(line, sizeof(line),
+                    "%08X room volume %zu: %s%s%s detect %s%s centre %.1f %.1f %.1f half %.1f %.1f %.1f\n",
+                    sViewArea, i, active ? "on " : "off ", inside ? "inside " : "outside",
+                    v.links.empty() ? "" : " (script-switched)", (v.detect & kRoomVolumePlayer) != 0 ? "player" : "",
                     (v.detect & kRoomVolumeCamera) != 0 ? "+camera" : "", v.centre[0], v.centre[1], v.centre[2],
                     v.half[0], v.half[1], v.half[2]);
       out += line;
@@ -1932,7 +1935,17 @@ void SetAreaPoints(uint32_t mrea, const float camera[3], const float playerMin[3
   if (area.roomInside.size() != area.file.roomVolumes.size()) {
     area.roomInside.assign(area.file.roomVolumes.size(), 0);
   }
+  if (area.roomActive.size() != area.file.roomVolumes.size()) {
+    area.roomActive.assign(area.file.roomVolumes.size(), 0);
+    for (size_t k = 0; k < area.roomActive.size(); ++k) {
+      area.roomActive[k] = area.file.roomVolumes[k].on ? 1 : 0;
+    }
+  }
   for (size_t k = 0; k < area.file.roomVolumes.size(); ++k) {
+    // A trigger that is off tests nothing, and keeps no side of its box (DriveRoomVolumes).
+    if (area.roomActive[k] == 0) {
+      continue;
+    }
     const uint8_t inside = InsideRoomVolume(area.file.roomVolumes[k], cameraOk ? camera : nullptr, playerMin,
                                             playerMax, playerOk)
                                ? 1
