@@ -60,6 +60,12 @@ bool HudFrameModel(const uint8_t* guif, size_t size, ModelUuid& model);
 bool HudBeamIconTints(const uint8_t* ldta, size_t size, std::map<std::string, std::array<float, 4>>& out,
                       std::string& error);
 
+// The icy material Remastered draws a frozen enemy with (CPatternedMP1::RenderIcy): the
+// MATI GUID, in the file's byte order, that the render loose data (the LDTA asset
+// RenderLooseDataMP1) holds in property 0xC2347D95 of its root property 0x5F2E374B.
+// False when `ldta` is not a tweak file or holds no such GUID.
+bool RenderIcyMaterial(const uint8_t* ldta, size_t size, ModelUuid& out, std::string& error);
+
 struct HudCounts {
   int widgets = 0;
   int models = 0;

@@ -327,11 +327,39 @@ void TestBeamTints() {
   ldta[0] = 'X';
   CHECK_MSG(!HudBeamIconTints(ldta.data(), ldta.size(), tints, error), "not a tweak file");
 }
+
+void TestIcyMaterial() {
+  Blob ldta(0x38, 0);
+  std::memcpy(ldta.data(), "RFRM", 4);
+  std::memcpy(ldta.data() + 0x14, "LDTA", 4);
+  std::memcpy(ldta.data() + 0x20, "LDCH", 4);
+  Little16(ldta, 2);
+  TweakColor(ldta, 0x12345678, {{0x110889D1, 0.f}});  // something else first
+  // The materials: two GUIDs, the icy one second, as RenderLooseDataMP1 has them.
+  Little32(ldta, 0x5F2E374B);
+  Little16(ldta, 2 + 2 * 22);
+  Little16(ldta, 2);
+  for (const uint32_t member : {0x8FC08AABu, 0xC2347D95u}) {
+    Little32(ldta, member);
+    Little16(ldta, 16);
+    for (int b = 0; b < 16; ++b) {
+      ldta.push_back(uint8_t(member + b));
+    }
+  }
+  ModelUuid icy{};
+  std::string error;
+  CHECK_MSG(RenderIcyMaterial(ldta.data(), ldta.size(), icy, error), error);
+  CHECK_MSG(icy[0] == uint8_t(0xC2347D95u) && icy[15] == uint8_t(0xC2347D95u + 15), "the second GUID");
+  CHECK_MSG(!RenderIcyMaterial(ldta.data(), ldta.size() - 1, icy, error), "a cut file");
+  ldta[0] = 'X';
+  CHECK_MSG(!RenderIcyMaterial(ldta.data(), ldta.size(), icy, error), "not a tweak file");
+}
 }  // namespace
 
 int main() {
   TestFrame();
   TestBeamTints();
+  TestIcyMaterial();
   if (port_test::Failures() == 0) {
     std::printf("port_remastered_hud: ok\n");
   }

@@ -6182,6 +6182,20 @@ uint32_t EffectRetailType(uint32_t form) {
   return 0;
 }
 
+bool ReadMaterialParams(const std::vector<uint8_t>& mati, MaterialParams& out) {
+  Mati parsed;
+  if (!ParseMati(mati, parsed)) {
+    return false;
+  }
+  out = MaterialParams();
+  out.shader = parsed.shader;
+  for (const auto& [tag, texture] : parsed.textures) {
+    out.textures[tag] = texture.guid;
+  }
+  out.vectors = parsed.vectors;
+  return true;
+}
+
 bool SplitRetailPart(const uint8_t* data, size_t size, std::vector<RetailPartProperty>& out, std::string& error) {
   return SplitRetailEffect(F("PART"), data, size, out, error);
 }

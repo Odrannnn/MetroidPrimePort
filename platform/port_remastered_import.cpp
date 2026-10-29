@@ -2,6 +2,7 @@
 #include "port_remastered_effect_convert.h"
 #include "port_queen_barrier_validate.h"
 #include "port_envfx_file.h"
+#include "port_icy_file.h"
 #include "port_shell_file.h"
 #include "port_retail_placement.h"
 #include "port_dread_reskin.h"
@@ -3759,6 +3760,76 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         AddLine("silhouette shell textures: " + shellError);
       } else if (!makeIO(0, hudFolder).write("shell.bin", file)) {
         AddLine("silhouette shell textures: cannot write");
+      }
+    }
+
+    // Remastered's frozen-enemy material (port_icy_file.h) as icy.bin: the icy MATI the render
+    // loose data names, its three textures and four constants (build/mpr/kb
+    // topic/frozen-enemy-icy-render.md). All of it or no file, and frozen enemies draw as retail.
+    {
+      PortIcy::Assets icy;
+      std::string icyError;
+      std::vector<uint8_t> raw;
+      ModelUuid material{};
+      MaterialParams params;
+      // A GUID as the file holds it, else with its first three groups swapped.
+      const auto swap = [](ModelUuid id) {
+        std::swap(id[0], id[3]);
+        std::swap(id[1], id[2]);
+        std::swap(id[4], id[5]);
+        std::swap(id[6], id[7]);
+        return id;
+      };
+      std::string readError;
+      if (!remastered.ReadTweak("RenderLooseDataMP1", raw, readError) ||
+          !RenderIcyMaterial(raw.data(), raw.size(), material, readError)) {
+        icyError = "RenderLooseDataMP1: " + readError;
+      } else if (!remastered.ReadEffectAsset(kMATI, material, raw, readError) &&
+                 !remastered.ReadEffectAsset(kMATI, swap(material), raw, readError)) {
+        icyError = "the icy material: " + readError;
+      } else if (!ReadMaterialParams(raw, params)) {
+        icyError = "the icy material does not parse";
+      }
+      for (int i = 0; i < PortIcy::kCount && icyError.empty(); ++i) {
+        const auto texture = params.textures.find(PortIcy::kImageTag[i]);
+        if (texture == params.textures.end()) {
+          icyError = std::string("the icy material has no ") + PortIcy::kImageTag[i];
+          break;
+        }
+        std::string error;
+        TxtrImage tex;
+        if (!remastered.ReadTexture(texture->second, raw, error) &&
+            !remastered.ReadTexture(swap(texture->second), raw, error)) {
+          icyError = std::string(PortIcy::kImageTag[i]) + ": " + error;
+        } else if (!DecodeTxtr(raw.data(), raw.size(), tex, error)) {
+          icyError = std::string(PortIcy::kImageTag[i]) + ": " + error;
+        } else if (tex.width < 1 || tex.height < 1 || tex.width > 4096 || tex.height > 4096) {
+          icyError = std::string(PortIcy::kImageTag[i]) + ": " + std::to_string(tex.width) + "x" +
+                     std::to_string(tex.height);
+        } else {
+          BuildShellImage(tex, icy.image[i]);
+        }
+      }
+      for (int i = 0; i < PortIcy::kVectors && icyError.empty(); ++i) {
+        const auto vector = params.vectors.find(PortIcy::kVectorTag[i]);
+        if (vector == params.vectors.end()) {
+          icyError = std::string("the icy material has no ") + PortIcy::kVectorTag[i];
+        } else {
+          icy.vector[i] = vector->second;
+        }
+      }
+      PortIcy::Assets check;
+      std::vector<uint8_t> file;
+      if (icyError.empty()) {
+        file = PortIcy::Serialize(icy);
+        if (!PortIcy::Parse(file.data(), file.size(), check, icyError)) {
+          icyError = "unexpected size: " + icyError;
+        }
+      }
+      if (!icyError.empty()) {
+        AddLine("frozen-enemy material: " + icyError);
+      } else if (!makeIO(0, hudFolder).write("icy.bin", file)) {
+        AddLine("frozen-enemy material: cannot write");
       }
     }
     if (hudFrames == 0 && compassModels == 0) {

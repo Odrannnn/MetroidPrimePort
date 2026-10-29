@@ -331,6 +331,8 @@ set(MP_PORT_SOURCES
     platform/port_shell.cpp
     platform/port_shell_assets.cpp
     platform/port_shell_file.cpp
+    platform/port_icy_assets.cpp
+    platform/port_icy_file.cpp
     platform/port_room_geo.cpp
     platform/port_room_geo_file.cpp
     platform/port_room_liquid.cpp
@@ -1184,6 +1186,9 @@ if(MP_BUILD_TESTS)
         INCLUDES platform/include)
     mp_port_test(port_shell_file_tests
         SOURCES tests/port_shell_file.cpp platform/port_shell_file.cpp
+        INCLUDES platform/include)
+    mp_port_test(port_icy_file_tests
+        SOURCES tests/port_icy_file.cpp platform/port_icy_file.cpp
         INCLUDES platform/include)
     mp_port_test(port_hud_bars_tests
         SOURCES tests/port_hud_bars.cpp platform/port_hud_bars_file.cpp

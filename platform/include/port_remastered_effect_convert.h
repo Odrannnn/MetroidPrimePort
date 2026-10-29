@@ -56,8 +56,10 @@
 
 #include "port_remastered_effect.h"
 
+#include <array>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -137,5 +139,14 @@ bool SplitRetailPart(const uint8_t* data, size_t size, std::vector<RetailPartPro
 // as CParticleSwooshDataFactory and CParticleElectricDataFactory do.
 bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vector<RetailPartProperty>& out,
                        std::string& error);
+
+// A MATI's parameters as the effect converter reads them: each texture's GUID, in the
+// MATI's byte order, and each vec4 constant, by tag. False when `mati` is too short to be one.
+struct MaterialParams {
+  uint32_t shader = 0;  // the shader id, big-endian as the MATI holds it (700e8e71 for the icy one)
+  std::map<std::string, EffectGuid> textures;
+  std::map<std::string, std::array<float, 4>> vectors;
+};
+bool ReadMaterialParams(const std::vector<uint8_t>& mati, MaterialParams& out);
 
 }  // namespace PortRemastered

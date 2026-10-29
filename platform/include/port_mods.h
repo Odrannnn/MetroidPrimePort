@@ -230,6 +230,8 @@ std::string ThermalLutPath();
 std::string EnvFxPath();
 // The shell.bin a mod supplies (Remastered's silhouette-shell textures, port_shell_assets.h); empty when none.
 std::string ShellPath();
+// The icy.bin a mod supplies (Remastered's frozen-enemy material, port_icy_assets.h); empty when none.
+std::string IcyPath();
 // The retailplacements.bin a mod supplies (port_retail_placement.h); empty when none.
 std::string RetailPlacementPath();
 // The id a retail asset (a WPSC) reads for an effect in its field ('APS2'...), when a mod's

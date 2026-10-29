@@ -991,6 +991,49 @@ bool HudBeamIconTints(const uint8_t* ldta, size_t size, std::map<std::string, st
   return true;
 }
 
+// SLdrRenderLooseDataMP1 is one property list like the GUI colour tweak's; its 0x5F2E374B
+// holds two material GUIDs, and CPatternedMP1::RenderIcy (0xfc4794) draws with the second
+// (+0x10 of the loaded struct; build/mpr/kb topic/frozen-enemy-icy-render.md).
+bool RenderIcyMaterial(const uint8_t* ldta, size_t size, ModelUuid& out, std::string& error) {
+  auto u16 = [&](size_t at) { return uint32_t(ldta[at]) | uint32_t(ldta[at + 1]) << 8; };
+  auto u32 = [&](size_t at) { return u16(at) | u16(at + 2) << 16; };
+  constexpr size_t kRoot = 0x38;
+  constexpr uint32_t kMaterials = 0x5F2E374B;
+  constexpr uint32_t kIcy = 0xC2347D95;
+  if (ldta == nullptr || size < kRoot + 2 || std::memcmp(ldta, "RFRM", 4) != 0 ||
+      std::memcmp(ldta + 0x14, "LDTA", 4) != 0 || std::memcmp(ldta + 0x20, "LDCH", 4) != 0) {
+    error = "not a tweak file";
+    return false;
+  }
+  const uint32_t count = u16(kRoot);
+  size_t at = kRoot + 2;
+  for (uint32_t i = 0; i < count && at + 6 <= size; ++i) {
+    const uint32_t hash = u32(at);
+    const size_t length = u16(at + 4);
+    at += 6;
+    if (at + length > size) {
+      break;
+    }
+    if (hash == kMaterials && length >= 2) {
+      const size_t end = at + length;
+      size_t c = at + 2;
+      for (uint32_t k = u16(at); k > 0 && c + 6 <= end; --k) {
+        const uint32_t member = u32(c);
+        const size_t mlen = u16(c + 4);
+        c += 6;
+        if (member == kIcy && mlen == out.size() && c + mlen <= end) {
+          std::memcpy(out.data(), ldta + c, out.size());
+          return true;
+        }
+        c += mlen;
+      }
+    }
+    at += length;
+  }
+  error = "no icy material";
+  return false;
+}
+
 HudConverter::HudConverter(ConvertIO io)
 : m_io(std::move(io)), m_nextModel(kModelIds), m_nextTexture(kTextureIds) {}
 
