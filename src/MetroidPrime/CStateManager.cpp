@@ -2844,6 +2844,14 @@ bool CStateManager::SetupFogForDraw() const {
     gpRender->SetWorldFog(kRFM_None, 0.f, 1.f, CColor::Black());
     return true;
   case CPlayerState::kPV_XRay:
+#ifdef TARGET_PC
+    // Nor X-ray fog: Remastered has no distance fog to set (no SetWorldFog/SetFog), and its
+    // X-ray draws the lit world, the post making the look (kb topic/visor-hdr-pipeline.md).
+    if (sPortRemasteredFog) {
+      gpRender->SetWorldFog(kRFM_None, 0.f, 1.f, CColor::Black());
+      return true;
+    }
+#endif
     return false;
   default:
     return false;
@@ -2889,6 +2897,11 @@ void CStateManager::SetupFogForArea3XRange(const CGameArea& area) const {
   if (x8b8_playerState->GetActiveVisor(*this) != CPlayerState::kPV_XRay) {
     return;
   }
+#ifdef TARGET_PC
+  if (sPortRemasteredFog) {
+    return;
+  }
+#endif
 
   const float fogDist = const_cast< CGameArea& >(area).GetXRayFogDistance();
   const CTweakGui* tweak = gpTweakGui;
@@ -3559,9 +3572,10 @@ void CStateManager::DrawWorld() const {
       portRoomGeo[i] = true;
       continue;
     }
-    // A mod's room geometry stands in for the area's own (port_room_geo.h).
-    portRoomGeo[i] = (!thermal || portThermalScene) && visor != CPlayerState::kPV_XRay &&
-                     PortRoomGeo::Draw(*this, area, frustum);
+    // A mod's room geometry stands in for the area's own (port_room_geo.h). X-ray draws it
+    // too: Remastered's RenderPrimaryPass 0xf9ccd8 draws its one world in every visor, the
+    // X-ray's bit-18 meshes left out by InitMeshFilter 0xf9e764 (kb topic/visor-mesh-filter.md).
+    portRoomGeo[i] = (!thermal || portThermalScene) && PortRoomGeo::Draw(*this, area, frustum);
     if (portRoomGeo[i]) {
       continue;
     }
@@ -3604,10 +3618,6 @@ void CStateManager::DrawWorld() const {
   // Remastered fogs the opaque world and sky full-screen, then the actors and transparents as
   // they draw (up to GXPortVolumetricFogEnd).
   PortDrawVolumetricFog(*this, backupViewMatrix, frustum);
-  // Remastered's X-ray distortion of the opaque world (pass A of its visor post).
-  if (GetPlayerState()->GetActiveVisor(*this) == CPlayerState::kPV_XRay) {
-    PortRoomEnv::XRayPass(true);
-  }
 #endif
   bool morphingPlayerVisible = false;
   rstl::reserved_vector< const CActor*, kMaxObjects > thermalActors;
@@ -3779,6 +3789,13 @@ void CStateManager::DrawWorld() const {
   // (CAutoExposureHintMP1GOC) is PortRoomEnv::SetExposureState.
   if (portSceneHdrRequested && !portZoomed) {
     GXPortMeasureScene(PortRoomEnv::MeasureExposure());
+  }
+  // Remastered's X-ray distortion of the opaque world (pass A of its visor post), at
+  // RenderPostOpaque: after every opaque draw and the measure above (kb
+  // topic/visor-hdr-pipeline.md, steps 5 and 7). Pass A brightens a dark frame, so measuring
+  // its output would feed back into the exposure.
+  if (GetPlayerState()->GetActiveVisor(*this) == CPlayerState::kPV_XRay) {
+    PortRoomEnv::XRayPass(true);
   }
   // Pass B: each area's sorted drawables and world surfaces, in the same order and with the
   // fog, light fade, PVS, draw token and room-geometry state pass A had for that area.
