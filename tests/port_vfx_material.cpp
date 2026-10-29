@@ -298,7 +298,7 @@ void TestModelExposureOverride() {
   PortRoomEnv::testFrameExposure = 4.f;
   desc.xPortVfx->mat.features = aurora::gfx::vfx::ParticleLit;
   Check(PortVfxModelExposureOverride(desc) == snapshot && PortVfxExposureGain(desc) == 1.f,
-        "lit models still consume inverse; lit sprite selection is unchanged");
+        "lit models still consume inverse; lit sprites do not");
   aurora::gfx::vfx::DrawDesc sprite;
   Check(!sprite.exposureOverride, "unselected draws default to inherited policy");
   desc.xPortVfx->mat.blend = uint32_t(Blend::Opaque);
@@ -331,7 +331,7 @@ void TestModelExposureOverride() {
   PortRoomEnv::testFrameExposure = 4.f;
 }
 
-// Every unlit explicit-policy sprite forwards the frame exposure, not the GX tone's inherited w (the last
+// Every explicit-policy sprite, lit or unlit, forwards the frame exposure, not the GX tone's inherited w (the last
 // CCubeModel's 1 sorted or GlowScale opaque): IEXP blended nets 1, opaque E / E_static, bare E.
 void TestSpriteExposureOverride() {
   using aurora::gfx::vfx::Blend;
@@ -350,7 +350,8 @@ void TestSpriteExposureOverride() {
   desc.xPortVfx->mat.blend = uint32_t(Blend::Alpha);
   Check(*PortVfxSpriteExposureOverride(desc) * PortVfxExposureGain(desc) == 1.f, "blended sprite nets 1");
   desc.xPortVfx->mat.features = aurora::gfx::vfx::ParticleLit;
-  Check(!PortVfxSpriteExposureOverride(desc), "lit sprites keep the inherited w (scale not yet RE'd)");
+  Check(*PortVfxSpriteExposureOverride(desc) * PortVfxExposureGain(desc) == 4.f,
+        "a lit sprite ignores ITEN x inverse and nets E, IEXP or not");
   desc.xPortVfx->mat.features = 0;
   desc.xPortInverseExposure = false;
   Check(*PortVfxSpriteExposureOverride(desc) * PortVfxExposureGain(desc) == 4.f, "a bare sprite nets E");

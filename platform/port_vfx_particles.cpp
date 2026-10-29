@@ -357,9 +357,11 @@ std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc) {
   return PortVfxFrameExposureOverride();
 }
 
+// Lit sprites too: 20e149b2's lit perms (084_0/088_0) apply no exposure, and their VS (084_1/088_1) passes
+// COLR through without the writers' ITEN x inverse-exposure scalar (FUN_002b4634/002b44c0, component 0xe),
+// so the sprite is bare and nets E from the tonemap (kb topic/lit-sprite-exposure.md).
 std::optional<float> PortVfxSpriteExposureOverride(const CGenDescription& desc) {
-  if (!desc.xPortExposurePolicy || !desc.xPortVfx ||
-      (desc.xPortVfx->mat.features & aurora::gfx::vfx::ParticleLit) != 0) {
+  if (!desc.xPortExposurePolicy || !desc.xPortVfx) {
     return std::nullopt;
   }
   return PortVfxFrameExposureOverride();
