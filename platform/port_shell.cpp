@@ -2,6 +2,7 @@
 
 #include "port_shell.h"
 
+#include "port_debug.h"
 #include "port_mods.h"
 #include "port_room_env.h"
 #include "port_shell_assets.h"
@@ -83,7 +84,9 @@ void Draw(Type type, const CAABox& bounds, const std::function<void()>& draw) {
 }
 } // namespace
 
-bool Enabled() { return PortRoomEnv::Enabled() && PortMods::RoomEnvLoaded() && InitTextures(); }
+bool Enabled() {
+  return PortDebug::PhazonShell() && PortRoomEnv::Enabled() && PortMods::RoomEnvLoaded() && InitTextures();
+}
 
 bool Defer(Type type, const CAABox& bounds, std::function<void()> draw) {
   if (!Enabled()) {

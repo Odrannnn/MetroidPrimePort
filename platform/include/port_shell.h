@@ -16,8 +16,8 @@ enum Type : int {
   kDoll = 2, // the pause screen's Samus doll (CSamusDollMP1::RenderSuit)
 };
 
-// Whether a shell can draw now (Remastered room environment on, shell.bin loaded); false: the
-// caller draws retail's effect.
+// Whether a shell can draw now (setting phazon_shell on, Remastered room environment on,
+// shell.bin loaded); false: the caller draws retail's effect.
 bool Enabled();
 
 // `draw` draws the model (its own transform and flags; the shell overrides the shading, blend and

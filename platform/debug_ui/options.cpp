@@ -443,6 +443,11 @@ bool CinemaBars() {
   return sCinemaBars || sOriginalExperience;
 }
 
+bool PhazonShell() {
+  EnsureInitialized();
+  return sPhazonShell;
+}
+
 bool SharpScanWindow() {
   EnsureInitialized();
   return sSharpScanWindow && !sOriginalExperience;
