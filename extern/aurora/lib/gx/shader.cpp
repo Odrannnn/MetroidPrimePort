@@ -2299,7 +2299,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // ChozoLore 9d53cf06 FS002/003 (identical): TCH0 (map 4, texA) scrolled by CCH0.xy at CCH0.z bends
   // BCLR (tex8) by CCH0.w x c1[0].x (0.2), which scrolls by (CCH1.w, CCH2.w) at CCH1.x. Unlit and
   // premultiplied: rgb = BCLR x CCH1.y x (1 + clamp(w) x CCH1.z) x DIFC x alpha, alpha = BCLR.a x
-  // the vertex alpha x DIFC.a.
+  // the vertex alpha x DIFC.a. The glow has no exposure factor of its own: bare (pbr_eb).
   if (config.pbrKind == 46 && mapStage[0] != -1 && mapStage[4] != -1) {
     liquid += fmt::format(R"""(
     if (pbr_kind > 45.5 && pbr_kind < 46.5) {{
@@ -2316,7 +2316,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
         let lrg = clamp(in.pbr_lore.z, 0.0, 1.0) * lr1.z;
         pbr_alpha = lrs.a * pbr_vraw.a * lrd.a;
         pbr_lo = vec3f(0.0);
-        pbr_glow = lrs.rgb * lr1.y * (1.0 + lrg) * lrd.rgb * pbr_alpha;
+        pbr_glow = lrs.rgb * lr1.y * (1.0 + lrg) * lrd.rgb * (pbr_alpha * pbr_eb);
         pbr_pass = vec3f(0.0);
     }})""",
         underlying(config.tevStages[mapStage[0]].texMapId),
