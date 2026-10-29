@@ -165,6 +165,7 @@ struct State {
   rstl::vector<CSegId> segs; // the segments RecalcPoseBuilder poses
   bool posed[kSegs] = {};     // which segments segs holds
   bool upper[kSegs] = {};     // Spine_1 and everything under it: what the aim clips pose
+  bool freeArm[kSegs] = {};   // the arm without the cannon: it swings with the walk while aiming
   CSegId hips = CSegId::Invalid(); // the top posed bone, which carries a clip's height
   float hipsHeight = 0.f;          // its height in the skeleton
   CSegId spine = CSegId::Invalid(); // Spine_1, the upper body's top bone
@@ -721,6 +722,7 @@ Pose sArms;
 Pose sModel;
 Pose sBlended;
 Pose sUpper;
+Pose sWalkArm;
 
 // Pose p with each rotation turned into the model's frame (its parents' rotations times its
 // own); a segment RecalcPoseBuilder doesn't set keeps the pose builder's rotation.
@@ -1123,6 +1125,9 @@ void PoseBody(CAnimData& data) {
       Mix(sArms, armsTotal, sModel, weights[j], true);
     }
     if (armsTotal > 0.f) {
+      // Walking, the free arm keeps the walk's swing under the aimed shoulders.
+      const float freeAim = s.aimWeight * (1.f - s.stanceWeight[int(Stance::Loco)] * (1.f - s.backWeight));
+      sWalkArm = sAcc;
       ModelRotations(data, sAcc, sModel);
       const CCharLayoutInfo& layout = **data.PoseBuilder().CharLayoutInfo();
       for (const CSegId& seg : s.segs) {
@@ -1141,6 +1146,15 @@ void PoseBody(CAnimData& data) {
         const CQuaternion& parentModel = s.upper[parent] ? sBlended.rot[parent] : sModel.rot[parent];
         sAcc.rot[i] = parentModel.BuildInverted() * sBlended.rot[i];
         sAcc.off[i] = sAcc.off[i] * (1.f - s.aimWeight) + sArms.off[i] * s.aimWeight;
+      }
+      if (freeAim < s.aimWeight) {
+        for (const CSegId& seg : s.segs) {
+          const int i = seg.val();
+          if (s.freeArm[i]) {
+            sAcc.rot[i] = Blend(sWalkArm.rot[i], sAcc.rot[i], s.aimWeight > 0.f ? freeAim / s.aimWeight : 0.f);
+            sAcc.off[i] = sWalkArm.off[i] * (1.f - freeAim) + sArms.off[i] * freeAim;
+          }
+        }
       }
     }
   }
@@ -1221,6 +1235,24 @@ void Build(CStateManager& mgr) {
   }
   FindAimBones(*data);
   FindReachBones(*data);
+  std::fill(std::begin(s.freeArm), std::end(s.freeArm), false);
+  for (const char* name : {"L_shoulder", "R_shoulder"}) {
+    CSegId arm = layout.GetSegIdFromString(rstl::string_l(name));
+    if (arm != CSegId::Invalid() && s.shoulder != CSegId::Invalid() && arm != s.shoulder) {
+      // From where the arm leaves the spine: the aim clips raise the collarbone too.
+      for (int depth = 0; depth < 64; ++depth) {
+        const CSegId parent = layout.GetOriginalParent(arm);
+        if (!s.upper[parent.val()] || IsAncestor(layout, parent, s.shoulder)) {
+          break;
+        }
+        arm = parent;
+      }
+      for (const CSegId& seg : s.segs) {
+        s.freeArm[seg.val()] = s.upper[seg.val()] && (seg == arm || IsAncestor(layout, arm, seg));
+      }
+      break;
+    }
+  }
   BuildSets(false);
   // A missing walk clip stands in by its fallback, else the walk (the ready pose without one);
   // a missing walk back or sprint drops out of its tiers (Update).
