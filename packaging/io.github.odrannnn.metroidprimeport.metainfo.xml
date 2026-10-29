@@ -55,6 +55,12 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.36.0" date="2026-10-29">
+      <description>
+        <p>Third person: a sidestep strafe, a backpedal, stopping and idling animations, a grapple arm that reaches for its point, the free arm swinging while aiming, and a crosshair clear of the shoulder pad with the charge effect on the body's cannon. Remastered: room fog and grading switched by trigger volumes, the X-ray visor drawing room geometry, the Chozo Lore sheets, the frozen-enemy icy shell, cutscene suit models, many glow and exposure fixes, a Phazon Suit aura toggle and a choice of which parts of the import load. Input: your own binding presets, inverted map rotation options, larger button prompts. Fixes: skipping the Frigate's item-loss cutscene takes the items, the F1 menu at high frame rates, simulation timing at non-60 Hz rates, stacked beams no longer running out of object slots, safer saving, and the cheat menu's Chozo Artifacts.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.36.0</url>
+    </release>
     <release version="0.35.1" date="2026-10-28">
       <description>
         <p>Bugfixes: GameCube controllers through a Wii U/Mayflash adapter now work on Windows and read raw like a console (no deadzone, origin at plug-in, X+Y+Start for 3 s recalibrates); Trilogy shows GameCube button art for the active input on the map and pause screens, its map text and legend layout match the disc, and a GameCube-made Remastered import no longer crashes Trilogy on the map or pause screen; an optional GameCube crosshair style on Trilogy, and no doubled crosshair under free aim; Dread's shoulder pads sit in its idle pose; mouse aim no longer snaps back under Xwayland; the Flatpak's OpenGL fallback works; the touch map button no longer flickers while looking around; the Linux release binary is much smaller, with its debug info shipped separately.</p>
