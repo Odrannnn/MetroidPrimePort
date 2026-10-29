@@ -375,6 +375,8 @@ bool ApplyKeyPresetNamed(std::string_view name) {
   } else {
     return false;
   }
+  // The presets turn mouse aim and Twin Stick Aim on or off; the settings file keeps them.
+  PortDebug::MarkSettingsDirty();
   return true;
 }
 
@@ -390,6 +392,8 @@ bool ApplyPadPresetNamed(std::string_view name) {
   } else {
     return false;
   }
+  // The presets turn mouse aim and Twin Stick Aim on or off; the settings file keeps them.
+  PortDebug::MarkSettingsDirty();
   return true;
 }
 

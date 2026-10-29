@@ -9,6 +9,8 @@
 #include "port_apclient.h"
 #include "port_controls.h"
 #include "port_input_devices.h"
+#include "port_input_remap_ui.h"
+#include <dolphin/pad.h>
 #include "port_mouse.h"
 
 #include "MetroidPrime/Player/CGameOptions.hpp"
@@ -30,6 +32,28 @@ namespace PortDebug {
 
 void DrawControlsOptions() {
   const bool locked = BeginOriginalLocked();
+  ImGui::SeparatorText("Quick setup");
+  if (ImGui::Button("Use mouse & keyboard")) {
+    PortInputRemap::ApplyPreset(PortInput::Family::Keyboard, "mouse");
+  }
+  ItemHelp("Turns on mouse aim and the Mouse & keyboard layout: WASD to move, mouse to aim, left "
+           "click to fire, Space to jump, Q to lock on. Replaces your own keyboard bindings; "
+           "Controls > Remap > Presets... has the others.");
+  SameLineAfterHelp();
+  ImGui::TextDisabled(sInput.mouseAim ? "Mouse aim is on." : "Mouse aim is off.");
+  // A GameCube pad has no right stick click for the dual-stick layout (as Remap's Presets...).
+  ImGui::BeginDisabled(PADIsGCAdapter(0) != 0);
+  if (ImGui::Button("Use twin-stick controller")) {
+    PortInputRemap::ApplyPreset(PortInput::Family::Pad, "remastered");
+  }
+  ImGui::EndDisabled();
+  ItemHelp("Turns on Twin Stick Aim and the Remastered layout for all controllers: left stick moves, "
+           "right stick aims, RT fire, LT lock on, A jump, X morph ball, right stick click free look. "
+           "Replaces your own controller bindings; Controls > Remap > Presets... has Modern and the "
+           "others. Not for a GameCube controller, which has no right stick click.");
+  SameLineAfterHelp();
+  ImGui::TextDisabled(PadTwinStick() ? "Twin-stick aim is on." : "Twin-stick aim is off.");
+
   ImGui::SeparatorText("On-screen prompts");
   int glyphs = sPromptGlyphs.load(std::memory_order_relaxed);
   if (ImGui::Combo("Button glyphs", &glyphs,

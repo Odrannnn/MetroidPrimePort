@@ -5,13 +5,19 @@
 // trigger, turbo and contexts; a pad profile follows a controller (GUID) or a kind
 // of controller (SDL type).
 
+#include "port_input_bindings.h"
 #include "port_input_engine.h"
 
 #include <string>
+#include <string_view>
 
 namespace PortInputRemap {
 
 void Draw();
+// Remap's Presets... button: replaces the family's own Default-profile bindings
+// with the named PortControls preset ("classic", "mouse"; "gamecube", "remastered",
+// "modern", "southpaw") and its Morph Ball rows. Overlay thread.
+void ApplyPreset(PortInput::Family family, std::string_view id);
 // An input capture is running: the overlay's pad navigation stays off.
 bool Capturing();
 // The inputs bound to `action` as Remap names them ("F1 or Back + Start"); empty

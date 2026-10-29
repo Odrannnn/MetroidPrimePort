@@ -32,7 +32,6 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
-#include <sstream>
 
 namespace aurora {
 void request_screenshot() noexcept;
@@ -727,12 +726,19 @@ void RefreshLocked() {
   sUserTime = time;
   std::ifstream file(path, std::ios::binary);
   if (!file) return;
-  std::ostringstream text;
-  text << file.rdbuf();
+  // A bindings file is a few KiB; a huge one is a mistake, not a config.
+  constexpr std::streamsize kMaxControlsBytes = 1 << 20;
+  std::string content(static_cast< size_t >(kMaxControlsBytes) + 1, '\0');
+  file.read(content.data(), kMaxControlsBytes + 1);
+  content.resize(static_cast< size_t >(file.gcount()));
+  if (static_cast< std::streamsize >(content.size()) > kMaxControlsBytes) {
+    PortLog::Write("port: controls.toml is larger than 1 MiB; ignored\n");
+    return;
+  }
   PortInput::UserBindings parsed;
   std::string error;
   int dropped = 0;
-  if (PortInput::ParseUserBindings(text.str(), parsed, &error, &dropped)) {
+  if (PortInput::ParseUserBindings(content, parsed, &error, &dropped)) {
     PortLog::Write("port: controls.toml loaded (%zu profiles)\n", parsed.profiles.size());
     if (dropped > 0)
       PortLog::Write("port: controls.toml: skipped %d beam_shift row(s); beams are now default shift+D-pad chords\n", dropped);
@@ -1206,7 +1212,16 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
     r.status.err = PAD_ERR_NO_CONTROLLER;
     return r;
   }
-  RouteDirectActions(out);
+  if (PortDebug::Visible()) {
+    // The F1 overlay owns the keyboard and pad: the direct actions (beam/visor picks, the
+    // radial menus, Spring Ball) reach the game outside the pad, so they wait too. A held
+    // radial menu is released and its pick dropped.
+    PortRadial::Tick(false, false, 0.f, 0.f);
+    PortRadial::TakePick(PortRadial::kBeam);
+    PortRadial::TakePick(PortRadial::kVisor);
+  } else {
+    RouteDirectActions(out);
+  }
 
   r.status = Synthesize(out);
   // The scan text reads only A: the Menu row's, not gameplay's (issue #93). The

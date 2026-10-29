@@ -132,6 +132,10 @@
   sharpens in one filter), and only to a frame smaller than the window. The file also
   takes a manual `render_scale` under 1.
 - `MP_ASPECT=4:3|16:9|window` (default `window`, persisted as `aspect`); the legacy `MP_WIDESCREEN` selects 16:9.
+- Quick setup (Controls > Options): "Use mouse & keyboard" turns on mouse aim (with twin stick) and applies
+  the Mouse & keyboard layout; "Use twin-stick controller" turns on twin stick and applies the
+  Remastered layout to all controllers (greyed out with a GameCube adapter). Both replace your own
+  bindings for that device (Remap > Presets...) and are saved.
 - `MP_TWIN_STICK=1` (Controls > Options, persisted as `twin_stick`): twin-stick aiming. The
   right stick feeds the first-person aim through the same path as the mouse (so
   the same sensitivity/invert apply, tuned by `stick_aim_rate`, default 900 px/s, 50-10000; the F1

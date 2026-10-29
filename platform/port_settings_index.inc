@@ -32,6 +32,8 @@
 {"Game", "", "Speedrun", "LiveSplit", "timer split tcp server speedrun"},
 {"Game", "", "Speedrun", "Server (host:port)", "livesplit address host port"},
 {"Game", "", "Speedrun", "Split on upgrades", "livesplit split item timer"},
+{"Controls", "Options", "Quick setup", "Use mouse & keyboard", "mouse aim keyboard wasd preset layout quick setup"},
+{"Controls", "Options", "Quick setup", "Use twin-stick controller", "twin stick dual sticks right stick aim controller gamepad remastered preset layout quick setup"},
 {"Controls", "Options", "On-screen prompts", "Button glyphs", "button icons prompts controller xbox playstation"},
 {"Controls", "Options", "Buttons", "Toggle Lock-On", "lock on target toggle hold"},
 {"Controls", "Options", "Buttons", "Sticky Charge", "charge beam hold fire"},

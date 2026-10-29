@@ -2,6 +2,7 @@
 #include "port_console.h"
 #include "port_debug.h"
 #include "port_freecam.h"
+#include "port_input_gate.h"
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
@@ -126,6 +127,10 @@ void CDolphinController::ReadDevices() {
       status[i].err = error;
     }
   }
+  // Pad 0 reads neutral while the F1 overlay is open (zeroed above); on closing, whatever is still
+  // held (a menu key, a walk key, a stick or trigger) stays masked until released, so it fires nothing.
+  static PortInputGate::Gate< PADStatus > sPad0Gate;
+  sPad0Gate.Apply(PortDebug::Visible(), status[0]);
   memcpy(x4_status, status, sizeof(status));
 
   // Twin-stick: feed the right stick into the first-person aim and consume it,
