@@ -331,8 +331,8 @@ void TestModelExposureOverride() {
   PortRoomEnv::testFrameExposure = 4.f;
 }
 
-// A sprite's IEXP inverse is undone by the frame exposure it forwards, not by the GX tone's inherited w
-// (the last CCubeModel's 1 sorted or GlowScale opaque): blended nets 1, opaque E / E_static.
+// Every unlit explicit-policy sprite forwards the frame exposure, not the GX tone's inherited w (the last
+// CCubeModel's 1 sorted or GlowScale opaque): IEXP blended nets 1, opaque E / E_static, bare E.
 void TestSpriteExposureOverride() {
   using aurora::gfx::vfx::Blend;
   PortRoomEnv::testFrameExposure = 4.f;
@@ -350,10 +350,10 @@ void TestSpriteExposureOverride() {
   desc.xPortVfx->mat.blend = uint32_t(Blend::Alpha);
   Check(*PortVfxSpriteExposureOverride(desc) * PortVfxExposureGain(desc) == 1.f, "blended sprite nets 1");
   desc.xPortVfx->mat.features = aurora::gfx::vfx::ParticleLit;
-  Check(!PortVfxSpriteExposureOverride(desc), "lit sprites take no intensity scalar and keep the inherited w");
+  Check(!PortVfxSpriteExposureOverride(desc), "lit sprites keep the inherited w (scale not yet RE'd)");
   desc.xPortVfx->mat.features = 0;
   desc.xPortInverseExposure = false;
-  Check(!PortVfxSpriteExposureOverride(desc), "a bare sprite keeps the inherited w");
+  Check(*PortVfxSpriteExposureOverride(desc) * PortVfxExposureGain(desc) == 4.f, "a bare sprite nets E");
   desc.xPortInverseExposure = true;
   desc.xPortExposurePolicy = false;
   Check(!PortVfxSpriteExposureOverride(desc), "legacy exposure policy remains unchanged");

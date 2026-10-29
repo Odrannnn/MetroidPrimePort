@@ -32,9 +32,12 @@ std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc);
 // The frame's exposure (sFrame.exposure, 1 in pause lighting) while rooms are exposed, for a draw
 // whose CPU colour carries Remastered's inverse exposure; nullopt otherwise.
 std::optional<float> PortVfxFrameExposureOverride();
-// An unlit inverse-exposed sprite's (IEXP, blended or opaque): its inverse exposure is applied before
-// the tonemap's frame exposure, which the HDR tail multiplies by only through this. Inherited, the GX
-// tone's w is the last CCubeModel's correction (1 sorted, GlowScale opaque), not an exposure.
+// An unlit explicit-policy sprite's: Remastered writes particles as pre-exposure radiance that the
+// tonemap multiplies by the frame exposure, which the HDR tail applies only through this. IEXP's CPU
+// inverse (blended or opaque) comes before it; a bare sprite nets E. Inherited, the GX tone's w is the
+// last CCubeModel's correction (1 sorted, GlowScale opaque), not an exposure. Lit sprites still inherit:
+// at E the Landing Site mist (LIT_ 1, FXBR 2.5, ITEN 5 dropped) all but vanishes, and its lit chain
+// is not yet reverse-engineered far enough to say which factor is missing.
 std::optional<float> PortVfxSpriteExposureOverride(const CGenDescription& desc);
 
 // Model particles with a VMSH mesh: RenderModels adds each live particle's CPU-transformed

@@ -358,7 +358,7 @@ std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc) {
 }
 
 std::optional<float> PortVfxSpriteExposureOverride(const CGenDescription& desc) {
-  if (!desc.xPortExposurePolicy || !desc.xPortInverseExposure || !desc.xPortVfx ||
+  if (!desc.xPortExposurePolicy || !desc.xPortVfx ||
       (desc.xPortVfx->mat.features & aurora::gfx::vfx::ParticleLit) != 0) {
     return std::nullopt;
   }
