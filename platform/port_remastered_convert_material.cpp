@@ -186,6 +186,8 @@ constexpr uint32_t kShaderHoloGlassB = 0x3991DA00;  // HoloGlass: scrolling indi
 constexpr uint32_t kShaderHoloGlassE264 = 0xE2644678;
 // 5586D988 VS000: static hologram with green-selected apex collapse and X/Z fade.
 constexpr uint32_t kShaderRouteHologram = 0x5586D988;
+// 9d53cf06 (ChozoLore_Mat_B, the lore statues' sheet): unlit, premultiplied, its vertices waved along the normal.
+constexpr uint32_t kShaderChozoLore = 0x9D53CF06;
 constexpr double kHoloGlassE264DepthCap = 0.019999999552965164;  // vp_c1[0].x, binary32 0x3ca3d70a
 constexpr uint32_t kShaderRefractGlassB = 0xCC8AFD0F;
 // SimpleGlass_DX11_1 (kind 43, kb material/084a8db5.md): HoloGlass (3991da00) without TCH1, TCH2 and DIFC. TCH0
@@ -310,6 +312,7 @@ std::string ShaderRole(uint32_t shader) {
   add(shader == kShaderHoloRefl, "holo-refl");
   add(shader == kShaderHologram, "hologram");
   add(shader == kShaderEnergyField, "energy-field");
+  add(shader == kShaderChozoLore, "chozo-lore");
   add(shader == kShaderLambertFx, "lambert-fx");
   add(shader == kShaderGunFx, "gun-fx");
   add(IsEyeGloss(shader), "eye-gloss");
@@ -379,6 +382,7 @@ const char* KindName(int kind) {
   case 43: return "simple-glass";
   case 44: return "energy-field";
   case 45: return "route-hologram";
+  case 46: return "chozo-lore";
   default: return "kind?";
   }
 }
@@ -1261,6 +1265,30 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
         for (int i = 0; i < 4; ++i) out.shieldRows[28 + i] = ShortestDouble(d.color[i]);
       }
     }
+  } else if (shader == kShaderChozoLore && out.maps[kBase].has && tch[0] && cch[0] && cch[1] && cch[2]) {
+    // ChozoLore 9d53cf06 (kb material/9d53cf06.md), unlit and premultiplied: BCLR (tex8) is the base map, TCH0
+    // (texA, the offset that bends it) is bound raw as the second layer's base (stage 4). Rows 0-2 CCH0..CCH2
+    // (FS c5[0], c5[1], VS/FS CCH2: the wave), row 7 DIFC. The VS waves the vertices along the normal by the
+    // vertex alpha and maps the sheet from the model-space y and z.
+    out.kind = 46;
+    out.shield = true;
+    out.vcolor = true;
+    out.unlit = true;
+    set(kBase, tch[0]->texture, &out.layer[kBase]);
+    out.layer[kBase].raw = true;
+    out.kindParam[0] = 1.0;  // the game multiplies it by the time
+    out.tint[0] = out.tint[1] = out.tint[2] = 0.0;
+    for (int r = 0; r < 3; ++r) {
+      for (int i = 0; i < 4; ++i) {
+        out.shieldRows[r * 4 + i] = ShortestDouble(cch[r]->color[i]);
+      }
+    }
+    for (int i = 0; i < 4; ++i) out.shieldRows[28 + i] = 1.0;
+    for (const ModelMaterialData& d : mat.data) {
+      if (d.kind == ModelMaterialData::Kind::Color && d.usage == FourCC('D', 'I', 'F', 'C')) {
+        for (int i = 0; i < 4; ++i) out.shieldRows[28 + i] = ShortestDouble(d.color[i]);
+      }
+    }
   } else if ((shader == kShaderHolo || shader == kShaderHoloRefl || shader == kShaderHologram || shader == kShaderRouteHologram) &&
              out.maps[kBase].has && ((shader != kShaderHologram && shader != kShaderRouteHologram) || (cch[0] && cch[1] && cch[2] && cch[3]))) {
     out.kind = shader == kShaderHolo ? 16 : shader == kShaderHoloRefl ? 17 : shader == kShaderRouteHologram ? 45 : 18;
@@ -1550,6 +1578,15 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     out.layered = true;
     out.cutout = out.tinted = out.mask = false;
     out.height = 0.0;
+  }
+  if (out.kind == 46) {
+    // The lore sheet's TCH0 is the second layer's base (stage 4); it blends One / InvSrcAlpha (PbrBlend).
+    out.layered = out.blended = true;
+    out.cutout = out.tinted = out.mask = false;
+    out.height = 0.0;
+    out.emissive = 0.0;
+    out.backlight = out.backlightTop = 0.0;
+    out.maps[kMr].has = out.maps[kNormal].has = out.maps[kEmissive].has = false;
   }
   if (out.kind == 28) {
     // Lit, with the frost map in the emissive slot and its own opacity (the base alpha).

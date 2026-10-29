@@ -802,6 +802,29 @@ gx::ShaderConfig screen_config(int kind, bool hdr) {
   return config;
 }
 
+// The Chozo Lore sheet (9D53CF06): its vertices wave along the normal by the vertex alpha, its base
+// map (stage 0) bent by the TCH0 offset (stage 4), unfogged, with and without a colour stream.
+TEST_F(SceneHdrTest, ChozoLoreCompilesWithVertexColor) {
+  for (const bool colored : {false, true}) {
+    for (const bool hdr : {false, true}) {
+      SCOPED_TRACE(testing::Message() << "colored " << colored << " hdr " << hdr);
+      auto config = screen_config(46, hdr);
+      if (colored) {
+        config.attrs[GX_VA_CLR0].attrType = GX_DIRECT;
+        config.attrs[GX_VA_CLR0].cnt = 4;
+        config.attrs[GX_VA_CLR0].compType = GX_RGBA8;
+        config.attrs[GX_VA_CLR0].stride = 4;
+      }
+      const auto source = gx::build_shader_source(config);
+      ASSERT_FALSE(source.empty());
+      EXPECT_EQ(module_error(source), "");
+      EXPECT_NE(source.find("lore_pos"), std::string::npos);
+      EXPECT_NE(source.find("pbr_kind > 45.5 && pbr_kind < 46.5"), std::string::npos);
+    }
+  }
+  EXPECT_TRUE(g_uncapturedErrors.empty());
+}
+
 size_t count(std::string_view source, std::string_view what) {
   size_t n = 0;
   for (size_t at = source.find(what); at != std::string_view::npos; at = source.find(what, at + what.size())) {

@@ -880,7 +880,38 @@ void TestRouteHologram() {
   }
 }
 
+// 9D53CF06 (the Chozo Lore sheet) is kind 46: BCLR the base, TCH0 the second layer's base, rows 0-2 CCH0..CCH2
+// and row 7 DIFC, drawn premultiplied. Without CCH2 (the wave) it is no kind 46.
+void TestChozoLore() {
+  ModelMaterial material = Material(0, false);
+  SetShader(material, 0x9D53CF06);
+  material.unk1 = 0x11;  // as shipped: transparent, vertex colour
+  material.data.push_back(TexParam(FourCC('T', 'C', 'H', '0'), 0x51));
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '0'), .3f, .2f, 4.f, 3.f));
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '1'), 3.f, 10.f, 2.f, -.1f));
+  {
+    std::vector<MaterialDecision> decisions;
+    ConvertDecisions(material, decisions, true);
+    CHECK_MSG(decisions.empty() || decisions[0].kind != 46, "9D53CF06 without CCH2 is not kind 46");
+  }
+  material.data.push_back(ColorParam(FourCC('C', 'C', 'H', '2'), 4.f, .3f, 8.f, 0.f));
+  material.data.push_back(ColorParam(FourCC('D', 'I', 'F', 'C'), .5f, .25f, .125f, .75f));
+  std::vector<MaterialDecision> decisions;
+  const auto cmdl = ConvertDecisions(material, decisions, true);
+  REQUIRE(!decisions.empty());
+  CHECK_MSG(decisions[0].kind == 46 && decisions[0].path == "pbr", "9D53CF06: kind 46, PBR");
+  size_t at = 0, size = 0;
+  REQUIRE(FirstBlob(cmdl, at, size));
+  const auto t = BlobShield(cmdl, at, size);
+  CHECK_MSG(t.has && t.hasKind && t.kind == 46.f, "9D53CF06: a kind 46 trailer");
+  CHECK_MSG(Near(t.row[0], .3f) && Near(t.row[3], 3.f) && Near(t.row[5], 10.f) && Near(t.row[7], -.1f) &&
+                Near(t.row[8], 4.f) && Near(t.row[10], 8.f),
+            "9D53CF06: rows 0-2 are CCH0..CCH2");
+  CHECK_MSG(Near(t.row[28], .5f) && Near(t.row[31], .75f), "9D53CF06: row 7 is DIFC");
+}
+
 int main() {
+  TestChozoLore();
   TestRouteHologram();
   TestReader();
   TestHoloGlassE264();

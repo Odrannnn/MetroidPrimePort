@@ -2392,6 +2392,30 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     }
     return lo[0] <= hi[0];
   };
+  // Whether a model draws a Chozo Lore sheet (9D53CF06, ChozoLore_Mat_B): the glow over the lore
+  // statues, which Remastered places as an actor of its own model where retail has its "Chozo Lore
+  // Glow" actor, unmarked as added. It stands in for that actor like a synthetic-model one.
+  std::map<Id16, bool> loreSheets;
+  auto loreSheet = [&](const uint8_t* id) {
+    const Id16 key = SwapUuid(id);
+    if (const auto found = loreSheets.find(key); found != loreSheets.end()) {
+      return found->second;
+    }
+    std::vector<uint8_t> data;
+    PortRemastered::Model cmdl;
+    std::string error;
+    bool lore = false;
+    if (FindResource(id, FourCC("CMDL"), home, data, nullptr, nullptr) &&
+        PortRemastered::ParseModel(data.data(), data.size(), cmdl, error)) {
+      lore = std::any_of(cmdl.materials.begin(), cmdl.materials.end(), [](const PortRemastered::ModelMaterial& m) {
+        uint8_t sid[4];
+        std::memcpy(sid, &m.shaderId, 4);
+        return ReadBE32(sid) == kShaderChozoLoreSheet;
+      });
+    }
+    loreSheets.emplace(key, lore);
+    return lore;
+  };
   // Whether a static model's bounds hold its origin, give or take half a metre.
   auto aroundOrigin = [&](const uint8_t* id) {
     Vec3 lo, hi;
@@ -2445,6 +2469,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
   struct Standin {
     uint32_t instance;
     Vec3 pos, lo, hi;
+    bool lore;
   };
   std::vector<Standin> standins;
   std::vector<const Component*> renderActors = r.room.Of(kActorMP1);
@@ -2461,7 +2486,9 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
                          chprProp.size == 16 && r.room.Nested(*c, {animProperty, kPropAnimName}, nameProp) &&
                          nameProp.size == 8;
     Vec3 pos, rot, scale;
-    const bool synthetic = hasModel && m_syntheticEntities.count(c->entity) != 0;
+    const bool synthetic = hasModel && (m_syntheticEntities.count(c->entity) != 0 ||
+                                        (!isPlatform && std::memcmp(r.room.Bytes(prop->second), kRetailIdPrefix, 12) != 0 &&
+                                         loreSheet(r.room.Bytes(prop->second))));
     if ((!isPlatform && f.find(kPropActorAdded) == f.end() && !synthetic) || (!hasModel && !hasAnim) ||
         !r.room.Xform(*c, pos, rot, scale)) {
       continue;
@@ -2587,6 +2614,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     if (Vec3 lo, hi; synthetic && modelBounds(r.room.Bytes(prop->second), lo, hi)) {
       Standin& s = standins.emplace_back();
       s.instance = uint32_t(instances.size() - 1);
+      s.lore = loreSheet(r.room.Bytes(prop->second));
       s.pos = Apply(area.xf, MulR2G(pos));
       s.lo = Vec3{HUGE_VAL, HUGE_VAL, HUGE_VAL};
       s.hi = Vec3{-HUGE_VAL, -HUGE_VAL, -HUGE_VAL};
@@ -2684,6 +2712,14 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
   // covers (Central Dynamo's three grates under the wider centre one). Neither may draw a model
   // the room keeps under its retail id, nor (the dropped one) stand where any entity does.
   size_t standinHidden = 0;
+  auto inside = [](const Vec3& p, const Vec3& lo, const Vec3& hi, double margin) {
+    for (size_t k = 0; k < 3; ++k) {
+      if (!(p[k] >= lo[k] - margin && p[k] <= hi[k] + margin)) {
+        return false;
+      }
+    }
+    return true;
+  };
   if (!standins.empty()) {
     for (const ScriptObject& o : area.objects) {
       if (o.type != kRetailActor || !o.hasPos ||
@@ -2693,8 +2729,22 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
           })) {
         continue;
       }
+      // A lore sheet's actor stands in for the retail "Chozo Lore Glow" actor (model 600D500E)
+      // over the same statue: the sheet is flat and set a little off retail's actor (a third of a
+      // metre in the Ruined Nursery), so the glow's origin need only lie by the sheet's box.
+      static constexpr uint8_t kLoreGlow[4] = {0x60, 0x0D, 0x50, 0x0E};
+      const bool loreGlow = std::search(o.props.begin(), o.props.end(), kLoreGlow, kLoreGlow + 4) != o.props.end();
       const Standin* by = nullptr;
       for (const Standin& s : standins) {
+        if (s.lore && loreGlow && inside(o.pos, s.lo, s.hi, kRetailActorNear)) {
+          by = &s;
+          break;
+        }
+      }
+      for (const Standin& s : standins) {
+        if (by != nullptr) {
+          break;
+        }
         if (MaxAbs(s.pos, o.pos) < kRetailActorNear) {
           by = &s;
           break;
@@ -2704,9 +2754,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
             return MaxAbs(p, o.pos) < kRetailActorNear;
           })) {
         for (const Standin& s : standins) {
-          if (o.pos[0] >= s.lo[0] - kStandinMargin && o.pos[0] <= s.hi[0] + kStandinMargin &&
-              o.pos[1] >= s.lo[1] - kStandinMargin && o.pos[1] <= s.hi[1] + kStandinMargin &&
-              o.pos[2] >= s.lo[2] - kStandinMargin && o.pos[2] <= s.hi[2] + kStandinMargin) {
+          if (inside(o.pos, s.lo, s.hi, kStandinMargin)) {
             by = &s;
             break;
           }
@@ -2718,7 +2766,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
       }
     }
   }
-  if (!m_syntheticEntities.empty()) {
+  if (!m_syntheticEntities.empty() || !standins.empty()) {
     Log("  " + r.name + ": " + std::to_string(standins.size()) + " of " + std::to_string(m_syntheticEntities.size()) +
         " Remastered stand-in actors drawn, " + std::to_string(standinHidden) + " retail actors hidden");
   }

@@ -706,6 +706,8 @@ constexpr uint8_t kRetailIdPrefix[12] = {0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x0
 constexpr uint8_t kRetailActor = 0x00;
 // How far Remastered moved a scenery actor off the retail one it stands for (0.38 at most).
 constexpr double kRetailActorNear = 0.5;
+// ChozoLore_Mat_B, the lore statues' glow sheet (port_remastered_convert_material.cpp's kShaderChozoLore).
+constexpr uint32_t kShaderChozoLoreSheet = 0x9D53CF06;
 // How far outside a Remastered stand-in model's world box a dropped retail Actor's origin
 // may lie and still be hidden with it (WriteGeometry): a floor's box is a few cm thick.
 constexpr double kStandinMargin = 0.25;

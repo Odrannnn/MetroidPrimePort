@@ -2296,6 +2296,32 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
         underlying(config.tevStages[mapStage[4]].texMapId),
         underlying(config.tevStages[mapStage[4]].texCoordId));
   }
+  // ChozoLore 9d53cf06 FS002/003 (identical): TCH0 (map 4, texA) scrolled by CCH0.xy at CCH0.z bends
+  // BCLR (tex8) by CCH0.w x c1[0].x (0.2), which scrolls by (CCH1.w, CCH2.w) at CCH1.x. Unlit and
+  // premultiplied: rgb = BCLR x CCH1.y x (1 + clamp(w) x CCH1.z) x DIFC x alpha, alpha = BCLR.a x
+  // the vertex alpha x DIFC.a.
+  if (config.pbrKind == 46 && mapStage[0] != -1 && mapStage[4] != -1) {
+    liquid += fmt::format(R"""(
+    if (pbr_kind > 45.5 && pbr_kind < 46.5) {{
+        let lr0 = ubuf.pbr_shield[0];
+        let lr1 = ubuf.pbr_shield[1];
+        let lr2 = ubuf.pbr_shield[2];
+        let lrd = ubuf.pbr_shield[7];
+        let lrt = ubuf.pbr_param.x;
+        let lruv = in.pbr_lore.xy;
+        let lrauv = lruv * lr0.z + lrt * lr0.xy;
+        let lra = textureSampleGrad(tex{1}, tex{1}_samp, lrauv, dpdx(lrauv), dpdy(lrauv)).xy;
+        let lr8uv = (lra - vec2f(0.5)) * lr0.w * 0.200000003 + lruv * lr1.x + lrt * vec2f(lr1.w, lr2.w);
+        let lrs = textureSampleGrad(tex{0}, tex{0}_samp, lr8uv, dpdx(lr8uv), dpdy(lr8uv));
+        let lrg = clamp(in.pbr_lore.z, 0.0, 1.0) * lr1.z;
+        pbr_alpha = lrs.a * pbr_vraw.a * lrd.a;
+        pbr_lo = vec3f(0.0);
+        pbr_glow = lrs.rgb * lr1.y * (1.0 + lrg) * lrd.rgb * pbr_alpha;
+        pbr_pass = vec3f(0.0);
+    }})""",
+        underlying(config.tevStages[mapStage[0]].texMapId),
+        underlying(config.tevStages[mapStage[4]].texMapId));
+  }
   // Kind 19, Remastered's lit sphere-map shader 98F0556D (permutation 002_0): L is the ambient
   // plus the lights' N.L; rgb = REFV x REFS(0.5 + 0.5 n.xy) x luminance(L) + DIFT x DIFC x L / pi
   // + ICNC + ICMC (the base map's albedo is DIFT; row 7 = DIFC; no 1/pi, as for the other lit kinds). Map 4 is REFS, map 5 REFV.
@@ -3185,6 +3211,9 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
     // Neither EnergyField permutation consumes the froxel fog terms.
     kind("pbr_alpha = max(efmask, ef1.z);",
          "pbr_alpha = max(efmask, ef1.z);\n          pbr_vfon = false;");
+    // 9d53cf06 FS002/003 read no froxel fog.
+    kind("pbr_glow = lrs.rgb * lr1.y * (1.0 + lrg) * lrd.rgb * pbr_alpha;",
+         "pbr_glow = lrs.rgb * lr1.y * (1.0 + lrg) * lrd.rgb * pbr_alpha;\n          pbr_vfon = false;");
     if (config.pbrKind == 45) {
       // 5586D988 FS000..003 have no froxel inputs or fog sample.
       kind("pbr_glow = pbr_yri + pbr_yx * pbr_yg * (1.0 + pbr_yrm * pbr_yc3.y) + ubuf.pbr_shield[6].rgb;",
@@ -3637,6 +3666,27 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
     let holo_pos = holo_fade * holo_selected + (1.0 - holo_fade) * (holo_origin + ubuf.pbr_layer_height.xyz * holo_y);
 )", windPos, config.attrs[GX_VA_CLR0].attrType != GX_NONE ? vtx_attr(config, GX_VA_CLR0) : "vec4f(1.0)");
       windPos = "holo_pos";
+    }
+    if (config.pbrKind == 46) {
+      // 9d53cf06 VS002: the wave w (vp_c5[0] = CCH2, row 2; vp_c4[0].x the time) pushes the vertex
+      // along its normal by w x col.a x CCH2.y x vp_c1[0].x (0.1, binary32 0x3dcccccd at 002_1+0x4d0).
+      // The map's texcoord is the object position on Remastered's Z and Y (the port's Y and Z) times
+      // the model's scale on that axis, x 0.1; w goes along for the glow.
+      const std::string clr = config.attrs[GX_VA_CLR0].attrType != GX_NONE ? vtx_attr(config, GX_VA_CLR0) : "vec4f(1.0)";
+      const std::string nrm = config.attrs[GX_VA_NRM].attrType != GX_NONE ? vtx_attr(config, GX_VA_NRM) : "vec3f(0.0)";
+      vtxXfrAttrsPre += fmt::format(R"(
+    let lore_p2 = ubuf.pbr_shield[2];
+    let lore_t = ubuf.pbr_param.x;
+    let lore_w = sin(lore_t * lore_p2.x + length({0}) * lore_p2.z) +
+                 sin(1.5 * lore_t * lore_p2.x + length({1}.rgb) * lore_p2.z * 1.66 + 1.0);
+    let lore_pos = {0} + {2} * (lore_w * {1}.a * lore_p2.y * 0.100000001);
+    let lore_m = ubuf.postex_mtx[in_pnmtxidx];
+    let lore_uv = vec2f({0}.y * length(vec3f(lore_m[0].y, lore_m[1].y, lore_m[2].y)),
+                        {0}.z * length(vec3f(lore_m[0].z, lore_m[1].z, lore_m[2].z))) * 0.100000001;
+)", windPos, clr, nrm);
+      vtxOutAttrs += fmt::format("\n    @location({}) pbr_lore: vec3f,", vtxOutIdx++);
+      vtxXfrAttrs += "\n    out.pbr_lore = vec3f(lore_uv, lore_w);";
+      windPos = "lore_pos";
     }
     if (hasWind) {
       vtxXfrAttrsPre += windCode(windPos, vtx_attr(config, GX_VA_CLR0));

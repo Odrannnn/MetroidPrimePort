@@ -104,7 +104,8 @@ namespace ImportStage {
 //     frame when the buffers its two-tangent surfaces draw have it, not only when all of them do.
 // 81: C78982B4 door frames and its twin family 131ED7F0 read their bake from coord 3 (TEXCOORD_1.zw).
 // 82: the surface's visor word keeps mesh bits 19 and 22 (the thermal visor's hot and cold passes).
-inline constexpr int kConverter = 82;
+// 83: 9D53CF06 (the Chozo Lore statues' sheet) draws as kind 46, its waved, bent, premultiplied glow.
+inline constexpr int kConverter = 83;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.
@@ -248,7 +249,8 @@ inline constexpr int kEffects = 139;   // Queen barrier shield/glow models back-
 // 67: roomenv version 32, a room trigger volume's own active bit and the script links that switch it.
 // 69: a matched retail Effect object drawing another PART takes its GENP's shared PART and variables
 // (68 is port's trigger hash fix).
-inline constexpr int kRooms = 69;
+// 70: the Chozo Lore sheets' actors (their own model, unmarked as added) stand in for retail's lore glow actors.
+inline constexpr int kRooms = 70;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).
