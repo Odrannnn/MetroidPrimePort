@@ -24,6 +24,8 @@ public:
   bool HandlesBreakup() const { return started_ || finished_; }
   bool Visible(const CStateManager& mgr) const;
   bool Covers(uint16_t platform, const CStateManager& mgr) const;
+  // One-line state plus one line per ring, for the console's `fx barrier`.
+  std::string Describe() const;
 
 private:
   bool ResourcesReady(const CStateManager& mgr) const;
@@ -36,6 +38,7 @@ private:
   uint64_t generation_ = 0;
   uint32_t mrea_ = 0;
   float elapsed_ = 0;
+  int ringState_ = -1;  // the controller's x1a8_ringState as of the last Update
   bool configured_ = false;
   bool started_ = false;
   bool ready_ = false;  // ResourcesReady as of the last Update

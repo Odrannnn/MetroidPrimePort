@@ -10,6 +10,7 @@
 #include "MetroidPrime/TCastTo.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace PortQueenBarrier {
 namespace {
@@ -84,6 +85,21 @@ bool State::Covers(uint16_t platform, const CStateManager& mgr) const {
          (finished_ || Visible(mgr));
 }
 
+std::string State::Describe() const {
+  char line[160];
+  snprintf(line, sizeof(line), "%s%s%s%s%s ringState %d, breakup %.2f/%.2f s, provider %s",
+           configured_ ? "configured" : "unconfigured", started_ ? " started" : "", ready_ ? " ready" : "",
+           finished_ ? " finished" : "", failed_ ? " failed" : "", ringState_, elapsed_, group_.duration,
+           provider_.empty() ? "-" : provider_.c_str());
+  std::string out = line;
+  for (size_t i = 0; i < 5; ++i) {
+    snprintf(line, sizeof(line), "\n  ring %zu: platform u%u, effects u%u u%u, motion %.2f", i, unsigned(platforms_[i]),
+             unsigned(effects_[2 * i]), unsigned(effects_[2 * i + 1]), motion_[i]);
+    out += line;
+  }
+  return out;
+}
+
 void State::Stop(CStateManager& mgr) {
   started_ = false;
   ready_ = false;
@@ -98,6 +114,7 @@ void State::Stop(CStateManager& mgr) {
 void State::Update(float dt, int ringState, const std::array<RingInput, 5>& inputs,
                    CScriptSpecialFunction& controller, CStateManager& mgr) {
   if (!configured_ || failed_ || finished_ || !std::isfinite(dt) || dt < 0) return;
+  ringState_ = ringState;
   if (generation_ != PortMods::ResourceGeneration() || !PortRoomEffects::Enabled()) {
     Stop(mgr);
     return;

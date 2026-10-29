@@ -1209,6 +1209,26 @@ void CmdFxQuery() {
       Out("  %08X u%u PART %08X %s %s, %zu variable(s) set", s.eid, unsigned(s.uid), s.part,
           !alive ? "gone" : ent->GetActive() ? "active" : "inactive", s.name.c_str(), s.vars);
     }
+  } else if (sub == "barrier") {
+    // The Parasite Queen barrier group (port_queen_barrier.h), from each live ring controller.
+    const CStateManager* const mgr = PortDebug::StateManager();
+    if (mgr == nullptr) {
+      return Finish("no game");
+    }
+    const CObjectList& list = mgr->GetObjectListById(kOL_All);
+    size_t found = 0;
+    for (int i = list.GetFirstObjectIndex(); i != -1; i = list.GetNextObjectIndex(i)) {
+      const CScriptSpecialFunction* const func = TCastToConstPtr< CScriptSpecialFunction >(list[i]);
+      if (func == nullptr || func->PortFunction() != CScriptSpecialFunction::kSF_IntroBossRingController) {
+        continue;
+      }
+      ++found;
+      Out("fx barrier u%u %s: %s", unsigned(func->GetUniqueId().Value()), func->GetActive() ? "active" : "inactive",
+          func->PortDescribeBarrier().c_str());
+    }
+    if (found == 0) {
+      Out("fx barrier: no ring controller here");
+    }
   } else if (sub == "mute" || sub == "solo") {
     const std::string arg = sCmd.args.size() > 2 ? Lower(sCmd.args[2]) : "";
     if (arg == "clear" || (sub == "mute" && arg.empty())) {
@@ -4023,7 +4043,7 @@ struct CommandSpec {
 // fx's queries, which read the particle debug state rather than the world.
 bool FxIsQuery() {
   if (sCmd.args.size() > 1) {
-    static const char* const queries[] = {"list", "tree", "stats", "addons", "mute", "solo", "timescale"};
+    static const char* const queries[] = {"list", "tree", "stats", "addons", "barrier", "mute", "solo", "timescale"};
     for (const char* q : queries) {
       if (Lower(sCmd.args[1]) == q) {
         return true;
@@ -4053,6 +4073,7 @@ const CommandSpec kCommands[] = {
      "fx tree <#id>              one generator and its children, recursively\n"
      "fx stats                   live generators, vfx quads/triangles and CPU ms (update, render) last frame\n"
      "fx addons                  this area's Remastered effect actors a mod added, and the retail ones they replace\n"
+     "fx barrier                 the Parasite Queen barrier group: state, ring state, per-ring motion\n"
      "fx mute <asset>|clear|list  hide a PART/SWHC/ELSC asset (it still updates); fx solo <asset|#id> hides the rest\n"
      "fx timescale <s>           particle time scale (0 freezes particles only; 1 = off)",
      FxIsQuery},

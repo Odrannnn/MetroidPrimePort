@@ -144,6 +144,7 @@ public:
     if (xe8_function == kSF_IntroBossRingController) xPortBarrier.Configure(group, mrea);
   }
   bool PortBarrierVisible(const CStateManager& mgr) const { return xPortBarrier.Visible(mgr); }
+  std::string PortDescribeBarrier() const { return xPortBarrier.Describe(); }
   // Room-state saves omit add-on effects and their particle/controller progress. Never
   // keep a future/past replacement group alive across restore: use retail until reload.
   void PortInvalidateBarrierForRestore(CStateManager& mgr) { xPortBarrier.Stop(mgr); }

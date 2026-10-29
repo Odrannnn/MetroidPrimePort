@@ -1066,6 +1066,7 @@ constexpr uint32_t kNoHeaderBlend = 0xffffffffu;
 struct Mati {
   uint32_t shader = 0;  // the four bytes at 0x48, big-endian
   uint32_t headerBlend = kNoHeaderBlend;  // the header's EBlendMode, the LE u32 at 0x61
+  uint8_t cull = 0xff;  // the header's cull byte at 0x5d; 0xff (unset) resolves to 2 (back)
   std::map<std::string, MatiTexture> textures;
   std::map<std::string, std::array<float, 4>> vectors;
   // The header's material-flag list, after the parameters: a u32 count then that many four-byte tags
@@ -1092,6 +1093,7 @@ bool ParseMati(const std::vector<uint8_t>& d, Mati& out) {
   }
   out.shader = port::GetBE32(d, 0x48);
   out.headerBlend = ReadLE32(d.data() + 0x61);
+  out.cull = d[0x5d];
   const uint32_t count = ReadLE32(d.data() + 0x69);
   size_t at = 0x6d;
   uint32_t parsed = 0;
@@ -3688,6 +3690,14 @@ public:
     // Exact shipped custom model: MATI cull=-1 resolves to back at 0x2bd7f4..0x2bd810;
     // the sorted model draw binds it at 0x2bda84. No inference for other materials/sprites.
     if (model && guid->guid == kIceWedgeMati && mati.shader == 0x84e0fe6c && mati.headerBlend == 2) {
+      features |= kModelBackCull;
+    }
+    // The Queen barrier's shield (f197ec38) and glow (b1eb2b67) models: MATI cull byte 2 (0xff
+    // resolves to 2 at 0x2bd7fc..0x2bd810) takes SetCullMode at 0x2bda88 from 0x2bd904, Back
+    // (NRenderUtil::SetBackCullState 0xf32c0). Drawn cull none, their back faces give 1 + n.v ~ 2 and
+    // flood the wall cyan. Cull 0/1 take an undecoded two-pass path; not inferred here.
+    if (model && (mati.shader == 0xf197ec38 || mati.shader == 0xb1eb2b67) &&
+        (mati.cull == 0xff || mati.cull >= 2)) {
       features |= kModelBackCull;
     }
     if (!swoosh && find(F("PMDL")) != nullptr && guid->guid == kWaveOrbMati && mati.shader == 0x642dd72b &&

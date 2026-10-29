@@ -197,7 +197,8 @@ inline constexpr int kModels = 22;
 // 135: KESP kept as the ELC2 node tween (AtomicBeta ELC2 radius).
 // 136: GunTurret particle properties (room GENPs).
 // 137: GunTurret visor effects (room ELC2s).
-inline constexpr int kEffects = 138;   // Drone laser and scanner particles (room GENPs)
+// 138: Drone laser and scanner particles (room GENPs).
+inline constexpr int kEffects = 139;   // Queen barrier shield/glow models back-cull (MATI cull byte)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
