@@ -915,6 +915,11 @@ bool Bloom(float& threshold, float tints[5][3]) {
   return true;
 }
 
+const std::vector<IceDarkener>* IceDarkeners(uint32_t mrea) {
+  const auto it = sAreas.find(mrea);
+  return it == sAreas.end() ? nullptr : &it->second.file.iceDarkeners;
+}
+
 float EnvFxIntensity() {
   const auto view = sAreas.find(sViewArea);
   return view == sAreas.end() ? 1.f : view->second.file.envFxIntensity;

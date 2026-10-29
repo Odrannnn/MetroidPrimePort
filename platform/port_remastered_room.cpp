@@ -3433,7 +3433,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 32);
+  AppendLE32(out, 33);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3817,6 +3817,18 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     out.insert(out.end(), 2, 0);
     AppendLE32(out, uint32_t(b.value));
     AppendLE32(out, b.query);
+  }
+  {
+    std::vector<std::string> notes;
+    const std::vector<IceDarkenerAtLoad> darkeners = IceDarkeners(r.room, notes);
+    AppendLE32(out, uint32_t(darkeners.size()));
+    for (const IceDarkenerAtLoad& d : darkeners) {
+      AppendLEFloat(out, d.factor);
+      AppendLEFloat(out, d.delay);
+    }
+    for (const std::string& n : notes) {
+      Log("  " + r.name + ": " + n);
+    }
   }
   if (!scripts.envOps.empty() || scripts.envUnresolved != 0) {
     Log("  " + r.name + ": " + std::to_string(scripts.envOps.size()) + " environment variable op(s), " +

@@ -316,6 +316,7 @@ public:
   void DrawWorld() const;
 #ifdef TARGET_PC
   void PortCaptureProbeFace() const;
+  void PortUpdateIceDarkeners(float dt);
   // CMFGame snapshots this per-world-pass policy; DrawWorld consumes and clears it before
   // recording the LDR probe capture or beginning the real scene.
   static bool sPortSceneHdrRequest;

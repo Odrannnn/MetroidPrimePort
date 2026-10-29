@@ -254,7 +254,8 @@ inline constexpr int kEffects = 139;   // Queen barrier shield/glow models back-
 // 69: a matched retail Effect object drawing another PART takes its GENP's shared PART and variables
 // (68 is port's trigger hash fix).
 // 70: the Chozo Lore sheets' actors (their own model, unmarked as added) stand in for retail's lore glow actors.
-inline constexpr int kRooms = 70;
+// 71: roomenv version 33, the ice darkeners fired at load (ActorIceDarkenerMP1 0xf798e0).
+inline constexpr int kRooms = 71;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

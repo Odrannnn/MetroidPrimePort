@@ -2600,9 +2600,11 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   }
   if (icy) {
     // Kind 47's glow: a rim, NdotV^CCH0.x x CCH0.y, darkening a 0.3 base lifted by a tenth of the
-    // albedo, at the inverse of the exposure (pbr_ei); CCH1.w is the opacity.
+    // albedo, at the inverse of the exposure (pbr_ei) times the actor's ice darkening (row 7.y:
+    // RenderIcy 0xfc4794 sets the inverse tonemap exposure to cmd+0x34 times it, which 700e8e71's
+    // fragment 004_0 reads as c4[0].z on the glow alone); CCH1.w is the opacity.
     liquid += R"""(
-      pbr_glow = (pow(icy_nv, max(ubuf.pbr_shield[2].x, 0.001)) * ubuf.pbr_shield[2].y * -0.3 + icy_alb * 0.1 + 0.3) * pbr_ei;
+      pbr_glow = (pow(icy_nv, max(ubuf.pbr_shield[2].x, 0.001)) * ubuf.pbr_shield[2].y * -0.3 + icy_alb * 0.1 + 0.3) * pbr_ei * ubuf.pbr_shield[7].y;
       pbr_alpha = ubuf.pbr_shield[3].w;)""";
   }
   // In pieces: MSVC rejects one string literal over 16 KB (adjacent ones join).

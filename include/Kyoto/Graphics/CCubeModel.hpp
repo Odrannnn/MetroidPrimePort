@@ -167,8 +167,9 @@ public:
   static void PortSetChargeShell(float amount);
   // While active, every model drawn outside the thermal visor is a frozen enemy's body, drawn as
   // Remastered's RenderIcy (kind 47, 0xfc4794) in place of its materials: dirGC is the freeze
-  // direction in the game's world, t the seconds since the freeze.
-  static void PortSetIcy(bool active, const float dirGC[3], float t);
+  // direction in the game's world, t the seconds since the freeze, darkening the actor's ice
+  // darkening factor (CPhysicsActor::GetPortIceDarkening), which scales the icy glow.
+  static void PortSetIcy(bool active, const float dirGC[3], float t, float darkening = 1.f);
   // The frost shell's glow IINT, 3 to 10 (CIceBeamMP1::PreRenderGunFx); the record holds 10.
   static void PortSetIceShellIint(float iint);
   // The visor whose mesh filter the world and actor draws apply (CPlayerState::EPlayerVisor

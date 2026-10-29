@@ -15,7 +15,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 32;
+constexpr uint32_t kVersion = 33;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -1250,6 +1250,31 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       b.value = int32_t(ReadLE32(data.data() + at + 20));
       b.query = ReadLE32(data.data() + at + 24);
       at += kBranchBytes;
+    }
+  }
+  if (version >= 33) {
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t darkeners = ReadLE32(data.data() + at);
+    at += 4;
+    constexpr uint32_t kMaxIceDarkeners = 64;
+    if (darkeners > kMaxIceDarkeners || (data.size() - at) / 8 < darkeners) {
+      error = "cut short";
+      return false;
+    }
+    out.iceDarkeners.resize(darkeners);
+    for (IceDarkener& d : out.iceDarkeners) {
+      d.factor = ReadLEFloat(data.data() + at);
+      d.delay = ReadLEFloat(data.data() + at + 4);
+      if (!std::isfinite(d.factor)) {
+        d.factor = 1.f;
+      }
+      if (!std::isfinite(d.delay) || d.delay < 0.f) {
+        d.delay = 0.f;
+      }
+      at += 8;
     }
   }
   out.data = std::move(data);

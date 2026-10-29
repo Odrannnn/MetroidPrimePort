@@ -112,6 +112,9 @@
 #include "Kyoto/Graphics/CGX.hpp"
 #include <dolphin/gx/GXExtra.h>
 #include <stdlib.h>
+#include <algorithm>
+#include <map>
+#include <vector>
 #endif
 #include "Kyoto/Graphics/CLight.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
@@ -138,6 +141,13 @@ const int gkPVSEnabled = 1;
 #ifdef TARGET_PC
 // Tick generation (CActor::PortTickGeneration) of the last TickSimTime.
 static uint sPortSimTimeGeneration = 0;
+// The room environments' ice darkeners still to fire (PortRoomEnv::IceDarkeners), by area: armed
+// when the area has loaded and its room environment is in memory, dropped when it unloads.
+struct SPortIceDarkenerArea {
+  bool armed = false;
+  std::vector< float > remaining;  // seconds left; < 0 once fired
+};
+static std::map< uint, SPortIceDarkenerArea > sPortIceDarkeners;
 #endif
 
 namespace {
@@ -761,6 +771,7 @@ CStateManager::~CStateManager() {
   }
   delete sPortPresence;
   sPortPresence = nullptr;
+  sPortIceDarkeners.clear();
   // The Remastered rooms of the last areas drawn are freed only when a frame loads others;
   // without this they stayed on the GPU through the title screen and the next world's load.
   PortRoomEnv::SetLoadedAreas(nullptr, 0);
@@ -1497,6 +1508,71 @@ void CStateManager::PreThinkObjects(float dt) {
 
 void CStateManager::PostUpdatePlayer(float dt) { x84c_player->DoPostCameraStuff(dt, *this); }
 
+#ifdef TARGET_PC
+// An ActorIceDarkenerMP1 the room fires at load (its timers' wait after the area's entities load):
+// ApplyIceDarkeningFactor 0xf798e0 walks the physics actor list (mgr+0x4e0150, list 2) and gives
+// each actor present the factor (SetIceDarkeningFactor 0xc4d200), which it keeps.
+void CStateManager::PortUpdateIceDarkeners(float dt) {
+  // MP_ICE_DARKENERS=0 leaves them unfired, for an A/B of the darkening.
+  static const bool sOff = [] {
+    const char* const env = std::getenv("MP_ICE_DARKENERS");
+    return env != nullptr && env[0] == '0';
+  }();
+  if (sOff) {
+    return;
+  }
+  std::vector< uint > loaded;
+  for (int i = 0; i < x850_world->GetNumAreas(); ++i) {
+    const CGameArea& area = *x850_world->GetArea(TAreaId(i));
+    if (area.IsLoaded()) {
+      loaded.push_back(area.GetAreaAssetId());
+    }
+  }
+  for (std::map< uint, SPortIceDarkenerArea >::iterator it = sPortIceDarkeners.begin();
+       it != sPortIceDarkeners.end();) {
+    if (std::find(loaded.begin(), loaded.end(), it->first) == loaded.end()) {
+      sPortIceDarkeners.erase(it++);
+    } else {
+      ++it;
+    }
+  }
+  for (size_t i = 0; i < loaded.size(); ++i) {
+    SPortIceDarkenerArea& area = sPortIceDarkeners[loaded[i]];
+    const std::vector< PortRoomEnv::IceDarkener >* const darkeners =
+        PortRoomEnv::IceDarkeners(loaded[i]);
+    if (darkeners == nullptr) {
+      continue;  // its room environment loads with the next frame drawn
+    }
+    if (!area.armed) {
+      // The timers start counting with the area's entities.
+      area.armed = true;
+      area.remaining.clear();
+      for (size_t d = 0; d < darkeners->size(); ++d) {
+        area.remaining.push_back((*darkeners)[d].delay);
+      }
+      continue;
+    }
+    for (size_t d = 0; d < area.remaining.size() && d < darkeners->size(); ++d) {
+      if (area.remaining[d] < 0.f) {
+        continue;  // fired
+      }
+      area.remaining[d] -= dt;
+      if (area.remaining[d] > 0.f) {
+        continue;
+      }
+      area.remaining[d] = -1.f;
+      const float factor = (*darkeners)[d].factor;
+      CObjectList& actors = ObjectListById(kOL_PhysicsActor);
+      for (int idx = actors.GetFirstObjectIndex(); idx != -1; idx = actors.GetNextObjectIndex(idx)) {
+        if (CPhysicsActor* const act = static_cast< CPhysicsActor* >(actors[idx])) {
+          act->SetPortIceDarkening(factor);
+        }
+      }
+    }
+  }
+}
+#endif
+
 void CStateManager::Update(float dt) {
   if (GetWantsToQuit()) return;
 
@@ -1508,6 +1584,7 @@ void CStateManager::Update(float dt) {
   }
   CGraphics::TickSimTime(dt);
   sPortSimTimeGeneration = CActor::PortTickGeneration();
+  PortUpdateIceDarkeners(dt);
 #endif
 
 #ifdef TARGET_PC

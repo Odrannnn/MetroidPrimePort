@@ -644,6 +644,20 @@ constexpr uint32_t kEnvFxDensityController = 0x3c832ec7;
 constexpr uint32_t kRelayAutoFire = 0x7f6d1cba;
 constexpr uint32_t kPropEnvFxIntensity = 0x19da7ec9;
 constexpr uint32_t kActionEnvFxApply = 0x582c90b4;
+// ActorIceDarkenerMP1: on kActionIceDarken (AcceptScriptMsg 0xf79090) ApplyIceDarkeningFactor
+// 0xf798e0 gives every physics actor present its float kPropIceDarkeningFactor (props+8) through
+// SetIceDarkeningFactor 0xc4d200; kPropIceDarkenEveryFrame (props+0xc) makes Think 0xf796c4 do it
+// every frame instead. A TimerMP1 (kTimerMP1) starts itself when kPropTimerAutostart is set; a
+// ScriptRelayMP1 (kScriptRelayMP1) passes on kActionScriptRelayFire.
+constexpr uint32_t kIceDarkener = 0x427c6c50;
+constexpr uint32_t kActionIceDarken = 0xe63b4292;
+constexpr uint32_t kPropIceDarkeningFactor = 0x160e1c00;
+constexpr uint32_t kPropIceDarkenEveryFrame = 0x35a2afcb;
+constexpr uint32_t kTimerMP1 = 0x25c6d2a3;
+constexpr uint32_t kPropTimerAutostart = 0xd0ecc8ea;
+constexpr uint32_t kActionTimerStart[2] = {0xd63b8f04, 0x55193b90};
+constexpr uint32_t kScriptRelayMP1 = 0x1b78f9a4;
+constexpr uint32_t kActionScriptRelayFire = 0x379d362e;
 // A trigger's own Activate / Deactivate (CTriggerMP1GOC::TranslateScriptActionToMessage 0xf3e434:
 // msg 1 / msg 4; kb topic/triggermp1-active-state.md).
 constexpr uint32_t kActionTriggerActivate = 0xb5dd4543;
@@ -780,6 +794,16 @@ std::vector<std::pair<uint32_t, int>> ReadEntityLinkIds(const Room& room, size_t
 // that a RelayAutoFire reaches, through Relays, with kActionEnvFxApply, else 1. A controller
 // nothing reaches at load (fired by a trigger, or by nothing) is left out, and noted in `notes`.
 float EnvFxIntensity(const Room& room, std::vector<std::string>& notes);
+// The ice darkeners the room fires at load (kb topic/frozen-enemy-icy-render.md): an
+// ActorIceDarkenerMP1 (kIceDarkener) told kActionIceDarken by an autostart TimerMP1 or a
+// RelayAutoFire, through non-autostart Timers (their start actions) and ScriptRelayMP1s. Each is
+// its factor (kPropIceDarkeningFactor, default 1) and the seconds after load the timers add. One
+// fired by anything else (a trigger, a camera) is left out, and noted in `notes`.
+struct IceDarkenerAtLoad {
+  float factor;
+  float delay;
+};
+std::vector<IceDarkenerAtLoad> IceDarkeners(const Room& room, std::vector<std::string>& notes);
 double MaxAbs(const Vec3& a, const Vec3& b);
 
 // What drives the scenery actors of a room.

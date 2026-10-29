@@ -260,13 +260,15 @@ bool sPortSky = false;
 f32 sPortSkyGain[3];
 f32 sPortChargeShell = 0.f;
 // The frozen enemy's icy pass (PortSetIcy): the freeze direction in the game's world and the
-// seconds since the freeze. Remastered's RenderIcy material maps, bound to maps 0-2.
+// seconds since the freeze, and the actor's ice darkening. Remastered's RenderIcy material maps,
+// bound to maps 0-2.
 struct SPortIcy {
   bool active;
   f32 dir[3];
   f32 t;
+  f32 darkening;
 };
-SPortIcy sPortIcy = {false, {0.f, 0.f, 0.f}, 0.f};
+SPortIcy sPortIcy = {false, {0.f, 0.f, 0.f}, 0.f, 1.f};
 bool sPortIcyTexInit = false;
 GXTexObj sPortIcyTex[PortIcy::kCount];
 
@@ -294,7 +296,8 @@ bool PortIcyTextures() {
 // RenderIcy's constants (CPatternedMP1::RenderIcy 0xfc4794, kb topic/frozen-enemy-icy-render.md) as
 // kind 47's GXSetPBRShield rows: the extrude c = (0.1k, 0.2k, 2, 0) with k = min(1, t / 0.15), the freeze
 // direction normalised in Remastered's world R = (-x, z, y), CCH0, CCH1, view to the game's world in
-// rows 4-6, and in row 7.x whether the colour map is sRGB.
+// rows 4-6, in row 7.x whether the colour map is sRGB and in 7.y the actor's ice darkening
+// (CActorMP1 +0x1d0, which RenderIcy puts in the command at +0x34).
 void PortSetIcyMaterial(const f32 viewToWorld[3][3], const CTransform4f& view) {
   const PortIcy::Assets* assets = PortIcy::Get();
   f32 shield[8][4] = {};
@@ -321,6 +324,7 @@ void PortSetIcyMaterial(const f32 viewToWorld[3][3], const CTransform4f& view) {
     shield[4 + row][3] = eye[row];
   }
   shield[7][0] = assets->image[PortIcy::kColor].srgb ? 1.f : 0.f;
+  shield[7][1] = sPortIcy.darkening;
   GXSetPBRShield(shield);
   f32 values[19] = {};
   values[13] = 47.f;
@@ -408,13 +412,14 @@ void CCubeModel::PortTakeThermalSkipCounts(unsigned& cold, unsigned& hotDropped)
 
 void CCubeModel::PortSetChargeShell(const f32 amount) { sPortChargeShell = amount; }
 
-void CCubeModel::PortSetIcy(const bool active, const f32 dirGC[3], const f32 t) {
+void CCubeModel::PortSetIcy(const bool active, const f32 dirGC[3], const f32 t, const f32 darkening) {
   sPortIcy.active = active;
   if (active) {
     sPortIcy.dir[0] = dirGC[0];
     sPortIcy.dir[1] = dirGC[1];
     sPortIcy.dir[2] = dirGC[2];
     sPortIcy.t = t;
+    sPortIcy.darkening = darkening;
   }
 }
 

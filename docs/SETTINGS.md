@@ -1339,6 +1339,9 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   Remastered room models > Skip small models, console `roomgeo minpx <n>`; default 0): leaves out room
   geometry instances that span fewer than n pixels of the game's 480-line
   screen.
+- `MP_ICE_DARKENERS=0` (debugging aid; default on): the Remastered rooms' ice
+  darkeners (ActorIceDarkenerMP1) stay unfired, so frozen enemies' icy shell
+  keeps its full glow in those rooms.
 - `remastered_performance=<0|1>` (Mods > Prime Remastered > Performance mode;
   default 1): faster Remastered drawing that is no longer exact (glass copy
   every second frame, quarter-size exposure measure, blended volumetric fog,

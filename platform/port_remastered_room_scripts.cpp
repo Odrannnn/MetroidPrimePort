@@ -579,6 +579,100 @@ float EnvFxIntensity(const Room& room, std::vector<std::string>& notes) {
   return result;
 }
 
+std::vector<IceDarkenerAtLoad> IceDarkeners(const Room& room, std::vector<std::string>& notes) {
+  const std::vector<Component>& comps = room.Components();
+  const std::vector<Connection> conns = ReadConnections(room);
+  const auto entityOf = [&](const Id16& guid) {
+    const int t = room.ByGuid(guid);
+    return t < 0 ? -1 : comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity;
+  };
+  const auto floatOf = [&](size_t c, uint32_t prop, float def) {
+    const auto f = room.Flat(comps[c]);
+    const auto it = f.find(prop);
+    return it != f.end() && it->second.size >= 4 ? ReadLEFloat(room.Bytes(it->second)) : def;
+  };
+  const auto byteOf = [&](size_t c, uint32_t prop) {
+    const auto f = room.Flat(comps[c]);
+    const auto it = f.find(prop);
+    return it != f.end() && it->second.size >= 1 ? room.Bytes(it->second)[0] : uint8_t(0);
+  };
+  constexpr int kMaxDepth = 6;
+  std::vector<IceDarkenerAtLoad> out;
+  char text[192];
+  for (size_t d = 0; d < comps.size(); ++d) {
+    if (comps[d].type != kIceDarkener) {
+      continue;
+    }
+    const float factor = floatOf(d, kPropIceDarkeningFactor, 1.f);
+    if (!std::isfinite(factor)) {
+      notes.push_back("ice darkener #" + std::to_string(d) + " has a bad factor, skipped");
+      continue;
+    }
+    if (byteOf(d, kPropIceDarkenEveryFrame) != 0) {
+      notes.push_back("ice darkener #" + std::to_string(d) + " applies every frame; applied once at load");
+    }
+    // Back from the darkener: who sends what reaches `to`'s entity, adding the timers' waits.
+    bool atLoad = false;
+    std::set<std::string> others;
+    std::function<void(size_t, bool, float, int, std::vector<size_t>&)> back =
+        [&](size_t to, bool darken, float delay, int depth, std::vector<size_t>& path) {
+          const int entity = comps[to].type == kEntity ? int(to) : comps[to].entity;
+          for (const Connection& c : conns) {
+            if (entity < 0 || entityOf(c.target) != entity) {
+              continue;
+            }
+            const uint32_t want = comps[to].type;
+            const bool passes = darken ? c.action == kActionIceDarken
+                                : want == kTimerMP1 ? c.action == kActionTimerStart[0] || c.action == kActionTimerStart[1]
+                                                    : c.action == kActionScriptRelayFire;
+            if (!passes) {
+              continue;
+            }
+            const size_t s = c.sender;
+            const uint32_t type = comps[s].type;
+            float wait = 0.f;
+            if (type == kTimerMP1) {
+              wait = floatOf(s, kPropTimerDelay, 0.f);
+              if (!std::isfinite(wait) || wait < 0.f) {
+                wait = 0.f;
+              }
+            }
+            if (type == kRelayAutoFire || (type == kTimerMP1 && byteOf(s, kPropTimerAutostart) != 0)) {
+              if (!room.Active(comps[s])) {
+                std::snprintf(text, sizeof text, "ice darkener #%zu: its load sender #%zu starts inactive", d, s);
+                notes.push_back(text);
+                continue;
+              }
+              out.push_back({factor, delay + wait});
+              atLoad = true;
+              std::snprintf(text, sizeof text, "ice darkener #%zu (factor %g) fires %gs after load from #%zu", d, factor,
+                            delay + wait, s);
+              notes.push_back(text);
+            } else if ((type == kTimerMP1 || type == kScriptRelayMP1) && depth < kMaxDepth &&
+                       std::find(path.begin(), path.end(), s) == path.end()) {
+              path.push_back(s);
+              back(s, false, delay + wait, depth + 1, path);
+              path.pop_back();
+            } else {
+              std::snprintf(text, sizeof text, "%08X", type);
+              others.insert(text);
+            }
+          }
+        };
+    std::vector<size_t> path{d};
+    back(d, true, 0.f, 0, path);
+    if (!atLoad) {
+      std::string by;
+      for (const std::string& o : others) {
+        by += (by.empty() ? "" : ", ") + o;
+      }
+      std::snprintf(text, sizeof text, "ice darkener #%zu (factor %g) skipped: ", d, factor);
+      notes.push_back(text + (by.empty() ? std::string("nothing fires it") : "not fired at load; reached by type " + by));
+    }
+  }
+  return out;
+}
+
 double MaxAbs(const Vec3& a, const Vec3& b) {
   return std::max({std::fabs(a[0] - b[0]), std::fabs(a[1] - b[1]), std::fabs(a[2] - b[2])});
 }

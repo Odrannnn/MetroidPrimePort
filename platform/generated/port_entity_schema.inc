@@ -2302,8 +2302,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPhysicsActor >()
       {"x24c_numTicksStuck", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPhysicsActor::x24c_numTicksStuck), PES_ADDR(CPhysicsActor, x24c_numTicksStuck), PES_GETI(CPhysicsActor, x24c_numTicksStuck), PES_SETI(CPhysicsActor, x24c_numTicksStuck)},
       {"x250_numTicksPartialUpdate", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPhysicsActor::x250_numTicksPartialUpdate), PES_ADDR(CPhysicsActor, x250_numTicksPartialUpdate), PES_GETI(CPhysicsActor, x250_numTicksPartialUpdate), PES_SETI(CPhysicsActor, x250_numTicksPartialUpdate)},
       {"x254_", "unsigned int", PortSchemaKind::int_, 0, kPortSchemaPrivate, sizeof(CPhysicsActor::x254_), PES_ADDR(CPhysicsActor, x254_), PES_GETI(CPhysicsActor, x254_), PES_SETI(CPhysicsActor, x254_)},
+      {"xPortIceDarkening", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPhysicsActor::xPortIceDarkening), PES_ADDR(CPhysicsActor, xPortIceDarkening), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CPhysicsActor", "CActor", fields, 32, 0x055252C86697082Bull};
+  static const PortSchemaClass desc = {"CPhysicsActor", "CActor", fields, 33, 0x3ADD1381DFE263B6ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CPlasmaProjectile >() {
@@ -4698,4 +4699,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3424;
+const int PortEntitySchema::kFieldCount = 3425;

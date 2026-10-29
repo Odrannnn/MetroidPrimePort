@@ -44,7 +44,11 @@ CPhysicsActor::CPhysicsActor(TUniqueId uid, const bool active, const rstl::strin
 , x244_restitutionCoefModifier(0.f)
 , x248_collisionAccuracyModifier(1.f)
 , x24c_numTicksStuck(0)
-, x250_numTicksPartialUpdate(0) {
+, x250_numTicksPartialUpdate(0)
+#ifdef TARGET_PC
+, xPortIceDarkening(1.f)
+#endif
+{
   SetMass(moverData.x30_mass);
   MoveCollisionPrimitive(CVector3f::Zero());
   SetVelocityOR(moverData.x0_velocity);

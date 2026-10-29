@@ -207,6 +207,10 @@ public:
   CVector3f GetConstantTotalForceWR() const { return x15c_force + x150_momentum; }
 
   static float GravityConstant() { return kGravityAccel; }
+#ifdef TARGET_PC
+  float GetPortIceDarkening() const { return xPortIceDarkening; }
+  void SetPortIceDarkening(float factor) { xPortIceDarkening = factor; }
+#endif
 
 protected:
   float xe8_mass;
@@ -241,6 +245,12 @@ protected:
   uint x24c_numTicksStuck;
   uint x250_numTicksPartialUpdate;
   uint x254_;
+#ifdef TARGET_PC
+  // Remastered's ice darkening (CActorMP1 +0x1d0, 1 at construction): an ActorIceDarkenerMP1
+  // (ApplyIceDarkeningFactor 0xf798e0) gives it to every physics actor present, through
+  // SetIceDarkeningFactor 0xc4d200; a frozen enemy's icy glow is scaled by it (RenderIcy 0xfc4794).
+  float xPortIceDarkening;
+#endif
 };
 CHECK_SIZEOF(CPhysicsActor, (VERSION >= VERSION_GM8P_00 ? 0x268 : 0x258))
 

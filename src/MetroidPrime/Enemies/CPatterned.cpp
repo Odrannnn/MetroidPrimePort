@@ -1437,11 +1437,11 @@ void CPatterned::Render(const CStateManager& mgr) const {
         const float dir[3] = {xPortFreezeDir.GetX(), xPortFreezeDir.GetY(), xPortFreezeDir.GetZ()};
         if (CModelData::GetRenderingModel(mgr) == CModelData::kWM_XRay) {
           CPhysicsActor::Render(mgr);
-          CCubeModel::PortSetIcy(true, dir, t);
+          CCubeModel::PortSetIcy(true, dir, t, GetPortIceDarkening());
           GetModelData()->Render(CModelData::kWM_Normal, GetTransform(), GetActorLights(),
                                  CModelFlags(CModelFlags::kT_Opaque, 1.f));
         } else {
-          CCubeModel::PortSetIcy(true, dir, t);
+          CCubeModel::PortSetIcy(true, dir, t, GetPortIceDarkening());
           CPhysicsActor::Render(mgr);
         }
         CCubeModel::PortSetIcy(false, dir, 0.f);
