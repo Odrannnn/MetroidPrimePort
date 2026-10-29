@@ -91,6 +91,10 @@ private:
   std::vector< SPortExternalVar > xPortExternalVars;
   TUniqueId xPortBarrierController = kInvalidUniqueId;
   TUniqueId xPortBarrierPlatform = kInvalidUniqueId;
+  // The followed platform's model bounds: the barrier mesh's own extent, which the
+  // point-sized particle bounds miss (and which go stale once a culled effect stops updating).
+  CAABox xPortBarrierBounds = CAABox::MakeMaxInvertedBox();
+  bool xPortHasBarrierBounds = false;
 #endif
 };
 

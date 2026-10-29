@@ -300,7 +300,13 @@ void CScriptEffect::AddToRenderer(const CFrustumPlanes& frustum, const CStateMan
     return;
   }
   const CAABox& bounds = GetRenderBoundsCached();
-  if (!frustum.BoxInFrustumPlanes(bounds)) {
+#ifdef TARGET_PC
+  // A barrier mesh rises well above its platform's model bounds: never cull it by them.
+  const bool cull = xPortBarrierController == kInvalidUniqueId;
+#else
+  const bool cull = true;
+#endif
+  if (cull && !frustum.BoxInFrustumPlanes(bounds)) {
     return;
   }
   x12c_remTime = rstl::max_val(x134_durationResetWhileVisible, x12c_remTime);
@@ -419,6 +425,9 @@ void CScriptEffect::PortFollowBarrier(const CActor& source) {
     x104_particleSystem->SetOrientation(ClearTrans(GetTransform()));
     x104_particleSystem->SetGlobalTranslation(GetTranslation());
   }
+  xPortHasBarrierBounds = source.HasModelData();
+  if (xPortHasBarrierBounds) xPortBarrierBounds = source.GetModelData()->GetBounds(source.GetTransform());
+  CalculateRenderBounds();
 }
 #endif
 
@@ -448,6 +457,9 @@ void CScriptEffect::CalculateRenderBounds() {
     if (electricBounds.valid()) {
       bounds.Include(*electricBounds);
     }
+#ifdef TARGET_PC
+    if (xPortHasBarrierBounds) bounds = xPortBarrierBounds;
+#endif
     SetRenderBounds(bounds);
     x111_26_canRender = true;
   } else {
