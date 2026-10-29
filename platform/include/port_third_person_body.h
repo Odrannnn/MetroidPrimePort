@@ -51,13 +51,23 @@ inline constexpr float kAimGridAccel = 10.f;
 // kerb doesn't crouch).
 inline constexpr float kLandAirSeconds = 0.5f;
 
+// The body (and its cannon) fades as the camera comes within kFadeDistance of its bounds, to
+// kFadeAlpha with the camera inside them.
+inline constexpr float kFadeDistance = 0.6f;
+inline constexpr float kFadeAlpha = 0.2f;
+
+// A walk stops only once the body has stood kSettleSeconds: a stick held near its dead zone
+// dips under kStandSpeed for a tick or two, which would flick the legs to Stop and back.
+inline constexpr float kSettleSeconds = 0.1f;
+
 // The stance the movement asks for. fwd and side are the speeds along the facing (+ forward)
-// and across it, rise the vertical one; landing: the body was in the air kLandAirSeconds.
+// and across it, rise the vertical one; landing: the body was in the air kLandAirSeconds;
+// settled: it has been under kStandSpeed kSettleSeconds.
 // Stopping from a walk plays Stop, and landing Land, until done (the current stance's clip
 // played out), unless the body moves (again: the touchdown tick's own speed, a blip of the
 // collision, doesn't count).
 inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Stance current,
-                           bool done, bool landing) {
+                           bool done, bool landing, bool settled = true) {
   if (!grounded) {
     return rise > 0.f ? Stance::Jump : Stance::Fall;
   }
@@ -66,6 +76,9 @@ inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Sta
   }
   const float speed = std::sqrt(fwd * fwd + side * side);
   if (speed < kStandSpeed) {
+    if (current == Stance::Loco && !settled) {
+      return Stance::Loco;
+    }
     if (current == Stance::Loco || (current == Stance::Stop && !done)) {
       return Stance::Stop;
     }
@@ -201,5 +214,10 @@ std::string DescribeFeet();
 // Holds the named clip at phase 0..1 instead of the movement's clip, the body turned by yaw degrees;
 // nullptr lets go. False if the body has no such clip (or is not built).
 bool PinClip(const char* name, float phase, float yaw = 0.f);
+// Debug (console `thirdperson backwalk`): which clips walk backward: the walk-back clip
+// (Phazon_Struggle_walkback's legs), or the forward walks played in reverse (the default).
+enum class BackWalk { Struggle, Reverse };
+void SetBackWalk(BackWalk mode);
+BackWalk GetBackWalk();
 
 } // namespace PortThirdPersonBody

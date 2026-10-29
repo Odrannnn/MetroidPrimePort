@@ -2037,7 +2037,7 @@ void CmdCollDump() {
 void CmdThirdPerson() {
   static const char* const usage =
       "usage: thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>] [clips] [feet] "
-      "[clip <name>|off [phase [yaw]]]";
+      "[clip <name>|off [phase [yaw]]] [backwalk struggle|reverse]";
   for (size_t i = 1; i < sCmd.args.size(); ++i) {
     const std::string arg = Lower(sCmd.args[i]);
     float number = 0.f;
@@ -2046,6 +2046,13 @@ void CmdThirdPerson() {
     } else if (arg == "feet") {
       sCmd.out += PortThirdPersonBody::DescribeFeet();
       return Finish();
+    } else if (arg == "backwalk" && i + 1 < sCmd.args.size()) {
+      const std::string mode = Lower(sCmd.args[++i]);
+      if (mode != "struggle" && mode != "reverse") {
+        return Finish(usage);
+      }
+      PortThirdPersonBody::SetBackWalk(mode == "struggle" ? PortThirdPersonBody::BackWalk::Struggle
+                                                          : PortThirdPersonBody::BackWalk::Reverse);
     } else if (arg == "clips") {
       sCmd.out += PortThirdPersonBody::DescribeClips();
       return Finish();
@@ -4189,7 +4196,7 @@ const CommandSpec kCommands[] = {
      "freecam [on|off|freeze on|off|player on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]\n"
      "                           fly the view away from the player (HUD hidden; freeze holds the game still)"},
     {"thirdperson", CmdThirdPerson, nullptr,
-     "thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>] [clips] [feet] [clip <name>|off [phase [yaw]]]\n"
+     "thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>] [clips] [feet] [clip <name>|off [phase [yaw]]] [backwalk struggle|reverse]\n"
      "                           third-person gameplay camera (also third_person* settings)"},
     {"photo", nullptr, CmdPhoto,
      "photo [on|off|capture [1|2|4]|fov <n>|roll <n>|samus on|off|panel on|off|super 1|2|4|speed <n>]\n"

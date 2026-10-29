@@ -53,6 +53,11 @@ int main() {
   CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Land, false, false) == Stance::Land);
   CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Land, true, false) == Stance::Idle);
   CHECK(ChooseStance(5.f, 0.f, true, 0.f, Stance::Land, false, false) == Stance::Loco);
+  // A walk dipping under kStandSpeed keeps walking until it has settled; standing doesn't start one.
+  CHECK(ChooseStance(0.3f, 0.f, true, 0.f, Stance::Loco, true, false, false) == Stance::Loco);
+  CHECK(ChooseStance(0.3f, 0.f, true, 0.f, Stance::Loco, true, false, true) == Stance::Stop);
+  CHECK(ChooseStance(0.3f, 0.f, true, 0.f, Stance::Idle, true, false, false) == Stance::Idle);
+  CHECK(ChooseStance(0.3f, 0.f, false, -1.f, Stance::Loco, true, false, false) == Stance::Fall);
 
   // The walk clips by speed: one alone outside their range, the bracketing two linearly inside,
   // continuous where the pairs meet.

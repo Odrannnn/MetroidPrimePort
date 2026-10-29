@@ -188,6 +188,7 @@ struct State {
   float clock = 0.f;      // seconds, for the clips that play by time (ready, aim)
   float stanceTime[int(Stance::Count)] = {}; // seconds since each stance was last entered
   float airTime = 0.f;    // seconds off the ground
+  float slowTime = 0.f;   // seconds under kStandSpeed
   // Where the player and the platform it rides stood last tick (GroundVelocity).
   bool haveLast = false;
   CVector3f lastPos = CVector3f::Zero(), lastPlatformPos = CVector3f::Zero();
@@ -246,6 +247,9 @@ struct State {
   std::unique_ptr<CModelData> beamData;
 };
 State s;
+// The forward walks reversed: the walk-back clip covers 0.88 u/s, so at Samus's ~1.9 u/s backward
+// it plays over twice its speed, and its stance stays splayed (#216).
+BackWalk sBackWalk = BackWalk::Reverse;
 
 int CharIdx(const CStateManager& mgr) {
   const CPlayerState::EPlayerSuit suit = mgr.GetPlayerState()->GetCurrentSuitRaw();
@@ -689,6 +693,7 @@ Pose sAcc;
 Pose sArms;
 Pose sModel;
 Pose sBlended;
+Pose sUpper;
 
 // Pose p with each rotation turned into the model's frame (its parents' rotations times its
 // own); a segment RecalcPoseBuilder doesn't set keeps the pose builder's rotation.
@@ -833,6 +838,12 @@ void PoseBody(CAnimData& data) {
     const float w = s.stanceWeight[int(Stance::Loco)] * s.locoWeight[i];
     if (w > 0.f) {
       Sample(s.loco[i], Wrap(kLocoDir[i] * s.stride + s.locoPeak[i]), sTmp);
+      if (kLocoDir[i] < 0.f) {
+        // The walk-back is Samus struggling in the Phazon: its arms clutch the helmet and
+        // fling out. Only its legs; above them the ready pose.
+        Sample(data, s.idle, Wrap(s.clock / idleDuration), sUpper);
+        Overlay(sTmp, sUpper, 1.f, true);
+      }
       Mix(sAcc, total, sTmp, w, false);
     }
   }
@@ -1109,9 +1120,11 @@ void Update(CStateManager& mgr, float dt) {
                                ? s.body->GetAnimationData()->GetAnimationDuration(s.stop)
                            : s.stance == Stance::Land && s.land.Valid() ? ShotSeconds(s.land, kLand)
                                                                          : 0.f;
+  const float speed = std::sqrt(fwd * fwd + side * side);
+  s.slowTime = speed < kStandSpeed ? s.slowTime + dt : 0.f;
   const Stance stance = ChooseStance(fwd, side, grounded, vel.GetZ(), s.stance,
                                      s.stanceTime[int(s.stance)] >= stanceDone,
-                                     s.airTime >= kLandAirSeconds);
+                                     s.airTime >= kLandAirSeconds, s.slowTime >= kSettleSeconds);
   if (stance != s.stance) {
     s.stanceTime[int(stance)] = 0.f;
     if (s.changeCount == int(std::size(s.changes))) {
@@ -1142,7 +1155,6 @@ void Update(CStateManager& mgr, float dt) {
   // the walk clips' weights (kept while the walk fades out) from the tiers for the way they
   // walk, and the feet move a loop for each stride of ground covered: the clips play at the
   // speed the body moves, in step with each other.
-  const float speed = std::sqrt(fwd * fwd + side * side);
   if (stance == Stance::Loco) {
     s.legsBack = LegsBackward(fwd, side, s.legsBack);
     LocoSlot tier[4];
@@ -1154,7 +1166,7 @@ void Update(CStateManager& mgr, float dt) {
         }
       }
     };
-    if (s.legsBack) {
+    if (s.legsBack && sBackWalk == BackWalk::Struggle) {
       add(kBackTiers, int(std::size(kBackTiers)));
     }
     if (n == 0) {
@@ -1267,27 +1279,38 @@ bool Render(const CStateManager& mgr, const CTransform4f& feet, const CActorLigh
   }
   const CTransform4f xf =
       s.pinned.Valid() ? feet * CTransform4f::RotateZ(CRelAngle::FromDegrees(s.pinYaw)) : feet;
+  // A camera pulled in by a wall behind her ends up in her: the body fades as it nears.
+  float cam[3];
+  PortThirdPerson::GetCameraPosition(cam);
+  const CAABox box = s.body->GetBounds(xf);
+  float near2 = 0.f;
+  for (int i = 0; i < 3; ++i) {
+    const float d = std::max({box.GetMinPoint()[i] - cam[i], cam[i] - box.GetMaxPoint()[i], 0.f});
+    near2 += d * d;
+  }
+  const float fade = std::clamp(std::sqrt(near2) / kFadeDistance, kFadeAlpha, 1.f);
+  const CModelFlags flags = fade < 1.f ? CModelFlags(CModelFlags::kT_Blend, fade) : CModelFlags::Normal();
   s.body->Touch(mgr, 0);
-  s.body->Render(mgr, xf, lights, CModelFlags::Normal());
+  s.body->Render(mgr, xf, lights, flags);
   // Prime's cannon at the hand locator, unless the dread-samus mod's body carries its own.
   const bool drawGun = s.beamData && !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(s.loadedChar));
   const CTransform4f gun = drawGun ? xf * s.body->GetScaledLocatorTransform("GUN_LCTR") : xf;
   if (drawGun) {
     s.beamData->Touch(mgr, 0);
-    s.beamData->Render(mgr, gun, lights, CModelFlags::Normal());
+    s.beamData->Render(mgr, gun, lights, flags);
   }
   if (shell) {
     // The lights are the player's, alive until the frame's Flush; the body is this file's.
     const CStateManager* const pmgr = &mgr;
-    PortShell::Defer(PortShell::kBody, s.body->GetBounds(xf), [pmgr, xf, lights] {
+    PortShell::Defer(PortShell::kBody, box, [pmgr, xf, lights, flags] {
       if (s.body) {
-        s.body->Render(*pmgr, xf, lights, CModelFlags::Normal());
+        s.body->Render(*pmgr, xf, lights, flags);
       }
     });
     if (drawGun) {
-      PortShell::Defer(PortShell::kBody, s.beamData->GetBounds(gun), [pmgr, gun, lights] {
+      PortShell::Defer(PortShell::kBody, s.beamData->GetBounds(gun), [pmgr, gun, lights, flags] {
         if (s.beamData) {
-          s.beamData->Render(*pmgr, gun, lights, CModelFlags::Normal());
+          s.beamData->Render(*pmgr, gun, lights, flags);
         }
       });
     }
@@ -1414,6 +1437,9 @@ std::string DescribeFeet() {
                 s.aimYawNow * 57.2958f, s.aimPitchNow * 57.2958f);
   return out + line;
 }
+
+void SetBackWalk(BackWalk mode) { sBackWalk = mode; }
+BackWalk GetBackWalk() { return sBackWalk; }
 
 bool PinClip(const char* name, float phase, float yaw) {
   if (name == nullptr || !Ready()) {
