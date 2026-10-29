@@ -141,6 +141,14 @@ void DrawCheats() {
       {"Varia Suit", CPlayerState::kIT_VariaSuit},
       {"Phazon Suit", CPlayerState::kIT_PhazonSuit},
   };
+  static const SItemToggle kArtifacts[] = {
+      {"Truth", CPlayerState::kIT_Truth},         {"Strength", CPlayerState::kIT_Strength},
+      {"Elder", CPlayerState::kIT_Elder},         {"Wild", CPlayerState::kIT_Wild},
+      {"Lifegiver", CPlayerState::kIT_Lifegiver}, {"Warrior", CPlayerState::kIT_Warrior},
+      {"Chozo", CPlayerState::kIT_Chozo},         {"Nature", CPlayerState::kIT_Nature},
+      {"Sun", CPlayerState::kIT_Sun},             {"World", CPlayerState::kIT_World},
+      {"Spirit", CPlayerState::kIT_Spirit},       {"Newborn", CPlayerState::kIT_Newborn},
+  };
   // As many columns as the widest name allows.
   float nameWidth = 0.f;
   for (const SItemToggle& item : kItems) {
@@ -148,8 +156,12 @@ void DrawCheats() {
   }
   nameWidth += ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::GetStyle().ItemSpacing.x * 2.f;
   const int columns = std::clamp(int(ImGui::GetContentRegionAvail().x / nameWidth), 1, 4);
-  if (ImGui::BeginTable("##abilities", columns)) {
-    for (const SItemToggle& item : kItems) {
+  const auto itemTable = [&](const char* id, const SItemToggle* items, size_t count) {
+    if (!ImGui::BeginTable(id, columns)) {
+      return;
+    }
+    for (size_t i = 0; i < count; ++i) {
+      const SItemToggle& item = items[i];
       ImGui::TableNextColumn();
       bool owned = ps->HasPowerUp(item.type);
       if (ImGui::Checkbox(item.name, &owned)) {
@@ -162,7 +174,8 @@ void DrawCheats() {
       }
     }
     ImGui::EndTable();
-  }
+  };
+  itemTable("##abilities", kItems, std::size(kItems));
 
   int missiles = ps->GetItemAmount(CPlayerState::kIT_Missiles);
   if (CheatSlider("Missiles", missiles, 250)) {
@@ -177,6 +190,9 @@ void DrawCheats() {
     GrantItem(*ps, CPlayerState::kIT_EnergyTanks, tanks, tanks); // tanks have no ammo: count is capacity
     ps->HealthInfo()->SetHP(ps->CalculateHealth());
   }
+
+  ImGui::SeparatorText("Artifacts");
+  itemTable("##artifacts", kArtifacts, std::size(kArtifacts));
 
   ImGui::SeparatorText("Teleport");
   CWorld* world = mgr->World();
