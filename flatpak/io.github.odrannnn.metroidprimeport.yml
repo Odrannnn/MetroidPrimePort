@@ -26,6 +26,9 @@ finish-args:
   - --socket=x11
   # The disc image lives wherever the user keeps it; it is read-only to us.
   - --filesystem=home:ro
+  # Audio: SDL talks to PulseAudio or PipeWire's pulse server; without the socket
+  # it fails to open a device ("Host is down", issue #202) and the game is silent.
+  - --socket=pulseaudio
   # The update check (api.github.com) and Archipelago servers.
   - --share=network
   # Discord Rich Presence (off by default): the native and Flatpak Discord
