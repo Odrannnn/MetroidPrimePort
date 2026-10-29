@@ -513,7 +513,10 @@ CIOWin::EMessageReturn CSlideShow::ProcessUserInput(const CFinalInput& input) {
     }
     bool changed = false;
     if (input.PDPRight()) {
-      x44_gallery = (x44_gallery + 1) % x28_galleries.size();
+#ifdef TARGET_PC
+      if (x28_galleries.size() != 0) // no galleries: nothing to step to
+#endif
+        x44_gallery = (x44_gallery + 1) % x28_galleries.size();
       x48_slide = -1;
       changed = true;
       x135_24_galleryChanged = true;

@@ -153,7 +153,14 @@ CStateMachine::CStateMachine(CInputStream& in) {
           newTrig = state.GetTrig(j);
         }
         if (k == 0) {
+#ifdef TARGET_PC
+          // A state index outside the asset's states (corrupt data) points at the first state.
+          const int stateIndex = in.Get< int >();
+          newTrig->Setup(func, isNot, arg,
+                         &x0_states[stateIndex >= 0 && stateIndex < x0_states.size() ? stateIndex : 0]);
+#else
           newTrig->Setup(func, isNot, arg, &x0_states[in.Get< int >()]);
+#endif
         } else {
           newTrig->Setup(func, isNot, arg, lastTrig);
         }
