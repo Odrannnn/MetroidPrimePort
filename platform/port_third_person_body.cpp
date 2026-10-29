@@ -872,9 +872,9 @@ constexpr float kBackCadence = 3.f;
 // Sidestepping (the gait across the facing; between, mixed by its share across), the planted
 // foot's travel, the loop as a share of the forward walk's stride, and the most loops a second.
 // The feet stay kStepGap legs apart at least (StepWiden).
-constexpr float kSideHalf = 0.25f;
-constexpr float kSideLoop = 0.4f;
-constexpr float kSideCadence = 3.5f;
+constexpr float kSideHalf = 0.32f;
+constexpr float kSideLoop = 0.8f;
+constexpr float kSideCadence = 2.4f;
 constexpr float kStepGap = 0.12f;
 
 // The legs' bones and lengths, and the ready pose's feet, for Backpedal (s.legs if all there).
