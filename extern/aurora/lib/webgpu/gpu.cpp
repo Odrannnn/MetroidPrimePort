@@ -47,6 +47,8 @@ wgpu::Device g_device;
 wgpu::Queue g_queue;
 wgpu::Surface g_surface;
 wgpu::BackendType g_backendType;
+// Highest anisotropy the adapter gets, whatever the setting asks (set_quality, initialize).
+uint16_t g_anisotropyCap = 16;
 bool g_vulkanLibraryFailed = false;
 GraphicsConfig g_graphicsConfig;
 TextureWithSampler g_frameBuffer;
@@ -1190,6 +1192,13 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
                                              supportedLimits.maxComputeWorkgroupsPerDimension,
                                              supportedLimits.maxComputeInvocationsPerWorkgroup));
     }
+    // An OpenGL adapter without compute shaders is GL < 4.3 hardware (Intel gen4-7 such as HD Graphics
+    // 3000, issue #202): 16x anisotropic filtering costs those far more texture bandwidth than 4x does.
+    const bool openGL = g_backendType == wgpu::BackendType::OpenGL || g_backendType == wgpu::BackendType::OpenGLES;
+    g_anisotropyCap = openGL && adapterNoCompute ? 4 : 16;
+    if (g_anisotropyCap < 16) {
+      Log.info("Anisotropic filtering capped at {}x (OpenGL adapter without compute shaders)", g_anisotropyCap);
+    }
     // Storage buffers hold the vertex data and feed the compute passes; with both on their fallbacks
     // nothing binds one, so require none (OpenGL 3.3 has no shader storage buffers at all).
     const bool needStorageBuffers = !gfx::g_vertexFetchTexture || !gfx::g_noCompute;
@@ -1521,7 +1530,7 @@ static bool initialize_once(AuroraBackend auroraBackend, bool allowCpu) {
           },
       .depthFormat = wgpu::TextureFormat::Depth32Float,
       .msaaSamples = g_config.msaa,
-      .textureAnisotropy = g_config.maxTextureAnisotropy,
+      .textureAnisotropy = std::min(g_config.maxTextureAnisotropy, g_anisotropyCap),
   };
   create_copy_pipeline();
   create_resample_pipeline();
@@ -1686,14 +1695,16 @@ void resize_swapchain(uint32_t width, uint32_t height, uint32_t nativeWidth, uin
 void set_quality(uint32_t msaaSamples, uint16_t anisotropy) {
   msaaSamples = msaaSamples >= 4 ? 4 : 1; // WebGPU only guarantees 1x and 4x
   anisotropy = std::clamp<uint16_t>(anisotropy, 1, 16);
+  const uint16_t effectiveAnisotropy = std::min(anisotropy, g_anisotropyCap);
   const bool msaaChanged = msaaSamples != g_graphicsConfig.msaaSamples;
-  if (!msaaChanged && anisotropy == g_graphicsConfig.textureAnisotropy) {
+  if (!msaaChanged && effectiveAnisotropy == g_graphicsConfig.textureAnisotropy) {
+    g_config.maxTextureAnisotropy = anisotropy;
     return;
   }
   gfx::gpu_synchronize();
   g_config.msaa = msaaSamples;
   g_config.maxTextureAnisotropy = anisotropy;
-  g_graphicsConfig.textureAnisotropy = anisotropy;
+  g_graphicsConfig.textureAnisotropy = effectiveAnisotropy;
   // Cached bind groups hold samplers built for the old anisotropy and views of
   // the old framebuffers.
   gfx::clear_caches();
