@@ -245,10 +245,18 @@ const SettingKey kSettingKeys[] = {
      [](const std::string& value) { PortThirdPerson::SetDistance(std::strtof(value.c_str(), nullptr)); },
      [](std::ostream& out) { out << PortThirdPerson::GetParams().distance; }, false, "2.5", "4"},
     {"third_person_shoulder",
-     [](const std::string& value) { PortThirdPerson::SetShoulder(std::strtof(value.c_str(), nullptr)); },
-     [](std::ostream& out) { out << PortThirdPerson::GetParams().shoulder; }, false, "0.5", "-0.5"},
+     // Every save writes every key, so files written before 69b52d4a3 hold the old defaults
+     // (shoulder 0.5, height 0.1), which put the crosshair on her pad: those move to the new ones.
+     [](const std::string& value) {
+       const float shoulder = std::strtof(value.c_str(), nullptr);
+       PortThirdPerson::SetShoulder(shoulder == 0.5f ? PortThirdPerson::Params{}.shoulder : shoulder);
+     },
+     [](std::ostream& out) { out << PortThirdPerson::GetParams().shoulder; }, false, "0.6", "-0.5"},
     {"third_person_height",
-     [](const std::string& value) { PortThirdPerson::SetHeight(std::strtof(value.c_str(), nullptr)); },
+     [](const std::string& value) {
+       const float height = std::strtof(value.c_str(), nullptr);
+       PortThirdPerson::SetHeight(height == 0.1f ? PortThirdPerson::Params{}.height : height);
+     },
      [](std::ostream& out) { out << PortThirdPerson::GetParams().height; }, false, "0.5", "0"},
     BoolKey< &sHideVisorEffects >("hide_visor_effects"),
     BoolKey< &sRevealMap >("reveal_map"),
