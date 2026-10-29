@@ -1237,11 +1237,9 @@ void CPlayer::UpdateAimTarget(CStateManager& mgr) {
 }
 
 void CPlayer::SetOrbitPosition(float distance, CStateManager& mgr) {
-#ifdef TARGET_PC
-  CTransform4f cameraXf = PortThirdPerson::TickView(GetFirstPersonCameraTransform(mgr));
-#else
+  // port: from the eye even in third person (issue #224): a point ahead of the shoulder
+  // camera sits off to its right, and Samus turning toward it drags the view right.
   CTransform4f cameraXf = GetFirstPersonCameraTransform(mgr);
-#endif
   if (x304_orbitState == kOS_OrbitPoint && x30c_orbitBrokenType == kOB_BadVerticalAngle) {
     cameraXf = GetTransform();
   }
