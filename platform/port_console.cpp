@@ -1324,6 +1324,41 @@ void CmdKill(CStateManager& mgr) {
   Finish();
 }
 
+// Freezes an enemy as an Ice Beam hit whose knockback freezes does (CPatterned::Freeze, hit
+// from the player's side), for looking at the frozen draw without having to land the shot.
+void CmdFreeze(CStateManager& mgr) {
+  if (sCmd.args.size() < 2) {
+    return Finish("usage: freeze <id>|target [seconds]");
+  }
+  CEntity* ent = nullptr;
+  if (Lower(sCmd.args[1]) == "target") {
+    const CPlayer* player = mgr.GetPlayer();
+    const TUniqueId target = player != nullptr ? player->GetOrbitTargetId() : kInvalidUniqueId;
+    if (target == kInvalidUniqueId) {
+      return Finish("nothing is locked on");
+    }
+    ent = const_cast< CEntity* >(mgr.GetObjectById(target));
+  } else {
+    ent = FindObject(mgr, sCmd.args[1]);
+  }
+  CPatterned* patterned = TCastToPtr< CPatterned >(ent);
+  if (patterned == nullptr) {
+    return Finish("not an enemy");
+  }
+  float duration = 10.f;
+  if (sCmd.args.size() > 2) {
+    duration = static_cast< float >(std::atof(sCmd.args[2].c_str()));
+  }
+  CVector3f dir = patterned->GetTranslation() - mgr.GetPlayer()->GetTranslation();
+  if (dir.CanBeNormalized()) {
+    dir.Normalize();
+  } else {
+    dir = patterned->GetTransform().GetForward();
+  }
+  patterned->Freeze(mgr, patterned->GetTranslation(), CUnitVector3f(dir), duration);
+  Finish();
+}
+
 void CmdHeal(CStateManager& mgr) {
   CPlayerState& ps = *mgr.PlayerState();
   ps.HealthInfo()->SetHP(ps.CalculateHealth());
@@ -4139,6 +4174,8 @@ const CommandSpec kCommands[] = {
     {"kill", nullptr, CmdKill,
      "kill <id>|target [damage]  kill an actor as with a last Power Beam shot (bosses too);\n"
      "                           target: the enemy the player is locked on to"},
+    {"freeze", nullptr, CmdFreeze,
+     "freeze <id>|target [s]     freeze an enemy as an Ice Beam hit does, for s seconds (default 10)"},
     {"phazongun", CmdPhazonGun, nullptr,
      "phazongun [off]            let the arm cannon fire the Phazon Beam (off: stop)"},
     {"hurt", nullptr, [](CStateManager&) { CmdHurt(sCmd.args.size() > 1 ? sCmd.args[1] : std::string()); },
