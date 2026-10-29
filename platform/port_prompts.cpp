@@ -452,7 +452,7 @@ const std::string* StablePath(const std::string& path) {
 // Serves one generated icon as if it were a replacement file. Called from
 // Aurora worker threads, so it only touches the filesystem.
 bool ReadIconBytes(void* userData, const char* path, std::vector<uint8_t>& out) {
-  // The prompts are 32x32 with a single mip, so any mip sidecar Aurora probes
+  // The prompts have a single mip, so any mip sidecar Aurora probes
   // for is a miss rather than the same image again.
   if (path != nullptr && std::strstr(path, "_mip") != nullptr) {
     return false;
@@ -687,7 +687,7 @@ std::string IconStemForPrompt(uint32_t prompt, const char* device) {
 }
 
 // The icon file for `stem` at width x height, or an empty string. Prefers the
-// binding generated at exactly this texture's size, then the unsuffixed one. A
+// binding generated for this texture's size, then the unsuffixed one. A
 // single stem can serve textures of different sizes - the C-stick prompts are
 // one 32x32 and one 64x32 - and a mismatch is not scaled by the game: it reads
 // 64x32 of pixels out of 32x32 of data and draws the right-hand half as noise.
@@ -733,8 +733,11 @@ void ApplyBound(const void* owner, BoundPrompt& bound, const std::string& stem) 
   const std::string iconPath = FindIconForSize(stem, bound.width, bound.height);
   uint32_t iconWidth = 0;
   uint32_t iconHeight = 0;
-  if (iconPath.empty() || !IconDimensions(iconPath, iconWidth, iconHeight) || iconWidth != bound.width ||
-      iconHeight != bound.height) {
+  // Any whole multiple of the texture's size, the same on both axes: the icons are drawn
+  // larger than the game's art so they stay sharp on a scaled-up HUD (#229).
+  if (iconPath.empty() || !IconDimensions(iconPath, iconWidth, iconHeight) || bound.width == 0 ||
+      bound.height == 0 || iconWidth % bound.width != 0 || iconWidth < bound.width ||
+      iconHeight * bound.width != iconWidth * bound.height) {
     return;
   }
   const std::string* path = StablePath(iconPath);

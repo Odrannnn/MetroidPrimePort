@@ -246,10 +246,13 @@ mouse button, and pad button, stick and D-pad, whole and per direction) into `<d
 compositing the CC0 icons vendored in `tools/prompt_icons/` (Kenney's Input Prompts pack). The
 names are the port's stems for the inputs, not the game's texture names, so the same set serves
 every screen. The build copies `textures/` next to the executable (or embeds it), so a built
-binary picks the replacements up without a manual copy. Two details matter:
+binary picks the replacements up without a manual copy. Three details matter:
 
 - the icon must keep the game's inset (the glyph is only about 22px in the 32x32 buttons and 28px
   in the 64x32 stick and D-pad art, and a full-bleed icon reads as a square);
+- an icon may be any whole multiple of the texture's size, the same on both axes; the generated
+  ones are twice it, so they stay sharp on a scaled-up HUD. A file name's `_64x32` suffix is the
+  game texture it serves, not the file's own size;
 - DDS is used rather than PNG because Aurora's DDS path preserves the texture's alpha.
 
 ### Binding-aware prompts
