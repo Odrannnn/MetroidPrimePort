@@ -61,7 +61,10 @@ struct ClipNames {
   const char* a;
   const char* b;
 };
-constexpr ClipNames kIdle{"B_ready_samus", "B_rready_samus"};
+// Standing: the relaxed ready, the pose the stop ends in (B_ready_samus, the cannon levelled,
+// stands in a lunge side-on, and turning into it from the stop's end swung the body a quarter
+// turn). Walking back keeps B_ready_samus above the hips (s.ready).
+constexpr ClipNames kIdle{"B_rready_samus", "B_ready_samus"};
 constexpr ClipNames kStop{"B_intorreadyfromwalk_samus", "B_rready_samus"};
 // The walk clips (B_walkgun_samus is not one: the aim clips over the legs raise the cannon at
 // any speed), each with the one that stands in where a set lacks it. The other sets give the
@@ -163,6 +166,7 @@ struct State {
   float hipsHeight = 0.f;          // its height in the skeleton
   CSegId spine = CSegId::Invalid(); // Spine_1, the upper body's top bone
   int idle = -1;
+  int ready = -1; // B_ready_samus, the cannon levelled: the backpedal's and walk-back's upper body
   int stop = -1;
   Clip loco[kLocoSlots];
   // Measured by Build: each walk clip's ground speed (world units per second), the ground one
@@ -849,7 +853,7 @@ void FindLegBones(CAnimData& data) {
   const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
   static const char* const kNames[2][4] = {{"L_hip", "L_knee", "L_ankle", "L_ball"},
                                            {"R_hip", "R_knee", "R_ankle", "R_ball"}};
-  s.legs = s.idle >= 0 && s.hips != CSegId::Invalid();
+  s.legs = s.ready >= 0 && s.hips != CSegId::Invalid();
   for (int f = 0; f < 2; ++f) {
     for (int b = 0; b < 4; ++b) {
       s.leg[f][b] = layout.GetSegIdFromString(rstl::string_l(kNames[f][b]));
@@ -861,7 +865,7 @@ void FindLegBones(CAnimData& data) {
   if (!s.legs) {
     return;
   }
-  Sample(data, s.idle, 0.f, sTmp);
+  Sample(data, s.ready, 0.f, sTmp);
   for (int f = 0; f < 2; ++f) {
     const CVector3f hip = SegPosition(data, s.leg[f][0]);
     const CVector3f knee = SegPosition(data, s.leg[f][1]);
@@ -888,8 +892,8 @@ CQuaternion ModelRotation(const CHierarchyPoseBuilder& pb, const CCharLayoutInfo
 // ground). Two-bone IK puts each ankle there, its knee bent forward; the hips crouch so the
 // stretched leg reaches, and bob at each step.
 void Backpedal(CAnimData& data, Pose& out) {
-  const float idleDuration = std::max(data.GetAnimationDuration(s.idle), 0.1f);
-  Sample(data, s.idle, Wrap(s.clock / idleDuration), out);
+  const float readyDuration = std::max(data.GetAnimationDuration(s.ready), 0.1f);
+  Sample(data, s.ready, Wrap(s.clock / readyDuration), out);
   CHierarchyPoseBuilder& pb = data.PoseBuilder();
   const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
   const float leg = 0.5f * (s.thigh[0] + s.shin[0] + s.thigh[1] + s.shin[1]);
@@ -1008,7 +1012,7 @@ void PoseBody(CAnimData& data) {
       if (kLocoDir[i] < 0.f) {
         // The walk-back is Samus struggling in the Phazon: its arms clutch the helmet and
         // fling out. Only its legs; above them the ready pose.
-        Sample(data, s.idle, Wrap(s.clock / idleDuration), sUpper);
+        Sample(data, s.ready, Wrap(s.clock / std::max(data.GetAnimationDuration(s.ready), 0.1f)), sUpper);
         Overlay(sTmp, sUpper, 1.f, true);
       }
       Mix(sAcc, total, sTmp, w, false);
@@ -1141,6 +1145,10 @@ void Build(CStateManager& mgr) {
   s.animating = s.idle >= 0;
   if (!s.animating) {
     return;
+  }
+  s.ready = data->GetCharacterInfo().GetAnimationIndex(rstl::string_l(kReady));
+  if (s.ready < 0) {
+    s.ready = s.idle;
   }
   s.stop = Find(*data, kStop);
   if (s.stop < 0) {
