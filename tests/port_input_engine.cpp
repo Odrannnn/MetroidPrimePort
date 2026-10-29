@@ -365,6 +365,21 @@ int main() {
     REQUIRE(!done.Released(CustomAction(3)) && !done.Pressed(CustomAction(7)));
   }
 
+  // A rebuild with the button down keeps it held, not pressed again (issue #235).
+  {
+    Rig r;
+    r.profile.bindings = {Bind(CustomAction(3), {Btn(kA)}), Bind(Action::PadA, {Btn(kA)})};
+    r.Start();
+    r.Set(kA, true);
+    REQUIRE(r.Step().Pressed(Action::PadA) && r.runtime.Last().Pressed(CustomAction(3)));
+    r.Start();
+    const Output& again = r.Step();
+    REQUIRE(again.Held(Action::PadA) && !again.Pressed(Action::PadA));
+    REQUIRE(again.Held(CustomAction(3)) && !again.Pressed(CustomAction(3)));
+    r.Set(kA, false);
+    REQUIRE(r.Step().Released(Action::PadA) && r.runtime.Last().Released(CustomAction(3)));
+  }
+
   // A null profile reports nothing held or pressed, the customs as the fixed ones.
   {
     Rig r;

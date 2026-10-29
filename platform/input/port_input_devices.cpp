@@ -382,9 +382,11 @@ void BindPortControls(Profile& p) {
   BindBeamChords(p);
 
   // Turbo: A on one poll and off the next, so the gun sees a press edge every
-  // other tick. Retail has no turbo; the touch button has its own setting.
-  const float tick = PortDebug::TickPeriod();
-  const auto turboHz = static_cast< uint16_t >(std::lround(tick > 0.f ? 0.5f / tick : 30.f));
+  // other tick. Retail has no turbo; the touch button has its own setting. The
+  // rate is the nominal one: adaptive simulation changes the tick every frame,
+  // and a profile that changes every frame is rebuilt every frame (issue #235).
+  const unsigned rate = PortDebug::SimRate();
+  const auto turboHz = static_cast< uint16_t >(rate > 0 ? (rate + 1) / 2 : 30);
   if (!PortDebug::OriginalExperience()) {
     for (int slot = 0; slot < PAD_KEY_SLOT_COUNT; ++slot) {
       Bind(p, Action::PadA, KeySlotInput(PortDebug::TurboBinding(slot), kMouseHeld), turboHz);
