@@ -24,6 +24,7 @@ bool sActive = false;
 bool sFrozen = false;
 float sSpeed = 10.f;
 bool sShowPlayer = true;
+bool sDrive = false;
 Pose sPose{0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
 float sFov = 0.f;
 float sTouchMoveX = 0.f;
@@ -119,6 +120,8 @@ void SetSpeed(float speed) {
 
 bool ShowPlayer() { return sActive && sShowPlayer; }
 void SetShowPlayer(bool show) { sShowPlayer = show; }
+bool Drive() { return sActive && sDrive; }
+void SetDrive(bool drive) { sDrive = drive; }
 
 Pose GetPose() { return sPose; }
 
@@ -171,6 +174,9 @@ bool Input(const CFinalInput& input) {
   MarkTick();
   if (PortDebug::OverlayVisible()) {
     return true; // the overlay has the pad
+  }
+  if (sDrive) {
+    return false; // the player has the pad
   }
   const float dt = std::clamp(input.Time(), 0.f, 0.1f);
   sPose.yaw -= (input.ARARight() - input.ARALeft()) * kTurnRate * dt;

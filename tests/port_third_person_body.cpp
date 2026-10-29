@@ -124,5 +124,25 @@ int main() {
     sum += e;
   }
   CHECK(Near(sum, 1.f) && Near(g[1], 0.7f * 0.6f) && Near(g[2], 0.3f * 0.6f));
+
+  // The backpedal's foot: touches down at the back toe first, slides forward flat at a steady
+  // speed, rolls up onto the heel, and swings back without a jump at either end.
+  CHECK(Near(BackpedalFoot(0.f).y, -1.f) && Near(BackpedalFoot(0.f).pitch, -kBackToeDown));
+  CHECK(std::fabs(BackpedalFoot(kBackDuty - 1e-5f).y - 1.f) < 1e-3f);
+  CHECK(Near(BackpedalFoot(1.f).y, -1.f) && Near(BackpedalFoot(0.5f).lift, 0.f));
+  CHECK(Near(BackpedalFoot(0.5f * kBackDuty).pitch, 0.f));
+  CHECK(Near(BackpedalFoot(kBackDuty - 1e-5f).pitch, BackpedalFoot(kBackDuty).pitch));
+  CHECK(Near(BackpedalFoot(1.f - 1e-5f).pitch, BackpedalFoot(0.f).pitch));
+  CHECK(Near(BackpedalFoot(kBackDuty + 0.5f * (1.f - kBackDuty)).lift, 1.f));
+  const float v0 = BackpedalFoot(0.3f).y - BackpedalFoot(0.2f).y;
+  const float v1 = BackpedalFoot(0.5f).y - BackpedalFoot(0.4f).y;
+  CHECK(Near(v0, v1) && v0 > 0.f);
+  CHECK(Near(BackpedalBob(0.5f * kBackDuty), 0.f) && Near(BackpedalBob(0.5f * kBackDuty + 0.5f), 0.f));
+  CHECK(Near(BackpedalBob(0.5f * kBackDuty + 0.25f), 1.f));
+  // Running (a shorter duty), a foot still plants for that share and swings, peaking, the rest.
+  CHECK(std::fabs(BackpedalFoot(0.3f - 1e-5f, 0.3f).y - 1.f) < 1e-3f && Near(BackpedalFoot(0.2f, 0.3f).lift, 0.f));
+  CHECK(Near(BackpedalFoot(0.65f, 0.3f).lift, 1.f) && Near(BackpedalFoot(1.f - 1e-5f, 0.3f).pitch, BackpedalFoot(0.f, 0.3f).pitch));
+  CHECK(Near(BackpedalBob(0.15f, 0.3f), 0.f) && Near(BackpedalBob(0.4f, 0.3f), 1.f));
+  CHECK(Near(KneeAngle(1.f, 1.f, 2.f), 3.14159265f) && Near(KneeAngle(1.f, 1.f, std::sqrt(2.f)), 1.5707963f));
   return port_test::Failures() == 0 ? 0 : 1;
 }

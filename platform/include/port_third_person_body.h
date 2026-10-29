@@ -186,6 +186,50 @@ inline void AimGridWeights(float u, float v, float (&w)[9]) {
   w[(r + 1) * 3 + c + 1] += fu * fv;
 }
 
+// The procedural backpedal (BackWalk::Procedural): each foot loops through stance (planted,
+// sliding forward under her at ground speed) for duty of the step (kBackDuty walking, less once a
+// planted foot can't cover the stride: then both feet leave the ground, a run) and swing (lifted,
+// carried back) for the rest. It lands toe first, kBackToeDown, and rolls up onto the toe, kBackToeUp,
+// before it lifts, as a step backward does.
+inline constexpr float kBackDuty = 0.6f;
+inline constexpr float kBackToeDown = 0.35f;
+inline constexpr float kBackToeUp = 0.2f;
+
+// One foot at phase 0..1 (0 = touch-down, furthest back): y in half strides (-1 back .. 1 front),
+// lift 0..1, pitch in radians (+ toe up, - toe down).
+struct BackFoot {
+  float y;
+  float lift;
+  float pitch;
+};
+inline BackFoot BackpedalFoot(float phase, float duty = kBackDuty) {
+  const float p = phase - std::floor(phase);
+  const auto ease = [](float t) { return t * t * (3.f - 2.f * t); };
+  if (p < duty) {
+    const float t = p / duty;
+    float pitch = 0.f;
+    if (t < 0.2f) {
+      pitch = -kBackToeDown * (1.f - ease(t / 0.2f));
+    } else if (t > 0.85f) {
+      pitch = kBackToeUp * ease((t - 0.85f) / 0.15f);
+    }
+    return {-1.f + 2.f * t, 0.f, pitch};
+  }
+  const float t = (p - duty) / (1.f - duty);
+  return {1.f - 2.f * ease(t), std::sin(3.14159265f * t), kBackToeUp + (-kBackToeDown - kBackToeUp) * ease(t)};
+}
+
+// The pelvis bob at the left foot's phase: 0 at mid-stance of either foot (highest), 1 lowest.
+inline float BackpedalBob(float phaseL, float duty = kBackDuty) {
+  return 0.5f * (1.f - std::cos(4.f * 3.14159265f * (phaseL - duty * 0.5f)));
+}
+
+// The interior angle at the knee (radians) of a leg with thigh a and shin b whose hip and ankle are
+// d apart: pi straight.
+inline float KneeAngle(float a, float b, float d) {
+  return std::acos(std::clamp((a * a + b * b - d * d) / (2.f * a * b), -1.f, 1.f));
+}
+
 // A shot left the cannon (CPlayerGun): the body raises it for kGunUpSeconds.
 void NoteShot();
 // Once per game tick while the third-person camera is active (PortThirdPerson::Update).
@@ -214,9 +258,10 @@ std::string DescribeFeet();
 // Holds the named clip at phase 0..1 instead of the movement's clip, the body turned by yaw degrees;
 // nullptr lets go. False if the body has no such clip (or is not built).
 bool PinClip(const char* name, float phase, float yaw = 0.f);
-// Debug (console `thirdperson backwalk`): which clips walk backward: the walk-back clip
-// (Phazon_Struggle_walkback's legs), or the forward walks played in reverse (the default).
-enum class BackWalk { Struggle, Reverse };
+// Debug (console `thirdperson backwalk`): how Samus walks backward: the procedural backpedal (the
+// default; no clip walks backward well), the walk-back clip (Phazon_Struggle_walkback's legs), or
+// the forward walks played in reverse.
+enum class BackWalk { Struggle, Reverse, Procedural };
 void SetBackWalk(BackWalk mode);
 BackWalk GetBackWalk();
 

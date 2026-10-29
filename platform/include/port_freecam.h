@@ -22,6 +22,10 @@ void SetSpeed(float speed);
 // out in first person. True only while the camera is on.
 bool ShowPlayer();
 void SetShowPlayer(bool show);
+// The pad drives Samus and the camera holds still (off by default), for watching her move
+// from a fixed viewpoint. True only while the camera is on.
+bool Drive();
+void SetDrive(bool drive);
 
 struct Pose {
   float x, y, z;

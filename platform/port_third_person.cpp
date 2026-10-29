@@ -77,7 +77,9 @@ float Blend() {
 bool StateAllows(const CStateManager& mgr) {
   const CPlayer* player = mgr.GetPlayer();
   const CCameraManager* cams = mgr.GetCameraManager();
-  if (!sEnabled || player == nullptr || cams == nullptr || PortFreeCam::Active()) {
+  // Under the free camera only while it drives Samus (a fixed view of her body moving).
+  if (!sEnabled || player == nullptr || cams == nullptr ||
+      (PortFreeCam::Active() && !PortFreeCam::Drive())) {
     return false;
   }
   const CFirstPersonCamera* fp = cams->GetFirstPersonCamera();
