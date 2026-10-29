@@ -1239,6 +1239,51 @@ void TestWorldVolumes() {
   PutFloat(v26, std::numeric_limits<float>::infinity());
   CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(v26), file, error) && file.envFxIntensity == 1.f,
             "envfx: a bad intensity is the default");
+  {
+    // Version 30 adds the room's own trigger volumes at the end.
+    CHECK_MSG(file.roomVolumes.empty(), "room volumes: none before version 30");
+    std::vector<uint8_t> v30 = v26;
+    v30[4] = 30;
+    CHECK_MSG(!PortRoomEnv::Parse(std::vector<uint8_t>(v30), file, error), "room volumes: cut short");
+    Put32(v30, 2);
+    for (int k = 0; k < 2; ++k) {
+      // b's box (turned a quarter about z), then one that reads wrong.
+      for (float f : b.centre) PutFloat(v30, f);
+      for (float f : b.half) PutFloat(v30, k == 0 ? f : std::numeric_limits<float>::quiet_NaN());
+      for (float f : b.axes) PutFloat(v30, f);
+      v30.insert(v30.end(), {uint8_t(k == 0 ? 3 : 1), 0, 0, 0});
+    }
+    CHECK_MSG(!PortRoomEnv::Parse(std::vector<uint8_t>(v30.begin(), v30.end() - 4), file, error),
+              "room volumes: entry cut short");
+    CHECK_MSG(PortRoomEnv::Parse(std::vector<uint8_t>(v30), file, error) && file.roomVolumes.size() == 2 &&
+                  file.envFxIntensity == 1.f && file.worldVolumes.size() == 2,
+              "room volumes: version 30 read back");
+    using PortRoomEnv::RoomVolume;
+    const RoomVolume& r = file.roomVolumes[0];
+    CHECK_MSG(r.detect == (PortRoomEnv::kRoomVolumePlayer | PortRoomEnv::kRoomVolumeCamera) && r.centre[0] == 10.f &&
+                  r.half[0] == 2.f && r.axes[1] == 1.f,
+              "room volumes: fields");
+    const float in[3] = {10.f, 1.5f, 0.f}, out[3] = {11.5f, 0.f, 0.f}, far[3] = {50.f, 50.f, 50.f};
+    // The box spans x 9..11, y -2..2, z -1..1 in the area's axes.
+    const float touchLo[3] = {10.8f, -0.5f, -0.5f}, touchHi[3] = {12.f, 0.5f, 0.5f};
+    const float awayLo[3] = {11.2f, -0.5f, -0.5f}, awayHi[3] = {12.f, 0.5f, 0.5f};
+    CHECK_MSG(PortRoomEnv::InsideRoomVolume(r, in, nullptr, nullptr, false), "room volumes: camera inside");
+    CHECK_MSG(!PortRoomEnv::InsideRoomVolume(r, out, nullptr, nullptr, false), "room volumes: camera outside");
+    CHECK_MSG(PortRoomEnv::InsideRoomVolume(r, far, touchLo, touchHi, true), "room volumes: player bounds overlap");
+    CHECK_MSG(!PortRoomEnv::InsideRoomVolume(r, far, awayLo, awayHi, true), "room volumes: player bounds apart");
+    CHECK_MSG(!PortRoomEnv::InsideRoomVolume(r, far, touchLo, touchHi, false), "room volumes: no player");
+    RoomVolume cameraOnly = r;
+    cameraOnly.detect = PortRoomEnv::kRoomVolumeCamera;
+    CHECK_MSG(!PortRoomEnv::InsideRoomVolume(cameraOnly, far, touchLo, touchHi, true),
+              "room volumes: a camera trigger ignores the player");
+    RoomVolume playerOnly = r;
+    playerOnly.detect = PortRoomEnv::kRoomVolumePlayer;
+    CHECK_MSG(!PortRoomEnv::InsideRoomVolume(playerOnly, in, awayLo, awayHi, true),
+              "room volumes: a player trigger ignores the camera");
+    const RoomVolume& bad = file.roomVolumes[1];
+    CHECK_MSG(bad.half[0] < 0.f && !PortRoomEnv::InsideRoomVolume(bad, in, touchLo, touchHi, true),
+              "room volumes: a bad box detects nothing");
+  }
   const float inB[3] = {10.f, 1.5f, 0.f}, outB[3] = {11.5f, 0.f, 0.f};
   CHECK_MSG(PortRoomEnv::InsideWorldVolume(b, inB) && !PortRoomEnv::InsideWorldVolume(b, outB), "volumes: turned box");
 

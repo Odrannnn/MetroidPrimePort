@@ -15,7 +15,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 29;
+constexpr uint32_t kVersion = 30;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -1106,8 +1106,78 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
     at += 4;
     out.envFxIntensity = std::isfinite(v) && v >= 0.f ? v : 1.f;
   }
+  if (version >= 30) {
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t volumes = ReadLE32(data.data() + at);
+    at += 4;
+    constexpr size_t kVolumeBytes = 15 * 4 + 4;
+    if (volumes > kMaxRoomVolumes || (data.size() - at) / kVolumeBytes < volumes) {
+      error = "cut short";
+      return false;
+    }
+    out.roomVolumes.resize(volumes);
+    for (uint32_t i = 0; i < volumes; ++i, at += kVolumeBytes) {
+      RoomVolume& v = out.roomVolumes[i];
+      float* const fields[3] = {v.centre, v.half, v.axes};
+      const size_t counts[3] = {3, 3, 9};
+      size_t o = at;
+      for (int f = 0; f < 3; ++f) {
+        for (size_t k = 0; k < counts[f]; ++k, o += 4) {
+          fields[f][k] = ReadLEFloat(data.data() + o);
+        }
+      }
+      v.detect = data[o] & (kRoomVolumePlayer | kRoomVolumeCamera);
+      // A box that reads wrong detects nothing (its index stays, as links name it).
+      bool ok = true;
+      for (float x : v.centre) ok = ok && std::isfinite(x);
+      for (float x : v.half) ok = ok && std::isfinite(x);
+      for (float x : v.axes) ok = ok && std::isfinite(x);
+      if (!ok) {
+        v = RoomVolume{};
+        v.half[0] = v.half[1] = v.half[2] = -1.f;
+      }
+    }
+  }
   out.data = std::move(data);
   return true;
+}
+
+bool InsideRoomVolume(const RoomVolume& volume, const float camera[3], const float playerMin[3],
+                      const float playerMax[3], bool hasPlayer) {
+  for (float h : volume.half) {
+    if (!(h >= 0.f)) {
+      return false;
+    }
+  }
+  if ((volume.detect & kRoomVolumeCamera) != 0 && camera != nullptr) {
+    const float d[3] = {camera[0] - volume.centre[0], camera[1] - volume.centre[1], camera[2] - volume.centre[2]};
+    bool inside = true;
+    for (int axis = 0; axis < 3 && inside; ++axis) {
+      const float* const a = volume.axes + axis * 3;
+      inside = std::fabs(d[0] * a[0] + d[1] * a[1] + d[2] * a[2]) <= volume.half[axis];
+    }
+    if (inside) {
+      return true;
+    }
+  }
+  if ((volume.detect & kRoomVolumePlayer) != 0 && hasPlayer && playerMin != nullptr && playerMax != nullptr) {
+    // The box's extent along each of the area's axes.
+    bool overlap = true;
+    for (int j = 0; j < 3 && overlap; ++j) {
+      float extent = 0.f;
+      for (int i = 0; i < 3; ++i) {
+        extent += std::fabs(volume.axes[i * 3 + j]) * volume.half[i];
+      }
+      overlap = playerMax[j] >= volume.centre[j] - extent && playerMin[j] <= volume.centre[j] + extent;
+    }
+    if (overlap) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool InsideWorldVolume(const WorldVolume& volume, const float pos[3]) {

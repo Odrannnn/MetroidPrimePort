@@ -18,7 +18,7 @@
 // ambient colour.
 //
 // The file is little endian:
-//   'MPEV', u32 version (1 to 26), f32 tonemap[4], u32 probes, u32 cubes
+//   'MPEV', u32 version (1 to 30), f32 tonemap[4], u32 probes, u32 cubes
 //   probe: f32 worldToBox[12], f32 worldToCube[9], s32 layer, u32 cube, f32 scale, f32 padding
 //          and from version 8 on, s32 priority, f32 intensity min, f32 intensity max
 //          (before it the padding is unused, 1 m, and the rest 0, 0, 1). From version 9
@@ -155,6 +155,12 @@
 //   controller only a trigger fires is left out). Older files have 1.
 // Version 29 adds to each sun, after the casts block, a light's links, animation block and
 //   splines (as version 19's lights from u32 links on; the animation's falloff and scale unused).
+// Version 30 adds, at the end:
+//   u32 volumes
+//   volume: f32 centre[3], f32 half[3], f32 axes[9] (the area's own space, as the .roomgeo's
+//         camera volumes), u8 detect (bit 0 the player, bit 1 the camera), u8 pad[3]. The room's
+//         own TriggerMP1s that switch its hints (see RoomVolume); link senders
+//         kSenderRoomVolume + k name its entries.
 // The tonemap is Remastered's: the exposure value without auto exposure, the radiance
 // that comes out as middle grey once exposed, and how far the curve's toe and shoulder
 // are pulled in.
@@ -231,6 +237,11 @@ constexpr uint32_t kSenderCameraWater = 0xfffffff1;
 // below the two senders above.
 constexpr uint32_t kSenderWorldVolume = 0xfff00000;
 constexpr uint32_t kMaxWorldVolumes = 0x10000;
+// A room's own TriggerMP1s that switch its hints (no retail object): kSenderRoomVolume + k is
+// entry k of the file's room volume table, state 0 as the player or camera it detects goes in,
+// 1 as it comes out. Right after the world volumes, below kSenderCameraWaterItem.
+constexpr uint32_t kSenderRoomVolume = kSenderWorldVolume + kMaxWorldVolumes;
+constexpr uint32_t kMaxRoomVolumes = 0x10000;
 // The camera going under water as the player holds item k (an EItemType) or not: a master's
 // InventoryActivator fired by its camera water proxy. kSenderCameraWaterItem + k, state 0 with
 // the item, 1 without; nothing as the camera comes out.
@@ -238,6 +249,7 @@ constexpr uint32_t kSenderCameraWaterItem = 0xffff0000;
 constexpr uint32_t kCameraWaterItems = 64;
 // A sender that is no retail script object (keeps its high bits).
 inline bool PseudoSender(uint32_t sender) { return sender >= kSenderWorldVolume; }
+static_assert(kSenderRoomVolume + kMaxRoomVolumes <= kSenderCameraWaterItem, "room volumes overlap the item senders");
 
 struct GradeLink {
   uint32_t sender = 0;
@@ -475,6 +487,23 @@ struct WorldVolume {
 bool InsideWorldVolume(const WorldVolume& volume, const float pos[3]);
 bool SameWorldVolumes(const std::vector<WorldVolume>& a, const std::vector<WorldVolume>& b);
 
+// A room's own TriggerMP1 box (version 30), in the area's space. A TriggerMP1 that detects the
+// player tests the player's bounds against its box (overlap); one that detects the camera, the
+// camera's position (inside). The camera goes by the oriented box, as the .roomgeo's camera
+// volumes do, the player's bounds by the box's axis-aligned bounds.
+constexpr uint8_t kRoomVolumePlayer = 1;
+constexpr uint8_t kRoomVolumeCamera = 2;
+struct RoomVolume {
+  float centre[3] = {};
+  float half[3] = {};
+  float axes[9] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f};
+  uint8_t detect = 0;
+};
+// Whether what the volume detects is in it now: the camera at `camera`, the player's bounds
+// `playerMin`..`playerMax` (left out when `hasPlayer` is false).
+bool InsideRoomVolume(const RoomVolume& volume, const float camera[3], const float playerMin[3],
+                      const float playerMax[3], bool hasPlayer);
+
 // Which world volumes the camera is in, as a TriggerMP1 sees it: outside every one to begin
 // with, so a camera that starts inside one enters it on the first Update.
 struct WorldVolumeState {
@@ -506,6 +535,7 @@ struct File {
   std::vector<WorldVolume> worldVolumes; // version 22
   float worldShift[3] = {};              // version 23
   float envFxIntensity = 1.f;            // version 26: EnvironmentFX colour intensity
+  std::vector<RoomVolume> roomVolumes;   // version 30
   float contrast = 0.f;
   float bloomThreshold = 0.9f;
   std::vector<float> bloomTints; // RGBA; empty: the room has no bloom
@@ -877,6 +907,12 @@ void SetFluid(bool player, bool camera, uint64_t items);
 // kSenderWorldVolume + k; an area that loads later hears the entries and exits so far
 // (WorldVolumeState::Replay).
 void SetCameraPoint(const float pos[3]);
+// Once a frame for each loaded area `mrea`: the camera and the player's bounds in that area's
+// own space. The player or camera going into or out of one of its room volumes drives the hints
+// of that area linked to kSenderRoomVolume + k. Every volume starts outside, so one already
+// inside enters on the first call after the area's file is in.
+void SetAreaPoints(uint32_t mrea, const float camera[3], const float playerMin[3], const float playerMax[3],
+                   bool hasPlayer);
 // Once a frame: the inputs of the exposure hint swap (CAutoExposureHintMP1GOC): the player is
 // unmorphed, the thermal visor is the active one, a cinematic camera is running. A swap
 // registers a hint in every loaded area (area.hintSnap); an area that loads later starts in

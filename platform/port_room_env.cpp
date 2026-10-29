@@ -1795,6 +1795,18 @@ std::string FogInfo() {
                   v.half[2], (unsigned long long)entered);
     out += line;
   }
+  if (const auto view = sAreas.find(sViewArea); view != sAreas.end()) {
+    const Area& area = view->second;
+    for (size_t i = 0; i < area.file.roomVolumes.size(); ++i) {
+      const RoomVolume& v = area.file.roomVolumes[i];
+      const bool inside = i < area.roomInside.size() && area.roomInside[i] != 0;
+      std::snprintf(line, sizeof(line), "%08X room volume %zu: %s detect %s%s centre %.1f %.1f %.1f half %.1f %.1f %.1f\n",
+                    sViewArea, i, inside ? "inside " : "outside", (v.detect & kRoomVolumePlayer) != 0 ? "player" : "",
+                    (v.detect & kRoomVolumeCamera) != 0 ? "+camera" : "", v.centre[0], v.centre[1], v.centre[2],
+                    v.half[0], v.half[1], v.half[2]);
+      out += line;
+    }
+  }
   return out;
 }
 
@@ -1877,6 +1889,39 @@ void SetCameraPoint(const float pos[3]) {
         DriveGrades(mrea, area, kSenderWorldVolume + e.volume, e.state);
       }
     }
+  }
+}
+
+void SetAreaPoints(uint32_t mrea, const float camera[3], const float playerMin[3], const float playerMax[3],
+                   bool hasPlayer) {
+  const auto found = sAreas.find(mrea);
+  if (found == sAreas.end()) {
+    return;
+  }
+  Area& area = found->second;
+  if (area.pending.valid() || !area.hasFile || area.file.roomVolumes.empty()) {
+    return;
+  }
+  bool cameraOk = true, playerOk = hasPlayer;
+  for (int i = 0; i < 3; ++i) {
+    cameraOk = cameraOk && std::isfinite(camera[i]);
+    playerOk = playerOk && std::isfinite(playerMin[i]) && std::isfinite(playerMax[i]);
+  }
+  if (area.roomInside.size() != area.file.roomVolumes.size()) {
+    area.roomInside.assign(area.file.roomVolumes.size(), 0);
+  }
+  for (size_t k = 0; k < area.file.roomVolumes.size(); ++k) {
+    const uint8_t inside = InsideRoomVolume(area.file.roomVolumes[k], cameraOk ? camera : nullptr, playerMin,
+                                            playerMax, playerOk)
+                               ? 1
+                               : 0;
+    if (inside == area.roomInside[k]) {
+      continue;
+    }
+    area.roomInside[k] = inside;
+    PortLog::Write("room env: %08X room volume %zu %s at camera %.1f %.1f %.1f\n", mrea, k,
+                   inside != 0 ? "entered" : "left", camera[0], camera[1], camera[2]);
+    DriveGrades(mrea, area, kSenderRoomVolume + uint32_t(k), inside != 0 ? 0 : 1);
   }
 }
 

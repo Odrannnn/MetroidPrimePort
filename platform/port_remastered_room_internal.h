@@ -757,6 +757,8 @@ struct SceneryScripts {
   // in component order, which is the order the clips are written in.
   std::map<int, std::vector<size_t>> keyframes;
   size_t scriptUnresolved = 0;    // connections into the script not traced
+  // The room's own TriggerMP1s that switch its hints (kSenderRoomVolume + index), area space.
+  std::vector<PortRoomEnv::RoomVolume> roomVolumes;
   // A float driver of a material variable (see kRealNumberDriver): by the entity of each actor it
   // feeds. The importer checks that the actor's model binds the variable to a parameter it can
   // drive; the start links are in `links` under `driverStart`.

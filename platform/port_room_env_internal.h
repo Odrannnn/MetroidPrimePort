@@ -79,6 +79,7 @@ struct Area {
   bool pendingFluid = false; // sPlayerFluid and sCameraWater when Load was called
   bool pendingWater = false;
   std::vector<std::pair<uint32_t, int>> queued; // sender, state
+  std::vector<uint8_t> roomInside; // by file.roomVolumes entry: the player or camera is in it
   uint32_t serial = 0;  // of this load, which the worker's jobs for it carry
   std::vector<GpuCube> cubes;
   std::vector<GpuVolume> volumes; // one a grid

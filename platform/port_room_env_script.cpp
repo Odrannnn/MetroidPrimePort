@@ -305,6 +305,8 @@ void DriveCameraWaterItems(uint32_t mrea, Area& area, uint64_t items) {
 
 // Every grade and backlight as it starts, then the fluids the player and camera are in already.
 void StartGrades(uint32_t mrea, Area& area, bool playerFluid, bool cameraWater) {
+  // Its room volumes start outside, so what is in one enters it on the next SetAreaPoints.
+  area.roomInside.assign(area.file.roomVolumes.size(), 0);
   // The exposure hints' entities as they load (their registrations follow).
   if (area.hints.on.size() == area.file.fluidHints.size()) {
     bool changed = false;

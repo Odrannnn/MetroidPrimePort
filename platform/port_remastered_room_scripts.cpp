@@ -1051,6 +1051,37 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
   }
   std::set<int> driverStarts;
   result.drivers = FindMaterialDrivers(room, driverStarts);
+  // A room TriggerMP1 no retail object stands for, that a hint hears through Entered/Exited: its
+  // box in the file's room volume table, by component; -1 when it detects nothing here (inactive
+  // at load, which nothing here follows, or neither the player nor the camera).
+  std::map<size_t, int> roomVolumeOf;
+  const auto roomVolumeFor = [&](size_t comp) -> int {
+    const auto known = roomVolumeOf.find(comp);
+    if (known != roomVolumeOf.end()) {
+      return known->second;
+    }
+    const Component& c = comps[comp];
+    const auto f = room.Flat(c);
+    const auto prop = f.find(kPropTriggerFlags);
+    uint32_t flags = 1;  // absent: DetectPlayer
+    if (prop != f.end() && prop->second.size == 4) {
+      flags = ReadLE32(room.Bytes(prop->second));
+    }
+    const uint8_t detect = uint8_t(((flags & 0x1) != 0 ? PortRoomEnv::kRoomVolumePlayer : 0) |
+                                   ((flags & kTriggerDetectCamera) != 0 ? PortRoomEnv::kRoomVolumeCamera : 0));
+    Vec3 pos, rot, scale;
+    int index = -1;
+    if (detect != 0 && room.Active(c) && room.Xform(c, pos, rot, scale) &&
+        result.roomVolumes.size() < PortRoomEnv::kMaxRoomVolumes) {
+      PortRoomEnv::RoomVolume v;
+      CameraBox(pos, rot, scale, v.centre, v.half, v.axes);
+      v.detect = detect;
+      index = int(result.roomVolumes.size());
+      result.roomVolumes.push_back(v);
+    }
+    roomVolumeOf[comp] = index;
+    return index;
+  };
   for (const Ent& e : ents) {
     const auto v = votes.find(e.layer);
     if (v != votes.end() && !e.baseLayer) {
@@ -1145,6 +1176,23 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         // A light that switches itself off as a backward play reaches its start (PointLightData::offAtStart).
         if (light && depth == 0 && sender.entity == e.entity && c->event == kEventLightReachedStart) {
           continue;
+        }
+        // A room TriggerMP1 of its own that switches a hint (directly or through relays): the
+        // player or camera in its box, as a room volume. Camera ones are script objects too;
+        // the geometry's script follows those for the actors.
+        if (hintEntities.count(e.entity) != 0 && sender.type == kTriggerMP1 &&
+            (c->event == kEventEntered || c->event == kEventExited) &&
+            (depth == 0 || PassFires(via, c->action))) {
+          const int ts = entityOf(int(c->sender));
+          if (ts < 0 || match[size_t(ts)] < 0) {
+            const uint8_t volumeAct = act(depth > 0 ? action : c->action);
+            const int volume = volumeAct != 0 ? roomVolumeFor(c->sender) : -1;
+            if (volume >= 0) {
+              links.push_back({PortRoomEnv::kSenderRoomVolume + uint32_t(volume),
+                               uint8_t(c->event == kEventEntered ? 0 : 1), volumeAct, delay});
+              continue;
+            }
+          }
         }
         // Remastered's own objects, and keyframes, are followed by the script (below).
         if (sender.type == kTemplateManager || sender.type == kDebugOptions || isScriptObject(c->sender) ||

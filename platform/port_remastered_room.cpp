@@ -3385,7 +3385,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 29);
+  AppendLE32(out, 30);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3689,6 +3689,22 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     for (const std::string& n : notes) {
       Log("  " + r.name + ": " + n);
     }
+  }
+  AppendLE32(out, uint32_t(scripts.roomVolumes.size()));
+  for (const PortRoomEnv::RoomVolume& v : scripts.roomVolumes) {
+    for (const float* field : {v.centre, v.half}) {
+      for (int i = 0; i < 3; ++i) {
+        AppendLEFloat(out, field[i]);
+      }
+    }
+    for (float a : v.axes) {
+      AppendLEFloat(out, a);
+    }
+    out.push_back(v.detect);
+    out.insert(out.end(), 3, 0);
+  }
+  if (!scripts.roomVolumes.empty()) {
+    Log("  " + r.name + ": " + std::to_string(scripts.roomVolumes.size()) + " room trigger volume(s) switch hints");
   }
   if (!fogs.empty() || !regions.empty()) {
     Log("  " + r.name + ": " + std::to_string(fogs.size()) + " fog hint(s), " + std::to_string(regions.size()) +
