@@ -958,6 +958,9 @@ void CmdGive(CStateManager& mgr, bool take) {
   if (type == CPlayerState::kIT_EnergyTanks) {
     ps.HealthInfo()->SetHP(ps.CalculateHealth());
   }
+  if (type >= CPlayerState::kIT_Truth && type <= CPlayerState::kIT_Newborn) {
+    PortDebug::SyncTempleTotems(mgr, ps);
+  }
   Out("%s: %d/%d", kItemNames[item], ps.GetItemAmount(type), ps.GetItemCapacity(type));
   Finish();
 }

@@ -27,7 +27,7 @@ finishes; `fx off` removes it; `fx list [filter]`, `fx tree <#id>`, `fx stats`, 
 `face <yaw>`, `look <id>`, `objs [filter]`,
 `obj <id>` (AI state, health, a door's open or closed, body state and animation, connections, whether
 it is frustum-culled),
-`send <id> <msg>`, `give <item> [n]`, `take <item> [n]`, `fusion [0|1]` (wear the Fusion Suit, no unlock needed), `items`, `heal`, `refill [energy|ammo|all]` (tops up the health, the missiles and the power bombs the player already holds, giving no capacity; all when no argument), `kill <id>|target [damage]` (deals an actor its remaining health, or the given damage, as Power
+`send <id> <msg>`, `give <item> [n]`, `take <item> [n]` (an artifact also lights or darkens its Artifact Temple totem, as its pickup would), `fusion [0|1]` (wear the Fusion Suit, no unlock needed), `items`, `heal`, `refill [energy|ammo|all]` (tops up the health, the missiles and the power bombs the player already holds, giving no capacity; all when no argument), `kill <id>|target [damage]` (deals an actor its remaining health, or the given damage, as Power
 Beam damage, so bosses run their death scripts; `target` is the enemy the player is locked on to), `phazongun [off]` (lets the arm cannon fire the Phazon Beam, or stops it), `god [on|off]`,
 `hurt [n]` (hits the player for n, default 10, with the HUD flash and damage sound), `die` (empties the health),
 `hint show` (shows the hint the game would show next, as F1 > Game > Show current hint), `memo <text>` (shows the text as a HUD message), `memo pause <strg>` (shows that string table as the boxed memo a paused HUDMemo opens), `strg <id> [index]` (a string table, or one string of it, as the game loads it, mods included),

@@ -13,6 +13,7 @@
 
 class CStateManager;
 class CGuiModel;
+class CPlayerState;
 
 namespace PortDebug {
 
@@ -485,6 +486,9 @@ void SetUnlockFusionSuit(bool enabled);
 // Puts the Fusion Suit on or off in game, as the Fusion Bonus menu's choice
 // would: the suit, arm and ball load again as after a suit pickup.
 void WearFusionSuit(CStateManager& mgr, bool wearing);
+// Lights or darkens the Artifact Temple totems to match the artifacts held, as
+// the artifact pickups' scripts would, for artifacts given by a cheat.
+void SyncTempleTotems(CStateManager& mgr, const CPlayerState& ps);
 bool UnlockGalleries();
 void SetUnlockGalleries(bool enabled);
 
