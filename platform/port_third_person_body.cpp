@@ -81,6 +81,9 @@ constexpr ClipNames kLoco[kLocoSlots] = {{"Phazon_Struggle_walkback", nullptr},
                                          {"B_slowrunloop_samus", "B_walk_samus"},
                                          {"Thardus_fastrun_samus", nullptr}};
 constexpr float kLocoDir[kLocoSlots] = {-1.f, 1.f, 1.f, 1.f, 1.f};
+// How finely Measure samples the feet: over a walk loop, and over the Stop clip.
+constexpr int kLeadSamples = 16;
+constexpr int kStopSamples = 32;
 // The walk clips by speed, slowest first (LocoWeights): forward, and back (the walk back alone,
 // played as fast as the ground goes: there is no shipped run back; the forward ones reversed
 // without it).
@@ -174,6 +177,11 @@ struct State {
   float locoSpeed[kLocoSlots] = {};
   float locoStride[kLocoSlots] = {};
   float locoPeak[kLocoSlots] = {};
+  // The left ankle's lead over the right along the facing (model units), over each walk clip's
+  // loop and over the whole Stop clip (Measure; StopStart).
+  float locoLead[kLocoSlots][kLeadSamples] = {};
+  float stopLead[kStopSamples] = {};
+  float stopStart = 0.f; // the Stop clip's phase this stop began at (StopStart)
   Clip jump, fall, land, flinch, scan;
   AimCell aim[9] = {};
   bool aimLayer = false;
@@ -745,6 +753,7 @@ void Measure(CAnimData& data) {
   for (int i = 0; i < kLocoSlots; ++i) {
     const Clip& clip = s.loco[i];
     s.locoSpeed[i] = s.locoStride[i] = s.locoPeak[i] = 0.f;
+    std::fill(std::begin(s.locoLead[i]), std::end(s.locoLead[i]), 0.f);
     if (!clip.Valid()) {
       continue;
     }
@@ -754,14 +763,22 @@ void Measure(CAnimData& data) {
       continue;
     }
     // The left ankle's lead over the right along the facing, over one loop.
-    constexpr int kSamples = 16;
-    float lead[kSamples];
-    for (int k = 0; k < kSamples; ++k) {
-      Sample(clip, float(k) / kSamples, sTmp);
+    float* lead = s.locoLead[i];
+    for (int k = 0; k < kLeadSamples; ++k) {
+      Sample(clip, float(k) / kLeadSamples, sTmp);
       lead[k] = SegPosition(*clip.data, lFoot).GetY() - SegPosition(*clip.data, rFoot).GetY();
     }
-    s.locoPeak[i] = CurvePeak(lead, kSamples);
+    s.locoPeak[i] = CurvePeak(lead, kLeadSamples);
   }
+  std::fill(std::begin(s.stopLead), std::end(s.stopLead), 0.f);
+  if (s.stop >= 0 && lFoot != CSegId::Invalid() && rFoot != CSegId::Invalid()) {
+    for (int k = 0; k < kStopSamples; ++k) {
+      Sample(data, s.stop, float(k) / kStopSamples, sTmp);
+      s.stopLead[k] = SegPosition(data, lFoot).GetY() - SegPosition(data, rFoot).GetY();
+    }
+  }
+
+  s.stopStart = 0.f;
 
   // The aim grid: every cell its clips (missing ones the ready pose), then each row's columns
   // put on the side their cannon points to.
@@ -989,6 +1006,29 @@ void Backpedal(CAnimData& data, Pose& out) {
 
 // Poses the body into its pose builder: the legs' stances blended by their weights (the walk
 // clips by speed, in step), then, with the cannon raised, the aim clips over the upper body.
+// The forward walk's left-ankle lead at stride, as a share of its widest (-1..1), its clips
+// mixed by their weights; false when no forward clip walks.
+bool WalkLead(float stride, float& lead) {
+  float sum = 0.f, amp = 0.f;
+  for (int i = 0; i < kLocoSlots; ++i) {
+    if (i == kWalkBack || s.locoWeight[i] <= 0.f || !s.loco[i].Valid()) {
+      continue;
+    }
+    const float* curve = s.locoLead[i];
+    const float x = Wrap(kLocoDir[i] * stride + s.locoPeak[i]) * kLeadSamples;
+    const int k = int(x) % kLeadSamples;
+    const float t = x - std::floor(x);
+    sum += s.locoWeight[i] * (curve[k] + (curve[(k + 1) % kLeadSamples] - curve[k]) * t);
+    amp += s.locoWeight[i] * std::fabs(*std::max_element(curve, curve + kLeadSamples,
+                                                         [](float a, float b) { return std::fabs(a) < std::fabs(b); }));
+  }
+  if (amp <= 0.f) {
+    return false;
+  }
+  lead = sum / amp;
+  return true;
+}
+
 void PoseBody(CAnimData& data) {
   float total = 0.f;
   const float idleDuration = std::max(data.GetAnimationDuration(s.idle), 0.1f);
@@ -999,7 +1039,7 @@ void PoseBody(CAnimData& data) {
   if (s.stanceWeight[int(Stance::Stop)] > 0.f) {
     // Played once: held on its last frame (phase 1 would wrap to its first).
     const float duration = std::max(data.GetAnimationDuration(s.stop), 0.1f);
-    Sample(data, s.stop, std::min(s.stanceTime[int(Stance::Stop)] / duration, 0.999f), sTmp);
+    Sample(data, s.stop, std::min(s.stopStart + s.stanceTime[int(Stance::Stop)] / duration, 0.999f), sTmp);
     Mix(sAcc, total, sTmp, s.stanceWeight[int(Stance::Stop)], false);
   }
   const float backWeight = s.stanceWeight[int(Stance::Loco)] * s.backWeight;
@@ -1233,6 +1273,9 @@ void PumpBeam(const CStateManager& mgr) {
 
 // Faster than this (world units per second) the player warped rather than moved.
 constexpr float kWarpSpeed = 60.f;
+// On the ground the run tops out near 13 and dashes leave the ground, so faster over it is a
+// short warp too (a debug tp nearby read 32), which would otherwise brake into a Stop.
+constexpr float kWarpGroundSpeed = 20.f;
 
 // How fast the player goes over the ground: how far it moved since last tick, less the ride of
 // the platform it stands on. Not its velocity: walking into a wall that swings between the
@@ -1253,7 +1296,9 @@ CVector3f GroundVelocity(const CStateManager& mgr, const CPlayer& player, float 
       moved = moved - (platformPos - s.lastPlatformPos);
     }
     v = moved * (1.f / dt);
-    if (v.Magnitude() > kWarpSpeed) {
+    const bool grounded = player.GetPlayerMovementState() == NPlayer::kMS_OnGround;
+    if (v.Magnitude() > kWarpSpeed ||
+        (grounded && v.GetX() * v.GetX() + v.GetY() * v.GetY() > kWarpGroundSpeed * kWarpGroundSpeed)) {
       v = CVector3f::Zero();
     }
   }
@@ -1304,14 +1349,16 @@ void Update(CStateManager& mgr, float dt) {
 
   // The legs. Every stance fades in over kBlendSeconds while the others fade out.
   const float stanceDone = s.stance == Stance::Stop
-                               ? s.body->GetAnimationData()->GetAnimationDuration(s.stop)
+                               ? s.body->GetAnimationData()->GetAnimationDuration(s.stop) * (1.f - s.stopStart)
                            : s.stance == Stance::Land && s.land.Valid() ? ShotSeconds(s.land, kLand)
                                                                          : 0.f;
   const float speed = std::sqrt(fwd * fwd + side * side);
   s.slowTime = speed < kStandSpeed ? s.slowTime + dt : 0.f;
   if (dt > 0.f) {
+    // Only a walk brakes: kept through idle, the hold would stop the next walk as it starts.
+    const bool walking = s.stance == Stance::Loco || s.stance == Stance::Stop;
     const bool slowing = speed <= s.lastSpeed - kBrakeDecel * dt;
-    s.brakeTime = slowing || (speed < kBrakeHold && s.brakeTime > 0.f) ? s.brakeTime + dt : 0.f;
+    s.brakeTime = walking && (slowing || (speed < kBrakeHold && s.brakeTime > 0.f)) ? s.brakeTime + dt : 0.f;
     s.lastSpeed = speed;
   }
   const bool braking = grounded && s.brakeTime >= kBrakeSeconds && speed < kBrakeSpeed;
@@ -1321,6 +1368,14 @@ void Update(CStateManager& mgr, float dt) {
                                      braking);
   if (stance == Stance::Loco && s.stance == Stance::Stop) {
     s.brakeTime = 0.f; // walking on after a stop played out: only a new slowdown brakes
+  }
+  if (stance == Stance::Stop && stance != s.stance) {
+    // Stepping out of a forward walk, the Stop clip starts where its feet carry on from the walk's.
+    float lead = 0.f, ahead = 0.f;
+    s.stopStart = s.stance == Stance::Loco && !s.legsBack && s.backWeight < 0.5f &&
+                          WalkLead(s.stride, lead) && WalkLead(s.stride + 0.01f, ahead)
+                      ? StopStart(lead, ahead > lead, s.stopLead, kStopSamples)
+                      : 0.f;
   }
   if (stance != s.stance) {
     s.stanceTime[int(stance)] = 0.f;
@@ -1610,6 +1665,8 @@ std::string DescribeFeet() {
                   s.locoPeak[i], s.locoWeight[i]);
     out += line;
   }
+  std::snprintf(line, sizeof(line), "stop start %.2f\n", s.stopStart);
+  out += line;
   static const char* const kStanceNames[] = {"idle", "stop", "loco", "jump", "fall", "land"};
   std::snprintf(line, sizeof(line), "stance %s air %.2f flinch %.2f scan %.2f; clips jump %d fall %d land %d flinch %d scan %d\n",
                 kStanceNames[int(s.stance)], s.airTime, s.flinchTime, s.scanWeight,

@@ -162,6 +162,44 @@ inline float CurvePeak(const float* d, int n) {
   return p - std::floor(p);
 }
 
+// Where to start the Stop clip so its feet carry on from the walk's. lead: the left ankle's lead
+// over the right along the facing, as a share of the walk's widest (-1..1); rising: it grows as
+// the stride goes on. stop: the Stop clip's leads at n phases over the whole clip. The clip steps
+// on from the walk before it settles; the phase returned (0..1) is the one there whose lead,
+// as a share of the clip's widest, is nearest lead and moves the same way, 0 when none does.
+inline float StopStart(float lead, bool rising, const float* stop, int n) {
+  float amp = 0.f;
+  for (int k = 0; k < n; ++k) {
+    amp = std::max(amp, std::fabs(stop[k]));
+  }
+  if (amp <= 0.f) {
+    return 0.f;
+  }
+  // Settled: the lead holds within 2% of its widest from here to the end.
+  int moving = 0;
+  for (int k = 0; k + 1 < n; ++k) {
+    if (std::fabs(stop[k + 1] - stop[k]) > 0.02f * amp) {
+      moving = k + 1;
+    }
+  }
+  float best = 0.f;
+  float bestMiss = 1e9f;
+  for (int k = 0; k < moving; ++k) {
+    const float a = stop[k] / amp;
+    const float b = stop[k + 1] / amp;
+    if ((b > a) != rising || a == b) {
+      continue;
+    }
+    const float t = std::clamp((lead - a) / (b - a), 0.f, 1.f);
+    const float miss = std::fabs(a + (b - a) * t - lead);
+    if (miss < bestMiss - 1e-4f) {
+      bestMiss = miss;
+      best = (k + t) / n;
+    }
+  }
+  return best;
+}
+
 // Moves value toward target by at most step.
 inline float Approach(float value, float target, float step) {
   return value < target ? std::min(value + step, target) : std::max(value - step, target);
