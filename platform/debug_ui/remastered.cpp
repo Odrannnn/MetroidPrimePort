@@ -292,8 +292,9 @@ void DrawRemasteredParts() {
     const char* help;
   };
   static constexpr Part kParts[] = {
-      {"geometry", "Room geometry", "Remastered's rooms. Off: the disc's rooms (no restart needed to load them)."},
-      {"lighting", "Room lighting", "Remastered's room lighting, fog and colour grade."},
+      {"geometry", "Room geometry and lighting",
+       "Remastered's rooms with their lighting, fog and colour grade. Off: the disc's rooms (no restart "
+       "needed to load them)."},
       {"effects", "Particle effects", "Remastered's particles, beams and room effects."},
       {"models", "Models", "Remastered's characters, creatures, items and objects."},
       {"hud", "HUD", "Remastered's visor and HUD."},

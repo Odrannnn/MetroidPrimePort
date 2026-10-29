@@ -263,7 +263,8 @@ const char* ImportPartOf(const fs::path& relative) {
       return "geometry";
     }
     if (folder == "roomenv") {
-      return PortRoomEffects::ParseFileName(name, id) ? "effects" : "lighting";
+      // A room's lighting goes with its geometry: Remastered's lights are made for its rooms.
+      return PortRoomEffects::ParseFileName(name, id) ? "effects" : "geometry";
     }
     if (folder == PortRemastered::kHudFolder) {
       return "hud";

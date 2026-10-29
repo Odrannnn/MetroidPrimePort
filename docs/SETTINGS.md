@@ -966,7 +966,7 @@
   parts left out, comma-separated from `geometry`, `effects`, `hud`, `text`,
   `movies` and `gallery`; `MODS.md`); its "Parts to use" (`remastered_hide`:
   the installed parts the mods load without, comma-separated from `geometry`,
-  `lighting`, `effects`, `models`, `hud`, `font`, `text`, `map` and `movies`;
+  `effects`, `models`, `hud`, `font`, `text`, `map` and `movies`;
   `MP_REMASTERED_HIDE` overrides it; `MODS.md`); the
   Randomizer page's options (`rando_settings`, one line of JSON;
   `RANDOMIZER.md`); and Archipelago's "Staggered suit damage" (`ap_suit_damage`:

@@ -273,8 +273,8 @@ std::string JoinDisabled(const std::vector<std::string>& names);
 // (remastered_hide; MP_REMASTERED_HIDE overrides it): the disc's own asset stands in for each
 // file left out. Textures and material cubes always load: they have ids of their own, and load
 // only for a model that names them. Unlike remastered_skip, nothing is re-imported.
-inline constexpr const char* kImportParts[] = {"geometry", "lighting", "effects", "models", "hud",
-                                               "font",     "text",     "map",     "movies"};
+inline constexpr const char* kImportParts[] = {"geometry", "effects", "models", "hud",
+                                               "font",     "text",    "map",    "movies"};
 bool ImportPartHidden(const std::string& list, const char* part);
 inline bool SameImportParts(const std::string& a, const std::string& b) {
   for (const char* part : kImportParts) {

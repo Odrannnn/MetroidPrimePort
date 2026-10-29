@@ -129,7 +129,7 @@ int main() {
   scan(); // a world/mod reload cannot turn this into a partially active mod
   Check(PortMods::CurrentStatus().mods[0].pendingRestart && discRegistrations == 0, "reload bypassed deferral");
   Check(frameBufferReserves == 0, "deferred mod asked for the frame buffers");
-  hidden = "lighting, geometry"; // left out, the geometry needs no restart; the rest loads
+  hidden = "hud, geometry"; // left out, the geometry needs no restart; the rest loads
   scan();
   Check(PortMods::CurrentStatus().mods[0].enabled && !PortMods::CurrentStatus().mods[0].pendingRestart &&
         !PortMods::RoomGeometryLoaded() && frameBufferReserves == 0 &&
