@@ -567,6 +567,10 @@ def cmd_start(a):
 def start_run(a):
     cfg = config()
     name = a.name
+    # A mod itself (e.g. .../mods/remastered-models) loads each file as its own loose mod, so
+    # its CMDLs (the arm cannon) silently stay retail: insist on the dir that holds the mods.
+    if a.mods and a.mods != "none" and (Path(a.mods) / ".import-version").exists():
+        die(f"--mods {a.mods} is a mod, not a mods dir; pass its parent {Path(a.mods).parent}")
     d = run_dir(name)
     RIG.mkdir(parents=True, exist_ok=True)
     CACHE.mkdir(exist_ok=True)
