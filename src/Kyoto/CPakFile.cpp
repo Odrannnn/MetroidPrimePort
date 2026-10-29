@@ -150,6 +150,15 @@ void CPakFile::DataLoad() {
   if (x28_26_worldPak) {
     uint size = round_up_32(x4c_resTableCount * sizeof(SResInfo));
     x50_aramBase = CARAMManager::Alloc(size);
+#ifdef TARGET_PC
+    // Mods patch resources into the aram: PAKs, which can then fill ARAM: keep the
+    // table in MRAM (sub_8036742c won't stash it) rather than DMA to an invalid alloc.
+    if (x50_aramBase == CARAMManager::GetInvalidAlloc()) {
+      x38_headerData = rstl::vector< uchar, rstl::aligned_allocator >();
+      CMemory::OffsetFakeStatics(GetFakeStaticSize());
+      return;
+    }
+#endif
     uint handle =
         CARAMManager::DMAToARAM(x74_resList.data(), x50_aramBase, size, CARAMManager::kDMAPrio_One);
     CARAMManager::WaitForDMACompletion(handle);
@@ -275,6 +284,11 @@ const rstl::vector< CAssetId >* CPakFile::GetDepList() const {
 
 void CPakFile::sub_8036742c() {
   if (x28_26_worldPak) {
+#ifdef TARGET_PC
+    if (x50_aramBase == CARAMManager::GetInvalidAlloc()) {
+      return;
+    }
+#endif
     x28_27_stashedInARAM = true;
     x64_depList = rstl::vector< CAssetId >();
     x74_resList = rstl::vector< SResInfo >();
