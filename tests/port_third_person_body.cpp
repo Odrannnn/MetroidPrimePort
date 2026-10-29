@@ -153,6 +153,28 @@ int main() {
   CHECK(Near(BackpedalFoot(0.65f, 0.3f).lift, 1.f) && Near(BackpedalFoot(1.f - 1e-5f, 0.3f).pitch, BackpedalFoot(0.f, 0.3f).pitch));
   CHECK(Near(BackpedalBob(0.15f, 0.3f), 0.f) && Near(BackpedalBob(0.4f, 0.3f), 1.f));
   CHECK(Near(KneeAngle(1.f, 1.f, 2.f), 3.14159265f) && Near(KneeAngle(1.f, 1.f, std::sqrt(2.f)), 1.5707963f));
+  // The procedural gait: from past kStepAngle off the front, held kStepFlip back inside it.
+  CHECK(!Stepping(5.f, 0.f, false) && !Stepping(5.f, 5.f, false) && !Stepping(5.f, -5.f, true));
+  CHECK(Stepping(0.f, 5.f, false) && Stepping(0.f, -5.f, false) && Stepping(-5.f, 0.f, false));
+  CHECK(!Stepping(std::cos(kStepAngle), std::sin(kStepAngle), false));
+  CHECK(Stepping(std::cos(kStepAngle), std::sin(kStepAngle), true));
+  // Sidestepping, the feet (half a loop apart) widen so they never come nearer than the least gap,
+  // however they move; straight back (or with room enough) they keep their places.
+  CHECK(Near(StepWiden(0.f, 0.3f, 0.24f, 0.12f), 0.f) && Near(StepWiden(1.f, 0.05f, 0.24f, 0.12f), 0.f));
+  for (const float across : {1.f, -1.f, 0.7f}) {
+    for (const float duty : {kBackDuty, 0.3f}) {
+      const float half = 0.3f;
+      const float w = StepWiden(across, half, 0.24f, 0.12f);
+      float least = 1e9f;
+      for (int k = 0; k < 200; ++k) {
+        const float p = k / 200.f;
+        const float xl = -0.12f - w - across * BackpedalFoot(p, duty).y * half;
+        const float xr = 0.12f + w - across * BackpedalFoot(p + 0.5f, duty).y * half;
+        least = std::min(least, xr - xl);
+      }
+      CHECK(least >= 0.12f - 1e-3f);
+    }
+  }
   // The Stop clip (the shipped one's shape at 16 phases): the left foot swings forward to its
   // widest at 3/16, the right comes past it by 7/16, then it settles. A stop starts there where
   // the feet carry on from the walk's, moving the same way; never in the settled tail.

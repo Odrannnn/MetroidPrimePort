@@ -108,7 +108,8 @@ inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Sta
 // Strafing: the legs walk the way the body goes, turned from the facing by the angle LegYaw
 // gives (radians, + to the left, at most a quarter turn past the side), the upper body turned
 // back to the facing. Backward (back, kept within kLegFlip of the side so the legs don't swap
-// over at it) they walk back, the way the body came from.
+// over at it) they walk back, the way the body came from. (With BackWalk::Procedural only nearer
+// the front than Stepping: past it the procedural gait sidesteps or backpedals instead.)
 inline constexpr float kLegFlip = 0.2f;
 inline bool LegsBackward(float fwd, float side, bool backward) {
   const float speed = std::sqrt(fwd * fwd + side * side);
@@ -281,6 +282,25 @@ inline float BackpedalBob(float phaseL, float duty = kBackDuty) {
 // d apart: pi straight.
 inline float KneeAngle(float a, float b, float d) {
   return std::acos(std::clamp((a * a + b * b - d * d) / (2.f * a * b), -1.f, 1.f));
+}
+
+// With BackWalk::Procedural the procedural gait walks every way but the front: straight back the
+// backpedal, to the side a sidestep, the hips facing forward throughout (nearer the front the
+// forward walk plays, its legs turned by LegYaw). It takes over past kStepAngle (radians) from the
+// facing, kStepFlip either side of it so it doesn't flicker there.
+inline constexpr float kStepAngle = 0.96f;
+inline constexpr float kStepFlip = 0.09f;
+inline bool Stepping(float fwd, float side, bool stepping) {
+  const float a = std::atan2(std::fabs(side), fwd);
+  return stepping ? a > kStepAngle - kStepFlip : a > kStepAngle + kStepFlip;
+}
+
+// How far each foot stands out from the ready pose's place so the feet never come nearer than
+// minGap: across, the gait's share across the facing; half, how far a foot moves either way of
+// its place; gap, the ready pose's feet apart. Out of step by half a loop, they close by up to
+// 2 |across| half.
+inline float StepWiden(float across, float half, float gap, float minGap) {
+  return std::max(std::fabs(across) * half - 0.5f * (gap - minGap), 0.f);
 }
 
 // A shot left the cannon (CPlayerGun): the body raises it for kGunUpSeconds.
