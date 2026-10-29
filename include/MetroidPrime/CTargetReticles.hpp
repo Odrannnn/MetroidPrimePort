@@ -170,7 +170,7 @@ private:
   float x370_triFadeAlpha = 0.f, x374_triFadeScale = 0.f, x378_triFade = 0.f;
   bool x34c_triRelease = false;
   float x384_triOffScreenTime = 0.f;
-  unsigned x388_triOffScreenTicks = 0;
+  float x388_triOffScreenTicks = 0.f; // 60 Hz updates
 #endif
   CQuaternion x0_leadingOrientation;
   CQuaternion x10_laggingOrientation;

@@ -31,5 +31,19 @@ int main() {
   REQUIRE(half.Advance(-1.0) == 0);
   REQUIRE(half.Advance(std::numeric_limits<double>::quiet_NaN()) == 0);
   REQUIRE(half.Advance(0.0, true) == 1);
+  // Adaptive stepping (period = frame time): a leftover from a hitch would
+  // otherwise persist and turn a shorter frame into two steps.
+  PortTiming::FixedStepClock adaptive;
+  adaptive.SetPeriod(1.0 / 30.0);
+  REQUIRE(adaptive.Advance(0.05) == 1);
+  adaptive.SetPeriod(1.0 / 144.0);
+  REQUIRE(adaptive.Advance(1.0 / 144.0) == 3);
+  adaptive.DropRemainder();
+  for (unsigned frame = 0; frame < 1000; ++frame) {
+    const double elapsed = frame % 2 ? 1.0 / 120.0 : 1.0 / 160.0;
+    adaptive.SetPeriod(elapsed);
+    REQUIRE(adaptive.Advance(elapsed) == 1);
+    adaptive.DropRemainder();
+  }
   std::puts("fixed-step jitter, carry and stall regressions passed");
 }

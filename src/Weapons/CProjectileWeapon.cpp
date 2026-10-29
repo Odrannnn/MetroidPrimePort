@@ -2,7 +2,6 @@
 #include "Kyoto/Graphics/CLight.hpp"
 #include "Kyoto/Math/CVector3f.hpp"
 #include "Weapons/IWeaponRenderer.hpp"
-#include "port_debug.h"
 #include "rstl/optional_object.hpp"
 
 #include <Kyoto/Alloc/CMemory.hpp>
@@ -22,7 +21,9 @@
 
 uint CProjectileWeapon::skGlobalSeed = 99;
 
-float CProjectileWeapon::GetTickPeriod() { return PortDebug::SimPeriod(); }
+// Weapon descriptions give velocity and gravity per 1/60 s frame, and Update
+// steps the projectile in those frames by elapsed time, at any sim rate.
+float CProjectileWeapon::GetTickPeriod() { return 1.f / 60.f; }
 
 CProjectileWeapon::CProjectileWeapon(const TToken< CWeaponDescription >& description,
                                      const CVector3f& worldOffset, const CTransform4f& localToWorld,

@@ -34,6 +34,9 @@ public:
     mRemainder -= steps * mPeriod;
     return steps;
   }
+  // Adaptive stepping: a step already covered the frame, so leftover time (from
+  // a clamped hitch or a change of period) would only cause a stray extra step.
+  void DropRemainder() { mRemainder = 0.0; }
   float Interpolation() const {
     return static_cast<float>(std::clamp(mRemainder / mPeriod, 0.0, 1.0));
   }

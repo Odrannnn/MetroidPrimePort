@@ -121,13 +121,25 @@ all three accumulate real time and step it in fixed 1/60 substeps.
 - `CMain::RsMain` recomputes `dt` per frame and passes it to
   `CSfxManager::Update`; `CMain::UpdateStreamedAudio` uses the same period, so
   audio stays wall-clock (ticks x period == elapsed).
-- `CProjectileWeapon::GetTickPeriod()` returns `PortDebug::SimPeriod()` instead
-  of `1/60`, so projectile velocities and gravity scale with the tick.
-  `CBloodFlower` and `CTargetableProjectile` now read it per call instead of
-  caching it in a function-local static, so an adaptive or mid-session rate
-  stays correct.
-- Camera presentation interpolation (`main.cpp:929`) becomes a no-op once the
-  step matches the frame time, which is what "no interpolation" requires.
+- `CProjectileWeapon::GetTickPeriod()` stays `1/60`: weapon descriptions give
+  velocity and gravity per 1/60 s frame and `CProjectileWeapon::Update` steps
+  in those frames by elapsed time, so the per-second speeds that aim
+  prediction (`CProjectileInfo`, `CTargetableProjectile`, `CBloodFlower`)
+  derives must divide by 1/60 at any sim rate. (It briefly returned
+  `SimPeriod()`, which doubled predicted speeds at 120 Hz.)
+- Adaptive steps end on the present time, so `UpdateTicks` drops the clock's
+  remainder after a step within the 1/30 s clamp (a leftover would turn a
+  later short frame into two steps) and `RsMain` presents the current state
+  (interpolation -1, as with the cap on) instead of the previous tick.
+- `CGraphics::TickRenderTimings` advances the render clock (texture scroll, UV
+  animation, HUD pulses) by the seconds the ticks covered, with the fraction
+  of a 1/60 s frame carried, instead of 1/60 s per tick; the present lag is
+  `(1 - t) * dt`. `TickSimTime` carries its 1/600 s rounding. Both are
+  unchanged at 60 Hz.
+- The loader's idle budget under adaptive is the sim rate's frame, not the last
+  frame's length, so loading frames don't lengthen one another.
+- `CTargetReticles::x388_triOffScreenTicks` (port-added, Remastered's
+  update-count threshold) counts 60 Hz updates via `TickFrames()`.
 - `CDecal` ages by real time (`x6c_elapsedTime += dt`) and derives its 60 Hz
   frame index from it, so decals keep their authored duration above 60 Hz.
 - `PortDebug::TickPeriod()/SetTickPeriod()` (set by `UpdateTicks`) exposes the

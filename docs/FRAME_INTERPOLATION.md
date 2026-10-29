@@ -35,7 +35,8 @@ rendered frame. The alternative, running the simulation itself faster (`sim_rate
 - **Actor transforms (phase 2).** See section 1.
 - **Skinned poses (phase 3).** See section 2.
 - **Render-time animation.** `CGraphics::TickRenderTimings` advances draw-time
-  timers (texture scroll, UV animation) by whole ticks, not by frames.
+  timers (texture scroll, UV animation) by the time the ticks covered, not by
+  frames.
 
 So at 144 Hz today the camera and free look glide, and actors, animated
 poses, particles, swooshes, electric effects and beam weapons blend toward

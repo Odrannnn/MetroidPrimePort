@@ -2076,7 +2076,7 @@ void CCompoundTargetReticle::PortTriUpdateCombat(float dt, const CStateManager& 
   x260_aimCenterAlpha = 1.f; // fn_80015D2C: port pointer always valid/on-screen.
   if (player.GetGunHolsterState() == CPlayer::kGH_Holstered ||
       !PortTriReticle::AimVisible(x20_prevState)) x258_aimArmAlpha = x260_aimCenterAlpha = 0.f;
-  if (x388_triOffScreenTicks != 0) { // fn_80236E24: unreachable for port pointer sources.
+  if (x388_triOffScreenTicks != 0.f) { // fn_80236E24: unreachable for port pointer sources.
     x254_aimArmColor = x25c_aimCenterColor = skTriScanOverrideColor;
   }
 
@@ -2172,9 +2172,10 @@ void CCompoundTargetReticle::PortTriUpdateCombat(float dt, const CStateManager& 
       Clamp(x304_triLockAlpha - dt * (200.f / 255.f) / 3.5f, .35f, 200.f / 255.f) : 200.f / 255.f;
   x34c_triRelease = release;
   x2f0_triLocked = locked;
-  // fn_80235D18: update-count threshold, not an elapsed-time threshold.
+  // fn_80235D18: update-count threshold, not an elapsed-time threshold. The
+  // port counts 60 Hz updates, so it holds at other sim rates and adaptive.
   if (PortTriOffScreen(mgr)) {
-    if (++x388_triOffScreenTicks > 300) {
+    if ((x388_triOffScreenTicks += PortDebug::TickFrames()) > 300.f) {
       x384_triOffScreenTime += dt;
       if (x384_triOffScreenTime > 2.5f) x384_triOffScreenTime -= 2.5f;
     }

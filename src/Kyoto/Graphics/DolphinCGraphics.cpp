@@ -4,6 +4,8 @@
 #include <aurora/aurora.h>
 
 #include "port_debug.h"
+#include <algorithm>
+#include <cmath>
 
 #include <atomic>
 #ifdef __ANDROID__
@@ -1459,9 +1461,20 @@ void CGraphics::LoadDolphinSpareTexture(int width, int height, GXCITexFmt fmt, G
   }
 }
 
-void CGraphics::TickRenderTimings(uint ticks) {
-  mRenderTimings = (mRenderTimings + ticks) % (900 * 60);
-  mSecondsMod900 = static_cast< float >(mRenderTimings) / 60.f;
+// Port: the clock counts 1/60 s frames as on GC, but advances by the time the
+// ticks covered, so it stays real-time at any sim rate or adaptive step. The
+// fraction of a frame is carried and shown, so it doesn't step at 60 Hz.
+namespace {
+double sRenderTimingCarry = 0.0;
+} // namespace
+
+void CGraphics::TickRenderTimings(uint ticks, float tickSeconds) {
+  sRenderTimingCarry += static_cast< double >(ticks) * static_cast< double >(tickSeconds) * 60.0;
+  const double whole = std::floor(sRenderTimingCarry + 1e-6);
+  sRenderTimingCarry = std::max(0.0, sRenderTimingCarry - whole);
+  mRenderTimings = (mRenderTimings + static_cast< uint >(whole)) % (900 * 60);
+  mSecondsMod900 =
+      static_cast< float >((static_cast< double >(mRenderTimings) + sRenderTimingCarry) / 60.0);
 }
 
 // Remastered's CScene::SimulateScene adds floor(dt * 600 + 0.5) ticks (1/600 s) and wraps the
@@ -1473,7 +1486,12 @@ double sRenderTimePresentLag = 0.0;
 } // namespace
 
 void CGraphics::TickSimTime(float dt) {
-  const uint add = static_cast< uint >(static_cast< double >(dt) * 600.0 + 0.5);
+  // Port: carry the rounding, so steps that aren't whole 1/600 s (adaptive or
+  // other sim rates) don't drift. At 60 Hz this adds 10 per tick, as Remastered.
+  static double sSimTickCarry = 0.0;
+  sSimTickCarry += static_cast< double >(dt) * 600.0;
+  const uint add = static_cast< uint >(std::max(0.0, std::floor(sSimTickCarry + 0.5)));
+  sSimTickCarry -= add;
   mSimTicks = (mSimTicks + add) % 9072000u;
   sLastSimTickAdd = add;
 }
