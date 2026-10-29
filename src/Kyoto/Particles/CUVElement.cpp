@@ -46,8 +46,14 @@ CUVEAnimTexture::CUVEAnimTexture(TToken< CTexture > tex, CIntElement* tileW, CIn
 
   const int width = x4_tex->GetWidth();
   const int height = x4_tex->GetHeight();
+#ifdef TARGET_PC
+  // Port: a 0 stride from particle data is a SIGFPE on x86 (silent on PPC); one tile on that axis.
+  const int xTiles = x18_strideW != 0 ? rstl::max_val(1, width / x18_strideW) : 1;
+  const int yTiles = x1c_strideH != 0 ? rstl::max_val(1, height / x1c_strideH) : 1;
+#else
   const int xTiles = rstl::max_val(1, width / x18_strideW);
   const int yTiles = rstl::max_val(1, height / x1c_strideH);
+#endif
 
   x20_tiles = xTiles * yTiles;
   x2c_uvElems.reserve(xTiles * yTiles);

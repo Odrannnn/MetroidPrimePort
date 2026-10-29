@@ -99,6 +99,11 @@ bool CGuiTableGroup::IsWorkerSelectable(int worker) {
 }
 
 bool CGuiTableGroup::PreIncrement() {
+#ifdef TARGET_PC
+  if (xc0_elementCount <= 0) {
+    return false; // no workers: nothing to select (the wrap-around modulo would divide by zero)
+  }
+#endif
   if (xd0_selectWrapAround) {
     for (int sel = (xc4_userSelection + 1) % xc0_elementCount; sel != xc4_userSelection;
          sel = (sel + 1) % xc0_elementCount) {
@@ -131,6 +136,11 @@ bool CGuiTableGroup::DoDecrement() {
 }
 
 bool CGuiTableGroup::PreDecrement() {
+#ifdef TARGET_PC
+  if (xc0_elementCount <= 0) {
+    return false;
+  }
+#endif
   if (xd0_selectWrapAround) {
     for (int sel = (xc4_userSelection + xc0_elementCount - 1) % xc0_elementCount;
          sel != xc4_userSelection; sel = (sel + xc0_elementCount - 1) % xc0_elementCount) {

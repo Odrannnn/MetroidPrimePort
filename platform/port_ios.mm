@@ -79,6 +79,11 @@ void ShowDiscPicker(SDL_Window* window, DiscPickedCallback callback, void* userd
         callback(userdata, nullptr, -1);
         return;
     }
+    if (sCallback != nullptr) {
+        // A picker is already open: its callback would be overwritten and never answered.
+        callback(userdata, nullptr, -1);
+        return;
+    }
     sCallback = callback;
     sUserdata = userdata;
     // Any file: disc images have no system type, and .iso's (public.iso-image)

@@ -41,17 +41,34 @@ uint RotationAndOffsetStorage::DataSizeInBytes(uint rotationsCountPerFrame, uint
          frameCount;
 }
 
+#ifdef TARGET_PC
+// Port: an empty (missing-pak) ANIM has numFrames 0; x / 0 is a SIGFPE on x86, silent on PPC.
+RotationAndOffsetStorage::RotationAndOffsetStorage(const CRotationAndOffsetVectors& storage,
+                                                   const uint numFrames)
+: x0_storage(GetRotationsAndOffsets(storage.x0_rotations, storage.x10_offsets, numFrames))
+, x8_numFrames(numFrames)
+, xc_rotationsPerFrame(numFrames != 0 ? storage.x0_rotations.size() / numFrames : 0)
+, x10_offsetsPerFrame(numFrames != 0 ? storage.x10_offsets.size() / numFrames : 0) {}
+#else
 RotationAndOffsetStorage::RotationAndOffsetStorage(const CRotationAndOffsetVectors& storage,
                                                    const uint numFrames)
 : x0_storage(GetRotationsAndOffsets(storage.x0_rotations, storage.x10_offsets, numFrames))
 , x8_numFrames(numFrames)
 , xc_rotationsPerFrame(storage.x0_rotations.size() / numFrames)
 , x10_offsetsPerFrame(storage.x10_offsets.size() / numFrames) {}
+#endif
 
 rstl::auto_ptr< uint[] >
 RotationAndOffsetStorage::GetRotationsAndOffsets(const rstl::vector< CQuaternion >& rotations,
                                                  const rstl::vector< CVector3f >& offsets,
                                                  uint numFrames) {
+#ifdef TARGET_PC
+  if (numFrames == 0) {
+    xc_rotationsPerFrame = 0;
+    x10_offsetsPerFrame = 0;
+    return rstl::auto_ptr< uint[] >(rs_new uint[1]);
+  }
+#endif
   xc_rotationsPerFrame = rotations.size() / numFrames;
   x10_offsetsPerFrame = offsets.size() / numFrames;
   rstl::auto_ptr< uint[] > storage(rs_new uint[DataSizeInBytes(rotations.size() / numFrames, //
@@ -68,6 +85,11 @@ RotationAndOffsetStorage::GetRotationsAndOffsets(const rstl::vector< CQuaternion
 void RotationAndOffsetStorage::CopyRotationsAndOffsets(const rstl::vector< CQuaternion >& rotations,
                                                        const rstl::vector< CVector3f >& offsets,
                                                        const uint numFrames, float* buf) {
+#ifdef TARGET_PC
+  if (numFrames == 0) {
+    return;
+  }
+#endif
   const uint rotationsPerFrame = rotations.size() / numFrames;
   const uint offsetsPerFrame = offsets.size() / numFrames;
 

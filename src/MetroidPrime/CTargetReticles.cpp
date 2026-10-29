@@ -248,6 +248,16 @@ EReticleState CCompoundTargetReticle::GetDesiredReticleState(const CStateManager
 }
 
 void CCompoundTargetReticle::Update(float dt, const CStateManager& mgr) {
+#ifdef TARGET_PC
+  // Port: the 2-frame hide counts game ticks, not drawn frames (see Draw). Decrementing at the top
+  // of Update, before the state transition below sets it to 2, keeps the 60 FPS sequence of the
+  // retail per-Draw decrement: tick N sets 2 and the draw after it hides (retail 2->1), tick N+1
+  // makes it 1 and its draw hides (retail 1->0), tick N+2 makes it 0 and its draw shows. The
+  // transition's `x28_noDrawTicks <= 0` test also sees the same values on the same ticks.
+  if (x28_noDrawTicks > 0) {
+    --x28_noDrawTicks;
+  }
+#endif
   // 1. Orientation slerp
   CRelAngle angle = x10_laggingOrientation.AngleFrom(x0_leadingOrientation);
   float angleDeg = angle.AsDegrees();
@@ -743,9 +753,11 @@ void CCompoundTargetReticle::Draw(const CStateManager& mgr, bool hideLockon) con
     CGraphics::SetCullMode(kCM_Front);
   }
 
+#ifndef TARGET_PC
   if (x28_noDrawTicks > 0) {
     --x28_noDrawTicks;
   }
+#endif
 }
 
 void CCompoundTargetReticle::DrawGrappleGroup(const CMatrix3f& rot, const CStateManager& mgr,

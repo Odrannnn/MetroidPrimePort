@@ -116,16 +116,19 @@ bool sAimAppliedLastTick = false;
 // The tick's first applied aim update: it keeps the twin stick turn it
 // recorded and makes the tick's only pointer edge turn (issue #140).
 PortMouse::TickAim sAimTick;
-// Gyro state: the phone's sensor is looked up once, so the sensor list is not
-// walked on every tick.
-bool sPhoneGyroSearched = false;
+// Gyro state: the phone's sensors are searched again after a miss (a sensor
+// can appear late), at most once a second so the list is not walked per tick.
+uint64_t sPhoneNextSearchNs = 0;
 SDL_Sensor* sPhoneGyro = nullptr;
 SDL_Sensor* sPhoneAccel = nullptr;
 const char* sGyroStatus = "off";
 // Calibration and gravity for the current source, reset when it changes (a
 // different pad, or the phone), and whether that source has an accelerometer.
 PortGyro::Motion sGyroMotion;
-const void* sGyroMotionSource = nullptr;
+// The source the motion state belongs to: a pad's joystick instance id (never
+// reused, unlike its pointer after a replug), or kPhoneSource; 0 for none.
+constexpr uint32_t kPhoneSource = 0xFFFFFFFFu;
+uint32_t sGyroMotionSource = 0;
 bool sGyroHasAccel = false;
 PortGyro::Filter sGyroFilter;
 } // namespace
@@ -245,7 +248,7 @@ void ResetGyroCalibration() { sGyroMotion.Reset(); }
 void RequestResetAim() { sResetAimRequested.store(true, std::memory_order_release); }
 
 float GyroCalibrationConfidence() {
-  return sGyroMotionSource != nullptr && sGyroHasAccel ? sGyroMotion.Confidence() : -1.f;
+  return sGyroMotionSource != 0 && sGyroHasAccel ? sGyroMotion.Confidence() : -1.f;
 }
 
 void SetGyroButton(bool held) { sGyroActivation.Update(sInput.gyroMode, held); }
@@ -284,7 +287,7 @@ bool ReadGyroRates(float& pitch, float& yaw, float dt) {
   float gyro[3];
   float accel[3];
   bool haveAccel = false;
-  const void* source = nullptr;
+  uint32_t source = 0;
 
   if (wantController) {
     // The player's pad, not the first one SDL lists: that can be another pad
@@ -297,7 +300,7 @@ bool ReadGyroRates(float& pitch, float& yaw, float dt) {
           SDL_SetGamepadSensorEnabled(pad, SDL_SENSOR_GYRO, true);
         }
         if (SDL_GetGamepadSensorData(pad, SDL_SENSOR_GYRO, gyro, 3)) {
-          source = pad;
+          source = static_cast< uint32_t >(SDL_GetGamepadID(pad));
           sGyroStatus = "controller";
           if (SDL_GamepadHasSensor(pad, SDL_SENSOR_ACCEL)) {
             if (!SDL_GamepadSensorEnabled(pad, SDL_SENSOR_ACCEL)) {
@@ -310,9 +313,10 @@ bool ReadGyroRates(float& pitch, float& yaw, float dt) {
     }
   }
 
-  if (source == nullptr && wantPhone) {
-    if (sPhoneGyro == nullptr && !sPhoneGyroSearched) {
-      sPhoneGyroSearched = true;
+  if (source == 0 && wantPhone) {
+    const uint64_t searchNow = SDL_GetTicksNS();
+    if (sPhoneGyro == nullptr && searchNow >= sPhoneNextSearchNs) {
+      sPhoneNextSearchNs = searchNow + 1000000000ull;
       int count = 0;
       if (SDL_SensorID* ids = SDL_GetSensors(&count)) {
         for (int i = 0; i < count; ++i) {
@@ -327,7 +331,7 @@ bool ReadGyroRates(float& pitch, float& yaw, float dt) {
       }
     }
     if (sPhoneGyro != nullptr && SDL_GetSensorData(sPhoneGyro, gyro, 3)) {
-      source = sPhoneGyro;
+      source = kPhoneSource;
       sGyroStatus = "phone";
       haveAccel = sPhoneAccel != nullptr && SDL_GetSensorData(sPhoneAccel, accel, 3);
       // The phone reports its own axes (x right, y up in its natural
@@ -365,7 +369,7 @@ bool ReadGyroRates(float& pitch, float& yaw, float dt) {
     }
   }
 
-  if (source == nullptr) {
+  if (source == 0) {
     return false;
   }
   if (source != sGyroMotionSource || haveAccel != sGyroHasAccel) {
