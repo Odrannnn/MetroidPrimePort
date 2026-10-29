@@ -885,6 +885,20 @@ void CAutoMapper::ProcessMapRotateInput(const CFinalInput& input, const CStateMa
     dirSlot = 3;
   }
 
+  // Port: Controls > Options > Map can flip either rotate axis (#225).
+  if (PortDebug::MapInvertX()) {
+    if (dirSlot == 2)
+      dirSlot = 3;
+    else if (dirSlot == 3)
+      dirSlot = 2;
+  }
+  if (PortDebug::MapInvertY()) {
+    if (dirSlot == 0)
+      dirSlot = 1;
+    else if (dirSlot == 1)
+      dirSlot = 0;
+  }
+
   left = 0.f;
   right = 0.f;
   down = 0.f;

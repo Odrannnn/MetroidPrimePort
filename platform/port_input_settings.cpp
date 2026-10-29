@@ -187,6 +187,10 @@ bool ApplySetting(std::string_view keyView, std::string_view valueView) {
     s.mouseInvertX = ParseBool(value);
   } else if (key == "mouse_invert_y") {
     s.mouseInvertY = ParseBool(value);
+  } else if (key == "map_invert_x") {
+    s.mapInvertX = ParseBool(value);
+  } else if (key == "map_invert_y") {
+    s.mapInvertY = ParseBool(value);
   } else if (key == "mouse_buttons") {
     s.mouseButtons = ParseBool(value);
   } else if (key == "mouse_crosshair") {
@@ -372,6 +376,8 @@ void WriteAimSettings(std::ostream& out) {
   out << "touch_visor_tap_scan=" << (s.touchVisorTapScan ? 1 : 0) << '\n';
   out << "mouse_invert_x=" << (s.mouseInvertX ? 1 : 0) << '\n';
   out << "mouse_invert_y=" << (s.mouseInvertY ? 1 : 0) << '\n';
+  out << "map_invert_x=" << (s.mapInvertX ? 1 : 0) << '\n';
+  out << "map_invert_y=" << (s.mapInvertY ? 1 : 0) << '\n';
   out << "mouse_buttons=" << (s.mouseButtons ? 1 : 0) << '\n';
   for (int i = 0; i < PortInputMap::kMouseButtonCount; ++i) {
     out << PortInputMap::MouseButtonKey(i) << '=' << PortInputMap::MouseActionInfo(s.mouseActions[i]).name

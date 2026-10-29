@@ -693,6 +693,9 @@ bool MouseGameplayActive();
 void SetMouseGameplayActive(bool active);
 bool MouseInvertX();
 bool MouseInvertY();
+// Map rotate direction flips (Controls > Options > Map).
+bool MapInvertX();
+bool MapInvertY();
 bool MouseButtons();
 bool MouseCrosshair();
 // The free-aim crosshair under direct aim: the setting, or always with pointer aim.

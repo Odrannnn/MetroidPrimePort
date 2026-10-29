@@ -125,6 +125,8 @@ struct Settings {
   std::atomic< bool > touchControls{true};
   bool mouseInvertX = false;
   bool mouseInvertY = false;
+  bool mapInvertX = false; // map rotate left/right
+  bool mapInvertY = false; // map rotate up/down
   bool mouseButtons = true;
   bool mouseCrosshair = true;
   int crosshairSize = kCrosshairSizeDefault;

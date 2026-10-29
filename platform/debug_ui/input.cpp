@@ -531,6 +531,8 @@ void SetMouseGameplayActive(bool active) {
 }
 bool MouseInvertX() { EnsureInitialized(); return sInput.mouseInvertX; }
 bool MouseInvertY() { EnsureInitialized(); return sInput.mouseInvertY; }
+bool MapInvertX() { EnsureInitialized(); return sInput.mapInvertX; }
+bool MapInvertY() { EnsureInitialized(); return sInput.mapInvertY; }
 bool MouseButtons() { EnsureInitialized(); return sInput.mouseButtons; }
 bool MouseCrosshair() { EnsureInitialized(); return sInput.mouseCrosshair; }
 // Window travel (pixels) to pointer units (-1..1 of the half view). At a sensitivity of

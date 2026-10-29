@@ -194,6 +194,9 @@
   sweep it across the screen, independent of the mouse sensitivity. With
   `gyro_cursor_camera` (default off) the gyro also turns the camera at
   `gyro_sensitivity` while it moves the pointer.
+- Invert map rotate X / Y (Controls > Options > Map, `map_invert_x`, `map_invert_y`, off by
+  default) flip which way the map view turns on the map rotate inputs, left/right and up/down.
+  The game turns the map opposite to the stick; both on gives camera-style rotation.
 - Spring Ball (Controls > Options, persisted as `spring_ball`, off by default): C-stick
   up in morph ball jumps, as in Metroid Prime Trilogy and the randomprime discs
   the Archipelago world makes, once the Morph Ball Bombs are held. It is a bomb

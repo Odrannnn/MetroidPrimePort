@@ -177,6 +177,17 @@ void DrawControlsOptions() {
   ImGui::EndDisabled();
   ItemHelp("Same switch as Rumble in the pause menu. A controller doesn't rumble while you last "
            "used the keyboard or mouse.");
+
+  ImGui::SeparatorText("Map");
+  if (ImGui::Checkbox("Invert map rotate X", &sInput.mapInvertX)) {
+    MarkDirty();
+  }
+  ImGui::SameLine();
+  if (ImGui::Checkbox("Invert map rotate Y", &sInput.mapInvertY)) {
+    MarkDirty();
+  }
+  ItemHelp("Flips which way the map turns when you rotate it. The game turns the map the "
+           "opposite way to the stick; check both for camera-style rotation.");
 }
 
 void DrawControlsKeyboardMouse() {
