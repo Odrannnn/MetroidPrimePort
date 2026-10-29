@@ -135,7 +135,9 @@ inline constexpr int kTextures = 5;
 // 24: the cutscene Power/Varia/Gravity bodies F39476F2/776C1A96/57F5C930 take the models
 //     Remastered's cutscene characters bind (913C579B/2AED633C/5D4B52E2, with the face and visor
 //     glass), not BallTransitions' unlit stand-ins.
-inline constexpr int kModels = 24;
+// 25: retail CMDLs 1D7B426A, 7DE8EF50, 9AB3B2AA and FD19ECA3 (the Eyon's ice overlay) keep their
+//     retail models: their partners are VFX_Model_Base meshes, whose texture is the placeholder.
+inline constexpr int kModels = 25;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.
