@@ -129,7 +129,9 @@ inline constexpr int kTextures = 5;
 //     the elevator platforms 32103B70/F33A6018 take 6FA561D0's model, not a Frigate rubble sheet.
 // 21: intra-Mines elevator C0A4DF30 uses the shipped E8E0AB8D platform, not a VFX model.
 // 22: a static model on a rigid retail skin keeps each connected piece on one bone (the gunship's hatch).
-inline constexpr int kModels = 22;
+// 23: the HUD's minimap depth mask 5EA45156 keeps its retail model (a Remastered mesh in its
+//     place hid the whole map).
+inline constexpr int kModels = 23;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.
