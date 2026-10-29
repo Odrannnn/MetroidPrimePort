@@ -95,6 +95,9 @@ Remastered import's PBR shader path.
 
 ## After an update
 
+Version 12 poses the cannon-side shoulder pad from the same hanging-arm idle as
+the other one. Dread's aiming idle had its disc turned to face forward.
+
 Version 11 sets the shoulder pads as Dread's idle animations hold them
 (the left arm hanging, the right holding the cannon forward) instead of in its
 T-pose bind, where they rode high and flared out. Prime has no pad joint, so

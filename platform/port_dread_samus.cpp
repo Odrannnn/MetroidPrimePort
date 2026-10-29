@@ -706,14 +706,14 @@ bool Import(const Io& io, Result& result, std::string& error) {
   // The shoulder pads in Dread's idle pose (#221). Dread animates its *ShoulderPad* joints
   // (children of the chest) in every animation; Prime has no such joint, so the pads ride the
   // chest rigidly and the T-pose bind leaves them ~6 cm high and flared out. Their local
-  // transforms at the first frame of Dread's own idle animations go in instead: the left arm
-  // hangs (relaxalt01_loop), the right one holds the cannon forward (relaxfront), as Prime's
-  // Samus does. Joints an animation lacks keep the bind.
+  // transforms at the first frame of Dread's own idle animation (relaxalt01_loop) go in
+  // instead, for both sides. relaxfront's right pad is posed for an arm raised to aim, which
+  // turns its disc forward on Prime's lowered cannon arm (#226). Joints the animation lacks
+  // keep the bind.
   auto padPose = [&](const PortDread::Bcmdl& model) {
     std::vector<PortDread::BcmdlJoint> pose;
     for (const char* side : {"L01_", "R01_"}) {
-      const std::string path = std::string("actors/characters/samus/animations/") +
-                               (side[0] == 'L' ? "relaxalt01_loop" : "relaxfront") + ".bcskla";
+      const std::string path = "actors/characters/samus/animations/relaxalt01_loop.bcskla";
       std::vector<uint8_t> anim;
       if (!pkgFile(path, anim)) {
         log("dread: " + path + " is not in samus.pkg; the pads keep the bind pose");
