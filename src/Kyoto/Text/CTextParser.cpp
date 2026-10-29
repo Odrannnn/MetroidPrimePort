@@ -16,8 +16,36 @@ static const char* const skAssetIdFormat = "%02x%02x%02x%02x";
 
 CTextParser::CTextParser(IObjectStore& store) : mObjectStore(store) {}
 
+#ifdef TARGET_PC
+namespace {
+// Set while ParseText reads a Trilogy string about the Spider Ball (see kPortSpiderBallPrompt).
+bool sPortSpiderBallText = false;
+
+bool PortTextContains(const wchar_t* str, int len, const char* needle) {
+  for (int i = 0; len == -1 ? str[i] != 0 : i < len; ++i) {
+    int j = 0;
+    while (needle[j] && (len == -1 || i + j < len) && str[i + j] == static_cast< wchar_t >(needle[j]))
+      ++j;
+    if (!needle[j])
+      return true;
+  }
+  return false;
+}
+
+// Every English Trilogy string that draws Z for the Spider Ball (A32EDC44, 824FA176, the
+// 500EC6A0 inventory entry) names it one of these two ways; no lock-on, scan or grapple one does.
+bool PortIsSpiderBallText(const wchar_t* str, int len) {
+  return PortTextContains(str, len, "Spider Ball") || PortTextContains(str, len, "Morph Ball mode");
+}
+} // namespace
+#endif
+
 void CTextParser::ParseText(CTextExecuteBuffer& buffer, const wchar_t* str, int len,
                             const rstl::vector< rstl::pair< CAssetId, CAssetId > >* txtrMap) {
+#ifdef TARGET_PC
+  const bool portWasSpiderBallText = sPortSpiderBallText;
+  sPortSpiderBallText = PortDisc::IsTrilogy(PortDisc::Current()) && PortIsSpiderBallText(str, len);
+#endif
   int b = 0, e = 0;
   for (b = 0, e = 0; str[e] && (len == -1 || e < len);) {
     if (str[e] == L'&') {
@@ -45,6 +73,9 @@ void CTextParser::ParseText(CTextExecuteBuffer& buffer, const wchar_t* str, int 
 
   if (e > b)
     buffer.AddString(str + b, e - b);
+#ifdef TARGET_PC
+  sPortSpiderBallText = portWasSpiderBallText;
+#endif
 }
 
 const CAssetId
@@ -95,9 +126,16 @@ const PortWiiPrompt kPortWiiPrompts[] = {
     {0xDD924E6B, 0xF13452F8, 0.6f, 0.85f},  // - (visors) -> D-pad
 };
 
+// The Wii's Z both locks on/scans/grapples and holds the Spider Ball; the GC disc draws L for
+// the first and R (08A2E4B9, its animation's first frame) for the second.
+const uint kPortWiiZ = 0xCAA9C2A7;
+const PortWiiPrompt kPortSpiderBallPrompt = {kPortWiiZ, 0x08A2E4B9, 1.0f, 1.0f}; // Z -> R
+
 const PortWiiPrompt* PortFindWiiPrompt(CAssetId id) {
   if (!PortDisc::IsTrilogy(PortDisc::Current()))
     return nullptr;
+  if (sPortSpiderBallText && static_cast< uint >(id) == kPortWiiZ)
+    return &kPortSpiderBallPrompt;
   for (const PortWiiPrompt& prompt : kPortWiiPrompts) {
     if (prompt.wiiId == static_cast< uint >(id))
       return &prompt;
