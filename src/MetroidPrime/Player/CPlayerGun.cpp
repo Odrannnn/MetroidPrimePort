@@ -1585,6 +1585,13 @@ void CPlayerGun::PortFireStackedBeams(float dt, CStateManager& mgr, const CTrans
         !playerState.HasPowerUp(mBeamArr[i])) {
       continue;
     }
+    // Retail has 1024 object slots and spins forever in AllocateUniqueId once they are
+    // gone. Stacked shots (up to 5 a trigger, with rapid fire) in a big room filled them
+    // and froze the game (Exterior Docking Hangar alone holds ~950), so they leave the
+    // primary shot and the room's own spawns a reserve.
+    if (mgr.GetObjectListById(kOL_All).size() > 1024 - 48) {
+      break;
+    }
     beam->PortLockStackTokens();
     beam->PortFireStackedProjectile(
         x834_27_underwater, dt, CPlayerState::EChargeStage(x330_chargeState), xf, mgr,
