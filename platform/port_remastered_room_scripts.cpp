@@ -1181,6 +1181,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     // The script that switches this trigger, followed back to matched senders through whatever
     // passes the action on (a Relay's own): show activates it, hide deactivates it.
     std::vector<PortRoomEnv::GradeLink> toggles;
+    std::vector<PortRoomEnv::GradeLink> selfToggles;
     std::vector<int> toggleSeen{int(c.entity)};
     std::function<void(int, uint8_t, int, int)> togglesFor = [&](int entity, uint8_t act, int depth, int via) {
       const auto in = incoming.find(entity);
@@ -1205,6 +1206,13 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           continue;
         }
         const int s = entityOf(int(cc->sender));
+        // The trigger switching itself on its own Entered or Exited (07_Intro_Reactor #884 turns
+        // off as the player leaves): by its own volume, numbered once it is kept.
+        if (sender.entity == c.entity && sender.type == kTriggerMP1 &&
+            (cc->event == kEventEntered || cc->event == kEventExited)) {
+          selfToggles.push_back({0, uint8_t(cc->event == kEventEntered ? 0 : 1), next});
+          continue;
+        }
         const int state = RetailState(sender.type, cc->event);
         if (s >= 0 && match[size_t(s)] >= 0 && state >= 0 && state < 256) {
           toggles.push_back({objects[size_t(match[size_t(s)])].id, uint8_t(state), next});
@@ -1238,6 +1246,10 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       v.on = startsOn;
       v.links = std::move(toggles);
       index = int(result.roomVolumes.size());
+      for (PortRoomEnv::GradeLink& l : selfToggles) {
+        l.sender = PortRoomEnv::kSenderRoomVolume + uint32_t(index);
+        v.links.push_back(l);
+      }
       result.roomVolumes.push_back(std::move(v));
     }
     roomVolumeOf[comp] = index;

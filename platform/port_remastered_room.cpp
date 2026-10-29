@@ -3707,7 +3707,8 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     out.insert(out.end(), 3, 0);
     AppendLE32(out, uint32_t(v.links.size()));
     for (const PortRoomEnv::GradeLink& link : v.links) {
-      AppendLE32(out, link.sender & 0x3ffffff);  // as CEntity sends it: no layer bits
+      // As CEntity sends it, no layer bits; a volume's own pseudo-sender is kept whole.
+      AppendLE32(out, PortRoomEnv::PseudoSender(link.sender) ? link.sender : link.sender & 0x3ffffff);
       out.push_back(link.state);
       out.push_back(link.action);
       out.insert(out.end(), 2, 0);
@@ -3726,7 +3727,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
                         : link.action == PortRoomGeo::kHide     ? "off"
                         : link.action == PortRoomGeo::kToggle   ? "toggle"
                                                                 : "?",
-                        link.sender & 0x3ffffff, link.state);
+                        PortRoomEnv::PseudoSender(link.sender) ? link.sender : link.sender & 0x3ffffff, link.state);
           note += text;
         }
       }

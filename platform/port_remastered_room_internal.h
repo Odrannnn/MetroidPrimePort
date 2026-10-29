@@ -644,8 +644,10 @@ constexpr uint32_t kEnvFxDensityController = 0x3c832ec7;
 constexpr uint32_t kRelayAutoFire = 0x7f6d1cba;
 constexpr uint32_t kPropEnvFxIntensity = 0x19da7ec9;
 constexpr uint32_t kActionEnvFxApply = 0x582c90b4;
-constexpr uint32_t kActionTriggerActivate = 0x3067f115;
-constexpr uint32_t kActionTriggerDeactivate = 0xb5dd4543;
+// A trigger's own Activate / Deactivate (CTriggerMP1GOC::TranslateScriptActionToMessage 0xf3e434:
+// msg 1 / msg 4; kb topic/triggermp1-active-state.md).
+constexpr uint32_t kActionTriggerActivate = 0xb5dd4543;
+constexpr uint32_t kActionTriggerDeactivate = 0x3067f115;
 // An ActorKeyframe's Play (retail kSS_Play) tells its actor to play the keyframe's
 // animation (property kPropKeyframeAnim, a name in STRP; kPropKeyframeLoop: it loops).
 constexpr uint32_t kActorKeyframeMP1 = 0x3ce6630a;
