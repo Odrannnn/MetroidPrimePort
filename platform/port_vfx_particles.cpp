@@ -1092,9 +1092,11 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
     v.vec[1] = nv3.GetZ();
     v.vec[2] = nv3.GetY();
   }
+  const uint32_t base = static_cast< uint32_t >(verts.size());
+  verts.insert(verts.end(), world.begin(), world.end());
   const size_t count = size_t(vfx.meshTris) * 3;
   for (size_t k = 0; k < count; ++k) {
-    verts.push_back(world[wide ? vfx.meshIdx32[k] : vfx.meshIdx16[k]]);
+    indices.push_back(base + (wide ? vfx.meshIdx32[k] : vfx.meshIdx16[k]));
   }
 }
 
@@ -1191,6 +1193,7 @@ void CElementGen::PortRenderMeshesVfx(CPortVfxMeshBatch& batch) {
   aurora::gfx::vfx::DrawDesc desc;
   if (!PortVfxBuildDesc(*x28_loadedGenDesc->xPortVfx, xPortVsmt, xPortVsmtMask, desc)) {
     batch.verts.clear();
+    batch.indices.clear();
     return;
   }
   const CPortVfxData& vfx = *x28_loadedGenDesc->xPortVfx;
@@ -1229,11 +1232,23 @@ void CElementGen::PortRenderMeshesVfx(CPortVfxMeshBatch& batch) {
   const aurora::gfx::vfx::DepthSelection depth =
       aurora::gfx::vfx::select_model_depth(desc.blend, x26c_28_zTest, x26c_26_AAPH, x26c_27_ZBUF);
   CGraphics::SetDepthWriteMode(depth.compare, kE_LEqual, depth.write);
-  PortFx::gTriangles += static_cast< uint32_t >(batch.verts.size() / 3);
+  PortFx::gTriangles += static_cast< uint32_t >(batch.indices.size() / 3);
   ++PortFx::gDraws;
   // Model-only: Aurora copies this submission's value into its queued uniform payload.
   desc.exposureOverride = PortVfxModelExposureOverride(*x28_loadedGenDesc);
-  aurora::gfx::vfx::draw_triangles(desc, batch.verts.data(), static_cast< uint32_t >(batch.verts.size() / 3));
+  if (batch.verts.size() <= aurora::gfx::vfx::MaxIndexedVertices) {
+    aurora::gfx::vfx::draw_indexed_triangles(desc, batch.verts.data(), static_cast< uint32_t >(batch.verts.size()),
+                                             batch.indices.data(), static_cast< uint32_t >(batch.indices.size()));
+  } else {
+    // One particle whose mesh alone is past an indexed draw: its triangles, unshared, in split draws.
+    static std::vector< aurora::gfx::vfx::Vertex > tris;
+    tris.clear();
+    for (const uint32_t i : batch.indices) {
+      tris.push_back(batch.verts[i]);
+    }
+    aurora::gfx::vfx::draw_triangles(desc, tris.data(), static_cast< uint32_t >(tris.size() / 3));
+  }
   batch.verts.clear();
+  batch.indices.clear();
   batch.probePosSet = false;
 }

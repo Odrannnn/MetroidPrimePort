@@ -40,21 +40,23 @@ std::optional<float> PortVfxFrameExposureOverride();
 std::optional<float> PortVfxSpriteExposureOverride(const CGenDescription& desc);
 
 // Model particles with a VMSH mesh: RenderModels adds each live particle's CPU-transformed
-// triangles (world space) and PortRenderMeshesVfx draws them all in one aurora draw with the
-// PART's VMAT. A PART with PMDV variants keeps the retail model path (VMSH holds one model).
+// vertices (world space) and triangles and PortRenderMeshesVfx draws them all in one indexed
+// aurora draw with the PART's VMAT. A PART with PMDV variants keeps the retail model path (VMSH
+// holds one model).
 struct CPortVfxMeshBatch {
   std::vector< aurora::gfx::vfx::Vertex > verts;
+  std::vector< uint32_t > indices; // into verts
+
   // Where the batch's clustered lighting looks: the Lit material (IceChargeCollisionLit) samples the
   // room's baked probe at the first particle's model origin, as the stand-in for Remastered's per-instance
   // BLPD record. The cluster grid and its light list need nothing per batch (they are per camera).
   float probePos[3] = {};
   bool probePosSet = false;
 
-  // True when adding `vfx`'s mesh would take the batch past one aurora draw (the size
-  // draw_triangles splits at); the caller draws and clears it first, so it stays bounded.
+  // True when adding `vfx`'s mesh would take the batch past one indexed aurora draw; the caller
+  // draws and clears it first, so it stays bounded.
   bool WouldOverflow(const CPortVfxData& vfx) const {
-    return !verts.empty() &&
-           verts.size() + size_t(vfx.meshTris) * 3 > size_t(aurora::gfx::vfx::MaxTrianglesPerDraw) * 3;
+    return !verts.empty() && verts.size() + vfx.meshVerts > aurora::gfx::vfx::MaxIndexedVertices;
   }
 
   // `model` is the particle's full model matrix; the particle's UV context must be set.

@@ -1743,9 +1743,15 @@ std::string pipeline_source(const PipelineConfig& p) {
   return source;
 }
 
-// Quads (4 vertices, 6 indices) or triangles (3 vertices, drawn in order).
-static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t vertexCount, bool quads) {
-  if (verts == nullptr || vertexCount == 0 || vertexCount > MaxQuads * 4 || !ensure_registered()) {
+// Quads (4 vertices, 6 indices), triangles (3 vertices, drawn in order), or, with `index`, the
+// triangles `index` lists.
+static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t vertexCount, bool quads,
+                       const uint32_t* index = nullptr, uint32_t indexCount = 0) {
+  const uint32_t maxVerts = index != nullptr ? MaxIndexedVertices : MaxQuads * 4;
+  if (verts == nullptr || vertexCount == 0 || vertexCount > maxVerts || !ensure_registered()) {
+    return;
+  }
+  if (index != nullptr && (indexCount == 0 || indexCount % 3 != 0)) {
     return;
   }
   evict_idle();
@@ -1904,7 +1910,14 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   }
 
   std::vector<uint32_t> indices;
-  if (quads) {
+  if (index != nullptr) {
+    indices.assign(index, index + indexCount);
+    for (const uint32_t i : indices) {
+      if (i >= vertexCount) {
+        return;
+      }
+    }
+  } else if (quads) {
     const uint32_t quadCount = vertexCount / 4;
     indices.resize(size_t(quadCount) * 6);
     for (uint32_t q = 0; q < quadCount; ++q) {
@@ -1959,6 +1972,11 @@ void draw_triangles(const DrawDesc& desc, const Vertex* verts, uint32_t triCount
     draw_prims(desc, verts + size_t(done) * 3, n * 3, false);
     done += n;
   }
+}
+
+void draw_indexed_triangles(const DrawDesc& desc, const Vertex* verts, uint32_t vertexCount, const uint32_t* indices,
+                            uint32_t indexCount) {
+  draw_prims(desc, verts, vertexCount, false, indices, indexCount);
 }
 
 void capture_scene(bool again) {

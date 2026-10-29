@@ -315,6 +315,11 @@ void draw_quads(const DrawDesc& desc, const Vertex* verts, uint32_t quadCount);
 // into draws of MaxTrianglesPerDraw (a draw holds at most 65536 vertices; this is a multiple of 3).
 constexpr uint32_t MaxTrianglesPerDraw = (1u << 14) * 4 / 3;
 void draw_triangles(const DrawDesc& desc, const Vertex* verts, uint32_t triCount);
+// The same for the triangles `indices` lists (3 per triangle, each below vertexCount), so a mesh's shared
+// vertices are sent once. One draw; vertexCount is at most MaxIndexedVertices.
+constexpr uint32_t MaxIndexedVertices = 1u << 16;
+void draw_indexed_triangles(const DrawDesc& desc, const Vertex* verts, uint32_t vertexCount, const uint32_t* indices,
+                            uint32_t indexCount);
 // Remastered's CopyOpaqueColorBuffer point, between the opaque and the sorted geometry: copies the
 // EFB's depth (raw, full size) and its colour (half size with a mip chain; linear RGBA16F in the HDR
 // scene, else the RGBA8 display copy) for the later draws of this frame to read, at one pass break.
