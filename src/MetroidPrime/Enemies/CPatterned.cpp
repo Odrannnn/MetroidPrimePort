@@ -1429,7 +1429,14 @@ void CPatterned::Render(const CStateManager& mgr) const {
       // the hot pass skips it, and the icy material yields to the thermal override. The X-ray visor draws the body as X-ray and then RenderIcy on the
       // normal model (PickRenderProxy(which == 1 ? 0 : which)). With no icy material from a mod
       // it draws as retail.
-      if (x450_bodyController->IsFrozen() && PortIcy::Get() != nullptr) {
+      // With a frozen model (PortFrozenModel), 0xd2d94c skips RenderIcy and draws the actor
+      // normally, the frozen model standing in for the body (0xc4c4cc), and no ice overlay.
+      if (x450_bodyController->IsFrozen() && GetModelData()->PortFrozenModel() != nullptr) {
+        CModelData::sPortDrawFrozen = true;
+        CPhysicsActor::Render(mgr);
+        CModelData::sPortDrawFrozen = false;
+        icyDrawn = true;
+      } else if (x450_bodyController->IsFrozen() && PortIcy::Get() != nullptr) {
         float t = CGraphics::GetSimTime() - xPortFreezeTime;
         if (t < 0.f) {
           t += 15120.f;

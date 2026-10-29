@@ -1764,7 +1764,20 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
           tris.insert(tris.end(), p.I.begin(), p.I.end());
         }
       }
-      perVertex = SkinWeights(P, n, skinned ? &J : nullptr, skinned ? &W : nullptr, retail, refSpan,
+      Retail voters;
+      Blob voterSkin;
+      if (opt.weightModel != 0) {
+        if (!io.retail(FourCC('C', 'M', 'D', 'L'), opt.weightModel, voters.data) ||
+            !io.retail(FourCC('C', 'S', 'K', 'R'), opt.weightSkin, voterSkin)) {
+          throw Fail{"retail model " + Hex8(opt.weightModel) + " or skin " + Hex8(opt.weightSkin) +
+                     " is not on the disc"};
+        }
+        voters.Parse();
+        Log(Hex8(this->model) + "  weights voted by " + Hex8(opt.weightModel) + "/" + Hex8(opt.weightSkin));
+      }
+      const bool byVoters = opt.weightModel != 0;
+      perVertex = SkinWeights(P, n, skinned ? &J : nullptr, skinned ? &W : nullptr, byVoters ? voters : retail,
+                              byVoters ? Span{voterSkin.data(), voterSkin.size()} : refSpan,
                               [this](const std::string& line) { Log(Hex8(this->model) + line); },
                               pivoted ? &pivots : nullptr, pivoted ? &opt.retailBones : nullptr,
                               skinned ? nullptr : &tris);

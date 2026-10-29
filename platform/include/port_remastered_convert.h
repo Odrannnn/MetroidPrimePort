@@ -99,6 +99,13 @@ struct ConvertOptions {
     double head[3] = {};
   };
   std::vector<RetailBone> retailBones;
+  // Optional, both or neither, for the votes: the retail CMDL and CSKR whose vertices vote in place
+  // of `retail` and skins[0]'s. A character's frozen model (Remastered's property 0x0364A97A,
+  // drawn by CAnimDataMP1 0xc4f648 as a render proxy of the character, on its skeleton) stands in
+  // for the character's ice overlay, a shell pushed out along its normals that only roughly
+  // follows the body; the body it covers votes. The weights are still written under `skins`.
+  uint32_t weightModel = 0;
+  uint32_t weightSkin = 0;
   // More than the retail model's material sets: set 0 is copied up to this many (a model drawn
   // with a shader set its retail one lacks, the Dread cannon's one per beam). 0 keeps the retail
   // count.

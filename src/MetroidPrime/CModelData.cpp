@@ -127,6 +127,15 @@ void CModelData::Render(EWhichModel which, const CTransform4f& xf, const CActorL
     gpRender->SetAmbientColor(x18_ambientColor);
   }
   if (HasAnimation()) {
+#ifdef TARGET_PC
+    const CSkinnedModel* frozen =
+        sPortDrawFrozen && (which == kWM_Normal || which == kWM_XRay || which == kWM_Thermal)
+            ? PortFrozenModel()
+            : nullptr;
+    if (frozen != nullptr) {
+      xc_animData->Render(*frozen, flags, rstl::optional_object< CVertexMorphEffect >(), nullptr);
+    } else
+#endif
     xc_animData->Render(PickAnimatedModel(which), flags,
                         rstl::optional_object< CVertexMorphEffect >(), nullptr);
   } else if (x1c_normalModel) {
@@ -140,6 +149,28 @@ void CModelData::Render(EWhichModel which, const CTransform4f& xf, const CActorL
   CGraphics::DisableAllLights();
   x14_24_renderSorted = false;
 }
+
+#ifdef TARGET_PC
+bool CModelData::sPortDrawFrozen = false;
+
+const CSkinnedModel* CModelData::PortFrozenModel() const {
+  if (!HasAnimation()) {
+    return nullptr;
+  }
+  const rstl::optional_object< TLockedToken< CSkinnedModelWithAvgNormals > >& ice =
+      xc_animData->GetIceModel();
+  if (!ice.valid()) {
+    return nullptr;
+  }
+  const CSkinnedModel& model = (**ice)->GetSkinnedModel();
+  const CCubeModel* cube = model.GetModel()->GetCubeModel();
+  if (cube == nullptr || cube->PortMaterialCount() == 0) {
+    return nullptr;
+  }
+  float values[19];
+  return cube->PortReadPBRMaterial(0, values) > 0 ? &model : nullptr;
+}
+#endif
 
 void CModelData::RenderUnsortedParts(EWhichModel which, const CTransform4f& xf,
                                      const CActorLights* lights, const CModelFlags& flags) const {

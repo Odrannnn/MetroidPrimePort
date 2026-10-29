@@ -139,7 +139,10 @@ inline constexpr int kTextures = 5;
 //     retail models: their partners are VFX_Model_Base meshes, whose texture is the placeholder.
 // 26: retail CMDL 4F607CB5 (a model particle of PART B60D289E, the Phazon stream that takes the
 //     suit in Metroid Prime's Lair) keeps its retail model: its partner was a mines metal trim.
-inline constexpr int kModels = 26;
+// 27: the frozen models (CCharacterInfo 0x0364A97A) of Magdolite, Metroid Prime and the elite
+//     and Phazon elite pirates replace their ice overlays, weighted by the character's body;
+//     an ANCS binding one pair in several characters is rebound in the named one only.
+inline constexpr int kModels = 27;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.

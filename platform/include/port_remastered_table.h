@@ -34,6 +34,10 @@ struct TableEntry {
   // (another model shares the retail ones), bound in every character.
   uint32_t ancs;
   int8_t key;
+  // `ancs` set: the character of it whose pair is rebound, named by its body CMDL (the
+  // CCharacterInfo's own model), for a pair bound by several (one ANCS's characters sharing
+  // an ice overlay). 0: the pair is bound once.
+  uint32_t character = 0;
 };
 
 constexpr uint32_t kEveryCharacter = 0xFFFFFFFFu;
