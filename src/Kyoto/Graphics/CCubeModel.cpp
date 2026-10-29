@@ -719,7 +719,10 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   GXSetPBRShield(wind || (kind > 10.5f && kind < 11.5f) || (kind > 13.5f && kind < 19.5f) || (kind > 20.5f && kind < 22.5f) || (kind > 24.5f && kind < 25.5f) || (kind > 27.5f && kind < 29.5f) || (kind > 30.5f && kind < 33.5f) || (kind > 34.5f && kind < 35.5f) || (kind > 37.5f && kind < 45.5f) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
   // World up as the shader sees it: view space is right, up, -forward.
   const f32 up[3] = {view.Get20(), view.Get22(), -view.Get21()};
-  GXSetPBRMaterial(values, values + 3, values[6], values[7], values + 8, values + 13, up);
+  // A special kind's bare glow is at the frame's exposure: the shader's tone w (GlowScale in the
+  // opaque pass) times this (kb topic/post-output.md).
+  GXSetPBRMaterial(values, values + 3, values[6], values[7], values + 8, values + 13, up,
+                   PortRoomEnv::GlowGain(frameExposed));
   // Every material sets its own, so a back copy's factors don't reach the next one.
   GXSetPBRLightScale(lightScale[0], lightScale[1], kind == 45.f ? 1.f : fade,
                      kind == 45.f ? GX_FALSE : fadeReplaces ? GX_TRUE : GX_FALSE);
