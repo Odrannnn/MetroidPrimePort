@@ -12,8 +12,11 @@ seed being played). Energy tank capacity (10-200, default 100) sets the
 energy each tank holds; the suit alone holds one less, so 50 gives 49 + 50
 per tank. Combat logic still counts tanks as if they held 100. Shuffle
 Unlimited Missiles / Power Bombs put that item in the pool (in place of a
-Missile Expansion), as the apworld options do. The console has the same as `rando gen [seedtext]`,
-`rando play <name>`, `rando delete <name>` and `rando list`.
+Missile Expansion), as the apworld options do. While a seed is being
+played, **Play the normal game** above the list goes back to the normal game
+and its own save card; the seed keeps its progress, and its Play resumes it.
+The console has the same as `rando gen [seedtext]`, `rando play <name>`,
+`rando off`, `rando delete <name>` and `rando list`.
 
 Each seed has its own save card, which the game switches only at the title
 screen and file select. So while a game is loaded, Play is off for other

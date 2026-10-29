@@ -277,6 +277,7 @@
 {"Randomizer", "", "New seed", "Random", "random seed generate roll"},
 {"Randomizer", "", "New seed", "Generate", "generate seed create"},
 {"Randomizer", "", "New seed", "Generate & Play", "generate play start seed"},
+{"Randomizer", "", "Seeds", "Play the normal game", "vanilla normal game stop seed off unrandomized switch back"},
 {"Randomizer", "", "Seeds", "Play", "play start seed launch"},
 {"Randomizer", "", "Seeds", "Spoiler", "spoiler log show seed"},
 {"Randomizer", "", "Seeds", "Write spoiler file", "spoiler file write save text"},

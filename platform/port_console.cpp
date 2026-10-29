@@ -3815,6 +3815,14 @@ void CmdRando() {
     if (!PortAp::PlaySolo(sCmd.args[2], error))
       return Finish(error.c_str());
     Out("playing seed %s", sCmd.args[2].c_str());
+  } else if (action == "off" && sCmd.args.size() == 2) {
+    if (PortAp::SoloSeedInPlay().empty())
+      return Finish("no seed is being played");
+    if (PortDebug::StateManager() != nullptr)
+      return Finish("quit to the title screen to go back to the normal game");
+    if (!PortAp::Disconnect(error))
+      return Finish(error.c_str());
+    Out("playing the normal game");
   } else if (action == "delete" && sCmd.args.size() == 3) {
     if (!PortAp::DeleteSolo(sCmd.args[2], error))
       return Finish(error.c_str());
@@ -3828,7 +3836,7 @@ void CmdRando() {
         Out("%s", file.substr(0, file.size() - 5).c_str());
     }
   } else {
-    return Finish("usage: rando [gen [seedtext] | play <name> | delete <name> | list]");
+    return Finish("usage: rando [gen [seedtext] | play <name> | off | delete <name> | list]");
   }
   Finish();
 }
@@ -4340,7 +4348,7 @@ const CommandSpec kCommands[] = {
     {"ap", CmdAp, nullptr,
      "ap [connect <server> <slot> [password] | disconnect | recent | resume <n> | say <text> | chat]   Archipelago, as the F1 Archipelago page does"},
     {"rando", CmdRando, nullptr,
-     "rando [gen [seedtext] | play <name> | delete <name> | list]  the built-in randomizer's seeds"},
+     "rando [gen [seedtext] | play <name> | off | delete <name> | list]  the built-in randomizer's seeds"},
     {"help", CmdHelp, nullptr, "help                       this list"},
     {"quit", CmdQuit, nullptr, "quit                       exit the game"},
     {"title", CmdTitle, nullptr, "title                      quit the game to the title screen"},

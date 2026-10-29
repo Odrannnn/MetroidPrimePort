@@ -302,6 +302,21 @@ void DrawRandomizerTab() {
       ? "Delete removes the seed, its progress and its save card (not the seed being played)."
       : "Deletes the seed, its progress and its save card.";
   ImGui::SeparatorText("Seeds");
+  if (!inPlay.empty()) {
+    // The way back is the Archipelago page's Disconnect: the saved connection is
+    // switched off, so the game plays its own save card again.
+    ImGui::Text("Playing seed %s.", inPlay.c_str());
+    ImGui::BeginDisabled(inGame);
+    if (ImGui::Button("Play the normal game")) {
+      std::string error;
+      sMessageError = !PortAp::Disconnect(error);
+      sMessage = sMessageError ? error : "Playing the normal game. The seed and its progress are kept.";
+    }
+    ImGui::EndDisabled();
+    ItemHelp(inGame ? "Quit to the title screen to go back to the normal game."
+                    : "Stops playing the seed and goes back to the normal game and its save card. "
+                      "The seed keeps its progress: Play resumes it.");
+  }
   if (sRows.empty()) {
     ImGui::TextDisabled("No seeds yet.");
   } else if (inGame) {
