@@ -339,6 +339,22 @@ std::vector<Input> DownInputs(const PortInput::RawState& raw) {
   return down;
 }
 
+// Which trigger an input reads (0 left, 1 right, -1 neither). One pull reports
+// the trigger's half-pull button, its axis and its emulated click (issue #227).
+int TriggerSide(const Input& in) {
+  if (in.device == Device::PadAxis && (in.code == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || in.code == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)) {
+    return in.code == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 0 : 1;
+  }
+  if (in.device != Device::PadButton) return -1;
+  switch (in.code) {
+  case PAD_RAW_BUTTON_TRIGGER_LEFT:
+  case PAD_RAW_BUTTON_TRIGGER_LEFT_CLICK: return 0;
+  case PAD_RAW_BUTTON_TRIGGER_RIGHT:
+  case PAD_RAW_BUTTON_TRIGGER_RIGHT_CLICK: return 1;
+  default: return -1;
+  }
+}
+
 // Whether every input of a binding comes from one family (keyboard and mouse are one).
 bool OneFamily(const Binding& b) {
   for (int i = 1; i < b.count; ++i) {
@@ -392,6 +408,12 @@ void UpdateCapture() {
   }
   for (const Input& in : down) {
     if (!sCapture.chord.empty() && PortInput::FamilyOf(in.device) != PortInput::FamilyOf(sCapture.chord[0].device)) {
+      continue;
+    }
+    // A trigger records the first of its inputs to cross (the half-pull button).
+    const int side = TriggerSide(in);
+    if (side >= 0 && std::any_of(sCapture.chord.begin(), sCapture.chord.end(),
+                                 [side](const Input& c) { return TriggerSide(c) == side; })) {
       continue;
     }
     if (std::find(sCapture.chord.begin(), sCapture.chord.end(), in) == sCapture.chord.end() &&
@@ -1739,6 +1761,14 @@ void ApplyBallPreset(PortInput::Family family, std::string_view id) {
   Commit();
 }
 
+// Takes the saved bindings as the page's copy: a PortControls preset writes them
+// itself, and the next Commit would otherwise put the page's older copy back.
+void Reload() {
+  if (const auto saved = PortInputDevices::UserBindings()) sWork = *saved;
+  sSeenVersion = PortInputDevices::UserBindingsVersion();
+  sLoaded = true;
+}
+
 // One row of preset buttons. A click replaces the family's own Default-profile
 // bindings with the preset; a kind or model's own bindings stay on top.
 void PresetRow(const SView& v, const SPreset* presets, int count) {
@@ -1753,17 +1783,7 @@ void PresetRow(const SView& v, const SPreset* presets, int count) {
     if (i != 0) ImGui::SameLine();
     ImGui::BeginDisabled(gcAdapter && (id == "remastered" || id == "modern"));
     if (ImGui::Button(presets[i].name)) {
-      // The presets set the all-controllers layer, so clear that one even
-      // while a kind or model is selected.
-      SView base = v;
-      base.match.clear();
-      ClearOwn(base);
-      if (pads) {
-        PortControls::ApplyPadPresetNamed(id);
-      } else {
-        PortControls::ApplyKeyPresetNamed(id);
-      }
-      ApplyBallPreset(v.family, id);
+      ApplyPreset(v.family, id);
       ImGui::CloseCurrentPopup();
     }
     ImGui::EndDisabled();
@@ -1867,6 +1887,23 @@ void DrawActiveController() {
 }
 
 } // namespace
+
+void ApplyPreset(PortInput::Family family, std::string_view id) {
+  // The page may never have been drawn; start from the saved bindings.
+  if (sEditing == kEditNone && !sCapture.active) Reload();
+  // The presets set the all-controllers layer, so clear that one even
+  // while a kind or model is selected.
+  SView base;
+  base.family = family;
+  ClearOwn(base);
+  if (family == PortInput::Family::Pad) {
+    PortControls::ApplyPadPresetNamed(id);
+  } else {
+    PortControls::ApplyKeyPresetNamed(id);
+  }
+  Reload();
+  ApplyBallPreset(family, id);
+}
 
 std::string BindingsText(PortInput::Action action, const char* separator) {
   // Hints ask every frame; the profile is rebuilt at most twice a second.
