@@ -205,6 +205,8 @@ struct State {
   float stanceTime[int(Stance::Count)] = {}; // seconds since each stance was last entered
   float airTime = 0.f;    // seconds off the ground
   float slowTime = 0.f;   // seconds under kStandSpeed
+  float brakeTime = 0.f;  // seconds braking (kBrakeDecel), the time under kBrakeHold after it too
+  float lastSpeed = 0.f;  // ground speed last tick
   // Where the player and the platform it rides stood last tick (GroundVelocity).
   bool haveLast = false;
   CVector3f lastPos = CVector3f::Zero(), lastPlatformPos = CVector3f::Zero();
@@ -1307,9 +1309,19 @@ void Update(CStateManager& mgr, float dt) {
                                                                          : 0.f;
   const float speed = std::sqrt(fwd * fwd + side * side);
   s.slowTime = speed < kStandSpeed ? s.slowTime + dt : 0.f;
+  if (dt > 0.f) {
+    const bool slowing = speed <= s.lastSpeed - kBrakeDecel * dt;
+    s.brakeTime = slowing || (speed < kBrakeHold && s.brakeTime > 0.f) ? s.brakeTime + dt : 0.f;
+    s.lastSpeed = speed;
+  }
+  const bool braking = grounded && s.brakeTime >= kBrakeSeconds && speed < kBrakeSpeed;
   const Stance stance = ChooseStance(fwd, side, grounded, vel.GetZ(), s.stance,
                                      s.stanceTime[int(s.stance)] >= stanceDone,
-                                     s.airTime >= kLandAirSeconds, s.slowTime >= kSettleSeconds);
+                                     s.airTime >= kLandAirSeconds, s.slowTime >= kSettleSeconds,
+                                     braking);
+  if (stance == Stance::Loco && s.stance == Stance::Stop) {
+    s.brakeTime = 0.f; // walking on after a stop played out: only a new slowdown brakes
+  }
   if (stance != s.stance) {
     s.stanceTime[int(stance)] = 0.f;
     if (s.changeCount == int(std::size(s.changes))) {

@@ -60,15 +60,27 @@ inline constexpr float kFadeAlpha = 0.2f;
 // dips under kStandSpeed for a tick or two, which would flick the legs to Stop and back.
 inline constexpr float kSettleSeconds = 0.1f;
 
+// A walk brakes once its speed has fallen by at least kBrakeDecel (units per second squared)
+// each tick for kBrakeSeconds (or until it is under kBrakeHold) and is under kBrakeSpeed: the
+// stick let go, the body halts in a few ticks. Braking stops straight away, so the walk's
+// stride doesn't play on while she slows, and the collision's last jitter under kBrakeHold
+// doesn't start it again.
+inline constexpr float kBrakeDecel = 30.f;
+inline constexpr float kBrakeSeconds = 0.05f;
+inline constexpr float kBrakeSpeed = 6.f;
+inline constexpr float kBrakeHold = 1.2f;
+
 // The stance the movement asks for. fwd and side are the speeds along the facing (+ forward)
 // and across it, rise the vertical one; landing: the body was in the air kLandAirSeconds;
-// settled: it has been under kStandSpeed kSettleSeconds.
+// settled: it has been under kStandSpeed kSettleSeconds; braking: as kBrakeDecel.
 // Stopping from a walk plays Stop, and landing Land, until done (the current stance's clip
 // played out), unless the body moves (again: the touchdown tick's own speed, a blip of the
-// collision, doesn't count).
+// collision, doesn't count) and isn't braking.
 inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Stance current,
-                           bool done, bool landing, bool settled = true) {
-  if (!grounded) {
+                           bool done, bool landing, bool settled = true, bool braking = false) {
+  // The tick that leaves the ground has no rise yet (it comes from the position delta): it
+  // keeps the ground stance, so a jump doesn't flick through Fall first.
+  if (!grounded && (rise != 0.f || current == Stance::Jump || current == Stance::Fall)) {
     return rise > 0.f ? Stance::Jump : Stance::Fall;
   }
   if ((current == Stance::Jump || current == Stance::Fall) && landing) {
@@ -76,7 +88,7 @@ inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Sta
   }
   const float speed = std::sqrt(fwd * fwd + side * side);
   if (speed < kStandSpeed) {
-    if (current == Stance::Loco && !settled) {
+    if (current == Stance::Loco && !settled && !braking) {
       return Stance::Loco;
     }
     if (current == Stance::Loco || (current == Stance::Stop && !done)) {
@@ -86,6 +98,9 @@ inline Stance ChooseStance(float fwd, float side, bool grounded, float rise, Sta
       return Stance::Land;
     }
     return Stance::Idle;
+  }
+  if (braking && (current == Stance::Loco || (current == Stance::Stop && !done))) {
+    return Stance::Stop;
   }
   return Stance::Loco;
 }

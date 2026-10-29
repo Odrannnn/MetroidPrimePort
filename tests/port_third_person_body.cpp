@@ -43,6 +43,9 @@ int main() {
   CHECK(ChooseStance(9.f, 0.f, false, 3.f, Stance::Loco, true, false) == Stance::Jump);
   CHECK(ChooseStance(9.f, 0.f, false, -3.f, Stance::Jump, true, false) == Stance::Fall);
   CHECK(ChooseStance(0.f, 0.f, false, -1.f, Stance::Idle, true, false) == Stance::Fall);
+  // The takeoff tick, no rise yet, stays on the ground stance; in the air it stays airborne.
+  CHECK(ChooseStance(0.f, 0.f, false, 0.f, Stance::Idle, true, false) == Stance::Idle);
+  CHECK(ChooseStance(0.f, 0.f, false, 0.f, Stance::Jump, true, false) == Stance::Fall);
   // Landing: a long fall plays Land (even at the touchdown's speed blip), to its end standing
   // still; a short hop doesn't, and moving leaves it.
   CHECK(ChooseStance(0.f, 0.f, true, 0.f, Stance::Fall, true, true) == Stance::Land);
@@ -58,6 +61,12 @@ int main() {
   CHECK(ChooseStance(0.3f, 0.f, true, 0.f, Stance::Loco, true, false, true) == Stance::Stop);
   CHECK(ChooseStance(0.3f, 0.f, true, 0.f, Stance::Idle, true, false, false) == Stance::Idle);
   CHECK(ChooseStance(0.3f, 0.f, false, -1.f, Stance::Loco, true, false, false) == Stance::Fall);
+  // Braking stops while still moving, and keeps stopping; it starts no stop from a stand.
+  CHECK(ChooseStance(4.f, 0.f, true, 0.f, Stance::Loco, true, false, false, true) == Stance::Stop);
+  CHECK(ChooseStance(2.f, 0.f, true, 0.f, Stance::Stop, false, false, false, true) == Stance::Stop);
+  CHECK(ChooseStance(2.f, 0.f, true, 0.f, Stance::Stop, false, false, false, false) == Stance::Loco);
+  CHECK(ChooseStance(0.3f, 0.f, true, 0.f, Stance::Loco, true, false, false, true) == Stance::Stop);
+  CHECK(ChooseStance(4.f, 0.f, true, 0.f, Stance::Idle, true, false, false, true) == Stance::Loco);
 
   // The walk clips by speed: one alone outside their range, the bracketing two linearly inside,
   // continuous where the pairs meet.
