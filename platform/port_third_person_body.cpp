@@ -515,18 +515,53 @@ void ReachArm(const CStateManager& mgr, CAnimData& data, bool fresh) {
     return xf.GetTranslation();
   };
   const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
-  const auto aim = [&](CSegId seg, const CQuaternion& pose) {
-    const CVector3f pivot = position(seg);
-    const CVector3f hand = position(s.reachHand) - pivot;
-    const CVector3f want = target - pivot;
-    if (!hand.CanBeNormalized() || !want.CanBeNormalized()) {
-      return;
-    }
-    const CQuaternion turn = CQuaternion::ShortestRotationArc(hand.AsNormalized(), want.AsNormalized());
-    TurnSeg(pb, layout, seg, pose, CQuaternion::Slerp(CQuaternion::NoRotation(), turn, s.reachWeight));
-  };
-  aim(s.reachShoulder, s.reachShoulderPose);
-  aim(s.reachElbow, s.reachElbowPose);
+  const CVector3f shoulder = position(s.reachShoulder);
+  const CVector3f elbow = position(s.reachElbow);
+  const CVector3f hand = position(s.reachHand);
+  const CVector3f upper = elbow - shoulder;
+  const CVector3f fore = hand - elbow;
+  const CVector3f line = target - shoulder;
+  if (!upper.CanBeNormalized() || !fore.CanBeNormalized() || !line.CanBeNormalized()) {
+    return;
+  }
+  // Two-bone IK: the hand on the line to the point, the arm nearly straight, the elbow bent down
+  // and out (toward the hint) whatever the clip had the arm doing. One shortest arc from the clip's
+  // arm, often hanging back, twisted the whole arm about and turned it as the clip moved.
+  const float l1 = upper.Magnitude();
+  const float l2 = fore.Magnitude();
+  const CVector3f dir = line.AsNormalized();
+  const float reach = std::min(kReachStraight * (l1 + l2), line.Magnitude());
+  const float along = (l1 * l1 - l2 * l2 + reach * reach) / (2.f * reach);
+  const float out = std::sqrt(std::max(l1 * l1 - along * along, 0.f));
+  const CVector3f hint(shoulder.GetX() < 0.f ? -kReachElbowOut : kReachElbowOut, 0.f, -1.f);
+  CVector3f pole = hint - dir * CVector3f::Dot(hint, dir);
+  if (!pole.CanBeNormalized()) {
+    pole = CVector3f(shoulder.GetX() < 0.f ? -1.f : 1.f, 0.f, 0.f);
+  }
+  pole = pole.AsNormalized();
+  const CVector3f wantElbow = shoulder + dir * along + pole * out;
+  const CVector3f wantHand = shoulder + dir * reach;
+  // The shoulder carries the upper arm onto the new elbow and turns the bend into the new plane.
+  const CVector3f wantUpper = (wantElbow - shoulder).AsNormalized();
+  CQuaternion turn = CQuaternion::ShortestRotationArc(upper.AsNormalized(), wantUpper);
+  const CVector3f bend = turn.Transform(fore);
+  const CVector3f bendSide = bend - wantUpper * CVector3f::Dot(bend, wantUpper);
+  const CVector3f wantFore = wantHand - wantElbow;
+  const CVector3f wantSide = wantFore - wantUpper * CVector3f::Dot(wantFore, wantUpper);
+  if (bendSide.Magnitude() > 0.05f * l2 && wantSide.CanBeNormalized()) {
+    turn = CQuaternion::ShortestRotationArc(bendSide.AsNormalized(), wantSide.AsNormalized()) * turn;
+  }
+  TurnSeg(pb, layout, s.reachShoulder, s.reachShoulderPose,
+          CQuaternion::Slerp(CQuaternion::NoRotation(), turn, s.reachWeight));
+  // The elbow then hinges the hand onto the line.
+  const CVector3f pivot = position(s.reachElbow);
+  const CVector3f nowFore = position(s.reachHand) - pivot;
+  const CVector3f toHand = wantHand - pivot;
+  if (nowFore.CanBeNormalized() && toHand.CanBeNormalized()) {
+    const CQuaternion hinge = CQuaternion::ShortestRotationArc(nowFore.AsNormalized(), toHand.AsNormalized());
+    TurnSeg(pb, layout, s.reachElbow, s.reachElbowPose,
+            CQuaternion::Slerp(CQuaternion::NoRotation(), hinge, s.reachWeight));
+  }
 }
 
 float Wrap(float phase) { return phase - std::floor(phase); }
@@ -1559,11 +1594,15 @@ void Update(CStateManager& mgr, float dt) {
   s.aimWeight = s.haveAim ? std::min(s.aimWeight + dt / kAimInSeconds, 1.f)
                           : std::max(s.aimWeight - dt / kAimOutSeconds, 0.f);
 
-  // The grapple arm reaches while the beam is out, as the first-person arm fires it.
+  // The grapple arm reaches from the first-person arm's wind-up on, so it is up when the beam
+  // leaves the hand, and while the beam is out.
   const CGrappleArm& arm = player.GetPlayerGun()->GetGrappleArm();
-  const bool reach = arm.GetActive() && arm.BeamActive();
-  if (reach) {
+  const bool reach = arm.GetActive() && (arm.BeamActive() || player.GetGrappleState() != CPlayer::kGS_None);
+  if (arm.BeamActive()) {
     s.reachPoint = arm.PortGrapplePointPos();
+  } else if (const CActor* point = TCastToConstPtr< CActor >(mgr.GetObjectById(player.GetOrbitTargetId()));
+             reach && point != nullptr) {
+    s.reachPoint = point->GetTranslation();
   }
   s.reachWeight = reach ? std::min(s.reachWeight + dt / kReachInSeconds, 1.f)
                         : std::max(s.reachWeight - dt / kReachOutSeconds, 0.f);

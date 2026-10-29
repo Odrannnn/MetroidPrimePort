@@ -36,10 +36,13 @@ inline constexpr float kBlendSeconds = 0.25f;
 inline constexpr float kAimMaxRadians = 1.4f;
 inline constexpr float kAimInSeconds = 0.08f;
 inline constexpr float kAimOutSeconds = 0.3f;
-// While the grapple beam is out the left arm reaches for the grapple point, easing in over
-// kReachInSeconds and out over kReachOutSeconds.
+// While the grapple arm is out (from its wind-up, before the beam) the left arm reaches for the
+// grapple point, easing in over kReachInSeconds and out over kReachOutSeconds. The hand stops at
+// kReachStraight of the arm's length, the elbow bent down and kReachElbowOut out to the side.
 inline constexpr float kReachInSeconds = 0.1f;
 inline constexpr float kReachOutSeconds = 0.3f;
+inline constexpr float kReachStraight = 0.98f;
+inline constexpr float kReachElbowOut = 0.5f;
 // Below this speed (game units per second) the body stands.
 inline constexpr float kStandSpeed = 0.5f;
 // The aim-pose grid's coordinates move at most this fast (grid units, 1 = one aim clip, per
