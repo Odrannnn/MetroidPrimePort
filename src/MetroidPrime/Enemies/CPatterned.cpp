@@ -1423,16 +1423,27 @@ void CPatterned::Render(const CStateManager& mgr) const {
 #ifdef TARGET_PC
       // Remastered's Render (0xd2d94c): a frozen enemy that isn't burning draws its body as
       // RenderIcy (0xfc4794) in place of the body and the ice model, given the time since the
-      // freeze on the scene clock (which wraps at 15120 s). With no icy material from a mod,
-      // and in the thermal visor, it draws as retail.
-      if (thermalFlag == kTD_Bypass && x450_bodyController->IsFrozen() && PortIcy::Get() != nullptr) {
+      // freeze on the scene clock (which wraps at 15120 s). It does so in every pass the thermal
+      // gate lets through: the thermal visor's cold pass draws it on the thermal model
+      // (CModelDataMP1::RenderIcy 0xfa79ec); a frozen enemy is cold (UpdateThermalFrozenState), so
+      // the hot pass skips it, and the icy material yields to the thermal override. The X-ray visor draws the body as X-ray and then RenderIcy on the
+      // normal model (PickRenderProxy(which == 1 ? 0 : which)). With no icy material from a mod
+      // it draws as retail.
+      if (x450_bodyController->IsFrozen() && PortIcy::Get() != nullptr) {
         float t = CGraphics::GetSimTime() - xPortFreezeTime;
         if (t < 0.f) {
           t += 15120.f;
         }
         const float dir[3] = {xPortFreezeDir.GetX(), xPortFreezeDir.GetY(), xPortFreezeDir.GetZ()};
-        CCubeModel::PortSetIcy(true, dir, t);
-        CPhysicsActor::Render(mgr);
+        if (CModelData::GetRenderingModel(mgr) == CModelData::kWM_XRay) {
+          CPhysicsActor::Render(mgr);
+          CCubeModel::PortSetIcy(true, dir, t);
+          GetModelData()->Render(CModelData::kWM_Normal, GetTransform(), GetActorLights(),
+                                 CModelFlags(CModelFlags::kT_Opaque, 1.f));
+        } else {
+          CCubeModel::PortSetIcy(true, dir, t);
+          CPhysicsActor::Render(mgr);
+        }
         CCubeModel::PortSetIcy(false, dir, 0.f);
         icyDrawn = true;
       } else
