@@ -29,6 +29,13 @@ void PortVfxSetLaunchDir(CElementGen::CParticle& particle);
 float PortVfxExposureGain(const CGenDescription& desc, bool model = false);
 // Explicit inverse-exposed transparent models snapshot the matching forward frame exposure.
 std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc);
+// The frame's exposure (sFrame.exposure, 1 in pause lighting) while rooms are exposed, for a draw
+// whose CPU colour carries Remastered's inverse exposure; nullopt otherwise.
+std::optional<float> PortVfxFrameExposureOverride();
+// An unlit inverse-exposed sprite's (IEXP, blended or opaque): its inverse exposure is applied before
+// the tonemap's frame exposure, which the HDR tail multiplies by only through this. Inherited, the GX
+// tone's w is the last CCubeModel's correction (1 sorted, GlowScale opaque), not an exposure.
+std::optional<float> PortVfxSpriteExposureOverride(const CGenDescription& desc);
 
 // Model particles with a VMSH mesh: RenderModels adds each live particle's CPU-transformed
 // triangles (world space) and PortRenderMeshesVfx draws them all in one aurora draw with the

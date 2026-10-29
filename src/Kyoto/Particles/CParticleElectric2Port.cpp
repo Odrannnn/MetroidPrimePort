@@ -368,6 +368,9 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
   const int nfom = IntOr(mDesc->xPortNFOM, frame, 0);
   float tone[3][4];
   const float exposure = PortRoomEnv::Tone(tone) ? PortRoomEnv::FrameExposure() : 1.f;
+  // The AddVar's inverse exposure is undone by the tonemap's frame exposure, not by the GX tone's
+  // inherited w (the last model's 1 or GlowScale).
+  desc.exposureOverride = PortVfxFrameExposureOverride();
 
   std::vector< aurora::gfx::vfx::Vertex > verts;
   auto emit = [&](const V3& p, float u, float v, const float color[4], const float extra[4][4]) {

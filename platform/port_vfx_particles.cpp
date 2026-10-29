@@ -351,7 +351,22 @@ float PortVfxExposureGain(const CGenDescription& desc, bool model) {
 
 std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc) {
   if (!desc.xPortExposurePolicy || !desc.xPortInverseExposure || !desc.xPortVfx ||
-      desc.xPortVfx->mat.blend == uint32_t(aurora::gfx::vfx::Blend::Opaque) || !PortRoomEnv::Enabled()) {
+      desc.xPortVfx->mat.blend == uint32_t(aurora::gfx::vfx::Blend::Opaque)) {
+    return std::nullopt;
+  }
+  return PortVfxFrameExposureOverride();
+}
+
+std::optional<float> PortVfxSpriteExposureOverride(const CGenDescription& desc) {
+  if (!desc.xPortExposurePolicy || !desc.xPortInverseExposure || !desc.xPortVfx ||
+      (desc.xPortVfx->mat.features & aurora::gfx::vfx::ParticleLit) != 0) {
+    return std::nullopt;
+  }
+  return PortVfxFrameExposureOverride();
+}
+
+std::optional<float> PortVfxFrameExposureOverride() {
+  if (!PortRoomEnv::Enabled()) {
     return std::nullopt;
   }
   float tone[3][4];
@@ -439,6 +454,7 @@ void CElementGen::PortRenderPlanarVfx(const CParticle& particle, int frame) {
   if (!PortVfxBuildDesc(vfx, xPortVsmt, xPortVsmtMask, desc)) return;
   PortVfxEvalParams(vfx, x74_curFrame, desc.params);
   if (x28_loadedGenDesc->xPortExposurePolicy) desc.alreadyExposed = false;
+  desc.exposureOverride = PortVfxSpriteExposureOverride(*x28_loadedGenDesc);
   const bool lit = (desc.features & aurora::gfx::vfx::ParticleLit) != 0;
   const CTransform4f& model = CGraphics::GetModelMatrix();
   if (lit) {
@@ -521,6 +537,7 @@ void CElementGen::PortRenderParticlesVfx() {
     desc.alreadyExposed = false;
   }
   const float inverseExposure = PortVfxExposureGain(*x28_loadedGenDesc);
+  desc.exposureOverride = PortVfxSpriteExposureOverride(*x28_loadedGenDesc);
   // VisorRunOff is a PMDL model particle (the mesh path below), but a sprite generator sharing its
   // material still reads CCH0..4: evaluate them rather than draw from zeroed uniforms. VisorRain is a
   // sprite whose CCH0 is the drop mask's scale (SMTR-animated), so it needs the same rows, as does

@@ -331,8 +331,45 @@ void TestModelExposureOverride() {
   PortRoomEnv::testFrameExposure = 4.f;
 }
 
+// A sprite's IEXP inverse is undone by the frame exposure it forwards, not by the GX tone's inherited w
+// (the last CCubeModel's 1 sorted or GlowScale opaque): blended nets 1, opaque E / E_static.
+void TestSpriteExposureOverride() {
+  using aurora::gfx::vfx::Blend;
+  PortRoomEnv::testFrameExposure = 4.f;
+  CGenDescription desc;
+  Check(!PortVfxSpriteExposureOverride(desc), "missing VMAT sprite has no exposure override");
+  desc.xPortVfx = std::make_unique<CPortVfxData>();
+  desc.xPortExposurePolicy = desc.xPortInverseExposure = true;
+  for (Blend blend : {Blend::Alpha, Blend::Additive, Blend::Opaque}) {
+    desc.xPortVfx->mat.blend = uint32_t(blend);
+    const auto e = PortVfxSpriteExposureOverride(desc);
+    Check(e && *e == 4.f, "inverse-exposed sprite forwards the frame exposure, whatever its blend");
+  }
+  Check(*PortVfxSpriteExposureOverride(desc) * PortVfxExposureGain(desc) == 2.f,
+        "opaque sprite nets E / E_static");
+  desc.xPortVfx->mat.blend = uint32_t(Blend::Alpha);
+  Check(*PortVfxSpriteExposureOverride(desc) * PortVfxExposureGain(desc) == 1.f, "blended sprite nets 1");
+  desc.xPortVfx->mat.features = aurora::gfx::vfx::ParticleLit;
+  Check(!PortVfxSpriteExposureOverride(desc), "lit sprites take no intensity scalar and keep the inherited w");
+  desc.xPortVfx->mat.features = 0;
+  desc.xPortInverseExposure = false;
+  Check(!PortVfxSpriteExposureOverride(desc), "a bare sprite keeps the inherited w");
+  desc.xPortInverseExposure = true;
+  desc.xPortExposurePolicy = false;
+  Check(!PortVfxSpriteExposureOverride(desc), "legacy exposure policy remains unchanged");
+  desc.xPortExposurePolicy = true;
+  PortRoomEnv::testEnabled = false;
+  Check(!PortVfxSpriteExposureOverride(desc) && !PortVfxFrameExposureOverride(), "disabled room exposure");
+  PortRoomEnv::testEnabled = true;
+  PortRoomEnv::testHasTone = false;
+  Check(!PortVfxFrameExposureOverride(), "no-tone frame has no override");
+  PortRoomEnv::testHasTone = true;
+  Check(PortVfxFrameExposureOverride() == 4.f, "frame override is sFrame.exposure");
+}
+
 int main() {
   TestModelExposureOverride();
+  TestSpriteExposureOverride();
   TestParsing(); TestPhysicalTruncation(); TestDynamic(); TestHdrEvaluation(); TestTrss();
   CGenDescription exposure;
   exposure.xPortVfx = std::make_unique<CPortVfxData>();
