@@ -468,7 +468,7 @@ void CEnvFxManager::UpdateBlockedGrids(CStateManager& mgr, EEnvFxType type,
   x2c_lastBlockedGridIdx = -1;
   x24_enableSplash = false;
 
-  rstl::reserved_vector< TUniqueId, 1024 > blockList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > blockList;
   bool blockListBuilt = false;
   int blockedGrids = 0;
 
@@ -1070,7 +1070,7 @@ void CEnvFxManager::SetFxDensity(int val, float density) {
   x38_maxDensityDeltaSpeed = val;
 }
 
-void CEnvFxManager::BuildBlockObjectList(rstl::reserved_vector< TUniqueId, 1024 >& list,
+void CEnvFxManager::BuildBlockObjectList(rstl::reserved_vector< TUniqueId, kMaxObjects >& list,
                                          CStateManager& mgr) {
   const CObjectList& objList = mgr.GetObjectListById(kOL_All);
   for (int idx = objList.GetFirstObjectIndex(); idx != -1; idx = objList.GetNextObjectIndex(idx)) {

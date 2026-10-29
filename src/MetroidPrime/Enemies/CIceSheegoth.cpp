@@ -1187,14 +1187,14 @@ void CIceSheegoth::AttractProjectiles(CStateManager& mgr) {
     const CAABox projectileBounds((CVector3f(min)), CVector3f(max));
     const CMaterialFilter projectileFilter =
         CMaterialFilter::MakeInclude(CMaterialList(kMT_Projectile));
-    rstl::reserved_vector< TUniqueId, 1024 > projectiles;
+    rstl::reserved_vector< TUniqueId, kMaxObjects > projectiles;
     mgr.BuildNearList(projectiles, projectileBounds, projectileFilter, nullptr);
     if (!projectiles.empty()) {
       const CVector3f attractionPos = GetEnergyAttractionPos(mgr);
       const CAABox characterBounds((CVector3f(min)), CVector3f(max));
       const CMaterialFilter characterFilter =
           CMaterialFilter::MakeInclude(CMaterialList(kMT_Character));
-      rstl::reserved_vector< TUniqueId, 1024 > characters;
+      rstl::reserved_vector< TUniqueId, kMaxObjects > characters;
       mgr.BuildNearList(characters, characterBounds, characterFilter, nullptr);
       for (AUTO(it, projectiles.begin()); it != projectiles.end(); ++it) {
         if (CGameProjectile* const projectile =
@@ -1238,7 +1238,7 @@ void CIceSheegoth::AttractProjectiles(CStateManager& mgr) {
 }
 
 bool CIceSheegoth::IsClosestSheegoth(CStateManager& mgr,
-                                     const rstl::reserved_vector< TUniqueId, 1024 >& nearList,
+                                     const rstl::reserved_vector< TUniqueId, kMaxObjects >& nearList,
                                      const CVector3f& pos) const {
   CVector3f delta = pos - GetTranslation();
   const float distanceSquared = delta.MagSquared();

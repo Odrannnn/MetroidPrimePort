@@ -21,10 +21,10 @@ public:
   CVector3f Arrival(const CPhysicsActor& actor, const CVector3f& dest, float dampingRadius) const;
   CVector3f Pursuit(const CPhysicsActor& actor, const CVector3f& v0, const CVector3f& v1) const;
   CVector3f Separation(const CPhysicsActor& actor, const CVector3f& pos, float maxDist) const;
-  CVector3f Alignment(const CPhysicsActor& actor, rstl::reserved_vector< TUniqueId, 1024 >& list,
+  CVector3f Alignment(const CPhysicsActor& actor, rstl::reserved_vector< TUniqueId, kMaxObjects >& list,
                       const CStateManager& mgr) const;
 
-  CVector3f Cohesion(const CPhysicsActor& actor, rstl::reserved_vector< TUniqueId, 1024 >& list,
+  CVector3f Cohesion(const CPhysicsActor& actor, rstl::reserved_vector< TUniqueId, kMaxObjects >& list,
                      float dampingRadius, const CStateManager& mgr) const;
 
   CVector2f Flee2D(const CPhysicsActor& actor, const CVector2f& v0) const;

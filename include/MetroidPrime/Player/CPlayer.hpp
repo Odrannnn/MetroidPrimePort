@@ -513,7 +513,7 @@ public:
   void ActivateOrbitSource(CStateManager& mgr);
   void UpdateOrbitSelection(const CFinalInput& input, CStateManager& mgr);
   void UpdateOrbitableObjects(CStateManager& mgr);
-  void FindOrbitableObjects(const rstl::reserved_vector< TUniqueId, 1024 >& nearObjects,
+  void FindOrbitableObjects(const rstl::reserved_vector< TUniqueId, kMaxObjects >& nearObjects,
                            rstl::vector< TUniqueId >& listOut, EPlayerZoneInfo zone,
                            EPlayerZoneType type, CStateManager& mgr, bool onScreenTest) const;
   TUniqueId FindBestOrbitableObject(const rstl::vector< TUniqueId >& ids, EPlayerZoneInfo zone,
@@ -522,7 +522,7 @@ public:
   bool ValidateAimTargetId(TUniqueId id, CStateManager& mgr);
   bool ValidateObjectForMode(TUniqueId id, CStateManager& mgr) const;
   TUniqueId FindAimTargetId(CStateManager& mgr);
-  TUniqueId CheckEnemiesAgainstOrbitZone(const rstl::reserved_vector< TUniqueId, 1024 >& ids,
+  TUniqueId CheckEnemiesAgainstOrbitZone(const rstl::reserved_vector< TUniqueId, kMaxObjects >& ids,
                                         EPlayerZoneInfo zone, EPlayerZoneType type,
                                         CStateManager& mgr) const;
   void OrbitPoint(EPlayerOrbitType type, CStateManager& mgr);

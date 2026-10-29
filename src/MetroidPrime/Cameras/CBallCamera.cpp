@@ -2677,7 +2677,7 @@ void CBallCamera::OverrideCameraInfo(CStateManager& mgr) {
 
 bool CBallCamera::CheckFailsafeFromMorphBallState(CStateManager& mgr) {
   TUniqueId intersectId = kInvalidUniqueId;
-  rstl::reserved_vector< TUniqueId, 1024 > nearList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
   rstl::reserved_vector< CRayCastResult, 6 > frontResults;
   rstl::reserved_vector< CRayCastResult, 6 > backResults;
 

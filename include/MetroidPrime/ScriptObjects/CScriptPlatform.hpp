@@ -122,7 +122,7 @@ public:
 
 private:
   friend struct PortRoomState;
-  typedef rstl::reserved_vector< ushort, 1024 > TMovedList;
+  typedef rstl::reserved_vector< ushort, kMaxObjects > TMovedList;
 
   void DragSlave(CStateManager& mgr, TMovedList& moved, CActor* actor, const CVector3f& delta);
   void DragSlaves(CStateManager& mgr, TMovedList& moved, const CVector3f& delta);

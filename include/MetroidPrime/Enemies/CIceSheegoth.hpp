@@ -189,7 +189,7 @@ private:
   CVector3f GetEnergyAttractionPos(CStateManager& mgr) const;
   bool ShouldAttractProjectile(const CGameProjectile& projectile, const CStateManager& mgr) const;
   bool IsClosestSheegoth(CStateManager& mgr,
-                         const rstl::reserved_vector< TUniqueId, 1024 >& nearList,
+                         const rstl::reserved_vector< TUniqueId, kMaxObjects >& nearList,
                          const CVector3f& pos) const;
 
   void UpdateAILogicTimers(float dt);

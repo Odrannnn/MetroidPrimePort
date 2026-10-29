@@ -284,7 +284,7 @@ short CSortedListManager::ConstructIntersectionArray(const CAABox& aabb) const {
   }
 }
 
-void CSortedListManager::BuildNearList(rstl::reserved_vector< TUniqueId, 1024 >& nearListOut,
+void CSortedListManager::BuildNearList(rstl::reserved_vector< TUniqueId, kMaxObjects >& nearListOut,
                                        const CAABox& box, const CMaterialFilter& filter,
                                        const CActor* actor) const {
   short id = ConstructIntersectionArray(box);
@@ -306,7 +306,7 @@ static inline void GetActorMaterialData(const CActor& actor, const CMaterialFilt
   materials = &actor.GetMaterialList();
 }
 
-void CSortedListManager::BuildNearList(rstl::reserved_vector< TUniqueId, 1024 >& nearListOut,
+void CSortedListManager::BuildNearList(rstl::reserved_vector< TUniqueId, kMaxObjects >& nearListOut,
                                        const CActor& actor, const CAABox& box) const {
   const CMaterialList* materials;
   const CMaterialFilter* filter;
@@ -324,7 +324,7 @@ void CSortedListManager::BuildNearList(rstl::reserved_vector< TUniqueId, 1024 >&
   }
 }
 
-void CSortedListManager::BuildNearList(rstl::reserved_vector< TUniqueId, 1024 >& nearListOut,
+void CSortedListManager::BuildNearList(rstl::reserved_vector< TUniqueId, kMaxObjects >& nearListOut,
                                        const CVector3f& pos, const CVector3f& dir, const f32 mag,
                                        const CMaterialFilter& filter, const CActor* actor) const {
   const float length = mag ? mag : 8000.f;

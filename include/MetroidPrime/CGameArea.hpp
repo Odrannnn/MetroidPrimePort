@@ -176,7 +176,7 @@ public:
     rstl::vector< CWorldLight > x80_lightsB;
     rstl::vector< CLight > x90_gfxLightsB;
     rstl::single_ptr< CPVSAreaSet > xa0_pvs;
-    rstl::reserved_vector< SPVSActorInfo, 1024 > xa4_pvsEntityMap;
+    rstl::reserved_vector< SPVSActorInfo, kMaxObjects > xa4_pvsEntityMap;
     int x10a8_pvsVersion;
     rstl::optional_object< TLockedToken< CPFArea > > x10ac_pathToken;
     CPFArea* x10bc_pathArea;

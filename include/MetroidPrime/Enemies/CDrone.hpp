@@ -69,7 +69,7 @@ public:
   void Burn(float duration, float damage) override;
   CPathFindSearch* GetSearchPath() override { return &x6b0_pathFind; }
   virtual void BuildNearList(EMaterialTypes includeMat, EMaterialTypes excludeMat, float radius,
-                             rstl::reserved_vector< TUniqueId, 1024 >& list, CStateManager& mgr);
+                             rstl::reserved_vector< TUniqueId, kMaxObjects >& list, CStateManager& mgr);
   virtual void SetLightEnabled(CStateManager& mgr, bool active);
   virtual void SetVisorFlareEnabled(CStateManager& mgr, bool active);
   virtual void UpdateVisorFlare(CStateManager& mgr);

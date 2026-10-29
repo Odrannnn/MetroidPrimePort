@@ -20,8 +20,8 @@ PortGuid Guid(const std::array<uint8_t, 16>& bytes) {
   return g;
 }
 
-// Raw 16-bit unique id (version << 10 | id) to TUniqueId: TUniqueId takes (version, id).
-TUniqueId RawUid(uint16_t raw) { return TUniqueId(raw >> 10, raw & 0x3ff); }
+// Raw 16-bit unique id (version << kUniqueIdIndexBits | id) to TUniqueId: TUniqueId takes (version, id).
+TUniqueId RawUid(uint16_t raw) { return TUniqueId(raw >> kUniqueIdIndexBits, raw & kUniqueIdIndexMask); }
 
 const CScriptEffect* Effect(const CStateManager& mgr, uint16_t uid) {
   return TCastToConstPtr<CScriptEffect>(mgr.GetObjectById(RawUid(uid)));

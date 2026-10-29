@@ -1268,13 +1268,13 @@ void CElitePirate::AttractProjectiles(CStateManager& mgr) {
       const CAABox projBox((CVector3f(min)), CVector3f(max));
       const CMaterialFilter projFilter =
           CMaterialFilter::MakeInclude(CMaterialList(kMT_Projectile));
-      rstl::reserved_vector< TUniqueId, 1024 > projNearList;
+      rstl::reserved_vector< TUniqueId, kMaxObjects > projNearList;
       mgr.BuildNearList(projNearList, projBox, projFilter, nullptr);
       if (!projNearList.empty()) {
         const CAABox charBox((CVector3f(min)), CVector3f(max));
         const CMaterialFilter charFilter =
             CMaterialFilter::MakeInclude(CMaterialList(kMT_Character));
-        rstl::reserved_vector< TUniqueId, 1024 > charNearList;
+        rstl::reserved_vector< TUniqueId, kMaxObjects > charNearList;
         mgr.BuildNearList(charNearList, charBox, charFilter, nullptr);
         for (AUTO(it, projNearList.begin()); it != projNearList.end(); ++it) {
           if (CGameProjectile* const projectile =
@@ -1353,7 +1353,7 @@ void CElitePirate::UpdateBlockPose(float dt, CStateManager& mgr) {
 }
 
 bool CElitePirate::IsClosestEnergyAttractor(
-    CStateManager& mgr, const rstl::reserved_vector< TUniqueId, 1024 >& nearList,
+    CStateManager& mgr, const rstl::reserved_vector< TUniqueId, kMaxObjects >& nearList,
     const CVector3f& pos) const {
   const CVector3f delta = pos - GetTranslation();
   const float dist = delta.MagSquared();

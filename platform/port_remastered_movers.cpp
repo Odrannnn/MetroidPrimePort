@@ -107,7 +107,7 @@ static PortRemasteredGroundRider::CarryTerm PortRiderCarry(CStateManager& mgr, C
   if (rider.Active()) {
     const ushort raw = PortRemasteredGroundRider::RawFromOwner(rider.owner);
     if (const CScriptPlatform* platform = TCastToConstPtr< CScriptPlatform >(
-            mgr.GetObjectById(TUniqueId(raw >> 10, raw & 0x3ff)))) {
+            mgr.GetObjectById(TUniqueId(raw >> kUniqueIdIndexBits, raw & kUniqueIdIndexMask)))) {
       return PortRemasteredGroundRider::RiderCarryTerm(
           PortPose(platform->PortPreThinkTransform()), PortPose(platform->GetTransform()),
           PortPose(platform->PortPreThinkEndTransform()), platform->PortPoseTick(), simTick,
@@ -2729,7 +2729,7 @@ void CGameCollision::MoveGroundedRemastered(CStateManager& mgr, CPlayer& player,
       }
     }
     const ushort raw = PortRemasteredGroundRider::RawFromOwner(riderOwner);
-    CEntity* const platform = mgr.ObjectById(TUniqueId(raw >> 10, raw & 0x3ff));
+    CEntity* const platform = mgr.ObjectById(TUniqueId(raw >> kUniqueIdIndexBits, raw & kUniqueIdIndexMask));
     if (floor && platform != NULL) {
       mgr.DeliverScriptMsg(platform, actor.GetUniqueId(), kSM_AddPlatformRider);
       mgr.DeliverScriptMsg(&actor, platform->GetUniqueId(), kSM_AddPlatformRider);

@@ -5,8 +5,6 @@
 
 #include "MetroidPrime/TGameTypes.hpp"
 
-#define kMaxObjects 1024
-
 enum EGameObjectList {
   kOL_Invalid = -1,
   kOL_All,
@@ -54,7 +52,7 @@ public:
   }
 
 private:
-  SObjectListEntry mObjects[1024];
+  SObjectListEntry mObjects[kMaxObjects];
   EGameObjectList mListType;
   short mFirstId;
   short mCount;

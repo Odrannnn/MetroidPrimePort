@@ -814,13 +814,13 @@ void CParasite::UpdatePFDestination(CStateManager& mgr) {
 
 void CParasite::DoFlockingBehavior(CStateManager& mgr) {
   CVector3f upVec = GetTransform().GetUp();
-  rstl::reserved_vector< TUniqueId, 1024 > parasiteList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > parasiteList;
   float radius = x6e4_parasiteSearchRadius;
   const CVector3f position = GetTranslation();
   CAABox aabb(position - CVector3f(radius, radius, radius),
               position + CVector3f(radius, radius, radius));
   if ((x5d4_thinkCounter % 6) == 0) {
-    rstl::reserved_vector< TUniqueId, 1024 > nearList;
+    rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
     nearList.clear();
     static const CMaterialFilter filter =
         CMaterialFilter::MakeInclude(CMaterialList(kMT_Character));

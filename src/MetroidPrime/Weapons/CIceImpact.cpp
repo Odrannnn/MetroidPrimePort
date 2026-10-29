@@ -418,7 +418,7 @@ bool CIceImpact::GenerateParticlesAgainstWorld(CStateManager& mgr,
 
 bool CIceImpact::GenerateParticlesAgainstActors(CStateManager& mgr, const CAABox& bounds,
                                                 const CSphere& a, const CSphere& b) {
-  rstl::reserved_vector< TUniqueId, 1024 > nearList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
   mgr.BuildNearList(
       nearList, bounds,
       CMaterialFilter::MakeExclude(CMaterialList(kMT_Character, kMT_Player, kMT_Projectile,

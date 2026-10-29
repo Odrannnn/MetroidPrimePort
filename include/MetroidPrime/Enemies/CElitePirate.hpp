@@ -212,7 +212,7 @@ protected:
   void UpdateGrenadeLauncher(CStateManager& mgr, TUniqueId& uid, const rstl::string& locator) const;
   void ReDirectDamage(CStateManager& mgr, TUniqueId uid);
   bool IsClosestEnergyAttractor(CStateManager& mgr,
-                                const rstl::reserved_vector< TUniqueId, 1024 >& nearList,
+                                const rstl::reserved_vector< TUniqueId, kMaxObjects >& nearList,
                                 const CVector3f& pos) const;
   void StartAbsorbEnergyEffects(CStateManager& mgr, const CTransform4f& xf);
   void UpdateBlockPose(float dt, CStateManager& mgr);

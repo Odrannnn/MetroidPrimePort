@@ -215,7 +215,7 @@ CScriptDoor::EDoorOpenCondition CScriptDoor::GetDoorOpenCondition(CStateManager&
   if (!area->IsLoaded()) {
 #ifdef TARGET_PC
     // Issue #88: a room stays loaded behind a door that closed because another
-    // door opened. Streaming a third room on top can fill the 1024-entry object
+    // door opened. Streaming a third room on top can fill the fixed-size object
     // list (PCA + Phazon Processing Center + Elite Quarters in backwards Lower
     // Mines), and AllocateUniqueId then hangs in the error handler. Release
     // those rooms first, as the doorway trigger's SetToZero would; TravelToArea

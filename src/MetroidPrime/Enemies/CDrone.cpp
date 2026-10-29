@@ -497,7 +497,7 @@ void CDrone::FireProjectile(CStateManager& mgr, const CTransform4f& xf) {
 void CDrone::LaunchProjectile(const CTransform4f& xf, CStateManager& mgr) {
   static const CMaterialFilter filter = CMaterialFilter::MakeIncludeExclude(
       CMaterialList(kMT_Solid), CMaterialList(kMT_ProjectilePassthrough));
-  rstl::reserved_vector< TUniqueId, 1024 > nearList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
   TUniqueId hitId = kInvalidUniqueId;
   mgr.BuildNearList(nearList, xf.GetTranslation(), xf.GetForward(), 100000.f, filter, this);
   const CRayCastResult result = mgr.RayWorldIntersection(
@@ -651,7 +651,7 @@ void CDrone::Think(float dt, CStateManager& mgr) {
     x66c_ -= dt;
   }
   if (IsAlive() && x835_25_) {
-    rstl::reserved_vector< TUniqueId, 1024 > nearList;
+    rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
     CAABox bounds = GetBoundingBox();
     bounds.AccumulateBounds(GetTranslation() + 20.f * CVector3f::Down());
     mgr.BuildNearList(nearList, GetBoundingBox(),
@@ -696,7 +696,7 @@ void CDrone::Patrol(CStateManager& mgr, EStateMsg msg, float dt) {
     x834_25_ = true;
     break;
   case kStateMsg_Update: {
-    rstl::reserved_vector< TUniqueId, 1024 > nearList;
+    rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
     BuildNearList(kMT_Character, kMT_Player, 5.f, nearList, mgr);
     if (!nearList.empty()) {
       const CActor* actor = static_cast< const CActor* >(mgr.GetObjectById(nearList[0]));
@@ -767,7 +767,7 @@ void CDrone::UpdateScanner(CStateManager& mgr, float dt) {
       CMaterialList(kMT_Solid), CMaterialList(kMT_ProjectilePassthrough));
   const CTransform4f beacon(GetLctrTransform(rstl::string_l(sBeaconLocator)));
   TUniqueId hitId = kInvalidUniqueId;
-  rstl::reserved_vector< TUniqueId, 1024 > nearList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
   nearList.push_back(mgr.GetPlayer()->GetUniqueId());
   const CRayCastResult result = mgr.RayWorldIntersection(
       hitId, beacon.GetTranslation() + 0.2f * direction, direction, 10000.f, filter, nearList);
@@ -793,7 +793,7 @@ void CDrone::UpdateLaser(CStateManager& mgr, float dt) {
       CAABox bounds = CAABox::MakeMaxInvertedBox();
       bounds.AccumulateBounds(GetTranslation() + 1000.f * direction);
       bounds.AccumulateBounds(GetTranslation());
-      rstl::reserved_vector< TUniqueId, 1024 > nearList;
+      rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
       mgr.BuildNearList(nearList, bounds, filter, nullptr);
       const CRayCastResult result = mgr.RayWorldIntersection(
           hitId, beacon.GetTranslation() + 2.f * direction, direction, 10000.f, filter, nearList);
@@ -833,7 +833,7 @@ void CDrone::UpdateLaser(CStateManager& mgr, float dt) {
 
 static CRayCastResult FindBestCollision(const CStateManager& mgr, TUniqueId& hitId,
                                         const CVector3f& pos, const CVector3f& dir,
-                                        const rstl::reserved_vector< TUniqueId, 1024 >& nearList,
+                                        const rstl::reserved_vector< TUniqueId, kMaxObjects >& nearList,
                                         const CRayCastResult& initial) {
   CRayCastResult best = initial;
   float length = best.GetTime();
@@ -879,7 +879,7 @@ void CDrone::UpdateWaterRipples(CStateManager& mgr) {
   const CVector3f direction = -GetTransform().GetUp();
   CAABox bounds(GetBoundingBox());
   bounds.AccumulateBounds(GetBoundingBox().GetMinPoint() + -6.f * GetTransform().GetUp());
-  rstl::reserved_vector< TUniqueId, 1024 > nearList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
   mgr.BuildNearList(nearList, bounds, nearFilter, nullptr);
   if (nearList.size() > 0) {
     TUniqueId hitId = kInvalidUniqueId;
@@ -929,7 +929,7 @@ bool CDrone::ShouldAttack(CStateManager& mgr, float) {
 }
 
 bool CDrone::HearShot(CStateManager& mgr, float) {
-  rstl::reserved_vector< TUniqueId, 1024 > nearList;
+  rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
   BuildNearList(kMT_Projectile, kMT_Player, 10.f, nearList, mgr);
   for (AUTO(it, nearList.begin()); it != nearList.end(); ++it) {
     if (const CWeapon* weapon = TCastToConstPtr< CWeapon >(mgr.GetObjectById(*it))) {
@@ -942,7 +942,7 @@ bool CDrone::HearShot(CStateManager& mgr, float) {
 }
 
 void CDrone::BuildNearList(EMaterialTypes includeMat, EMaterialTypes excludeMat, float radius,
-                           rstl::reserved_vector< TUniqueId, 1024 >& list, CStateManager& mgr) {
+                           rstl::reserved_vector< TUniqueId, kMaxObjects >& list, CStateManager& mgr) {
   const CVector3f pos = GetTranslation();
   const CVector3f extent(radius, radius, radius);
   const CAABox bounds(pos - extent, pos + extent);
@@ -1746,7 +1746,7 @@ void CDrone::Burn(float, float) {}
 
 void CDrone::AvoidOtherAIs(CStateManager& mgr) {
   if (BodyCtrl()->GetCurrentStateId() != pas::kAS_Step) {
-    rstl::reserved_vector< TUniqueId, 1024 > nearList;
+    rstl::reserved_vector< TUniqueId, kMaxObjects > nearList;
     BuildNearList(kMT_Character, kMT_Player, x61c_, nearList, mgr);
     if (nearList.size() > 0) {
       CVector3f nearestPos = CVector3f::Zero();

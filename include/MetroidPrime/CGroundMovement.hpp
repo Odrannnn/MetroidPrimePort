@@ -12,7 +12,7 @@ class CAreaCollisionCache;
 class CMaterialFilter;
 class CCollisionInfoList;
 
-typedef rstl::reserved_vector< TUniqueId, 1024 > TEntityList;
+typedef rstl::reserved_vector< TUniqueId, kMaxObjects > TEntityList;
 
 class CGroundMovement {
 public:

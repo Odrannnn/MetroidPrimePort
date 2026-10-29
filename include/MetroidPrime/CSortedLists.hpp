@@ -62,12 +62,12 @@ public:
                                ESortedLists slA, ESortedLists slB, ESortedLists slC,
                                ESortedLists slD, const CAABox& aabb) const;
   short ConstructIntersectionArray(const CAABox& aabb) const;
-  void BuildNearList(rstl::reserved_vector< TUniqueId, 1024 >& nearListOut, const CAABox& box,
+  void BuildNearList(rstl::reserved_vector< TUniqueId, kMaxObjects >& nearListOut, const CAABox& box,
                      const CMaterialFilter& filter, const CActor* actor) const;
 
-  void BuildNearList(rstl::reserved_vector< TUniqueId, 1024 >& nearListOut, const CActor& actor,
+  void BuildNearList(rstl::reserved_vector< TUniqueId, kMaxObjects >& nearListOut, const CActor& actor,
                      const CAABox& box) const;
-  void BuildNearList(rstl::reserved_vector< TUniqueId, 1024 >& nearListOut, const CVector3f& pos,
+  void BuildNearList(rstl::reserved_vector< TUniqueId, kMaxObjects >& nearListOut, const CVector3f& pos,
                      const CVector3f& dir, f32 mag, const CMaterialFilter& filter,
                      const CActor* actor) const;
 

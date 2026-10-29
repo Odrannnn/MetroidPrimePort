@@ -802,13 +802,13 @@ TUniqueId CStateManager::AllocateUniqueId() {
   ushort ourIndex;
   do {
     ourIndex = x0_nextFreeIndex;
-    x0_nextFreeIndex = (ourIndex + 1) % 1024;
+    x0_nextFreeIndex = (ourIndex + 1) % kMaxObjects;
     if (x0_nextFreeIndex == lastIndex) {
       rs_debugger_printf("Object list full!");
     }
   } while (ObjectListById(kOL_All).GetObjectByIndex(ourIndex) != nullptr);
 
-  x4_objectIndexArray[ourIndex] = (x4_objectIndexArray[ourIndex] + 1) & 0x3f;
+  x4_objectIndexArray[ourIndex] = (x4_objectIndexArray[ourIndex] + 1) & kUniqueIdVersionMask;
   if (TUniqueId(x4_objectIndexArray[ourIndex], ourIndex) == kInvalidUniqueId) {
     x4_objectIndexArray[ourIndex] = 0;
   }
@@ -3610,7 +3610,7 @@ void CStateManager::DrawWorld() const {
   }
 #endif
   bool morphingPlayerVisible = false;
-  rstl::reserved_vector< const CActor*, 1024 > thermalActors;
+  rstl::reserved_vector< const CActor*, kMaxObjects > thermalActors;
 #ifdef TARGET_PC
   // Remastered's sun-shadow caster query has no camera frustum or PVS test; a model casts while
   // its actor is active and its area is rendered. So an actor of a rendered area that the PVS or

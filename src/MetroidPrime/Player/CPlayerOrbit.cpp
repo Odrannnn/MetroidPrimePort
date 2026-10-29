@@ -760,7 +760,7 @@ bool CPlayer::WithinOrbitScreenBox(const CVector3f& screenCoords, EPlayerZoneInf
   return false;
 }
 
-void CPlayer::FindOrbitableObjects(const rstl::reserved_vector< TUniqueId, 1024 >& nearObjects,
+void CPlayer::FindOrbitableObjects(const rstl::reserved_vector< TUniqueId, kMaxObjects >& nearObjects,
                                    rstl::vector< TUniqueId >& listOut, EPlayerZoneInfo zone,
                                    EPlayerZoneType type, CStateManager& mgr,
                                    bool onScreenTest) const {
@@ -982,7 +982,7 @@ TUniqueId CPlayer::FindOrbitTargetId(CStateManager& mgr) {
   return FindBestOrbitableObject(x354_onScreenOrbitObjects, x330_orbitZoneMode, mgr);
 }
 
-TUniqueId CPlayer::CheckEnemiesAgainstOrbitZone(const rstl::reserved_vector< TUniqueId, 1024 >& ids,
+TUniqueId CPlayer::CheckEnemiesAgainstOrbitZone(const rstl::reserved_vector< TUniqueId, kMaxObjects >& ids,
                                                 EPlayerZoneInfo zone, EPlayerZoneType type,
                                                 CStateManager& mgr) const {
   const CVector3f eyePosition = GetEyePosition();
