@@ -15,8 +15,8 @@ namespace PortThirdPerson {
 
 struct Params {
   float distance = 3.5f; // metres behind the eye
-  float shoulder = 0.6f; // metres to the right
-  float height = 0.1f;   // metres above the first-person eye (level with the 1.8x body's shoulder)
+  float shoulder = 0.9f; // metres to the right (the centre ray, the crosshair, clears her right pad)
+  float height = 0.25f;  // metres above the first-person eye (above the 1.8x body's shoulder)
 };
 constexpr float kDistanceMin = 0.5f, kDistanceMax = 10.f;
 constexpr float kShoulderMin = -2.f, kShoulderMax = 2.f;

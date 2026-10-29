@@ -8,6 +8,7 @@
 #include "port_env.h"
 #include "port_freecam.h"
 #include "port_third_person.h"
+#include "port_third_person_body.h"
 #include "port_photo.h"
 #include "port_pipeline_context.h"
 #include "port_discord.h"
@@ -3957,12 +3958,22 @@ void CStateManager::DrawWorld() const {
     }
 #ifdef TARGET_PC
     // The third-person body has no cannon pass, but its grapple beam leaves its hand
-    // (CGrappleArm::UpdateGrappleBeam), drawn as CPlayer::RenderGun draws it.
+    // (CGrappleArm::UpdateGrappleBeam), drawn as CPlayer::RenderGun draws it; its charge and
+    // muzzle effects form at the body's cannon.
     else if (PortThirdPerson::Active() && !x870_cameraManager->IsInCinematicCamera()) {
-      const CGrappleArm& arm = x84c_player->GetPlayerGun()->GetGrappleArm();
-      if (arm.GetActive() && arm.GetAnimState() != CGrappleArm::kAS_Done) {
+      const CPlayerGun& gun = *x84c_player->GetPlayerGun();
+      const CGrappleArm& arm = gun.GetGrappleArm();
+      CTransform4f muzzleXf = CTransform4f::Identity();
+      const bool muzzle = PortThirdPersonBody::TakeMuzzle(muzzleXf);
+      const bool beam = arm.GetActive() && arm.GetAnimState() != CGrappleArm::kAS_Done;
+      if (muzzle || beam) {
         CPortPipelineContextScope globalPipelines(AURORA_PIPELINE_CONTEXT_GLOBAL);
-        arm.RenderGrappleBeam(*this, x870_cameraManager->GetGlobalCameraTranslation(*this));
+        if (beam) {
+          arm.RenderGrappleBeam(*this, x870_cameraManager->GetGlobalCameraTranslation(*this));
+        }
+        if (muzzle) {
+          gun.PortRenderMuzzleFxAt(*this, muzzleXf);
+        }
       }
     }
 #endif

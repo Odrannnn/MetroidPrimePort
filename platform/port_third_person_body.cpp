@@ -273,6 +273,9 @@ struct State {
   int beam = -1;
   std::unique_ptr<TToken<CModel>> beamModel;
   std::unique_ptr<CModelData> beamData;
+  // The muzzle as Render last posed it, for the charge effect (TakeMuzzle).
+  CTransform4f muzzle = CTransform4f::Identity();
+  bool muzzleDrawn = false;
 };
 State s;
 // The procedural backpedal: the walk-back clip covers 0.88 u/s, so at Samus's ~1.9 u/s backward
@@ -1591,6 +1594,31 @@ void PreRender(const CStateManager& mgr) {
   }
 }
 
+// The cannon's muzzle for the body at `xf`, facing down the barrel: from the wrist (GUN_LCTR)
+// toward Charge_LCTR, at the far end of the drawn cannon (Charge_LCTR sits mid-barrel on it), or
+// at Charge_LCTR with no cannon drawn.
+CTransform4f Muzzle(const CTransform4f& xf) {
+  const CTransform4f gun = xf * s.body->GetScaledLocatorTransform("GUN_LCTR");
+  const CVector3f charge = (xf * s.body->GetScaledLocatorTransform("Charge_LCTR")).GetTranslation();
+  CVector3f dir = charge - gun.GetTranslation();
+  if (dir.Magnitude() < 0.01f) {
+    return CTransform4f::Translate(charge);
+  }
+  dir = dir.AsNormalized();
+  CVector3f tip = charge;
+  if (s.beamData && !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(s.loadedChar))) {
+    // The farthest the cannon's box reaches along the barrel, in the cannon's own frame.
+    const CVector3f d = gun.TransposeRotate(dir);
+    const CAABox box = s.beamData->GetBounds();
+    float reach = 0.f;
+    for (int i = 0; i < 3; ++i) {
+      reach += std::max(box.GetMinPoint()[i] * d[i], box.GetMaxPoint()[i] * d[i]);
+    }
+    tip = gun.GetTranslation() + dir * reach;
+  }
+  return CTransform4f::LookAt(tip, tip + dir);
+}
+
 bool Render(const CStateManager& mgr, const CTransform4f& feet, const CActorLights* lights) {
   if (!Ready()) {
     return false;
@@ -1624,6 +1652,8 @@ bool Render(const CStateManager& mgr, const CTransform4f& feet, const CActorLigh
     s.beamData->Touch(mgr, 0);
     s.beamData->Render(mgr, gun, lights, flags);
   }
+  s.muzzle = Muzzle(xf);
+  s.muzzleDrawn = true;
   if (shell) {
     // The lights are the player's, alive until the frame's Flush; the body is this file's.
     const CStateManager* const pmgr = &mgr;
@@ -1661,10 +1691,18 @@ bool CannonPosition(const CPlayer& player, CVector3f& out) {
   CVector3f origin = bodyXf.GetTranslation();
   origin.SetZ(player.GetBoundingBox().GetMinPoint().GetZ());
   bodyXf.SetTranslation(origin);
-  // GUN_LCTR is where the cannon is held, at the wrist; Charge_LCTR, where the charge forms, is
-  // its muzzle (0.56 m past the forearm at this scale, where the Dread cannon's tip is too).
-  out = (bodyXf * s.body->GetScaledLocatorTransform("Charge_LCTR")).GetTranslation();
+  // Where the charge forms (Render, TakeMuzzle).
+  out = Muzzle(bodyXf).GetTranslation();
   return true;
+}
+
+bool TakeMuzzle(CTransform4f& out) {
+  const bool drawn = s.muzzleDrawn && Ready();
+  s.muzzleDrawn = false;
+  if (drawn) {
+    out = s.muzzle;
+  }
+  return drawn;
 }
 
 bool GrappleHand(const CPlayer& player, CVector3f& out) {

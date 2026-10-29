@@ -2385,6 +2385,24 @@ void CPlayerGun::PortRenderFlashes(int first, int end) const {
   }
 }
 
+void CPlayerGun::PortRenderMuzzleFxAt(const CStateManager& mgr, const CTransform4f& muzzleXf) const {
+  // The effects are posed at x418_beamLocalXf in the gun's space (Update): seen from a camera
+  // moved into the space that puts that locator on `muzzleXf`, they form at the body's cannon.
+  const CTransform4f gunXf = muzzleXf * x418_beamLocalXf.GetInverse();
+  const CTransform4f oldViewMtx(CGraphics::GetViewMatrix());
+  CGraphics::SetViewPointMatrix(gunXf.GetInverse() * oldViewMtx);
+  gpRender->SetModelMatrix(CTransform4f::Identity());
+  if (x32c_chargePhase >= kCP_FxGrown && x32c_chargePhase < kCP_ComboXfer) {
+    x800_auxMuzzleGenerators[x320_currentAuxBeam]->Render();
+  }
+  if (x832_25_chargeEffectVisible &&
+      (x38c_muzzleEffectVisTimer > 0.f || x32c_chargePhase > kCP_AnimAndSfx)) {
+    x72c_currentBeam->DrawMuzzleFx(mgr);
+  }
+  PortRenderFlashes(0, kPortFirstChargeFlash);
+  CGraphics::SetViewPointMatrix(oldViewMtx);
+}
+
 // CPlayerMP1::ShouldGenerateUnderWaterBubbles 0xcf14bc: in normal water with the ball's top
 // (morphed) or the camera at least 0.9 below the surface.
 static bool PortShouldGenerateUnderWaterBubbles(const CPlayer& player, const CStateManager& mgr) {

@@ -13,8 +13,8 @@ static bool Near(const Vec3& a, const Vec3& b) {
 int main() {
   const Vec3 eye{10.f, 20.f, 30.f};
   const Vec3 fwd{0.f, 1.f, 0.f}, right{1.f, 0.f, 0.f}, up{0.f, 0.f, 1.f};
-  const Params p; // 3.5, 0.6, 0.1
-  CHECK(Near(ComputeEye(eye, fwd, right, up, p), Vec3{10.6f, 16.5f, 30.1f}));
+  const Params p; // 3.5, 0.9, 0.25
+  CHECK(Near(ComputeEye(eye, fwd, right, up, p), Vec3{10.9f, 16.5f, 30.25f}));
   Params q;
   q.distance = 1.f;
   q.shoulder = -1.f;

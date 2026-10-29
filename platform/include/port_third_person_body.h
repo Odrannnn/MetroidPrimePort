@@ -313,9 +313,13 @@ bool Ready();
 void PreRender(const CStateManager& mgr);
 // Draws the body (and its cannon) at the player's transform; false if it is not ready.
 bool Render(const CStateManager& mgr, const CTransform4f& xf, const CActorLights* lights);
-// The cannon's muzzle in the world (the body's Charge_LCTR) as the body is posed now; false when the
+// The cannon's muzzle in the world (the drawn cannon's tip down the barrel, else the body's
+// Charge_LCTR) as the body is posed now; false when the
 // body is not ready, then the first-person muzzle stands in.
 bool CannonPosition(const CPlayer& player, CVector3f& out);
+// The muzzle in the world, facing down the barrel, as this frame's Render drew it; false (once
+// taken, or when the body was not drawn) leaves out the cannon's charge effect.
+bool TakeMuzzle(CTransform4f& out);
 // The grapple hand in the world (the body's L_middle_1) as the body is posed now; false when the
 // body is not ready or the third-person camera is off, then the first-person arm's nozzle stands in.
 bool GrappleHand(const CPlayer& player, CVector3f& out);

@@ -141,6 +141,9 @@ public:
   void PortReleaseStackedBeams();
   void PortShotFromDrawnMuzzle(const CStateManager&, CTransform4f& xf, bool aim = true) const;
   void PortShotFromThirdPersonCannon(const CStateManager&, CTransform4f& xf, bool aim) const;
+  // Port: the charge and muzzle effects Render draws at the first-person gun's muzzle, drawn at
+  // `muzzleXf` (the third-person body's cannon) instead.
+  void PortRenderMuzzleFxAt(const CStateManager&, const CTransform4f& muzzleXf) const;
   // Port: where a shot from `from` along `dir` would arrive (the aim target at its depth, else
   // the first thing on the line, else far ahead), for re-aiming a moved shot at it.
   CVector3f PortShotAimPoint(const CStateManager&, const CVector3f& from, const CVector3f& dir) const;
