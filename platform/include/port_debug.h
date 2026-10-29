@@ -500,6 +500,11 @@ void MarkSettingsDirty();
 bool TwinStick();
 // The stored pad Twin Stick setting, whatever the touch layout: what the pause option edits.
 bool PadTwinStick();
+// The stored pad settings, whatever the touch layout (ShiftBinding(2), SwapScanXray and
+// PadAltButton read as unset while touch is in use): what a saved controller preset keeps.
+int PadShiftBinding();
+bool PadSwapScanXray();
+int StoredPadAltButton(int bit);
 // Android: touch was the last input and the F1 menu is closed. False on desktop.
 bool TouchActive();
 // True on Android when the modern (non-classic) touch layout is the active device: drag aims like a mouse.

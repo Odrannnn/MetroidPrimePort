@@ -36,6 +36,7 @@
 #include "port_room_liquid.h"
 #include "port_console.h"
 #include "port_controls.h"
+#include "port_input_user_presets.h"
 #include "port_mods.h"
 #include "port_savestate.h"
 #include "port_statedump.h"
@@ -2317,18 +2318,45 @@ void CmdOriginal() {
   Finish();
 }
 
+// The words from args[first] on, as one name.
+std::string PresetNameArg(size_t first) {
+  std::string name;
+  for (size_t i = first; i < sCmd.args.size(); ++i) name += (name.empty() ? "" : " ") + sCmd.args[i];
+  return name;
+}
+
+// A saved preset (Remap > Presets...) of that name, matched case-insensitively.
+bool ApplySavedPreset(PortInput::Family family) {
+  const std::string name = PresetNameArg(1);
+  return !name.empty() && PortInputUserPresets::Apply(family, name);
+}
+
+void SavePreset(PortInput::Family family) {
+  const std::string name = PresetNameArg(2);
+  if (name.empty()) return Finish("usage: keypreset|padpreset save <name>");
+  if (!PortInputUserPresets::Save(family, name)) {
+    return Finish(family == PortInput::Family::Pad && PADGetIndexForPort(PAD_CHAN0) < 0
+                      ? "no controller in port 1 to save"
+                      : "could not save the preset");
+  }
+  Out("saved preset %s", PortInputUserPresets::CleanName(name).c_str());
+  Finish();
+}
+
 void CmdKeyPreset() {
   const std::string preset = sCmd.args.size() > 1 ? Lower(sCmd.args[1]) : "";
-  if (!PortControls::ApplyKeyPresetNamed(preset)) {
-    return Finish("usage: keypreset classic|mouse");
+  if (preset == "save") return SavePreset(PortInput::Family::Keyboard);
+  if (!PortControls::ApplyKeyPresetNamed(preset) && !ApplySavedPreset(PortInput::Family::Keyboard)) {
+    return Finish("usage: keypreset classic|mouse|<saved preset name>|save <name>");
   }
   Finish();
 }
 
 void CmdPadPreset() {
   const std::string preset = sCmd.args.size() > 1 ? Lower(sCmd.args[1]) : "";
-  if (!PortControls::ApplyPadPresetNamed(preset)) {
-    return Finish("usage: padpreset gamecube|remastered|modern|southpaw");
+  if (preset == "save") return SavePreset(PortInput::Family::Pad);
+  if (!PortControls::ApplyPadPresetNamed(preset) && !ApplySavedPreset(PortInput::Family::Pad)) {
+    return Finish("usage: padpreset gamecube|remastered|modern|southpaw|<saved preset name>|save <name>");
   }
   Finish();
 }
@@ -4230,9 +4258,9 @@ const CommandSpec kCommands[] = {
     {"original", CmdOriginal, nullptr,
      "original [on|off]   Original experience (retail settings over the saved ones)"},
     {"keypreset", CmdKeyPreset, nullptr,
-     "keypreset classic|mouse   apply a keyboard preset (Controls > Remap), as its button"},
+     "keypreset classic|mouse|<saved name>|save <name>   apply or save a keyboard preset (Controls > Remap)"},
     {"padpreset", CmdPadPreset, nullptr,
-     "padpreset gamecube|remastered|modern|southpaw   apply a controller preset to pad 1"},
+     "padpreset gamecube|remastered|modern|southpaw|<saved name>|save <name>   apply or save a controller preset"},
     {"fov", CmdFov, nullptr, "fov <45..120>              first-person vertical FOV, as the Options row does"},
     {"gunoffset", CmdGunOffset, nullptr,
      "gunoffset <r> <f> <u>      arm cannon offset in metres (+-1), as the Video row does"},

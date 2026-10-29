@@ -180,6 +180,8 @@ void RemoveUserBinding(UserProfile& user, size_t index);
 void Revert(UserProfile& user, Action action, Family family);
 // Every override and unbind in one family (a reset to the built-in controls).
 void ClearFamily(UserProfile& user, Family family);
+// Whether ClearFamily removes this binding (a used row whose trigger is in the family).
+bool IsFamilyRow(const Binding& b, Family family);
 
 // The same physical input: mouse buttons match across their code runs (aim, key
 // slot, menu, held), and the press threshold is ignored.

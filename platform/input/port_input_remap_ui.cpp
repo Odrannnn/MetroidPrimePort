@@ -7,6 +7,7 @@
 #include "port_debug.h"
 #include "port_input_bindings.h"
 #include "port_input_devices.h"
+#include "port_input_user_presets.h"
 #include "port_pointer.h"
 #include "port_savestate.h"
 
@@ -1769,6 +1770,31 @@ void Reload() {
   sLoaded = true;
 }
 
+// The player's saved presets (port_input_user_presets.h), listed once when the
+// popup opens and after each save or delete; the files aren't read per frame.
+std::vector<std::string> sSaved[2];
+bool sSavedStale = true;
+char sSaveName[PortInputUserPresets::kMaxName + 1] = {};
+std::string sPendingDelete;
+
+std::vector<std::string>& Saved(PortInput::Family family) {
+  const int i = family == PortInput::Family::Pad ? 1 : 0;
+  if (sSavedStale) {
+    sSaved[0] = PortInputUserPresets::List(PortInput::Family::Keyboard);
+    sSaved[1] = PortInputUserPresets::List(PortInput::Family::Pad);
+    sSavedStale = false;
+  }
+  return sSaved[i];
+}
+
+// The page's copy goes stale when a preset writes the bindings, as for a built-in one.
+void ApplySaved(PortInput::Family family, const std::string& name) {
+  EndCapture();
+  sEditing = kEditNone;
+  PortInputUserPresets::Apply(family, name);
+  Reload();
+}
+
 // One row of preset buttons. A click replaces the family's own Default-profile
 // bindings with the preset; a kind or model's own bindings stay on top.
 void PresetRow(const SView& v, const SPreset* presets, int count) {
@@ -1791,6 +1817,63 @@ void PresetRow(const SView& v, const SPreset* presets, int count) {
       ImGui::SetTooltip("%s", presets[i].tooltip);
     }
   }
+  // Your own: one button to apply, a small x to delete (after a confirm).
+  const std::vector<std::string> saved = Saved(v.family);
+  for (size_t i = 0; i < saved.size(); ++i) {
+    ImGui::PushID(int(i));
+    if (ImGui::Button(saved[i].c_str())) {
+      ApplySaved(v.family, saved[i]);
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SetItemTooltip("Your preset. Replaces your own bindings for this device.");
+    ImGui::SameLine(0.f, 2.f);
+    if (ImGui::SmallButton("x")) {
+      sPendingDelete = saved[i];
+      ImGui::OpenPopup("deleteSaved");
+    }
+    ImGui::SetItemTooltip("Delete this saved preset.");
+    if (ImGui::BeginPopup("deleteSaved")) {
+      ImGui::Text("Delete the preset %s?", sPendingDelete.c_str());
+      if (ImGui::Button("Delete")) {
+        PortInputUserPresets::Delete(v.family, sPendingDelete);
+        sSavedStale = true;
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+    }
+    ImGui::PopID();
+    if (ImGui::GetContentRegionAvail().x > ImGui::GetFontSize() * 10.f && i + 1 < saved.size()) ImGui::SameLine();
+  }
+  if (ImGui::Button("Save current as...")) {
+    sSaveName[0] = '\0';
+    ImGui::OpenPopup("saveCurrent");
+  }
+  ImGui::SetItemTooltip("Keep this device's bindings as a preset of your own.");
+  if (ImGui::BeginPopup("saveCurrent")) {
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14.f);
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    ImGui::InputText("Name", sSaveName, sizeof(sSaveName));
+    const std::string name = PortInputUserPresets::CleanName(sSaveName);
+    bool exists = false;
+    for (const std::string& n : saved) {
+      exists = exists || PortInputUserPresets::Slug(n) == PortInputUserPresets::Slug(name);
+    }
+    // A pad's mappings live on the controller in port 1: without one there is nothing to keep.
+    const bool noPad = pads && PADGetIndexForPort(PAD_CHAN0) < 0;
+    ImGui::BeginDisabled(name.empty() || noPad);
+    if (ImGui::Button(exists ? "Replace" : "Save")) {
+      PortInputUserPresets::Save(v.family, name);
+      sSavedStale = true;
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndDisabled();
+    if (noPad) ImGui::SetItemTooltip("Connect a controller to save its bindings.");
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+  }
   if (pads && !v.match.empty()) {
     ImGui::TextDisabled("Applies to all controllers; %s keeps its own bindings on top.",
                         (v.name.empty() ? v.match : v.name).c_str());
@@ -1801,11 +1884,14 @@ void PresetRow(const SView& v, const SPreset* presets, int count) {
 // The keyboard and controller presets, behind a popup.
 void DrawPresets(const SViews& views) {
   using PortInput::Family;
-  if (ImGui::Button("Presets...")) ImGui::OpenPopup("presets");
+  if (ImGui::Button("Presets...")) {
+    sSavedStale = true;
+    ImGui::OpenPopup("presets");
+  }
   ImGui::SetItemTooltip("Ready-made layouts: Classic or Mouse & keyboard for the keyboard; GameCube,\n"
-                        "Remastered, Modern or Southpaw for controllers.");
+                        "Remastered, Modern or Southpaw for controllers. Save your own too.");
   if (!ImGui::BeginPopup("presets")) return;
-  ImGui::TextDisabled("A preset replaces your own bindings for that device.");
+  ImGui::TextDisabled("A preset replaces your own bindings for that device. Save your own below.");
   PresetRow(views[Family::Keyboard], kKeyPresets, int(std::size(kKeyPresets)));
   PresetRow(views[Family::Pad], kPadPresets, int(std::size(kPadPresets)));
   ImGui::Separator();
