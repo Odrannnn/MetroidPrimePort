@@ -258,6 +258,62 @@ const Signatures& ElementsOf(Type type) {
   }
 }
 
+// The port-only elements only Writer::Element's own cases write (a Remastered element of the same
+// fourcc is never passed through as one), in ElementsOf's letters plus d a byte and w a raw word
+// (an index, slot or mode). RetailReader walks these and ElementsOf's alike; the few whose payload
+// a signature cannot say (a count, a checked slot, a choice of rotation) it reads itself.
+const Signatures& PortElementsOf(Type type) {
+  static const Signatures intElements = {
+      // VARI: a PVRT index. PSYI: a PSYS slot. PLPT: the lifetime offset, then the percent.
+      {F("VARI"), "w"}, {F("PSYI"), "w"}, {F("PLPT"), "wi"},
+  };
+  static const Signatures realElements = {
+      // VARF: a PVRT index. PSYR: a PSYS slot. PSDT: the shutdown countdown's remaining over its
+      // total. PMXV: the index, then the fallback. PSLW: the two reals the system tween blends.
+      {F("VARF"), "w"}, {F("PSYR"), "w"}, {F("PSDT"), ""}, {F("PMXV"), "ir"}, {F("PSLW"), "rr"},
+  };
+  static const Signatures vectorElements = {
+      // VARV: a PVRT index. PCRC: centre, axis, start degrees, count, variance, radius, then the
+      // shuffle byte. RNDV: the magnitude. PCRO: P, the frequency, the octave count, the gain,
+      // then the amplitude A. PNCV: the normalised compensated velocity, no payload.
+      {F("VARV"), "w"}, {F("PCRC"), "vvrirrd"}, {F("RNDV"), "r"}, {F("PCRO"), "vrirv"}, {F("PNCV"), ""},
+  };
+  static const Signatures modVectorElements = {
+      // PCRM: the raw mode, the V vector, then t.
+      {F("PCRM"), "wvr"},
+  };
+  static const Signatures colorElements = {
+      // VARC: a PVRT index.
+      {F("VARC"), "w"},
+  };
+  static const Signatures none;
+  switch (type) {
+  case Type::Int:
+    return intElements;
+  case Type::Real:
+    return realElements;
+  case Type::Vector:
+    return vectorElements;
+  case Type::ModVector:
+    return modVectorElements;
+  case Type::Color:
+    return colorElements;
+  default:
+    return none;
+  }
+}
+
+// The arguments of the element `fourcc` of `type` (ElementsOf, then PortElementsOf), or null.
+const char* ShapeOf(uint32_t fourcc, Type type) {
+  for (const Signatures* elements : {&ElementsOf(type), &PortElementsOf(type)}) {
+    const auto found = elements->find(fourcc);
+    if (found != elements->end()) {
+      return found->second;
+    }
+  }
+  return nullptr;
+}
+
 Type TypeOfLetter(char letter) {
   switch (letter) {
   case 'i':
@@ -273,6 +329,11 @@ Type TypeOfLetter(char letter) {
   default:
     return Type::Bool;
   }
+}
+
+// The type of the element at `i` in the shape (ShapeOf) of the element `fourcc` of `type`.
+Type ArgType(uint32_t fourcc, Type type, size_t i) {
+  return TypeOfLetter(ShapeOf(fourcc, type)[i]);
 }
 
 using port::AppendBE32;
@@ -1258,6 +1319,19 @@ public:
   // written to give Remastered's numbers: reads of the port's state are taken into its space
   // (BSIS, BSSC for EXTS), MPCB(v) is BSIS(v), and the port turns the result back where it is
   // used (a vector property, a mod vector's or emitter's vector argument).
+  // Writes `fourcc` of `type`'s shape (ShapeOf) from position `from` up to its end or a raw byte or
+  // word, the element at each position from args, in order.
+  bool ShapedArgs(uint32_t fourcc, Type type, size_t from, const EffectValue* args, std::vector<uint8_t>& out,
+                  std::string& why) const {
+    const char* shape = ShapeOf(fourcc, type);
+    for (const char* c = shape + from; *c != 0 && *c != 'd' && *c != 'w'; ++c, ++args) {
+      if (!Element(*args, TypeOfLetter(*c), out, why)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool Element(const EffectValue& value, Type type, std::vector<uint8_t>& out, std::string& why) const {
     if (value.kind != EffectValue::Kind::Element) {
       why = "a bare value where retail reads an element";
@@ -1372,7 +1446,7 @@ public:
     // MPXV(i, fallback) is MPT_CREExternalValue 0x29715c: the port-only PMXV, the int then the real.
     if (type == Type::Real && value.fourcc == F("MPXV") && value.args.size() == 2) {
       AppendBE32(out, F("PMXV"));
-      return Element(value.args[0], Type::Int, out, why) && Element(value.args[1], Type::Real, out, why);
+      return ShapedArgs(F("PMXV"), type, 0, value.args.data(), out, why);
     }
     // PSA0..PSA9: the system's own additional real n (GetRealElement 0x260de4:
     // AddRefVar(ctx 0, real, n)), which its SVRn sets. The port-only PSYR and n.
@@ -1426,317 +1500,11 @@ public:
       return NegatedReal(value.args[0], out, why) && Element(value.args[2], Type::Real, out, why) &&
              Element(value.args[1], Type::Real, out, why);
     }
-    // ANCR(REUL(x, y, z, #00), x range, y range, magnitude): the port-only ANCR
-    // (x, y, z, x range, y range, magnitude) runs CVEAngleCone 0x29eebc as is, in
-    // Remastered's space like the tree around it.
-    if (value.fourcc == F("ANCR") && type == Type::Vector && value.args.size() == 4) {
-      AppendBE32(out, F("ANCR"));
-      if (!ConeRotation(value.args[0], out, why)) {
-        return false;
-      }
-      for (size_t i = 1; i < 4; ++i) {
-        if (!Element(value.args[i], Type::Real, out, why)) {
-          return false;
-        }
-      }
-      return true;
+    if (const std::optional<bool> done = DirectionElement(value, type, out, why)) {
+      return *done;
     }
-    // ASPR(origin, REUL, range 1, range 2, radius, speed): the port-only ASPR
-    // (origin, x, y, z, range 1, range 2, radius, speed) runs CVEAngleSphere
-    // 0x2cb100 as is and hands the port its position and velocity.
-    if (value.fourcc == F("ASPR") && type == Type::Emitter && value.args.size() == 6) {
-      AppendBE32(out, F("ASPR"));
-      if (!PortVector(value.args[0], out, why) || !ConeRotation(value.args[1], out, why)) {
-        return false;
-      }
-      for (size_t i = 2; i < 6; ++i) {
-        if (!Element(value.args[i], Type::Real, out, why)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    // ASPV(origin, REUL, A, B, polar count, polar variance, azimuth range, azimuth count, azimuth
-    // variance, radius, speed, shuffle): the port-only PASV (CVEAngleSphereWithVariance::GetValue
-    // 0x2cb6b0), the REUL as three angles like ASPR's. The counts and the shuffler are SPEV's
-    // (Compile2d 0x2a6b90 after Init 0x2a69b8, as CVEAngleSphereWithVariance::Compile 0x2cbc08).
-    if (value.fourcc == F("ASPV") && type == Type::Emitter && value.args.size() == 12) {
-      const EffectValue& flag = value.args[11];
-      if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
-        why = "ASPV with a shuffle flag that is not a byte";
-        return false;
-      }
-      uint32_t counts[2] = {1, 1};
-      bool known[2] = {false, false};
-      bool anyZero = false;
-      for (int i = 0; i < 2; ++i) {
-        known[i] = ConstWord(value.args[i == 0 ? 4 : 7], counts[i]);
-        if (known[i] && counts[i] > 255) {
-          why = "ASPV with a constant count over 255 (Remastered keeps it in a byte)";
-          return false;
-        }
-        anyZero = anyZero || (known[i] && counts[i] == 0);
-      }
-      uint32_t shuffle = 0;
-      bool resolved = false;
-      if (anyZero) {
-        if (!known[0] || !known[1]) {
-          why = "ASPV with a constant 0 count and a count that is not a constant";
-          return false;
-        }
-        if (m_maxp < 0) {
-          why = "ASPV with a constant 0 count and a MAXP that is not a constant";
-          return false;
-        }
-        const PortParticleMath::SectionCounts grid = PortParticleMath::SectionCompile2d(
-            int(counts[0]), int(counts[1]), counts[0] == 0, counts[1] == 0, PortParticleMath::SectionTotal(int32_t(uint32_t(m_maxp))));
-        counts[0] = uint32_t(grid.n1);
-        counts[1] = uint32_t(grid.n2);
-        resolved = true;
-        if (flag.word != 0) {
-          shuffle = uint32_t(std::max<uint64_t>(uint64_t(counts[0]) * counts[1], 1) & 0xff);
-          if (shuffle == 0) {
-            why = "ASPV with a shuffler of a multiple of 256 cells";
-            return false;
-          }
-        }
-      } else if (flag.word != 0) {
-        if (!known[0] || !known[1]) {
-          why = "ASPV with a shuffler and a count that is not a constant";
-          return false;
-        }
-        shuffle = uint32_t(std::max<uint64_t>(uint64_t(counts[0]) * counts[1], 1) & 0xff);
-        if (shuffle == 0) {
-          why = "ASPV with a shuffler of a multiple of 256 cells";
-          return false;
-        }
-      }
-      AppendBE32(out, F("PASV"));
-      if (!PortVector(value.args[0], out, why) || !ConeRotation(value.args[1], out, why)) {
-        return false;
-      }
-      static const Type kTypes[] = {Type::Vector, Type::Vector, Type::Real, Type::Real, Type::Int, Type::Real,
-                                    Type::Real,   Type::Int,    Type::Real, Type::Real, Type::Real};
-      for (size_t i = 2; i < 11; ++i) {
-        if (resolved && (i == 4 || i == 7)) {
-          AppendBE32(out, F("CNST"));
-          AppendBE32(out, counts[i == 4 ? 0 : 1]);
-          continue;
-        }
-        if (!Element(value.args[i], kTypes[i], out, why)) {
-          return false;
-        }
-      }
-      out.push_back(uint8_t(shuffle));
-      return true;
-    }
-    // PLNE(position, euler, velocity, wx, wz, spread): the plane emitter. The port's PLNE builds
-    // its matrix from the euler and the spread when it is made, so those two must be constants;
-    // the arguments stay in Remastered's axes and the emitter turns its outputs to the port's.
-    if (value.fourcc == F("PLNE") && type == Type::Emitter && value.args.size() == 6) {
-      if (!IsConstantValue(value.args[1]) || !IsConstantValue(value.args[5])) {
-        why = "PLNE with a euler or spread that is not a constant";
-        return false;
-      }
-      AppendBE32(out, F("PLNE"));
-      for (size_t i = 0; i < 3; ++i) {
-        if (!Element(value.args[i], Type::Vector, out, why)) {
-          return false;
-        }
-      }
-      for (size_t i = 3; i < 6; ++i) {
-        if (!Element(value.args[i], Type::Real, out, why)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    // PLNV(position, euler, velocity y, wx, wz, spread, x count, x variance, z count, z variance,
-    // shuffle): the port-only PLNV, the same way. The last byte is the size of Remastered's index
-    // shuffler, 0 for none. The grid is what CSectionedElementData::Compile2d 0x2a6b90 leaves
-    // after Init 0x2a69b8, which runs at the generator's _END:
-    // - no count a constant 0: Init's counts stand, and a shuffler exists when the flag is set
-    //   (a count that is not constant does not stop it), sized by the product of the constant
-    //   counts (a count that is not constant is 1) through SetUpShuffledIndexing 0x26ffe4: below
-    //   2 it is 1, and the size is kept in a byte;
-    // - a constant 0 count: the counts come from the owning generator's MAXP (SectionCompile2d),
-    //   written as constants, and the flag sets a shuffler of max(n1 * n2, 1) cells even at 1
-    //   (it still draws). A MAXP or a second count that is not a constant stays dropped.
-    // Without a shuffler the index is the creation count modulo the grid.
-    if (value.fourcc == F("PLNV") && type == Type::Emitter && value.args.size() == 11) {
-      if (!IsConstantValue(value.args[1]) || !IsConstantValue(value.args[5])) {
-        why = "PLNV with a euler or spread that is not a constant";
-        return false;
-      }
-      const EffectValue& flag = value.args[10];
-      if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
-        why = "PLNV with a shuffle flag that is not a byte";
-        return false;
-      }
-      uint32_t counts[2] = {1, 1};
-      bool known[2] = {false, false};
-      bool anyZero = false;
-      for (int i = 0; i < 2; ++i) {
-        known[i] = ConstWord(value.args[i == 0 ? 6 : 8], counts[i]);
-        if (known[i] && counts[i] > 255) {
-          why = "PLNV with a constant count over 255 (Remastered keeps it in a byte)";
-          return false;
-        }
-        anyZero = anyZero || (known[i] && counts[i] == 0);
-      }
-      uint32_t shuffle = 0;
-      bool resolved = false;
-      if (anyZero) {
-        if (!known[0] || !known[1]) {
-          why = "PLNV with a constant 0 count and a count that is not a constant";
-          return false;
-        }
-        if (m_maxp < 0) {
-          why = "PLNV with a constant 0 count and a MAXP that is not a constant";
-          return false;
-        }
-        const PortParticleMath::SectionCounts grid = PortParticleMath::SectionCompile2d(
-            int(counts[0]), int(counts[1]), counts[0] == 0, counts[1] == 0, PortParticleMath::SectionTotal(int32_t(uint32_t(m_maxp))));
-        counts[0] = uint32_t(grid.n1);
-        counts[1] = uint32_t(grid.n2);
-        resolved = true;
-        if (flag.word != 0) {
-          shuffle = uint32_t(std::max<uint64_t>(uint64_t(counts[0]) * counts[1], 1) & 0xff);
-          if (shuffle == 0) {
-            why = "PLNV with a shuffler of a multiple of 256 cells";
-            return false;
-          }
-        }
-      } else if (flag.word != 0) {
-        // Init 0x2a68dc sizes the shuffler from the count's value, which a count that is not a
-        // constant does not give it (the size is not reproduced).
-        if (!known[0] || !known[1]) {
-          why = "PLNV with a shuffler and a count that is not a constant";
-          return false;
-        }
-        uint64_t size = 1;
-        for (int i = 0; i < 2; ++i) {
-          size *= counts[i];
-        }
-        shuffle = uint32_t(std::max<uint64_t>(size, 1) & 0xff);
-        if (shuffle == 0) {
-          why = "PLNV with a shuffler of a multiple of 256 cells";
-          return false;
-        }
-      }
-      AppendBE32(out, F("PLNV"));
-      static const Type kTypes[] = {Type::Vector, Type::Vector, Type::Real, Type::Real, Type::Real, Type::Real,
-                                    Type::Int,    Type::Real,   Type::Int,  Type::Real};
-      for (size_t i = 0; i < 10; ++i) {
-        if (resolved && (i == 6 || i == 8)) {
-          AppendBE32(out, F("CNST"));
-          AppendBE32(out, counts[i == 6 ? 0 : 1]);
-          continue;
-        }
-        if (!Element(value.args[i], kTypes[i], out, why)) {
-          return false;
-        }
-      }
-      out.push_back(uint8_t(shuffle));
-      return true;
-    }
-    // SPEV(position, radius, speed, n1, variance 1, n2, variance 2, shuffle): the port-only PSPV,
-    // counts and shuffler as for PLNV (Compile2d 0x2a6b90 after Init 0x2a69b8), the position
-    // given in Remastered's axes.
-    if (value.fourcc == F("SPEV") && type == Type::Emitter && value.args.size() == 8) {
-      const EffectValue& flag = value.args[7];
-      if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
-        why = "SPEV with a shuffle flag that is not a byte";
-        return false;
-      }
-      uint32_t counts[2] = {1, 1};
-      bool known[2] = {false, false};
-      bool anyZero = false;
-      for (int i = 0; i < 2; ++i) {
-        known[i] = ConstWord(value.args[i == 0 ? 3 : 5], counts[i]);
-        if (known[i] && counts[i] > 255) {
-          why = "SPEV with a constant count over 255 (Remastered keeps it in a byte)";
-          return false;
-        }
-        anyZero = anyZero || (known[i] && counts[i] == 0);
-      }
-      uint32_t shuffle = 0;
-      bool resolved = false;
-      if (anyZero) {
-        if (!known[0] || !known[1]) {
-          why = "SPEV with a constant 0 count and a count that is not a constant";
-          return false;
-        }
-        if (m_maxp < 0) {
-          why = "SPEV with a constant 0 count and a MAXP that is not a constant";
-          return false;
-        }
-        const PortParticleMath::SectionCounts grid = PortParticleMath::SectionCompile2d(
-            int(counts[0]), int(counts[1]), counts[0] == 0, counts[1] == 0, PortParticleMath::SectionTotal(int32_t(uint32_t(m_maxp))));
-        counts[0] = uint32_t(grid.n1);
-        counts[1] = uint32_t(grid.n2);
-        resolved = true;
-        if (flag.word != 0) {
-          shuffle = uint32_t(std::max<uint64_t>(uint64_t(counts[0]) * counts[1], 1) & 0xff);
-          if (shuffle == 0) {
-            why = "SPEV with a shuffler of a multiple of 256 cells";
-            return false;
-          }
-        }
-      } else if (flag.word != 0) {
-        // Init 0x2a68dc sizes the shuffler from the count's value, which a count that is not a
-        // constant does not give it (the size is not reproduced).
-        if (!known[0] || !known[1]) {
-          why = "SPEV with a shuffler and a count that is not a constant";
-          return false;
-        }
-        uint64_t size = 1;
-        for (int i = 0; i < 2; ++i) {
-          size *= counts[i];
-        }
-        shuffle = uint32_t(std::max<uint64_t>(size, 1) & 0xff);
-        if (shuffle == 0) {
-          why = "SPEV with a shuffler of a multiple of 256 cells";
-          return false;
-        }
-      }
-      AppendBE32(out, F("PSPV"));
-      static const Type kTypes[] = {Type::Vector, Type::Real, Type::Real, Type::Int,
-                                    Type::Real,   Type::Int,  Type::Real};
-      for (size_t i = 0; i < 7; ++i) {
-        if (resolved && (i == 3 || i == 5)) {
-          AppendBE32(out, F("CNST"));
-          AppendBE32(out, counts[i == 3 ? 0 : 1]);
-          continue;
-        }
-        if (!Element(value.args[i], kTypes[i], out, why)) {
-          return false;
-        }
-      }
-      out.push_back(uint8_t(shuffle));
-      return true;
-    }
-    // ELPS(centre, size, euler, speed, surface only): the port-only PELP, which has no rotation,
-    // so the euler must be a constant (0, 0, 0). Only the surface-only byte follows.
-    if (value.fourcc == F("ELPS") && type == Type::Emitter && value.args.size() == 5) {
-      // The surface-only flag is a GetBool: the files give it as CNST(byte), so unwrap that.
-      const EffectValue& flag =
-          IsElement(value.args[4], F("CNST")) && value.args[4].args.size() == 1 ? value.args[4].args[0] : value.args[4];
-      if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
-        why = "ELPS with a surface-only flag that is not a byte";
-        return false;
-      }
-      if (!IsZeroVector(value.args[2])) {
-        why = "ELPS with a euler that is not a constant (0, 0, 0)";
-        return false;
-      }
-      AppendBE32(out, F("PELP"));
-      if (!Element(value.args[0], Type::Vector, out, why) || !Element(value.args[1], Type::Vector, out, why) ||
-          !Element(value.args[3], Type::Real, out, why)) {
-        return false;
-      }
-      out.push_back(flag.word != 0 ? 1 : 0);
-      return true;
+    if (const std::optional<bool> done = EmitterShape(value, type, out, why)) {
+      return *done;
     }
     // EMRV: the per-tick change of the system's translation (CVEVelocityCalc), in Remastered's
     // axes. The port-only PEMV gives it in the port's, so BSIS turns it back. XFMD 0, 3 and 6 give
@@ -1771,145 +1539,8 @@ public:
       AppendBE32(out, m_xfmd == 5 ? (m_pofs == 1 ? 2 : 1) : 0);
       return true;
     }
-    // CRCV(centre, axis, start degrees, count, variance, radius, shuffle): the port-only PCRC. The
-    // last byte is the size of Remastered's index shuffler, 0 for none. The axis is read once, so it
-    // must be a constant. CSectionedElementData::Init 0x2a68dc builds a shuffler only for a constant
-    // nonzero count (a count that is not a constant has none), sized by it (below 2 it is 1, kept in
-    // a byte); a constant 0 count is Compile1d 0x2a6ae4's: the count becomes the owning generator's
-    // MAXP (clamped 1 to 128) and the flag sets a shuffler of that many cells. A MAXP that is not a
-    // constant there stays dropped.
-    if (value.fourcc == F("CRCV") && type == Type::Vector && value.args.size() == 7) {
-      if (!IsConstantValue(value.args[1])) {
-        why = "CRCV with an axis that is not a constant";
-        return false;
-      }
-      const EffectValue& flag = value.args[6];
-      if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
-        why = "CRCV with a shuffle flag that is not a byte";
-        return false;
-      }
-      uint32_t count = 0;
-      const bool known = ConstWord(value.args[3], count);
-      bool resolved = false;
-      uint32_t shuffle = 0;
-      if (known && count == 0) {
-        // Compile1d runs only for the vector SEmitter::CompileSystem 0x28e00c compiles
-        // (vt[0x130] on the SEMR's position child; IElement::Compile 0x250830 does not recurse).
-        if (&value != m_semrPos) {
-          why = "CRCV with a constant 0 count that is not a SEMR's position";
-          return false;
-        }
-        if (m_maxp < 0) {
-          why = "CRCV with a constant 0 count and a MAXP that is not a constant";
-          return false;
-        }
-        count = uint32_t(PortParticleMath::SectionTotal(int32_t(uint32_t(m_maxp))));
-        resolved = true;
-        shuffle = flag.word != 0 ? count & 0xff : 0;
-      } else if (known) {
-        if (count > 255) {
-          why = "CRCV with a constant count over 255 (Remastered keeps it in a byte)";
-          return false;
-        }
-        if (flag.word != 0) {
-          shuffle = std::max<uint32_t>(count, 1) & 0xff;
-        }
-      }
-      AppendBE32(out, F("PCRC"));
-      static const Type kTypes[] = {Type::Vector, Type::Vector, Type::Real, Type::Int, Type::Real, Type::Real};
-      for (size_t i = 0; i < 6; ++i) {
-        if (resolved && i == 3) {
-          AppendBE32(out, F("CNST"));
-          AppendBE32(out, count);
-          continue;
-        }
-        if (!Element(value.args[i], kTypes[i], out, why)) {
-          return false;
-        }
-      }
-      out.push_back(uint8_t(shuffle));
-      return true;
-    }
-    // LINV(start, end, count, variance, shuffle): the port-only PLWV (CVELineWithVariance::GetValue
-    // 0x2a119c), in Remastered's numbers like PCRC. The shuffler and a constant 0 count are CRCV's
-    // (Init 0x2a68dc; Compile1d 0x2a6ae4, which CVELineWithVariance::Compile 0x2a1418 also calls,
-    // only for a SEMR's position).
-    if (value.fourcc == F("LINV") && type == Type::Vector && value.args.size() == 5) {
-      const EffectValue& flag = value.args[4];
-      if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
-        why = "LINV with a shuffle flag that is not a byte";
-        return false;
-      }
-      uint32_t count = 0;
-      const bool known = ConstWord(value.args[2], count);
-      bool resolved = false;
-      uint32_t shuffle = 0;
-      if (known && count == 0) {
-        if (&value != m_semrPos) {
-          why = "LINV with a constant 0 count that is not a SEMR's position";
-          return false;
-        }
-        if (m_maxp < 0) {
-          why = "LINV with a constant 0 count and a MAXP that is not a constant";
-          return false;
-        }
-        count = uint32_t(PortParticleMath::SectionTotal(int32_t(uint32_t(m_maxp))));
-        resolved = true;
-        shuffle = flag.word != 0 ? count & 0xff : 0;
-      } else if (known) {
-        if (count > 255) {
-          why = "LINV with a constant count over 255 (Remastered keeps it in a byte)";
-          return false;
-        }
-        if (flag.word != 0) {
-          shuffle = std::max<uint32_t>(count, 1) & 0xff;
-        }
-      }
-      AppendBE32(out, F("PLWV"));
-      static const Type kTypes[] = {Type::Vector, Type::Vector, Type::Int, Type::Real};
-      for (size_t i = 0; i < 4; ++i) {
-        if (resolved && i == 2) {
-          AppendBE32(out, F("CNST"));
-          AppendBE32(out, count);
-          continue;
-        }
-        if (!Element(value.args[i], kTypes[i], out, why)) {
-          return false;
-        }
-      }
-      out.push_back(uint8_t(shuffle));
-      return true;
-    }
-    // MPAC(x centre, y centre, x range, y range, magnitude): the port-only PMAC runs
-    // MPT_CVEAngleCone-like 0x29fec0 as is, a direction in retail's space (the MPCB around it
-    // turns it to Remastered's).
-    if (value.fourcc == F("MPAC") && type == Type::Vector && value.args.size() == 5) {
-      AppendBE32(out, F("PMAC"));
-      for (const EffectValue& arg : value.args) {
-        if (!Element(arg, Type::Real, out, why)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    // MPCN(direction, radius): the port-only PMCN runs MPT_CVECone 0x29eca0 as is.
-    if (value.fourcc == F("MPCN") && type == Type::Vector && value.args.size() == 2) {
-      AppendBE32(out, F("PMCN"));
-      return Element(value.args[0], Type::Vector, out, why) && Element(value.args[1], Type::Real, out, why);
-    }
-    // ANCM(REUL, A, B, magnitude): the port-only PANM runs CVEAngleConeMinMax 0x29f304 as is,
-    // the rotation as its three angles like ANCR's.
-    if (value.fourcc == F("ANCM") && type == Type::Vector && value.args.size() == 4) {
-      AppendBE32(out, F("PANM"));
-      if (!ConeRotation(value.args[0], out, why)) {
-        return false;
-      }
-      for (size_t i = 1; i < 4; ++i) {
-        if (!Element(value.args[i], Type::Real, out, why)) {
-          return false;
-        }
-      }
-      return true;
+    if (const std::optional<bool> done = SectionedVector(value, type, out, why)) {
+      return *done;
     }
     // CREL(LTHN(a, b), A, B) is a < b ? B : A, the real that is chosen read alone, as retail's
     // CLTN(a, b, B, A) (CRealElement.cpp CRECompareLessThan) does.
@@ -1925,12 +1556,6 @@ public:
       AppendBE32(out, F("CLTN"));
       return Element(condition.args[0], Type::Real, out, why) && Element(condition.args[1], Type::Real, out, why) &&
              Element(value.args[2], Type::Real, out, why) && Element(value.args[1], Type::Real, out, why);
-    }
-    // RNDV(magnitude): the port-only RNDV runs CVERandomVector 0x29e954 as is
-    // (a cube point normalised by the ARM rsqrt estimate, so not uniform).
-    if (value.fourcc == F("RNDV") && type == Type::Vector && value.args.size() == 1) {
-      AppendBE32(out, F("RNDV"));
-      return Element(value.args[0], Type::Real, out, why);
     }
     // PNCV: the port-only PNCV, the particle's velocity normalised by CVENormalizedCompensatedVelocity
     // 0x2a2800 (one refined FRSQRTE step, up vector below 2^-46). It yields Remastered's numbers, so
@@ -1996,7 +1621,7 @@ public:
     // reals, blended by the system tween.
     if (value.fourcc == F("SLTW") && type == Type::Real && value.args.size() == 2) {
       AppendBE32(out, F("PSLW"));
-      return Element(value.args[0], Type::Real, out, why) && Element(value.args[1], Type::Real, out, why);
+      return ShapedArgs(F("PSLW"), type, 0, value.args.data(), out, why);
     }
     // KEYF (version 2) is CREKeyframeInput 0x296490: the 30-byte header (version, an unused word,
     // loop and an unused byte, N at +10, loop start A, start B and rate R as floats, then the key
@@ -2264,6 +1889,302 @@ public:
     return true;
   }
 
+  // The grid of a sectioned element: the argument indices of its counts (one count: both the
+  // same), the counts, whether they were resolved to constants, and the shuffler's size (0 none).
+  struct Sections {
+    size_t at[2] = {0, 0};
+    uint32_t counts[2] = {1, 1};
+    bool resolved = false;
+    uint32_t shuffle = 0;
+  };
+
+  // A 2d sectioned emitter's (ASPV, PLNV, SPEV) counts at args `at1` and `at2` and shuffle flag at
+  // `flagAt`. The last byte it writes is the size of Remastered's index shuffler, 0 for none. The
+  // grid is what CSectionedElementData::Compile2d 0x2a6b90 leaves after Init 0x2a69b8, which runs
+  // at the generator's _END:
+  // - no count a constant 0: Init's counts stand, and a shuffler exists when the flag is set
+  //   (a count that is not constant does not stop it), sized by the product of the constant
+  //   counts (a count that is not constant is 1) through SetUpShuffledIndexing 0x26ffe4: below
+  //   2 it is 1, and the size is kept in a byte;
+  // - a constant 0 count: the counts come from the owning generator's MAXP (SectionCompile2d),
+  //   written as constants, and the flag sets a shuffler of max(n1 * n2, 1) cells even at 1
+  //   (it still draws). A MAXP or a second count that is not a constant stays dropped.
+  // Without a shuffler the index is the creation count modulo the grid.
+  bool Sectioned2d(const char* name, const EffectValue& value, size_t at1, size_t at2, size_t flagAt, Sections& grid,
+                   std::string& why) const {
+    const std::string element = name;
+    const EffectValue& flag = value.args[flagAt];
+    if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
+      why = element + " with a shuffle flag that is not a byte";
+      return false;
+    }
+    grid.at[0] = at1;
+    grid.at[1] = at2;
+    bool known[2] = {false, false};
+    bool anyZero = false;
+    for (int i = 0; i < 2; ++i) {
+      known[i] = ConstWord(value.args[grid.at[i]], grid.counts[i]);
+      if (known[i] && grid.counts[i] > 255) {
+        why = element + " with a constant count over 255 (Remastered keeps it in a byte)";
+        return false;
+      }
+      anyZero = anyZero || (known[i] && grid.counts[i] == 0);
+    }
+    if (anyZero) {
+      if (!known[0] || !known[1]) {
+        why = element + " with a constant 0 count and a count that is not a constant";
+        return false;
+      }
+      if (m_maxp < 0) {
+        why = element + " with a constant 0 count and a MAXP that is not a constant";
+        return false;
+      }
+      const PortParticleMath::SectionCounts counts = PortParticleMath::SectionCompile2d(
+          int(grid.counts[0]), int(grid.counts[1]), grid.counts[0] == 0, grid.counts[1] == 0,
+          PortParticleMath::SectionTotal(int32_t(uint32_t(m_maxp))));
+      grid.counts[0] = uint32_t(counts.n1);
+      grid.counts[1] = uint32_t(counts.n2);
+      grid.resolved = true;
+      if (flag.word == 0) {
+        return true;
+      }
+    } else if (flag.word != 0) {
+      // Init 0x2a68dc sizes the shuffler from the count's value, which a count that is not a
+      // constant does not give it (the size is not reproduced).
+      if (!known[0] || !known[1]) {
+        why = element + " with a shuffler and a count that is not a constant";
+        return false;
+      }
+    } else {
+      return true;
+    }
+    grid.shuffle = uint32_t(std::max<uint64_t>(uint64_t(grid.counts[0]) * grid.counts[1], 1) & 0xff);
+    if (grid.shuffle == 0) {
+      why = element + " with a shuffler of a multiple of 256 cells";
+      return false;
+    }
+    return true;
+  }
+
+  // A 1d sectioned vector's (CRCV, LINV) count at arg `at` and shuffle flag at `flagAt`.
+  // CSectionedElementData::Init 0x2a68dc builds a shuffler only for a constant nonzero count (a
+  // count that is not a constant has none), sized by it (below 2 it is 1, kept in a byte); a
+  // constant 0 count is Compile1d 0x2a6ae4's: the count becomes the owning generator's MAXP
+  // (clamped 1 to 128) and the flag sets a shuffler of that many cells. A MAXP that is not a
+  // constant there stays dropped.
+  bool Sectioned1d(const char* name, const EffectValue& value, size_t at, size_t flagAt, Sections& grid,
+                   std::string& why) const {
+    const std::string element = name;
+    const EffectValue& flag = value.args[flagAt];
+    if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
+      why = element + " with a shuffle flag that is not a byte";
+      return false;
+    }
+    grid.at[0] = grid.at[1] = at;
+    uint32_t& count = grid.counts[0];
+    count = 0;
+    const bool known = ConstWord(value.args[at], count);
+    if (known && count == 0) {
+      // Compile1d runs only for the vector SEmitter::CompileSystem 0x28e00c compiles
+      // (vt[0x130] on the SEMR's position child; IElement::Compile 0x250830 does not recurse).
+      if (&value != m_semrPos) {
+        why = element + " with a constant 0 count that is not a SEMR's position";
+        return false;
+      }
+      if (m_maxp < 0) {
+        why = element + " with a constant 0 count and a MAXP that is not a constant";
+        return false;
+      }
+      count = uint32_t(PortParticleMath::SectionTotal(int32_t(uint32_t(m_maxp))));
+      grid.resolved = true;
+      grid.shuffle = flag.word != 0 ? count & 0xff : 0;
+    } else if (known) {
+      if (count > 255) {
+        why = element + " with a constant count over 255 (Remastered keeps it in a byte)";
+        return false;
+      }
+      if (flag.word != 0) {
+        grid.shuffle = std::max<uint32_t>(count, 1) & 0xff;
+      }
+    }
+    return true;
+  }
+
+  // Writes args [from, to) as the elements `shift` places on in `fourcc`'s shape, a resolved count
+  // as its constant, then the shuffle byte.
+  bool SectionedArgs(uint32_t fourcc, Type type, const std::vector<EffectValue>& args, size_t from, size_t to,
+                     size_t shift, const Sections& grid, std::vector<uint8_t>& out, std::string& why) const {
+    for (size_t i = from; i < to; ++i) {
+      if (grid.resolved && (i == grid.at[0] || i == grid.at[1])) {
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, grid.counts[i == grid.at[0] ? 0 : 1]);
+        continue;
+      }
+      if (!Element(args[i], ArgType(fourcc, type, i + shift), out, why)) {
+        return false;
+      }
+    }
+    out.push_back(uint8_t(grid.shuffle));
+    return true;
+  }
+
+  // The port-only direction elements (ANCR, ANCM, MPAC, MPCN, RNDV). std::nullopt when `value` is none of them.
+  std::optional<bool> DirectionElement(const EffectValue& value, Type type, std::vector<uint8_t>& out,
+                                     std::string& why) const {
+    // ANCR(REUL(x, y, z, #00), x range, y range, magnitude): the port-only ANCR
+    // (x, y, z, x range, y range, magnitude) runs CVEAngleCone 0x29eebc as is, in
+    // Remastered's space like the tree around it.
+    if (value.fourcc == F("ANCR") && type == Type::Vector && value.args.size() == 4) {
+      AppendBE32(out, F("ANCR"));
+      return ConeRotation(value.args[0], out, why) && ShapedArgs(F("ANCR"), type, 3, &value.args[1], out, why);
+    }
+    // ANCM(REUL, A, B, magnitude): the port-only PANM runs CVEAngleConeMinMax 0x29f304 as is,
+    // the rotation as its three angles like ANCR's.
+    if (value.fourcc == F("ANCM") && type == Type::Vector && value.args.size() == 4) {
+      AppendBE32(out, F("PANM"));
+      return ConeRotation(value.args[0], out, why) && ShapedArgs(F("PANM"), type, 3, &value.args[1], out, why);
+    }
+    // MPAC(x centre, y centre, x range, y range, magnitude): the port-only PMAC runs
+    // MPT_CVEAngleCone-like 0x29fec0 as is, a direction in retail's space (the MPCB around it
+    // turns it to Remastered's).
+    if (value.fourcc == F("MPAC") && type == Type::Vector && value.args.size() == 5) {
+      AppendBE32(out, F("PMAC"));
+      return ShapedArgs(F("PMAC"), type, 0, value.args.data(), out, why);
+    }
+    // MPCN(direction, radius): the port-only PMCN runs MPT_CVECone 0x29eca0 as is.
+    if (value.fourcc == F("MPCN") && type == Type::Vector && value.args.size() == 2) {
+      AppendBE32(out, F("PMCN"));
+      return ShapedArgs(F("PMCN"), type, 0, value.args.data(), out, why);
+    }
+    // RNDV(magnitude): the port-only RNDV runs CVERandomVector 0x29e954 as is
+    // (a cube point normalised by the ARM rsqrt estimate, so not uniform).
+    if (value.fourcc == F("RNDV") && type == Type::Vector && value.args.size() == 1) {
+      AppendBE32(out, F("RNDV"));
+      return ShapedArgs(F("RNDV"), type, 0, value.args.data(), out, why);
+    }
+    return std::nullopt;
+  }
+
+  // The emitter shapes (ASPR, ASPV, PLNE, PLNV, SPEV, ELPS). std::nullopt when `value` is none of them.
+  std::optional<bool> EmitterShape(const EffectValue& value, Type type, std::vector<uint8_t>& out,
+                                 std::string& why) const {
+    // ASPR(origin, REUL, range 1, range 2, radius, speed): the port-only ASPR
+    // (origin, x, y, z, range 1, range 2, radius, speed) runs CVEAngleSphere
+    // 0x2cb100 as is and hands the port its position and velocity.
+    if (value.fourcc == F("ASPR") && type == Type::Emitter && value.args.size() == 6) {
+      AppendBE32(out, F("ASPR"));
+      return PortVector(value.args[0], out, why) && ConeRotation(value.args[1], out, why) &&
+             ShapedArgs(F("ASPR"), type, 4, &value.args[2], out, why);
+    }
+    // ASPV(origin, REUL, A, B, polar count, polar variance, azimuth range, azimuth count, azimuth
+    // variance, radius, speed, shuffle): the port-only PASV (CVEAngleSphereWithVariance::GetValue
+    // 0x2cb6b0), the REUL as three angles like ASPR's. The counts and the shuffler are SPEV's
+    // (Compile2d 0x2a6b90 after Init 0x2a69b8, as CVEAngleSphereWithVariance::Compile 0x2cbc08).
+    if (value.fourcc == F("ASPV") && type == Type::Emitter && value.args.size() == 12) {
+      Sections grid;
+      if (!Sectioned2d("ASPV", value, 4, 7, 11, grid, why)) {
+        return false;
+      }
+      AppendBE32(out, F("PASV"));
+      if (!PortVector(value.args[0], out, why) || !ConeRotation(value.args[1], out, why)) {
+        return false;
+      }
+      // The arguments after the REUL sit two places on in PASV's shape (the REUL is three angles).
+      return SectionedArgs(F("PASV"), type, value.args, 2, 11, 2, grid, out, why);
+    }
+    // PLNE(position, euler, velocity, wx, wz, spread): the plane emitter. The port's PLNE builds
+    // its matrix from the euler and the spread when it is made, so those two must be constants;
+    // the arguments stay in Remastered's axes and the emitter turns its outputs to the port's.
+    if (value.fourcc == F("PLNE") && type == Type::Emitter && value.args.size() == 6) {
+      if (!IsConstantValue(value.args[1]) || !IsConstantValue(value.args[5])) {
+        why = "PLNE with a euler or spread that is not a constant";
+        return false;
+      }
+      AppendBE32(out, F("PLNE"));
+      return ShapedArgs(F("PLNE"), type, 0, value.args.data(), out, why);
+    }
+    // PLNV(position, euler, velocity y, wx, wz, spread, x count, x variance, z count, z variance,
+    // shuffle): the port-only PLNV, the same way, its counts and shuffler as Sectioned2d sets them.
+    if (value.fourcc == F("PLNV") && type == Type::Emitter && value.args.size() == 11) {
+      if (!IsConstantValue(value.args[1]) || !IsConstantValue(value.args[5])) {
+        why = "PLNV with a euler or spread that is not a constant";
+        return false;
+      }
+      Sections grid;
+      if (!Sectioned2d("PLNV", value, 6, 8, 10, grid, why)) {
+        return false;
+      }
+      AppendBE32(out, F("PLNV"));
+      return SectionedArgs(F("PLNV"), type, value.args, 0, 10, 0, grid, out, why);
+    }
+    // SPEV(position, radius, speed, n1, variance 1, n2, variance 2, shuffle): the port-only PSPV,
+    // counts and shuffler as for PLNV (Compile2d 0x2a6b90 after Init 0x2a69b8), the position
+    // given in Remastered's axes.
+    if (value.fourcc == F("SPEV") && type == Type::Emitter && value.args.size() == 8) {
+      Sections grid;
+      if (!Sectioned2d("SPEV", value, 3, 5, 7, grid, why)) {
+        return false;
+      }
+      AppendBE32(out, F("PSPV"));
+      return SectionedArgs(F("PSPV"), type, value.args, 0, 7, 0, grid, out, why);
+    }
+    // ELPS(centre, size, euler, speed, surface only): the port-only PELP, which has no rotation,
+    // so the euler must be a constant (0, 0, 0). Only the surface-only byte follows.
+    if (value.fourcc == F("ELPS") && type == Type::Emitter && value.args.size() == 5) {
+      // The surface-only flag is a GetBool: the files give it as CNST(byte), so unwrap that.
+      const EffectValue& flag =
+          IsElement(value.args[4], F("CNST")) && value.args[4].args.size() == 1 ? value.args[4].args[0] : value.args[4];
+      if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
+        why = "ELPS with a surface-only flag that is not a byte";
+        return false;
+      }
+      if (!IsZeroVector(value.args[2])) {
+        why = "ELPS with a euler that is not a constant (0, 0, 0)";
+        return false;
+      }
+      AppendBE32(out, F("PELP"));
+      if (!Element(value.args[0], Type::Vector, out, why) || !Element(value.args[1], Type::Vector, out, why) ||
+          !Element(value.args[3], Type::Real, out, why)) {
+        return false;
+      }
+      out.push_back(flag.word != 0 ? 1 : 0);
+      return true;
+    }
+    return std::nullopt;
+  }
+
+  // The 1d sectioned vectors (CRCV, LINV). std::nullopt when `value` is none of them.
+  std::optional<bool> SectionedVector(const EffectValue& value, Type type, std::vector<uint8_t>& out,
+                                    std::string& why) const {
+    // CRCV(centre, axis, start degrees, count, variance, radius, shuffle): the port-only PCRC, its
+    // count and shuffler as Sectioned1d sets them. The axis is read once, so it must be a constant.
+    if (value.fourcc == F("CRCV") && type == Type::Vector && value.args.size() == 7) {
+      if (!IsConstantValue(value.args[1])) {
+        why = "CRCV with an axis that is not a constant";
+        return false;
+      }
+      Sections grid;
+      if (!Sectioned1d("CRCV", value, 3, 6, grid, why)) {
+        return false;
+      }
+      AppendBE32(out, F("PCRC"));
+      return SectionedArgs(F("PCRC"), type, value.args, 0, 6, 0, grid, out, why);
+    }
+    // LINV(start, end, count, variance, shuffle): the port-only PLWV (CVELineWithVariance::GetValue
+    // 0x2a119c), in Remastered's numbers like PCRC. The shuffler and a constant 0 count are CRCV's
+    // (Init 0x2a68dc; Compile1d 0x2a6ae4, which CVELineWithVariance::Compile 0x2a1418 also calls,
+    // only for a SEMR's position).
+    if (value.fourcc == F("LINV") && type == Type::Vector && value.args.size() == 5) {
+      Sections grid;
+      if (!Sectioned1d("LINV", value, 2, 4, grid, why)) {
+        return false;
+      }
+      AppendBE32(out, F("PLWV"));
+      return SectionedArgs(F("PLWV"), type, value.args, 0, 4, 0, grid, out, why);
+    }
+    return std::nullopt;
+  }
+
   // CMVECurlNoise(V, mode, t) as the port-only PCRM (mode, V, t) around V's curl-noise evaluator
   // as the port-only PCRN (P, F, A, then the field: NONE, or CNST and the VECF's id), Remastered's
   // CVECurlNoise_Perlin3d (slice 0, no octaves). The other slices and the octave classes are not
@@ -2289,9 +2210,7 @@ public:
       // Remastered's octave class, so it is not carried.
       std::vector<uint8_t> octave;
       AppendBE32(octave, F("PCRO"));
-      if (!Element(a[2], Type::Vector, octave, why) || !Element(a[3], Type::Real, octave, why) ||
-          !Element(a[4], Type::Int, octave, why) || !Element(a[5], Type::Real, octave, why) ||
-          !Element(a[6], Type::Vector, octave, why)) {
+      if (!ShapedArgs(F("PCRO"), Type::Vector, 0, &a[2], octave, why)) {
         return false;
       }
       AppendBE32(out, F("PCRM"));
@@ -5697,19 +5616,6 @@ public:
       uint32_t name;
       return Word(name) && Element(Type::Vector) && Word(name) && Element(Type::Vector);
     }
-    // Port-only VARF/VARI/VARV/VARC: a PVRT index.
-    if ((fourcc == F("VARF") && type == Type::Real) || (fourcc == F("VARI") && type == Type::Int) ||
-        (fourcc == F("VARV") && type == Type::Vector) || (fourcc == F("VARC") && type == Type::Color)) {
-      return Skip(4);
-    }
-    // Port-only PSDT: the shutdown countdown's remaining over its total, no payload.
-    if (fourcc == F("PSDT") && type == Type::Real) {
-      return true;
-    }
-    // Port-only PSYR/PSYI: a PSYS slot.
-    if ((fourcc == F("PSYR") && type == Type::Real) || (fourcc == F("PSYI") && type == Type::Int)) {
-      return Skip(4);
-    }
     // Port-only PKPR: a per-particle latch slot, then the element latched.
     if (fourcc == F("PKPR") && type == Type::Real) {
       uint32_t slot;
@@ -5720,44 +5626,11 @@ public:
       uint32_t slot;
       return Word(slot) && (slot < kKeepSlots || slot == 0xffffffffu) && Element(Type::Real);
     }
-    // Port-only PMXV: the index as an int element, then the fallback real.
-    if (fourcc == F("PMXV") && type == Type::Real) {
-      return Element(Type::Int) && Element(Type::Real);
-    }
     // SPA*: the parent's system variable n, then the fallback; DPV*/TPV*: a
     // PVAR guid, then the fallback.
     if (IsParentRead(fourcc, type)) {
       const bool guid = (fourcc >> 24) != 'S';
       return Skip(guid ? 16 : 4) && Element(type);
-    }
-    // Port-only PMAC: five real elements. PANM: six. PMCN: a vector element and a real one.
-    if (fourcc == F("PMAC") && type == Type::Vector) {
-      return Element(Type::Real) && Element(Type::Real) && Element(Type::Real) && Element(Type::Real) &&
-             Element(Type::Real);
-    }
-    if (fourcc == F("PANM") && type == Type::Vector) {
-      return Element(Type::Real) && Element(Type::Real) && Element(Type::Real) && Element(Type::Real) &&
-             Element(Type::Real) && Element(Type::Real);
-    }
-    if (fourcc == F("PCRC") && type == Type::Vector) {
-      return Element(Type::Vector) && Element(Type::Vector) && Element(Type::Real) && Element(Type::Int) &&
-             Element(Type::Real) && Element(Type::Real) && Skip(1);
-    }
-    if (fourcc == F("PMCN") && type == Type::Vector) {
-      return Element(Type::Vector) && Element(Type::Real);
-    }
-    // Port-only RNDV: the magnitude as a real element.
-    if (fourcc == F("RNDV") && type == Type::Vector) {
-      return Element(Type::Real);
-    }
-    // Port-only PCRM: the raw u32 mode, the V vector, then t as a real element.
-    if (fourcc == F("PCRM") && type == Type::ModVector) {
-      return Skip(4) && Element(Type::Vector) && Element(Type::Real);
-    }
-    // Port-only PCRO: P, the frequency, the octave count, the gain, then the amplitude A.
-    if (fourcc == F("PCRO") && type == Type::Vector) {
-      return Element(Type::Vector) && Element(Type::Real) && Element(Type::Int) &&
-             Element(Type::Real) && Element(Type::Vector);
     }
     // Port-only PCRN: P and F, the amplitude A, then NONE or CNST and a VECF id.
     if (fourcc == F("PCRN") && type == Type::Vector) {
@@ -5767,20 +5640,13 @@ public:
       }
       return field == F("NONE") || (field == F("CNST") && Skip(4));
     }
-    // Port-only PSLW: the two reals.
-    if (fourcc == F("PSLW") && type == Type::Real) {
-      return Element(Type::Real) && Element(Type::Real);
-    }
     // Port-only PKYF: the loop byte, N, the loop start, start and rate, N keys, then the input.
     if (fourcc == F("PKYF") && type == Type::Real) {
       uint32_t count;
       return Skip(1) && Word(count) && count >= 1 && count <= 0x100000 && Skip(12) &&
              Skip(size_t(count) * 4) && Element(Type::Real);
     }
-    // Port-only PRTV: the vector, then EXTR, CMRT or REUL and its three angles. PNCV has none.
-    if (fourcc == F("PNCV") && type == Type::Vector) {
-      return true;
-    }
+    // Port-only PRTV: the vector, then EXTR, CMRT or REUL and its three angles.
     if (fourcc == F("PRTV") && type == Type::Vector) {
       uint32_t rotation;
       if (!Element(Type::Vector) || !Word(rotation)) {
@@ -5797,10 +5663,6 @@ public:
       uint32_t count;
       return Word(count) && count <= 0x10000 && Skip(size_t(count) * 20) && Element(Type::Int) && Skip(1);
     }
-    // Port-only PLPT: the lifetime offset, then the percent as an int element.
-    if (fourcc == F("PLPT") && type == Type::Int) {
-      return Skip(4) && Element(Type::Int);
-    }
     // Port-only SLCT: the index as an int element, the entry count, then the entries.
     if (fourcc == F("SLCT") && (type == Type::Real || type == Type::Vector || type == Type::Color)) {
       uint32_t count;
@@ -5814,13 +5676,12 @@ public:
       }
       return true;
     }
-    const Signatures& elements = ElementsOf(type);
-    const auto found = elements.find(fourcc);
-    if (found == elements.end()) {
+    const char* shape = ShapeOf(fourcc, type);
+    if (shape == nullptr) {
       m_error = "no " + EffectFourCCString(fourcc) + " element of that type";
       return false;
     }
-    for (const char* c = found->second; *c != 0; ++c) {
+    for (const char* c = shape; *c != 0; ++c) {
       bool ok;
       switch (*c) {
       case '#':
@@ -5836,6 +5697,9 @@ public:
         break;
       case 'd':
         ok = Skip(1);
+        break;
+      case 'w':
+        ok = Skip(4);
         break;
       default:
         ok = Element(TypeOfLetter(*c));
