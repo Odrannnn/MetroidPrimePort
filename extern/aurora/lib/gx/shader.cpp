@@ -1176,44 +1176,32 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       // LambertFx, whose perms sample none of them and seed the light sum with the flat constant).
       // 524288 = the vertex colour is used raw (premultiplied glass 941068bf / bcc73459, whose
       // vertex shader has no log2/exp2 decode).
-      let pbr_rawv = ubuf.pbr_backlight.w > 524287.5;
-      let pbr_mwv5 = ubuf.pbr_backlight.w - select(0.0, 524288.0, pbr_rawv);
-      let pbr_flat = pbr_mwv5 > 262143.5;
-      let pbr_mwf = pbr_mwv5 - select(0.0, 262144.0, pbr_flat);
+      // The mode word is a whole number (CCubeModel strips 32 and 64, which the shader never sees).
+      let pbr_mode_bits = u32(max(ubuf.pbr_backlight.w, 0.0) + 0.5);
+      let pbr_rawv = (pbr_mode_bits & 524288u) != 0u;
+      let pbr_flat = (pbr_mode_bits & 262144u) != 0u;
       // 131072 = a bare unlit surface (the Surface shaders 67135a0b / 6fc4d540): Remastered
       // multiplies it by no exposure of its own, so the frame's tonemap exposes it; the backlight
       // rgb holds the part of that exposure GlowScale (tone row 0 w) leaves.
-      let pbr_uex = pbr_mwf > 131071.5;
-      let pbr_mwu = pbr_mwf - select(0.0, 131072.0, pbr_uex);
-      let pbr_vao = pbr_mwu > 65535.5;
-      let pbr_mwv = pbr_mwu - select(0.0, 65536.0, pbr_vao);
-      let pbr_wnd = pbr_mwv > 32767.5;
-      let pbr_mww = pbr_mwv - select(0.0, 32768.0, pbr_wnd);
+      let pbr_uex = (pbr_mode_bits & 131072u) != 0u;
+      let pbr_vao = (pbr_mode_bits & 65536u) != 0u;
+      let pbr_wnd = (pbr_mode_bits & 32768u) != 0u;
       // 16384 = a macro normal map (MNMP, map 6) whiteout-blended over the normal in TANGENT_1's
       // frame (a3c367be, 72b34e42, b9e899f3).
-      let pbr_macro = pbr_mww > 16383.5;
-      let pbr_mwz = pbr_mww - select(0.0, 16384.0, pbr_macro);
+      let pbr_macro = (pbr_mode_bits & 16384u) != 0u;
       // 8192 = map 1 is an indirect offset map (Remastered's INDI, 8ce05ed0), not metal/roughness:
       // the base map is sampled at uv + (INDI.xy - 0.5) * INDS (INDS in the backlight's x), and
       // the surface has no AO or metal.
-      let pbr_ind = pbr_mwz > 8191.5;
-      let pbr_mwi = pbr_mwz - select(0.0, 8192.0, pbr_ind);
-      let pbr_blit = pbr_mwi > 4095.5;
-      let pbr_mwa = pbr_mwi - select(0.0, 4096.0, pbr_blit);
-      let pbr_raw = pbr_mwa > 2047.5;
-      let pbr_mwb = pbr_mwa - select(0.0, 2048.0, pbr_raw);
-      let pbr_nols = pbr_mwb > 1023.5;
-      let pbr_mwc = pbr_mwb - select(0.0, 1024.0, pbr_nols);
-      let pbr_cut = pbr_mwc > 511.5;
-      let pbr_mw1 = pbr_mwc - select(0.0, 512.0, pbr_cut);
-      let pbr_noenv = pbr_mw1 > 255.5;
-      let pbr_mwr = pbr_mw1 - select(0.0, 256.0, pbr_noenv);
-      let pbr_f0t = pbr_mwr > 127.5;
-      let pbr_mw0 = pbr_mwr - select(0.0, 128.0, pbr_f0t);
-      let pbr_sky = pbr_mw0 > 15.5;
-      let pbr_mw = pbr_mw0 - select(0.0, 16.0, pbr_sky);
-      let pbr_cu = pbr_mw > 7.5;
-      let pbr_flags = pbr_mw - select(0.0, 8.0, pbr_cu);
+      let pbr_ind = (pbr_mode_bits & 8192u) != 0u;
+      let pbr_blit = (pbr_mode_bits & 4096u) != 0u;
+      let pbr_raw = (pbr_mode_bits & 2048u) != 0u;
+      let pbr_nols = (pbr_mode_bits & 1024u) != 0u;
+      let pbr_cut = (pbr_mode_bits & 512u) != 0u;
+      let pbr_noenv = (pbr_mode_bits & 256u) != 0u;
+      let pbr_f0t = (pbr_mode_bits & 128u) != 0u;
+      let pbr_sky = (pbr_mode_bits & 16u) != 0u;
+      let pbr_cu = (pbr_mode_bits & 8u) != 0u;
+      let pbr_flags = f32(pbr_mode_bits & 7u);
       var pbr_vc = select(vec4f(1.0), {}, pbr_flags > 3.5);
       if (pbr_cu) {{
           pbr_vc = vec4f(2.0 * pow(abs(pbr_vraw.rgb), vec3f(2.2)) * ubuf.pbr_backlight.rgb, pbr_vraw.a);
