@@ -18,6 +18,7 @@
 #include "port_discord.h"
 #include "port_suit_colours.h"
 #include "port_dread_samus_mod.h"
+#include "port_textures.h"
 
 #include <dolphin/gx/GXExtra.h>
 
@@ -298,6 +299,8 @@ const SettingKey kSettingKeys[] = {
      [](std::ostream& out) { out << PortGci::EmulatorFolder(); }, false, nullptr, nullptr},
     {"share_emulator_card", [](const std::string& value) { PortGci::SetShareEmulatorCard(ParseBool(value)); },
      [](std::ostream& out) { WriteBool(out, PortGci::ShareEmulatorCard()); }, false, "1", "0"},
+    {"texture_pack", [](const std::string& value) { PortTextures::SetUserPackEnabled(ParseBool(value)); },
+     [](std::ostream& out) { WriteBool(out, PortTextures::UserPackEnabled()); }, false, "0", "1"},
     {"text_language", [](const std::string& value) { sTextLanguage = value; },
      [](std::ostream& out) { out << sTextLanguage; }, false, "fr", "de"},
     {"elevator_ride",

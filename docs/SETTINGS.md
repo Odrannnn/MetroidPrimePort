@@ -17,7 +17,7 @@
   access, the same one Dolphin documents. A Mayflash adapter switched to PC
   mode shows up as ordinary controllers instead, one per port, without any
   driver.
-- F1: debug overlay. F10: 60 FPS cap on/off (off: F1 Video > Frame rate "FPS cap", `fps_cap=`, `MP_FPS_CAP`; 0 = unlimited). F11: fullscreen.
+- F1: debug overlay. F7: user texture pack on/off. F10: 60 FPS cap on/off (off: F1 Video > Frame rate "FPS cap", `fps_cap=`, `MP_FPS_CAP`; 0 = unlimited). F11: fullscreen.
   F12: screenshot.
 - Settings search: the box at the top of the F1 overlay (Ctrl+F) lists the
   settings whose name, page, section or keywords contain every typed word;
@@ -975,7 +975,10 @@
   `movies` and `gallery`; `MODS.md`); its "Parts to use" (`remastered_hide`:
   the installed parts the mods load without, comma-separated from `geometry`,
   `effects`, `models`, `hud`, `font`, `text`, `map` and `movies`;
-  `MP_REMASTERED_HIDE` overrides it; `MODS.md`); the
+  `MP_REMASTERED_HIDE` overrides it; `MODS.md`); the Textures section's "Use the
+  texture pack" (`texture_pack`, on by default; off shows the game's own textures
+  without deleting the pack, and the Texture pack binding, F7 by default,
+  switches it in game to compare); the
   Randomizer page's options (`rando_settings`, one line of JSON;
   `RANDOMIZER.md`); and Archipelago's "Staggered suit damage" (`ap_suit_damage`:
   0 Default, 1 Progressive, the default, 2 Additive), set by hand to match the

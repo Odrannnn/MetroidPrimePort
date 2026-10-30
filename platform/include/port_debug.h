@@ -596,6 +596,8 @@ void SetRemasteredHidden(const std::string& list);
 // The Remastered import on or off (mods_disabled, saved as on the Mods page), then the mods
 // reload; a note at the top of the screen says which.
 void ToggleRemastered();
+// The user's texture pack on or off (texture_pack, saved now); a note says which.
+void ToggleTexturePack();
 // A note at the top of the screen for a few seconds. Thread-safe.
 void ShowNote(const std::string& text);
 // Starts a Remastered import (port_remastered_import.h) with the mods unloaded

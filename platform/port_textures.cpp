@@ -38,6 +38,9 @@ Layer sUser{"user", 1};
 std::string sDevice = "keyboard";
 std::atomic<bool> sUserPending{false};
 std::atomic<bool> sUserRemove{false};
+// Asked for by SetUserPackEnabled, and what Poll last applied.
+std::atomic<bool> sUserEnabled{true};
+bool sUserOn = true;
 
 // Every name DeviceDirForType can return; used to tell a device-pack root from
 // a single device-agnostic pack.
@@ -255,6 +258,12 @@ void ApplyPendingUserPack() {
     DeleteInBackground(old);
   }
 }
+
+void LoadUser(bool force) {
+  if (sUserOn) {
+    Load(sUser, force);
+  }
+}
 } // namespace
 
 namespace PortTextures {
@@ -262,16 +271,26 @@ void Initialize(const char* root, const char* userRoot) {
   sBuiltIn.root = root != nullptr ? root : "";
   sUser.root = userRoot != nullptr ? userRoot : "";
   sDevice = ResolveDeviceName();
+  sUserOn = sUserEnabled.load(std::memory_order_acquire);
   DeleteStaleUserPacks();
   ApplyPendingUserPack();
   Load(sBuiltIn, true);
-  Load(sUser, true);
+  LoadUser(true);
 }
 
 void Poll() {
   if (sUserPending.exchange(false, std::memory_order_acq_rel)) {
     ApplyPendingUserPack();
-    Load(sUser, true);
+    LoadUser(true);
+  }
+  if (const bool on = sUserEnabled.load(std::memory_order_acquire); on != sUserOn) {
+    sUserOn = on;
+    if (on) {
+      Load(sUser, true);
+    } else {
+      Unload(sUser);
+    }
+    PortLog::Write("metroid_prime_port: user texture pack %s\n", on ? "on" : "off");
   }
   const char* device = ResolveDeviceName();
   if (sDevice == device) {
@@ -280,7 +299,7 @@ void Poll() {
   sDevice = device;
   const uint64_t startNs = SDL_GetTicksNS();
   Load(sBuiltIn, false);
-  Load(sUser, false);
+  LoadUser(false);
   PortLog::Write("metroid_prime_port: switched the texture set to '%s' in %llu ms\n", device,
                  static_cast<unsigned long long>((SDL_GetTicksNS() - startNs) / 1000000ull));
 }
@@ -291,6 +310,10 @@ void RequestUserPackRemoval() {
   sUserRemove.store(true, std::memory_order_release);
   sUserPending.store(true, std::memory_order_release);
 }
+
+void SetUserPackEnabled(bool enabled) { sUserEnabled.store(enabled, std::memory_order_release); }
+
+bool UserPackEnabled() { return sUserEnabled.load(std::memory_order_acquire); }
 
 const char* UserRoot() { return sUser.root.c_str(); }
 

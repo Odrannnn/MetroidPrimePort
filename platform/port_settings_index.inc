@@ -36,6 +36,7 @@
 {"Controls", "Options", "Quick setup", "Use twin-stick controller", "twin stick dual sticks right stick aim controller gamepad remastered preset layout quick setup"},
 {"Controls", "Options", "On-screen prompts", "Button glyphs", "button icons prompts controller xbox playstation"},
 {"Controls", "Options", "Buttons", "Toggle Lock-On", "lock on target toggle hold"},
+{"Controls", "Options", "Buttons", "Aim Lock-On", "lock on target crosshair aim priority nearest"},
 {"Controls", "Options", "Buttons", "Sticky Charge", "charge beam hold fire"},
 {"Controls", "Options", "Buttons", "Remastered charge (rapid fire)", "rapid fire autofire charge remastered"},
 {"Controls", "Options", "Buttons", "Swap the Scan and X-Ray visor buttons", "visor scan xray swap buttons"},
@@ -234,6 +235,7 @@
 #if !defined(__ANDROID__)
 {"Mods", "", "Importers", "Argument", "importer argument parameter file"},
 #endif
+{"Mods", "", "Textures", "Use the texture pack", "texture pack custom hd textures enable disable toggle on off f7 compare"},
 #if defined(__ANDROID__)
 {"Mods", "", "Textures", "Choose texture pack folder...", "texture pack folder choose hd textures"},
 {"Mods", "", "Textures", "Remove texture pack", "texture pack remove delete"},
