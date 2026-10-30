@@ -1589,6 +1589,15 @@ headers, applies the same rule to its own on/off variables (`MP_LOG_COPY_TEX`,
   twice, freed or reused before the flush); a fault logs `HEAP CHECK:` lines and aborts.
 - `MP_PIPELINE_SEED=0`: start from an empty pipeline cache instead of the shipped
   seed (`tools/pipeline_seed.py` records with it).
+- `MP_PIPELINE_LAZY=<0|1>`: build pipelines on first use instead of compiling the
+  cache at startup. On by default on Android and on low-RAM devices (issue #162).
+  In lazy mode, built pipelines are trimmed when memory runs short (issue #187):
+  `MP_PIPELINE_TRIM_MIB=<n>` (default 1024) releases those a minute of frames didn't
+  draw when less than that is available, `MP_PIPELINE_TRIM_SEVERE_MIB=<n>` (default
+  512) all but what the last frames drew; 0 turns a level off.
+  `MP_PIPELINE_EVICT=<frames>` adds a fixed sweep of pipelines idle that long.
+- `MP_PIPELINE_PBR=<0|1>`: compile the cached PBR pipelines at startup. By default
+  only when a mod is enabled, since only converted materials draw with them.
 - `MP_HOLD_FRONTEND_SHADERS=<0|1>`: hold the seed's background shader builds while no
   game is loaded. On by default under D3D11 only, whose drivers made the front end
   crawl behind them (issue #54).

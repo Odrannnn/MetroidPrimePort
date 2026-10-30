@@ -282,6 +282,11 @@ Console `fx` (also in `docs/CONSOLE.md`) shows the live generators of the partic
 
 The port-only material versions and override targets are documented in [REMASTERED_VFX.md](REMASTERED_VFX.md).
 
+Debug switches: `MP_NESTED_LIGHTS=0` drops the lights of child particle generators;
+`MP_PARTICLE_LIGHT_SCALE=<s>` multiplies the particle light gain (default 1);
+`MP_ITPE_DEFAULT=0` drops the default ITPE (Remastered's 1) the port fills in for
+effects that leave it out, to compare.
+
 **Spawn and filmstrip an effect**
 
     $M start r --room 83F6FF6F:D5CDB809 --mods <dir with the import>
