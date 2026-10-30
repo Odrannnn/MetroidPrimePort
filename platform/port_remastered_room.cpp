@@ -2527,6 +2527,12 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
           continue;
         }
       }
+    } else if (isPlatform) {
+      // An animated platform (Monitor Station's spinner bridge) is a retail Platform that
+      // plays its animation, moves and collides as its script drives it. Its pieces here would
+      // loop the clip from area load as scenery, unbound to that state and without collision.
+      ++retailDrawn;
+      continue;
     } else {
       const Id16 key = SwapUuid(r.room.Bytes(chprProp));
       auto ch = characters.find(key);
