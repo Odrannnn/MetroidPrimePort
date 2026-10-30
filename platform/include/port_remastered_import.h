@@ -259,7 +259,8 @@ inline constexpr int kEffects = 139;   // Queen barrier shield/glow models back-
 // 70: the Chozo Lore sheets' actors (their own model, unmarked as added) stand in for retail's lore glow actors.
 // 71: roomenv version 33, the ice darkeners fired at load (ActorIceDarkenerMP1 0xf798e0).
 // 72: animated platforms are left to retail's Platform (they looped as scenery, without collision).
-inline constexpr int kRooms = 72;
+// 74: a platform's model is drawn only riding its retail Platform; unbound or animated, retail draws it.
+inline constexpr int kRooms = 74;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

@@ -2493,6 +2493,28 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
         !r.room.Xform(*c, pos, rot, scale)) {
       continue;
     }
+    if (isPlatform) {
+      // A platform is a retail Platform that moves and collides as its script drives it.
+      // Its Remastered model is drawn only riding that Platform (`platformTransform`) or one it
+      // is attached to (`platform`); unbound, it would stand frozen at its placed pose while
+      // retail's moves. One that plays an animation (Monitor Station's spinner bridge) is left
+      // to retail too: drawn here it would loop the clip from area load, unbound to that state
+      // and without collision.
+      Span character;
+      const bool animates = r.room.Nested(*c, {animProperty, kPropAnimCharacter}, character) && character.size == 16 &&
+                            std::any_of(r.room.Bytes(character), r.room.Bytes(character) + 16, [](uint8_t b) { return b != 0; });
+      const auto bound = scripts.platformTransform.find(c->entity);
+      const bool rides = (bound != scripts.platformTransform.end() && bound->second->hasXf) ||
+                         scripts.platform.count(c->entity) != 0;
+      if (animates || !rides) {
+        if (hasModel) {
+          Log("  " + r.name + (animates ? ": a platform with a model plays an animation"
+                                        : ": a platform matched no retail Platform") + "; retail draws it");
+        }
+        ++retailDrawn;
+        continue;
+      }
+    }
     const bool active = r.room.Active(*c);
     PortRoomGeo::Instance::Driver driver;
     const bool driven = hasModel && driverOf(*c, r.room.Bytes(prop->second), driver);
@@ -2527,12 +2549,6 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
           continue;
         }
       }
-    } else if (isPlatform) {
-      // An animated platform (Monitor Station's spinner bridge) is a retail Platform that
-      // plays its animation, moves and collides as its script drives it. Its pieces here would
-      // loop the clip from area load as scenery, unbound to that state and without collision.
-      ++retailDrawn;
-      continue;
     } else {
       const Id16 key = SwapUuid(r.room.Bytes(chprProp));
       auto ch = characters.find(key);
