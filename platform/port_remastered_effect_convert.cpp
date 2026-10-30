@@ -1087,9 +1087,10 @@ using port::ReadLEFloat;
 // and 4 vec4, 1 float, 0 int. An unknown type ends the list. Types 5 and 4 are
 // the 2D textures and the colours of a few shaders (1c651f97's NMAP, TCH0 and
 // CCH0/1/4/6); every disc MATI with them parses to its end with these sizes.
-// The parameter count follows a list at 0x65 (LE u32 count of 10-byte entries:
-// two tags and two bytes, e.g. EXSC CCH0 01 01), empty in all but the four
-// dd007440 MATIs RenderLooseDataMP1 names.
+// The parameter count follows the variable table at 0x65 (LE u32 count of
+// 10-byte CVariableDescs: variable tag, constant tag, two bytes, e.g. EXSC CCH0
+// 01 01 = CCH0.y), empty in all but the four dd007440 MATIs RenderLooseDataMP1
+// names (kb topic/model-black-silhouette.md).
 bool ParseMati(const std::vector<uint8_t>& d, Mati& out) {
   if (d.size() < 0x6d) {
     return false;
