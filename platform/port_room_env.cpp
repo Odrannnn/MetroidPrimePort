@@ -822,6 +822,13 @@ float SkyGain() {
   return std::isfinite(gain) && gain > 0.f ? gain : 0.f;
 }
 
+// The gain both GlowGain and UnlitGain apply: the frame's exposure, or the sky's where one is set.
+float ExposedGain(bool frameExposed, float fallback) {
+  const float sky = SkyGain();
+  const float gain = frameExposed || sky <= 0.f ? sFrame.exposure : sky;
+  return std::isfinite(gain) && gain > 0.f ? gain : fallback;
+}
+
 float GlowGain(bool frameExposed) {
   if (PortPauseLighting::active) return 1.f;
   // Without tone data Remastered draws through STonemapParams::BuildLinear(3.0) (0x211ab0):
@@ -833,8 +840,7 @@ float GlowGain(bool frameExposed) {
   }
   // The shader multiplies the glow by GlowScale, 2^(static EV - EV), where the static
   // exposure is in use; this is the rest of Remastered's 2^(3 - EV).
-  const float gain = frameExposed || SkyGain() <= 0.f ? sFrame.exposure : SkyGain();
-  return std::isfinite(gain) && gain > 0.f ? gain : kFallback;
+  return ExposedGain(frameExposed, kFallback);
 }
 
 float ParticleLightGain(bool inverseExposed) {
@@ -855,9 +861,7 @@ float UnlitGain(bool frameExposed) {
   if (!sFrame.hasTone || !Enabled()) {
     return 1.f;
   }
-  const float sky = SkyGain();
-  const float gain = frameExposed || sky <= 0.f ? sFrame.exposure : sky;
-  return std::isfinite(gain) && gain > 0.f ? gain : 1.f;
+  return ExposedGain(frameExposed, 1.f);
 }
 
 void SetStaticExposure(bool on) { sStatic = on ? 1 : 0; }
