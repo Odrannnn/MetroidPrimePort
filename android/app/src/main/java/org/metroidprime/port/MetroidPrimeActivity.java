@@ -38,11 +38,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public final class MetroidPrimeActivity extends SDLActivity {
     private static final String TAG = "MetroidPrimePort";
     // Distinct from SDL's own dialog request codes, which count up from 0.
     private static final int REQUEST_TEXTURE_PACK = 0x7e57;
+    private static final int REQUEST_TEXTURE_PACK_ZIP = 0x7e58;
     // Asks the system picker to list the phone's storage root, which it otherwise
     // hides behind its shortcuts (Downloads, Recent, ...).
     private static final String SHOW_ADVANCED = "android.content.extra.SHOW_ADVANCED";
@@ -370,8 +373,10 @@ public final class MetroidPrimeActivity extends SDLActivity {
     }
 
     // Called from the debug overlay, on the SDL thread, with the data folder
-    // the pack goes into.
-    public void pickTexturePack(String folder) {
+    // the pack goes into: a folder, or a .zip of one. The .zip is a single
+    // document, so it can be picked from Downloads or Recents where some
+    // providers list no folder contents.
+    public void pickTexturePack(String folder, boolean zip) {
         runOnUiThread(() -> {
             if (texturePackCopying.get()) {
                 nativeTexturePackStatus("A texture pack is still being copied.");
@@ -379,11 +384,21 @@ public final class MetroidPrimeActivity extends SDLActivity {
             }
             texturePackFolder = folder;
             try {
-                startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                                           .putExtra(SHOW_ADVANCED, true),
-                                       REQUEST_TEXTURE_PACK);
+                if (zip) {
+                    // Providers disagree on a .zip's MIME type, so any file can be picked.
+                    startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                                               .addCategory(Intent.CATEGORY_OPENABLE)
+                                               .setType("*/*")
+                                               .putExtra(SHOW_ADVANCED, true),
+                                           REQUEST_TEXTURE_PACK_ZIP);
+                } else {
+                    startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                                               .putExtra(SHOW_ADVANCED, true),
+                                           REQUEST_TEXTURE_PACK);
+                }
             } catch (android.content.ActivityNotFoundException e) {
-                nativeTexturePackStatus("This device has no folder picker.");
+                nativeTexturePackStatus(zip ? "This device has no file picker."
+                                            : "This device has no folder picker.");
             }
         });
     }
@@ -491,7 +506,14 @@ public final class MetroidPrimeActivity extends SDLActivity {
         if (requestCode == REQUEST_TEXTURE_PACK) {
             Uri tree = data != null && resultCode == RESULT_OK ? data.getData() : null;
             if (tree != null) {
-                copyTexturePack(tree);
+                copyTexturePack(tree, false);
+            }
+            return;
+        }
+        if (requestCode == REQUEST_TEXTURE_PACK_ZIP) {
+            Uri zip = data != null && resultCode == RESULT_OK ? data.getData() : null;
+            if (zip != null) {
+                copyTexturePack(zip, true);
             }
             return;
         }
@@ -560,11 +582,12 @@ public final class MetroidPrimeActivity extends SDLActivity {
         }
     }
 
-    // Copies the picked folder's textures into <data>/user_textures.new, which
-    // the native side swaps in for user_textures on its next frame. A copy rather
-    // than reading through the URI: the grant can be revoked, and the loader
-    // needs real paths. The built-in set is never touched.
-    private void copyTexturePack(Uri tree) {
+    // Copies the picked folder's (or extracts the picked .zip's) textures into
+    // <data>/user_textures.new, which the native side swaps in for user_textures
+    // on its next frame. A copy rather than reading through the URI: the grant
+    // can be revoked, and the loader needs real paths. The built-in set is never
+    // touched.
+    private void copyTexturePack(Uri source, boolean zip) {
         if (!texturePackCopying.compareAndSet(false, true)) {
             return;
         }
@@ -577,11 +600,15 @@ public final class MetroidPrimeActivity extends SDLActivity {
             try {
                 deleteTree(staging);
                 int[] copied = {0};
-                String rootId = DocumentsContract.getTreeDocumentId(tree);
-                copyDocumentTree(tree, rootId, staging, copied);
+                if (zip) {
+                    extractTextureZip(source, staging, copied);
+                } else {
+                    copyDocumentTree(source, DocumentsContract.getTreeDocumentId(source), staging, copied);
+                }
                 if (copied[0] == 0) {
                     deleteTree(staging);
-                    nativeTexturePackStatus("No .png or .dds textures in that folder; nothing changed.");
+                    nativeTexturePackStatus(zip ? "No .png or .dds textures in that file (is it a .zip?); nothing changed."
+                                                : "No .png or .dds textures in that folder; nothing changed.");
                     return;
                 }
                 deleteTree(ready);
@@ -598,6 +625,55 @@ public final class MetroidPrimeActivity extends SDLActivity {
                 texturePackCopying.set(false);
             }
         }, "texture-pack-copy").start();
+    }
+
+    // Extracts a .zip's .png/.dds entries, keeping their folders (the loader
+    // searches subfolders). Entry names come from the archive, so any with an
+    // empty, "." or ".." component is skipped rather than allowed out of
+    // destination; so are macOS "._" resource forks.
+    private void extractTextureZip(Uri zip, File destination, int[] copied) throws IOException {
+        try (InputStream input = getContentResolver().openInputStream(zip)) {
+            if (input == null) {
+                throw new IOException("Cannot open " + zip);
+            }
+            ZipInputStream entries = new ZipInputStream(new java.io.BufferedInputStream(input));
+            ZipEntry entry;
+            while ((entry = entries.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String[] parts = entry.getName().replace('\\', '/').split("/");
+                String name = parts[parts.length - 1];
+                String lower = name.toLowerCase(Locale.ROOT);
+                if ((!lower.endsWith(".png") && !lower.endsWith(".dds")) || name.startsWith("._")) {
+                    continue;
+                }
+                File target = destination;
+                boolean safe = true;
+                for (String part : parts) {
+                    if (part.isEmpty() || part.equals(".") || part.equals("..")
+                            || part.equals("__MACOSX")) {
+                        safe = false;
+                        break;
+                    }
+                    target = new File(target, part);
+                }
+                if (!safe) {
+                    continue;
+                }
+                File parent = target.getParentFile();
+                if (!parent.isDirectory() && !parent.mkdirs()) {
+                    throw new IOException("Failed to create " + parent);
+                }
+                try (FileOutputStream output = new FileOutputStream(target)) {
+                    copyStream(entries, output);
+                }
+                if (++copied[0] % 100 == 0) {
+                    nativeTexturePackStatus(String.format(Locale.ROOT,
+                        "Copying the texture pack... %d textures", copied[0]));
+                }
+            }
+        }
     }
 
     private void copyDocumentTree(Uri tree, String parentId, File destination, int[] copied)

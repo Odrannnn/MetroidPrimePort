@@ -318,8 +318,10 @@ Texture packs replace the game's textures with Aurora-format images named
   the same folder rules. The overlay's Mods page has a Reload button.
 - **Android:** Mods > Texture pack > Choose texture pack folder opens the system folder picker
   and copies the folder's `.png`/`.dds` files into the data folder (pick it again after changing
-  it; Remove deletes the copy). The copy lands in `user_textures.new` and is swapped in on the
-  next frame, or at the next start if the app closed first.
+  it; Remove deletes the copy). Import texture pack .zip does the same from a `.zip` file,
+  keeping the archive's folders; use it where the folder picker lists no files (a single file can
+  still be picked from Downloads or Recents). The copy lands in `user_textures.new` and is swapped
+  in on the next frame, or at the next start if the app closed first.
 
 Priorities: built-in folder 0, user pack 1, binding icons 2, so a remapped action still shows
 its binding.

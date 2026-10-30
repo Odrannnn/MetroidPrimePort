@@ -451,7 +451,7 @@ void DrawDiscordSection();
 void DrawUpdateSection();
 std::string TexturePackStatus();
 void SetTexturePackStatus(std::string status);
-void PickTexturePack();
+void PickTexturePack(bool zip);
 void DrawOverlaySection();
 
 // video.cpp

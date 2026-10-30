@@ -238,6 +238,7 @@
 {"Mods", "", "Textures", "Use the texture pack", "texture pack custom hd textures enable disable toggle on off f7 compare"},
 #if defined(__ANDROID__)
 {"Mods", "", "Textures", "Choose texture pack folder...", "texture pack folder choose hd textures"},
+{"Mods", "", "Textures", "Import texture pack .zip...", "texture pack zip archive import hd textures"},
 {"Mods", "", "Textures", "Remove texture pack", "texture pack remove delete"},
 #else
 {"Mods", "", "Textures", "Reload texture pack", "texture pack reload refresh"},

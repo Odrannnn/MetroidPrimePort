@@ -839,16 +839,20 @@ void DrawTexturePack() {
     ImGui::TextWrapped("%s", status.c_str());
   }
   if (ImGui::Button("Choose texture pack folder...")) {
-    PickTexturePack();
+    PickTexturePack(false);
   }
   ImGui::SameLine();
+  if (ImGui::Button("Import texture pack .zip...")) {
+    PickTexturePack(true);
+  }
   if (ImGui::Button("Remove texture pack")) {
     PortTextures::RequestUserPackRemoval();
     SetTexturePackStatus("Texture pack removed.");
   }
   ImGui::TextWrapped(
-      "The folder is copied into the data folder, so it keeps working if the original is "
-      "moved. Pick it again after changing it.");
+      "The pack is copied into the data folder, so it keeps working if the original is "
+      "moved. Pick it again after changing it. Use the .zip import if the folder picker "
+      "shows no files.");
 #else
   ImGui::TextWrapped("Folder: %s", root);
   if (ImGui::Button("Reload texture pack")) {
