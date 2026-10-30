@@ -397,8 +397,12 @@ void CActor::Render(const CStateManager& mgr) const {
         // The smooth-frames clock lag can put the draw just before xbc_time.
         if (timeSince < 0.f && timeSince > -(1.f / 60.f))
           timeSince = 0.f;
-#endif
+        // CTimeProvider holds a `const float&`; a temporary would dangle past this line.
+        const float localTime = CMath::FastFmod(timeSince, 900.f);
+        CTimeProvider tp(localTime);
+#else
         CTimeProvider tp(CMath::FastFmod(timeSince, 900.f));
+#endif
         RenderInternal(mgr);
       }
       if (xe5_31_pointGeneratorParticles) {
@@ -489,7 +493,8 @@ bool CActor::PortRenderShadowCaster(const CStateManager& mgr) const {
     float timeSince = CGraphics::GetSecondsMod900() - xbc_time;
     if (timeSince < 0.f && timeSince > -(1.f / 60.f))
       timeSince = 0.f;
-    CTimeProvider tp(CMath::FastFmod(timeSince, 900.f));
+    const float localTime = CMath::FastFmod(timeSince, 900.f);
+    CTimeProvider tp(localTime);
     RenderInternal(mgr);
   }
   return true;
