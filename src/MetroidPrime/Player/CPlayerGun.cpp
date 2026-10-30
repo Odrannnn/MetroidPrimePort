@@ -1686,7 +1686,12 @@ void CPlayerGun::FireSecondary(float dt, CStateManager& mgr) {
   bool fired = false;
   switch (x318_comboAmmoIdx) {
   case 1: {
+#ifdef TARGET_PC
+    // Port: infinite ammo fires with none left (DecrPickUp then keeps the count).
+    x300_remainingMissiles = playerState->PortUsableAmount(CPlayerState::kIT_Missiles);
+#else
     x300_remainingMissiles = playerState->GetItemAmount(CPlayerState::kIT_Missiles);
+#endif
     if (mgr.GetWeaponIdCount(x538_playerId, kWT_Missile) < 3 && int(x300_remainingMissiles) != 0) {
       playerState->DecrPickUp(CPlayerState::kIT_Missiles,
                               x832_26_comboFiring ? playerState->GetMissileCostForAltAttack() : 1);
@@ -1818,7 +1823,12 @@ void CPlayerGun::ActivateCombo(CStateManager& mgr) {
 
   CPlayerState& playerState = *mgr.PlayerState();
   const int altCost = playerState.GetMissileCostForAltAttack();
+#ifdef TARGET_PC
+  // Port: infinite ammo starts a charge combo with too few missiles.
+  if (playerState.PortUsableAmount(skItemArr[x318_comboAmmoIdx]) >= altCost) {
+#else
   if (playerState.GetItemAmount(skItemArr[x318_comboAmmoIdx]) >= altCost) {
+#endif
     bool canFire = true;
     if (x310_currentBeam == CPlayerState::kBI_Plasma) {
       canFire = !x834_27_underwater;
@@ -2635,7 +2645,11 @@ void CPlayerGun::UpdateWeaponFire(float dt, CPlayerState& playerState, CStateMan
           DropBomb(kBW_Bomb, mgr);
       } else {
         x835_29_powerBombReady = playerState.HasPowerUp(CPlayerState::kIT_PowerBombs) &&
+#ifdef TARGET_PC
+                                 playerState.PortUsableAmount(CPlayerState::kIT_PowerBombs) > 0 &&
+#else
                                  playerState.GetItemAmount(CPlayerState::kIT_PowerBombs) > 0 &&
+#endif
                                  mgr.CanCreateProjectile(x538_playerId, kWT_PowerBomb, 1) &&
                                  mgr.CanCreateProjectile(x538_playerId, kWT_Bomb, 1);
         if ((pressedStates & 0x2) != 0 && x835_29_powerBombReady)
@@ -2648,7 +2662,11 @@ void CPlayerGun::UpdateWeaponFire(float dt, CPlayerState& playerState, CStateMan
     }
     if ((pressedStates & 0x2) != 0 && static_cast< int >(x318_comboAmmoIdx) == 0 &&
         !IsWeaponStateSet(0x2) && x32c_chargePhase == kCP_NotCharging) {
+#ifdef TARGET_PC
+      int missileCount = playerState.PortUsableAmount(CPlayerState::kIT_Missiles);
+#else
       int missileCount = playerState.GetItemAmount(CPlayerState::kIT_Missiles);
+#endif
       if (x338_nextState != kNS_EnterMissile && x338_nextState != kNS_ExitMissile) {
         if (playerState.HasPowerUp(CPlayerState::kIT_Missiles) && missileCount > 0) {
           x300_remainingMissiles = missileCount;

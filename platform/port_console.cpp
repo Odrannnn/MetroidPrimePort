@@ -1459,6 +1459,42 @@ void CmdGod() {
   Finish();
 }
 
+void CmdInfAmmo() {
+  // infammo [all|missile|powerbomb] [0|1]: no state prints each kind's.
+  unsigned kinds = PortDebug::kInfAmmoAll;
+  size_t next = 1;
+  if (sCmd.args.size() > next) {
+    const std::string kind = Lower(sCmd.args[next]);
+    if (kind == "all") {
+      ++next;
+    } else if (kind == "missile" || kind == "missiles") {
+      kinds = PortDebug::kInfAmmoMissile;
+      ++next;
+    } else if (kind == "powerbomb" || kind == "powerbombs") {
+      kinds = PortDebug::kInfAmmoPowerBomb;
+      ++next;
+    }
+  }
+  if (sCmd.args.size() > next + 1) {
+    return Finish("usage: infammo [all|missile|powerbomb] [0|1]");
+  }
+  if (sCmd.args.size() == next + 1) {
+    const std::string arg = Lower(sCmd.args[next]);
+    if (arg != "0" && arg != "1" && arg != "on" && arg != "off") {
+      return Finish("usage: infammo [all|missile|powerbomb] [0|1]");
+    }
+    PortDebug::SetInfiniteAmmo(kinds, arg == "1" || arg == "on");
+  }
+  const unsigned set = PortDebug::InfiniteAmmoSet();
+  std::string line = std::string("infammo missile ") + ((set & PortDebug::kInfAmmoMissile) ? "1" : "0") +
+                     " powerbomb " + ((set & PortDebug::kInfAmmoPowerBomb) ? "1" : "0");
+  if (set != 0 && !PortDebug::InfiniteAmmo(set)) {
+    line += " (refused: Original experience or Archipelago)";
+  }
+  Out("%s", line.c_str());
+  Finish();
+}
+
 void CmdHint() {
   if (sCmd.args.size() < 2 || Lower(sCmd.args[1]) != "show") {
     return Finish("usage: hint show");
@@ -4195,6 +4231,8 @@ const CommandSpec kCommands[] = {
     {"die", nullptr, CmdDie, ""},
     {"god", nullptr, [](CStateManager&) { CmdGod(); },
      "god [on|off]               the player takes no damage (no argument: show)"},
+    {"infammo", nullptr, [](CStateManager&) { CmdInfAmmo(); },
+     "infammo [all|missile|powerbomb] [0|1]  firing uses no ammo, the HUD shows infinity (no state: show)"},
     {"hint", nullptr, [](CStateManager&) { CmdHint(); },
      "hint show                  show the hint the game would show next"},
     {"memo", nullptr, [](CStateManager& mgr) { CmdMemo(mgr); },

@@ -73,4 +73,14 @@ bool Encode(uint8_t* data, size_t size, Format format, int texW, int texH, int x
 bool Composite(const Grid& base, Mark mark, int cellW, int baseH, uint8_t ink, uint8_t outline,
                bool outlined, Grid& out, int& shiftDown, int& cellH);
 
+// The infinity sign (U+221E) for the HUD's infinite ammo, which no disc font
+// has. Drawn in the style of the font's '8' (`eight`, its decoded cell): as
+// tall as the 8's ink, with its stroke, and the outline ring the outlined
+// fonts put around it. `out` is the 8's cell widened by `extraW` columns, ink
+// on the same rows, so the 8's baseline holds; the caller widens the advance
+// by `extraW` too. False when the 8 holds no ink or is too small to keep the
+// loops open.
+bool Infinity(const Grid& eight, uint8_t ink, uint8_t outline, bool outlined, Grid& out,
+              int& extraW);
+
 }  // namespace PortFontAccent

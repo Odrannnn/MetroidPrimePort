@@ -166,6 +166,7 @@ private:
   // A layered (FONT v4) font's mode in the file and its glyphs' layers, until unpacked.
   int mPortLayerMode;
   std::vector< std::pair< wchar_t, int > > mPortLayers;
+  static const wchar_t kPortInfinity = 0x221E;
   struct PortAccentPending {
     wchar_t chr;
     const CGlyph* base;

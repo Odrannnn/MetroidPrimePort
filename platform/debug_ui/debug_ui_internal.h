@@ -117,6 +117,7 @@ extern std::atomic< bool > sTouchTurboFire;
 extern bool sInvulnerable;
 extern bool sPhazonBeamCheat;
 extern int sInvulnerableRun;
+extern unsigned sInfiniteAmmo;
 extern bool sLogFile;
 extern std::mutex sRandoMutex;
 extern PortRandoGen::Settings sRandoSettings;

@@ -422,4 +422,121 @@ bool Composite(const Grid& base, Mark mark, int cellW, int baseH, uint8_t ink, u
   return true;
 }
 
+bool Infinity(const Grid& eight, uint8_t ink, uint8_t outline, bool outlined, Grid& out,
+              int& extraW) {
+  // The 8's ink box: anything drawn but the outline.
+  const auto isInk = [&](int x, int y) {
+    const uint8_t v = At(eight, x, y);
+    return v != 0 && (!outlined || v != outline);
+  };
+  int left = eight.w, right = -1, top = eight.h, bottom = -1;
+  for (int y = 0; y < eight.h; ++y) {
+    for (int x = 0; x < eight.w; ++x) {
+      if (isInk(x, y)) {
+        left = std::min(left, x);
+        right = std::max(right, x);
+        top = std::min(top, y);
+        bottom = std::max(bottom, y);
+      }
+    }
+  }
+  if (right < 0) {
+    return false;
+  }
+  const int inkW = right - left + 1;
+  const int inkH = bottom - top + 1;
+  if (inkW < 3 || inkH < 4) {
+    return false;
+  }
+  // The stroke: the 8's side run a quarter down, and its top run in the middle.
+  const int sideY = top + inkH / 4;
+  int sx = left;
+  while (sx < eight.w && !isInk(sx, sideY)) {
+    ++sx;
+  }
+  int side = 0;
+  while (sx + side < eight.w && isInk(sx + side, sideY)) {
+    ++side;
+  }
+  const int midX = left + inkW / 2;
+  int topRun = 0;
+  while (top + topRun < eight.h && isInk(midX, top + topRun)) {
+    ++topRun;
+  }
+  int stroke = std::max(1, std::min(side > 0 ? side : topRun, topRun > 0 ? topRun : side));
+  // The outline ring: how far the outline reaches out left of the ink.
+  int ring = 0;
+  if (outlined && outline != ink) {
+    while (sx - ring - 1 >= 0 && At(eight, sx - ring - 1, sideY) == outline) {
+      ++ring;
+    }
+    stroke = std::min(stroke, 2);  // the ring eats into the counters
+  }
+  // An 8 laid on its side is as wide as two of its loops; outlined fonts need
+  // more room for the ring inside them.
+  const int w = int(std::lround(double(inkW) * (ring > 0 ? 2.1 : 1.6)));
+  extraW = w - inkW;
+  // A Gerono lemniscate (x = cos t, y = sin t cos t) across the ink box,
+  // drawn as the texels near enough to it; thinned until both loops stay open.
+  constexpr int kSamples = 720;
+  constexpr double kPi = 3.14159265358979323846;
+  for (; stroke >= 1; --stroke) {
+    const double s = double(stroke);
+    const double ax = double(w) - s, ay = double(inkH) - s;
+    std::vector<double> px(kSamples), py(kSamples);
+    for (int i = 0; i < kSamples; ++i) {
+      const double t = 2.0 * kPi * double(i) / double(kSamples);
+      px[size_t(i)] = double(left) + s / 2.0 + (std::cos(t) + 1.0) / 2.0 * ax;
+      py[size_t(i)] = double(top) + s / 2.0 + (std::sin(t) * std::cos(t) + 0.5) * ay;
+    }
+    out.w = eight.w + extraW;
+    out.h = eight.h;
+    out.v.assign(size_t(out.w) * size_t(out.h), 0);
+    const double reach = (s / 2.0) * (s / 2.0) + 0.05;
+    for (int y = top; y <= bottom; ++y) {
+      for (int x = left; x < left + w; ++x) {
+        const double cx = double(x) + 0.5, cy = double(y) + 0.5;
+        for (int i = 0; i < kSamples; ++i) {
+          const double dx = px[size_t(i)] - cx, dy = py[size_t(i)] - cy;
+          if (dx * dx + dy * dy <= reach) {
+            Plot(out, x, y, ink);
+            break;
+          }
+        }
+      }
+    }
+    // Each loop's middle (cos t = +-0.55 on the centre line) must stay empty.
+    const int midY = int(double(top) + s / 2.0 + 0.5 * ay);
+    const int loopL = int(double(left) + s / 2.0 + 0.225 * ax);
+    const int loopR = int(double(left) + s / 2.0 + 0.775 * ax);
+    if (At(out, loopL, midY) == 0 && At(out, loopR, midY) == 0) {
+      break;
+    }
+  }
+  if (stroke < 1) {
+    return false;
+  }
+  if (ring > 0) {
+    const int reach = ring * ring + ring;
+    Grid inked = out;
+    for (int y = 0; y < out.h; ++y) {
+      for (int x = 0; x < out.w; ++x) {
+        if (At(inked, x, y) != 0) {
+          continue;
+        }
+        bool near = false;
+        for (int dy = -ring; dy <= ring && !near; ++dy) {
+          for (int dx = -ring; dx <= ring && !near; ++dx) {
+            near = dx * dx + dy * dy <= reach && At(inked, x + dx, y + dy) == ink;
+          }
+        }
+        if (near) {
+          Plot(out, x, y, outline);
+        }
+      }
+    }
+  }
+  return true;
+}
+
 }  // namespace PortFontAccent

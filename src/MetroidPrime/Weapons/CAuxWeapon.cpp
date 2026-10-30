@@ -139,13 +139,22 @@ const bool CAuxWeapon::UpdateComboFx(float dt, const CVector3f& scale, const CVe
 
     if (firingFx) {
       x68_ammoConsumeTimer += dt;
+#ifdef TARGET_PC
+      // Port: infinite ammo keeps a combo stream going with no missiles left.
+      if (playerState.PortUsableAmount(CPlayerState::kIT_Missiles) > 0 &&
+#else
       if (playerState.GetItemAmount(CPlayerState::kIT_Missiles) > 0 &&
+#endif
           x68_ammoConsumeTimer >= playerState.GetComboFireAmmoPeriod()) {
         playerState.DecrPickUp(CPlayerState::kIT_Missiles, 1);
         x68_ammoConsumeTimer = 0.f;
       }
     }
+#ifdef TARGET_PC
+    if (playerState.PortUsableAmount(CPlayerState::kIT_Missiles) == 0) {
+#else
     if (playerState.GetItemAmount(CPlayerState::kIT_Missiles) == 0) {
+#endif
       StopComboFx(mgr, false);
     }
 

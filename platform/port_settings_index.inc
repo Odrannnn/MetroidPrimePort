@@ -344,6 +344,7 @@
 {"Debug", "", "Cheats", "Grant everything", "cheat items everything all unlock"},
 {"Debug", "", "Cheats", "Invulnerable", "cheat god mode damage immune"},
 {"Debug", "", "Cheats", "Phazon Beam", "cheat hypermode phazon gun power beam"},
+{"Debug", "", "Cheats", "Infinite ammo", "cheat infinite ammo missiles power bombs unlimited"},
 {"Debug", "", "Cheats", "Missiles", "cheat missile ammo count"},
 {"Debug", "", "Cheats", "Power Bombs", "cheat power bomb ammo count"},
 {"Debug", "", "Cheats", "Energy Tanks", "cheat energy tank count"},

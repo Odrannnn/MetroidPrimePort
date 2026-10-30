@@ -221,14 +221,27 @@ void DrawCheats() {
   };
   itemTable("##abilities", kItems, std::size(kItems));
 
+  const auto infiniteBox = [](const char* id, unsigned kind) {
+    ImGui::SameLine();
+    ImGui::PushID(id);
+    unsigned bits = InfiniteAmmoSet();
+    if (ImGui::CheckboxFlags("Infinite", &bits, kind)) {
+      SetInfiniteAmmo(kind, (bits & kind) != 0);
+    }
+    ImGui::SetItemTooltip("Firing does not use this ammo up, even at zero, and the HUD shows infinity. "
+                          "The real count is kept and pickups still add to it. Not saved.");
+    ImGui::PopID();
+  };
   int missiles = ps->GetItemAmount(CPlayerState::kIT_Missiles);
   if (CheatSlider("Missiles", missiles, 250)) {
     SetAmount(*ps, CPlayerState::kIT_Missiles, missiles);
   }
+  infiniteBox("infMissiles", kInfAmmoMissile);
   int powerBombs = ps->GetItemAmount(CPlayerState::kIT_PowerBombs);
   if (CheatSlider("Power Bombs", powerBombs, 8)) {
     SetAmount(*ps, CPlayerState::kIT_PowerBombs, powerBombs);
   }
+  infiniteBox("infPowerBombs", kInfAmmoPowerBomb);
   int tanks = ps->GetItemAmount(CPlayerState::kIT_EnergyTanks);
   if (CheatSlider("Energy Tanks", tanks, 14)) {
     GrantItem(*ps, CPlayerState::kIT_EnergyTanks, tanks, tanks); // tanks have no ammo: count is capacity

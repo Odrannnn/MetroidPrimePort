@@ -12,6 +12,9 @@
 
 #include "rstl/string.hpp"
 #include <stdio.h>
+#ifdef TARGET_PC
+#include "MetroidPrime/Player/CPlayerState.hpp"
+#endif
 
 static const char skBombGroupName[] = "basewidget_bombstuff";
 static const char skBombDigitsName[] = "textpane_bombdigits";
@@ -61,9 +64,18 @@ void CHudBallInterface::SetBombParams(int pbAmount, int pbCapacity, int availabl
                                       bool hasBombs, bool hasPb, bool init) {
 
   if (pbAmount != x40_pbAmount || init) {
-    char buffer[4];
-    sprintf(buffer, "%02d", pbAmount);
-    x10_textpane_bombdigits->TextSupport().SetText(rstl::string(buffer));
+#ifdef TARGET_PC
+    // Port: infinite ammo shows infinity in place of the count (CSamusHud passes the
+    // capacity, so the readout keeps its colours).
+    if (CPlayerState::PortInfiniteAmmo(CPlayerState::kIT_PowerBombs)) {
+      x10_textpane_bombdigits->TextSupport().SetText(rstl::wstring_l(L" \x221E"));
+    } else
+#endif
+    {
+      char buffer[4];
+      sprintf(buffer, "%02d", pbAmount);
+      x10_textpane_bombdigits->TextSupport().SetText(rstl::string(buffer));
+    }
     x40_pbAmount = pbAmount;
     UpdatePowerBombReadoutColors();
   }

@@ -5,6 +5,7 @@
 
 #include "port_env.h"
 #include "port_debug.h"
+#include "port_apclient.h"
 #include "port_graphics_backend.h"
 #include "port_gyro_motion.h"
 #include "port_dynamic_res.h"
@@ -1156,6 +1157,20 @@ void SetInvulnerable(bool enabled) {
 
 bool PhazonBeamCheat() { return Loaded(sPhazonBeamCheat); }
 void SetPhazonBeamCheat(bool enabled) { StoreSetting(sPhazonBeamCheat, enabled); }
+
+unsigned InfiniteAmmoSet() {
+  EnsureInitialized();
+  return sInfiniteAmmo;
+}
+
+bool InfiniteAmmo(unsigned kinds) {
+  return kinds != 0 && (InfiniteAmmoSet() & kinds) == kinds && !OriginalExperience() && !PortAp::Connected();
+}
+
+void SetInfiniteAmmo(unsigned kinds, bool enabled) {
+  EnsureInitialized();
+  sInfiniteAmmo = enabled ? (sInfiniteAmmo | kinds) : (sInfiniteAmmo & ~kinds);
+}
 
 bool LogFile() { return Loaded(sLogFile); }
 void SetLogFile(bool enabled) { StoreSetting(sLogFile, enabled); }

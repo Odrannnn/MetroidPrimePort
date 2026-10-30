@@ -626,6 +626,16 @@ void SetInvulnerable(bool enabled);
 // Cheat: the Phazon Beam takes the Power Beam's place, anywhere (F1 > Debug > Cheats).
 bool PhazonBeamCheat();
 void SetPhazonBeamCheat(bool enabled);
+// Cheat: firing does not use up missiles or power bombs, even at zero, and the HUD shows
+// infinity (F1 > Debug > Cheats, MP_INFINITE_AMMO, console `infammo`). One bit per counter;
+// the real counts are kept and pickups still add to them. Not saved.
+enum : unsigned { kInfAmmoMissile = 1, kInfAmmoPowerBomb = 2, kInfAmmoAll = 3 };
+// The bits as set, whether or not they apply.
+unsigned InfiniteAmmoSet();
+// Whether every counter in `kinds` is infinite now: never in the Original experience or with
+// Archipelago connected, like every cheat.
+bool InfiniteAmmo(unsigned kinds);
+void SetInfiniteAmmo(unsigned kinds, bool enabled);
 // Write the log to <user folder>/metroid_prime_port.log (port_log_file.h). MP_LOG_FILE=1
 // turns it on for one run without changing the setting.
 bool LogFile();

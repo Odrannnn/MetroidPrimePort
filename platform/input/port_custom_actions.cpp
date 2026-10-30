@@ -37,6 +37,7 @@ enum class PresetId : int {
   Setting,
   Invulnerable,
   PhazonBeam,
+  InfiniteAmmo,
   FreeCamera,
   FreezeGame,
   ShowSamus,
@@ -62,6 +63,9 @@ constexpr Preset kPresets[] = {
     {"phazon_beam", "Cheats", "Phazon Beam",
      "Fire the Phazon Beam with the Power Beam, in any room, without the Phazon Suit", true, ArgKind::None,
      true},
+    {"infinite_ammo", "Cheats", "Infinite ammo",
+     "Fire with empty ammo; the HUD shows infinity, real counts and pickups are kept, until turned off again",
+     true, ArgKind::None, true},
     {"free_camera", "Cheats", "Free camera", "Fly the view away from Samus to look around", true, ArgKind::None,
      true},
     {"freeze_game", "Cheats", "Freeze the game", "Hold the game still while the free camera flies", true,
@@ -268,6 +272,14 @@ std::string RunPhazonBeam(const PortInput::CustomActionDef& def) {
   const bool on = Next(ModeOf(def.mode), PortDebug::PhazonBeamCheat());
   PortDebug::SetPhazonBeamCheat(on);
   return "Phazon Beam " + OnOff(on);
+}
+
+std::string RunInfiniteAmmo(const PortInput::CustomActionDef& def) {
+  // Missiles and power bombs together, as the Cheats page's ticks; "on" means both.
+  const unsigned all = PortDebug::kInfAmmoAll;
+  const bool on = Next(ModeOf(def.mode), (PortDebug::InfiniteAmmoSet() & all) == all);
+  PortDebug::SetInfiniteAmmo(all, on);
+  return "Infinite ammo " + OnOff(on);
 }
 
 std::string RunFreeCamSwitch(const PortInput::CustomActionDef& def, PresetId id) {
@@ -590,6 +602,8 @@ std::string AutoName(const PortInput::CustomActionDef& def) {
     return ModalName("Invincibility", def.mode);
   case PresetId::PhazonBeam:
     return ModalName("Phazon Beam", def.mode);
+  case PresetId::InfiniteAmmo:
+    return ModalName("Infinite ammo", def.mode);
   case PresetId::FreeCamera:
     return ModalName("Free camera", def.mode);
   case PresetId::FreezeGame:
@@ -667,6 +681,8 @@ std::string Run(const PortInput::CustomActionDef& def) {
   }
   case PresetId::PhazonBeam:
     return RunPhazonBeam(def);
+  case PresetId::InfiniteAmmo:
+    return RunInfiniteAmmo(def);
   case PresetId::FreeCamera:
   case PresetId::FreezeGame:
   case PresetId::ShowSamus:

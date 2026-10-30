@@ -20,6 +20,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/HUD/CSamusHud.hpp"
 #include "port_disc.h"
+#include <wchar.h>
 #endif
 
 // @ fn_800E6414: Trilogy reads the missile warnings from STRG_Hud entries 11 and 12, GC from the
@@ -153,6 +154,17 @@ void CHudMissileInterface::SetMissileCapacity(int capacity) { x4_missileCapacity
 
 void CHudMissileInterface::SetNumMissiles(int missiles, const CStateManager& mgr) {
 #ifdef TARGET_PC
+  // Port: infinite ammo shows infinity in place of the count (CSamusHud passes the
+  // capacity, so the meter reads full); Trilogy keeps "/capacity".
+  if (CPlayerState::PortInfiniteAmmo(CPlayerState::kIT_Missiles)) {
+    wchar_t text[16];
+    if (PortDisc::IsTrilogy(PortDisc::Current())) {
+      swprintf(text, 16, L"\x221E/%03d", CMath::Clamp(0, x4_missileCapacity, 999));
+    } else {
+      swprintf(text, 16, L"  \x221E");
+    }
+    x60_textpane_missiledigits->TextSupport().SetText(rstl::wstring(text));  // copies the stack buffer
+  } else
   // @ fn_800E5B04: Trilogy shows the count over the capacity, "%03d/%03d" (lbl_80470E48).
   if (PortDisc::IsTrilogy(PortDisc::Current())) {
     char trilogyDigits[16];

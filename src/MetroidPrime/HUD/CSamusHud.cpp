@@ -250,7 +250,12 @@ void CSamusHud::InitializeFrameGlueMutable(const CStateManager& mgr) {
   case kHS_Ball: {
     const CPlayerState& state = *mgr.GetPlayerState();
     const CPlayerGun& ballGun = *mgr.GetPlayer()->GetPlayerGun();
+#ifdef TARGET_PC
+    // Port: with infinite ammo the readout shows the capacity's worth (infinity as text).
+    const int powerBombs = state.PortUsableAmount(CPlayerState::kIT_PowerBombs);
+#else
     const int powerBombs = state.GetItemAmount(CPlayerState::kIT_PowerBombs);
+#endif
     const int capacity = state.GetItemCapacity(CPlayerState::kIT_PowerBombs);
     const int bombs = ballGun.IsBombReady() ? ballGun.GetBombsPending() : 0;
     bool hasBombs = state.HasPowerUp(CPlayerState::kIT_MorphBallBombs);
@@ -807,7 +812,19 @@ void CSamusHud::UpdateMissile(float dt, const CStateManager& mgr, bool init) {
   const CPlayerGun& gun = *mgr.GetPlayer()->GetPlayerGun();
   const CPlayerState& state = *mgr.GetPlayerState();
   const CPlayerGun::EMissileMode mode = gun.GetMissileMode();
+#ifdef TARGET_PC
+  // Port: infinite ammo reads as a full meter (CHudMissileInterface writes infinity), so
+  // no low-ammo warning; a toggle redraws the text even when the number stays.
+  static bool sMissilesInfinite = false;
+  const bool infinite = CPlayerState::PortInfiniteAmmo(CPlayerState::kIT_Missiles);
+  if (infinite != sMissilesInfinite) {
+    sMissilesInfinite = infinite;
+    x2d8_missileAmount = -1;
+  }
+  const int missiles = state.PortUsableAmount(CPlayerState::kIT_Missiles);
+#else
   const int missiles = state.GetItemAmount(CPlayerState::kIT_Missiles);
+#endif
   const int capacity = state.GetItemCapacity(CPlayerState::kIT_Missiles);
   const float charge = gun.GetChargePercentage();
   if (!x294_missileIntf.null()) {
@@ -838,13 +855,27 @@ void CSamusHud::UpdateBallMode(const CStateManager& mgr, bool init) {
   }
   const CPlayerState& state = *mgr.GetPlayerState();
   const CPlayerGun& gun = *mgr.GetPlayer()->GetPlayerGun();
+#ifdef TARGET_PC
+  // Port: infinite ammo reads as the capacity's worth (CHudBallInterface writes infinity);
+  // a toggle redraws the text even when the number stays.
+  static bool sPowerBombsInfinite = false;
+  const bool infinite = CPlayerState::PortInfiniteAmmo(CPlayerState::kIT_PowerBombs);
+  const bool redraw = infinite != sPowerBombsInfinite;
+  sPowerBombsInfinite = infinite;
+  const int powerBombs = state.PortUsableAmount(CPlayerState::kIT_PowerBombs);
+#else
   const int powerBombs = state.GetItemAmount(CPlayerState::kIT_PowerBombs);
+#endif
   const int capacity = state.GetItemCapacity(CPlayerState::kIT_PowerBombs);
   const int bombs = gun.IsBombReady() ? gun.GetBombsPending() : 0;
   bool hasBombs = state.HasPowerUp(CPlayerState::kIT_MorphBallBombs);
   bool pbReady = gun.IsPowerBombReady() &&
                  mgr.GetPlayer()->GetMorphballTransitionState() == CPlayer::kMS_Morphed;
+#ifdef TARGET_PC
+  x2b0_ballIntf->SetBombParams(powerBombs, capacity, bombs, hasBombs, pbReady, redraw);
+#else
   x2b0_ballIntf->SetBombParams(powerBombs, capacity, bombs, hasBombs, pbReady, false);
+#endif
 }
 
 void CSamusHud::OnNewInGameGuiState(EInGameGuiState state, const CStateManager& mgr) {}

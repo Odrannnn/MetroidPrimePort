@@ -45,14 +45,18 @@
 // the diacritic drawn over it (port_font_accent.h). Anything else keeps a copy
 // of its ASCII stand-in's cell (PortHdFont::StandIns), widened as the distance
 // field's character is wider. Only the typeface the distance field holds.
+// Every font with an 8 also gets an infinity sign drawn after it, for the
+// infinite ammo cheat's HUD counters (PortFontAccent::Infinity).
 void CRasterFont::PortAddStandIns() {
-  if (!PortHdFont::SameTypeface(*this)) {
-    return;
-  }
   std::vector< PortAccentPending > marked;
   std::vector< PortAccentPending > plain;
+  const CGlyph* eight = GetGlyph(L'8');
+  if (eight != nullptr && !HasGlyph(kPortInfinity)) {
+    marked.push_back({kPortInfinity, eight, 1.f});
+  }
   const std::vector< PortHdFont::StandIn >& standIns = PortHdFont::StandIns();
-  for (size_t i = 0; i < standIns.size(); ++i) {
+  const size_t standInCount = PortHdFont::SameTypeface(*this) ? standIns.size() : 0;
+  for (size_t i = 0; i < standInCount; ++i) {
     const wchar_t chr = static_cast< wchar_t >(standIns[i].character);
     const CGlyph* base = GetGlyph(static_cast< wchar_t >(standIns[i].base));
     if (base == nullptr || HasGlyph(chr)) {
@@ -84,7 +88,9 @@ void CRasterFont::PortAddStandIns() {
       accented = static_cast< int >(added.size() - before);
     } else {
       for (size_t i = 0; i < marked.size(); ++i) {
-        addPlain(marked[i]);
+        if (marked[i].chr != kPortInfinity) {  // an 8 is no stand-in for it
+          addPlain(marked[i]);
+        }
       }
     }
   }
@@ -97,7 +103,7 @@ void CRasterFont::PortAddStandIns() {
   }
   rstl::sort_by_key(xc_glyphs);
   if (accented > 0) {
-    PortLog::Write("[font] %s: %d accented glyphs with diacritics\n", PortGetName(), accented);
+    PortLog::Write("[font] %s: %d glyphs drawn (accents, infinity)\n", PortGetName(), accented);
   }
 }
 
@@ -139,6 +145,7 @@ bool CRasterFont::PortAddAccents(const std::vector< PortAccentPending >& pending
     int cellW;
     PortFontAccent::Grid grid;
     int shift;
+    int extraW;  // the infinity's widening of the 8's advance
   };
   std::vector< Cell > cells;
   for (size_t i = 0; i < pending.size(); ++i) {
@@ -191,9 +198,17 @@ bool CRasterFont::PortAddAccents(const std::vector< PortAccentPending >& pending
     if (!outlined || outlineCount < 6 || outline > maxValue) {
       outline = ink;  // no outline pass
     }
+    PortFontAccent::Grid grid;
+    if (pending[i].chr == kPortInfinity) {
+      int extraW = 0;
+      if (PortFontAccent::Infinity(decoded, uint8_t(ink), uint8_t(outline), outlined, grid,
+                                   extraW)) {
+        cells.push_back({pending[i].chr, *base, 1.f, grid.w, grid, 0, extraW});
+      }
+      continue;
+    }
     const int cellW =
         static_cast< int >(base->GetCellWidth() * pending[i].widen + 0.5f);
-    PortFontAccent::Grid grid;
     int shift = 0, cellH = 0;
     if (cellW <= 0 ||
         !PortFontAccent::Composite(decoded, PortFontAccent::MarkFor(pending[i].chr), cellW,
@@ -201,7 +216,7 @@ bool CRasterFont::PortAddAccents(const std::vector< PortAccentPending >& pending
                                    cellH)) {
       continue;
     }
-    cells.push_back({pending[i].chr, *base, pending[i].widen, cellW, grid, shift});
+    cells.push_back({pending[i].chr, *base, pending[i].widen, cellW, grid, shift, 0});
   }
   if (cells.empty()) {
     return false;
@@ -282,7 +297,7 @@ bool CRasterFont::PortAddAccents(const std::vector< PortAccentPending >& pending
       const float eu = float(atX + w) / float(texW);
       const float sv = float(atY) / float(newH);
       const float ev = float(atY + cell.grid.h) / float(newH);
-      const int bw = static_cast< int >(cell.base.GetB() * cell.widen + 0.5f);
+      const int bw = static_cast< int >(cell.base.GetB() * cell.widen + 0.5f) + cell.extraW;
       added.push_back(rstl::pair< wchar_t, CGlyph >(
           cell.chr, CGlyph(cell.base.GetA(), bw, cell.base.GetC(), su, sv, eu, ev, w,
                            cell.grid.h, cell.base.GetBaseLine() + cell.shift,

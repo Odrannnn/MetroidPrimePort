@@ -10,6 +10,7 @@
 #include "port_font_accent.h"
 #include "port_test.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -417,6 +418,86 @@ void TestAccents() {
             "a blank cell composites nothing");
 }
 
+// An 8: two stacked 2-pixel rings, 8 wide and 14 tall, in a 12x22 cell.
+PortFontAccent::Grid FakeEight(bool outlined) {
+  PortFontAccent::Grid g;
+  g.w = 12;
+  g.h = 22;
+  g.v.assign(12 * 22, 0);
+  for (int y = 4; y < 18; ++y) {
+    for (int x = 2; x < 10; ++x) {
+      const bool edge = x < 4 || x >= 8 || y < 6 || (y >= 10 && y < 12) || y >= 16;
+      if (edge) {
+        g.v[size_t(y) * 12 + size_t(x)] = 1;
+      }
+    }
+  }
+  if (outlined) {
+    PortFontAccent::Grid ringed = g;
+    for (int y = 0; y < 22; ++y) {
+      for (int x = 0; x < 12; ++x) {
+        bool near = false;
+        for (int dy = -1; dy <= 1; ++dy) {
+          for (int dx = -1; dx <= 1; ++dx) {
+            const int nx = x + dx, ny = y + dy;
+            near |= nx >= 0 && ny >= 0 && nx < 12 && ny < 22 && g.v[size_t(ny) * 12 + size_t(nx)] == 1;
+          }
+        }
+        if (g.v[size_t(y) * 12 + size_t(x)] == 0 && near) {
+          ringed.v[size_t(y) * 12 + size_t(x)] = 2;
+        }
+      }
+    }
+    g = ringed;
+  }
+  return g;
+}
+
+void TestInfinity() {
+  using PortFontAccent::Grid;
+  using PortFontAccent::Infinity;
+  for (const bool outlined : {false, true}) {
+    const Grid eight = FakeEight(outlined);
+    Grid out;
+    int extra = -1;
+    CHECK_MSG(Infinity(eight, 1, 2, outlined, out, extra), "an infinity is drawn from the 8");
+    CHECK_MSG(extra > 0 && out.w == eight.w + extra && out.h == eight.h,
+              "the infinity cell is the 8's, widened");
+    const auto at = [&out](int x, int y) { return out.v[size_t(y) * size_t(out.w) + size_t(x)]; };
+    int left = out.w, right = -1, top = out.h, bottom = -1, inkCount = 0, outlineCount = 0;
+    for (int y = 0; y < out.h; ++y) {
+      for (int x = 0; x < out.w; ++x) {
+        if (at(x, y) == 1) {
+          ++inkCount;
+          left = std::min(left, x);
+          right = std::max(right, x);
+          top = std::min(top, y);
+          bottom = std::max(bottom, y);
+        } else if (at(x, y) == 2) {
+          ++outlineCount;
+        }
+      }
+    }
+    CHECK_MSG(inkCount > 0 && top == 4 && bottom == 17, "the infinity's ink spans the 8's rows");
+    CHECK_MSG(left == 2 && right - left + 1 == 8 + extra, "the infinity is as wide as it claims");
+    CHECK_MSG((outlineCount > 0) == outlined, "only an outlined 8 gives the infinity an outline");
+    // Wider than tall, crossing in the middle, with both loops open.
+    const int mid = (top + bottom) / 2;
+    const int cx = (left + right) / 2;
+    CHECK_MSG(at(cx, mid) == 1 || at(cx + 1, mid) == 1 || at(cx, mid + 1) == 1,
+              "the strokes cross in the middle");
+    const int qL = left + (right - left) / 4, qR = right - (right - left) / 4;
+    CHECK_MSG(at(qL, mid) == 0 && at(qR, mid) == 0, "both loops are open");
+  }
+  Grid blank;
+  blank.w = 12;
+  blank.h = 22;
+  blank.v.assign(12 * 22, 0);
+  Grid out;
+  int extra = 0;
+  CHECK_MSG(!Infinity(blank, 1, 2, false, out, extra), "a blank 8 draws no infinity");
+}
+
 int main(int argc, char** argv) {
   if (argc == 6) {
     return Convert(argv);
@@ -426,6 +507,7 @@ int main(int argc, char** argv) {
   TestAsset();
   TestStandIns();
   TestAccents();
+  TestInfinity();
   if (port_test::Failures() == 0) {
     std::puts("port_hd_font tests passed");
   }

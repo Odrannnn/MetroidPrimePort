@@ -157,6 +157,11 @@ public:
   static void PortSetAmmoLimits(int missiles, int powerBombs);
   // Port: sets an ammo count as saved, past the limits in force.
   void PortRestoreAmmo(EItemType type, int amount, int capacity);
+  // Port: whether the infinite ammo cheat covers this counter (missiles, power bombs).
+  static bool PortInfiniteAmmo(EItemType type);
+  // Port: the ammo firing may use: the real amount, or with infinite ammo at least the
+  // capacity (1 with none), so an empty counter still fires. The real amount is unchanged.
+  int PortUsableAmount(EItemType type) const;
 #endif
   const float CalculateHealth();
   void InitializePowerUp(CPlayerState::EItemType type, int capacity);

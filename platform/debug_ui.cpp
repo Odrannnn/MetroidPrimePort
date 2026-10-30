@@ -146,6 +146,8 @@ bool sPhazonBeamCheat = false;
 // MP_GODMODE, for this run only: -1 unset, else 0 or 1. Never saved, and changing the
 // setting ends it.
 int sInvulnerableRun = -1;
+// The infinite ammo cheat's kInfAmmo* bits. Never saved; MP_INFINITE_AMMO=1 sets them all.
+unsigned sInfiniteAmmo = 0;
 // On by default: a game that closes at launch gives no chance to tick the box
 // first, and a phone or a desktop launcher has no terminal to read.
 bool sLogFile = true;
@@ -464,6 +466,9 @@ void EnsureInitialized() {
   }
   if (port::EnvString("MP_GODMODE") != nullptr) {
     sInvulnerableRun = port::EnvFlag("MP_GODMODE") ? 1 : 0;
+  }
+  if (port::EnvFlag("MP_INFINITE_AMMO")) {
+    sInfiniteAmmo = PortDebug::kInfAmmoAll;
   }
   if (port::EnvFlag("MP_SHOW_DEBUG_UI")) {
     sVisible = true;
