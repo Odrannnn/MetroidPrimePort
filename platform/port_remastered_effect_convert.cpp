@@ -1087,17 +1087,25 @@ using port::ReadLEFloat;
 // and 4 vec4, 1 float, 0 int. An unknown type ends the list. Types 5 and 4 are
 // the 2D textures and the colours of a few shaders (1c651f97's NMAP, TCH0 and
 // CCH0/1/4/6); every disc MATI with them parses to its end with these sizes.
+// The parameter count follows a list at 0x65 (LE u32 count of 10-byte entries:
+// two tags and two bytes, e.g. EXSC CCH0 01 01), empty in all but the four
+// dd007440 MATIs RenderLooseDataMP1 names.
 bool ParseMati(const std::vector<uint8_t>& d, Mati& out) {
   if (d.size() < 0x6d) {
+    return false;
+  }
+  const uint32_t prefix = ReadLE32(d.data() + 0x65);
+  if (prefix > (d.size() - 0x6d) / 10) {
     return false;
   }
   out.shader = port::GetBE32(d, 0x48);
   out.headerBlend = ReadLE32(d.data() + 0x61);
   out.cull = d[0x5d];
-  const uint32_t count = ReadLE32(d.data() + 0x69);
-  size_t at = 0x6d;
+  size_t at = 0x69 + 10 * size_t(prefix);
+  const uint32_t count = ReadLE32(d.data() + at);
+  at += 4;
   uint32_t parsed = 0;
-  bool parametersDone = false;
+  bool parametersDone = count == 0;
   for (; parsed < count; ++parsed) {
     if (at + 5 > d.size()) {
       break;
