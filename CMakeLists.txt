@@ -764,7 +764,7 @@ if(MP_BUILD_TESTS)
         platform/port_remastered_anuv.cpp
         platform/port_remastered_image.cpp
         platform/port_remastered_pak.cpp)
-    target_include_directories(mp_test_remastered_convert PUBLIC platform/include)
+    target_include_directories(mp_test_remastered_convert PUBLIC platform/include extern/aurora/include)
     target_link_libraries(mp_test_remastered_convert PUBLIC astcenc)
     mp_port_test(port_buffer_tests
         SOURCES tests/port_buffers.cpp tests/port_forward_owner.cpp

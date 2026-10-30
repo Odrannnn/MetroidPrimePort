@@ -34,6 +34,8 @@
 #include "port_remastered_pak.h"
 #include "port_remastered_uv.h"
 
+#include <aurora/pbr_kind.hpp>
+
 namespace PortRemastered {
 namespace ConvertDetail {
 

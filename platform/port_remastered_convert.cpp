@@ -639,7 +639,7 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     // The wind a material sways with: its index into the model's WIND sets (0xFF none). Only the plain lit
     // foliage (kind 0) of a standalone model, whose vertices can carry the weight in their colour alpha.
     RemMaterial& rem = mats.back();
-    if (rem.kind == 45) {
+    if (rem.kind == aurora::PbrKind::RouteHologram) {
       // 5586D988 VS000 scales source X/Z about the source origin and preserves Y.
       // Conjugate that operation by the actual import transform, including fitted
       // actor transforms; a hardcoded R2G apex would only work for room geometry.
@@ -661,7 +661,7 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
       rem.shieldRows[27] = origin[2];
     }
     const size_t at = mats.size() - 1;
-    if (opt.standalone && rem.kind == 0 && !rem.unlit && !rem.colorUnlit && !rem.blended && !rem.layered &&
+    if (opt.standalone && rem.kind == aurora::PbrKind::Standard && !rem.unlit && !rem.colorUnlit && !rem.blended && !rem.layered &&
         std::find(std::begin(kShaderWindFoliage), std::end(kShaderWindFoliage), rem.shader) !=
             std::end(kShaderWindFoliage) &&
         at < model.windMaterialSet.size() && model.windMaterialSet[at] < model.windSets.size()) {
@@ -1103,7 +1103,7 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
   for (Prim& p : prims) {
     if (opt.standalone) {
       const RemMaterial& m = mats[p.mat];
-      p.rmat = m.kind == 8 || m.kind == 10 || m.kind == 11 || m.kind == 14 || m.kind == 23 || m.kind == 29 || m.kind == 30 || m.kind == 34 || m.kind == 36 || m.kind == 43 ? 3 : m.cutout ? 1 : m.additive ? 4 : m.blended ? 2 : 0;
+      p.rmat = aurora::IsGlassSortKind(static_cast<aurora::PbrKind>(m.kind)) ? 3 : m.cutout ? 1 : m.additive ? 4 : m.blended ? 2 : 0;
       continue;
     }
     if (opt.material >= 0) {
@@ -1404,18 +1404,18 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     }
     // The Ice Beam cannon's frost shell (kind 12) needs no vertex colours: its glow mask is
     // the shader's own.
-    const bool frostShell = rem.kind == 12;
+    const bool frostShell = rem.kind == aurora::PbrKind::FrozenShell;
     // The pause visor's two materials (kinds 36, 37) are retail fx surfaces drawn by their shaders,
     // and only by those: no vertex colour, no second layer.
-    const bool inventory = rem.kind == 36 || rem.kind == 37;
-    if (rem.kind == 19 || rem.kind == 25 || rem.kind == 42) {
+    const bool inventory = rem.kind == aurora::PbrKind::InventoryGlass || rem.kind == aurora::PbrKind::InventoryAdd;
+    if (rem.kind == aurora::PbrKind::GunFx || rem.kind == aurora::PbrKind::EyeGloss || rem.kind == aurora::PbrKind::BallGlass) {
       // Row 6 w (unused by this kind otherwise): the retail konst alpha, a factor of the alpha of a particle model.
       rem.shieldRows[27] = GunFxParticle(pm) ? pm.konstAlpha : 1.0;
     }
     // A retail model's material keeps its kind, macro and second layer as a room's does: its
     // vertices carry the colour and its texcoords every set (above). A second layer is
     // weighed by a kind's shader or by the vertex colour.
-    rem.layered = rem.layered && (rem.kind != 0 || (useColor && rem.tinted));
+    rem.layered = rem.layered && (rem.kind != aurora::PbrKind::Standard || (useColor && rem.tinted));
     rem.macroLayered = rem.macroLayered && rem.layered;
     const MapRef* rt = rem.maps;
     // Every set has its slot already (above), the beam glow's noise and the frost shell's
@@ -1438,11 +1438,11 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     // cut by the shader. Any other keeps the CMPR punch and retail's alpha compare.
     // The glow masks (and the frost shell's, the Vfx shaders', the pickups' and the pause
     // visor's alpha) are the shaders' own, squared where USE_DIFFUSE_AS_INCAN_MASK squares it.
-    const bool exactCut = rem.cutout && (rem.kind == 0 || rem.kind == 24) && !rem.unlit && !rem.layered;
+    const bool exactCut = rem.cutout && (rem.kind == aurora::PbrKind::Standard || rem.kind == aurora::PbrKind::DecalCut) && !rem.unlit && !rem.layered;
     const char* const baseAlpha =
         rem.cutout ? (exactCut ? "cut" : "punch")
         : rem.mask || rem.layered || rem.height > 0.0 || frostShell || inventory || rem.shader == kShaderVfxBase ||
-                rem.shader == kShaderVfxBase2 || (rem.kind >= 16 && rem.kind <= 18) || rem.kind == 45
+                rem.shader == kShaderVfxBase2 || (rem.kind == aurora::PbrKind::Holo || rem.kind == aurora::PbrKind::HoloRefl || rem.kind == aurora::PbrKind::Hologram) || rem.kind == aurora::PbrKind::RouteHologram
             ? (!frostShell && rem.maskSquared ? "mask2" : "mask")
         : rem.blended ? "blend"
                       : "";

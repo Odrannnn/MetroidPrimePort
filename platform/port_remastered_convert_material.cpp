@@ -335,57 +335,7 @@ std::string ShaderRole(uint32_t shader) {
   return out.empty() ? "-" : out;
 }
 
-const char* KindName(int kind) {
-  switch (kind) {
-  case 0: return "standard";
-  case 1: return "up-layer";
-  case 2: return "detail";
-  case 3: return "lava";
-  case 4: return "parallax";
-  case 6: return "lava-pool";
-  case 7: return "waterfall";
-  case 8: return "glass";
-  case 9: return "gun-glow";
-  case 10: return "premul-glass";
-  case 11: return "holo-glass";
-  case 12: return "frozen-shell";
-  case 13: return "matcap-shell";
-  case 14: return "boundary-shield";
-  case 15: return "pickup";
-  case 16: return "holo";
-  case 17: return "holo-refl";
-  case 18: return "hologram";
-  case 19: return "gun-fx";
-  case 20: return "vertex-blend";
-  case 21: return "phazon";
-  case 22: return "phazon-b";
-  case 23: return "refract-glass";
-  case 24: return "decal-cut";
-  case 25: return "eye-gloss";
-  case 26: return "projected-blend";
-  case 27: return "decal-alpha";
-  case 28: return "ice";
-  case 29: return "holo-glass-b";
-  case 30: return "refract-glass-b";
-  case 31: return "xray-ghost";
-  case 32: return "phazon-pool";
-  case 33: return "xray-map";
-  case 34: return "dual-glass";
-  case 35: return "phazon-veins";
-  case 36: return "inventory-glass";
-  case 37: return "inventory-add";
-  case 38: return "unlit-cube";
-  case 39: return "unlit-vertex";
-  case 40: return "unlit-matcap";
-  case 41: return "unlit-add";
-  case 42: return "ball-glass";
-  case 43: return "simple-glass";
-  case 44: return "energy-field";
-  case 45: return "route-hologram";
-  case 46: return "chozo-lore";
-  default: return "kind?";
-  }
-}
+const char* KindName(int kind) { return aurora::PbrKindName(static_cast<aurora::PbrKind>(kind)); }
 
 // A shader's DIFC, ICNC and ICMC constants (white, black and black where the material has none).
 struct ShaderColors {

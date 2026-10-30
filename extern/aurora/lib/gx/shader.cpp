@@ -10,6 +10,8 @@
 #include "gx_fmt.hpp"
 #include "shader_info.hpp"
 
+#include <aurora/pbr_kind.hpp>
+
 #include <dolphin/gx/GXEnum.h>
 
 #include <absl/container/flat_hash_map.h>
@@ -1017,7 +1019,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   }
   // Kind 47 (Remastered's frozen-enemy icy material) samples its maps at coordinates of its own
   // (see icy below), so its normal map does not go through the generic tangent-space path.
-  const bool icy = config.pbrKind == 47 && mapStage[1] != -1 && mapStage[2] != -1 && config.lineMode == 0;
+  const bool icy = config.pbrKind == PbrKind::Icy && mapStage[1] != -1 && mapStage[2] != -1 && config.lineMode == 0;
   const int icyNormalStage = icy ? mapStage[2] : -1;
   if (icy) {
     mapStage[2] = -1;
@@ -1025,7 +1027,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // Glass (kind 8) also samples map 7, a copy of what is behind it on screen. The
   // shadow's stage samples map 7 too, so a shadowed surface goes without.
   // 3c66aaef (layered + MNMP) binds its macro normal as map 7, which is not a scene copy.
-  const bool layeredMacro = mapStage[4] != -1 && mapStage[7] != -1 && (config.pbrKind == 0 || config.pbrKind == 24);
+  const bool layeredMacro = mapStage[4] != -1 && mapStage[7] != -1 && (config.pbrKind == PbrKind::Standard || config.pbrKind == PbrKind::DecalCut);
   bool screen = false;
   for (int i = 0; i < config.tevStageCount && !shadowed && !layeredMacro; ++i) {
     const auto& stage = config.tevStages[i];
@@ -1083,12 +1085,12 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // The beam glow (kind 9) has no colourless variant in Remastered: a gun without colours
   // (the inventory and cinematic ones) reads the missing attribute's default, (0,0,0,1)
   // (inferred; kb topic/gun-beam-glow-no-vtxcolor.md).
-  std::string tint, tintAlpha, vclr = config.pbrKind == 9 ? "vec4f(0.0, 0.0, 0.0, 1.0)" : "vec4f(1.0)";
-  if (config.pbrKind == 45) vclr = "vec4f(2.0, 2.0, 2.0, 1.0)";
+  std::string tint, tintAlpha, vclr = config.pbrKind == PbrKind::GunGlow ? "vec4f(0.0, 0.0, 0.0, 1.0)" : "vec4f(1.0)";
+  if (config.pbrKind == PbrKind::RouteHologram) vclr = "vec4f(2.0, 2.0, 2.0, 1.0)";
   if (config.attrs[GX_VA_CLR0].attrType != GX_NONE) {
     vtxOutAttrs += fmt::format("\n    @location({}) pbr_vclr: vec4f,", vtxOutIdx++);
     vtxXfrAttrs += fmt::format("\n    out.pbr_vclr = {};", vtx_attr(config, GX_VA_CLR0));
-    if (config.pbrKind == 45) {
+    if (config.pbrKind == PbrKind::RouteHologram) {
       // 5586D988 VS000: decode before interpolation, not in the fragment shader.
       vtxXfrAttrs += fmt::format("\n    out.pbr_vclr = vec4f(2.0 * pow(abs({0}.rgb), vec3f(2.2)), {0}.a);",
                                 vtx_attr(config, GX_VA_CLR0));
@@ -1096,14 +1098,14 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     tint = " * pbr_vc.rgb";
     tintAlpha = " * pbr_vc.a";
     vclr = "in.pbr_vclr";
-    if (config.pbrKind == 29) {
+    if (config.pbrKind == PbrKind::HoloGlassB) {
       // E2644678's VS002 decodes the vertex colour per vertex (kb material/e2644678.md).
       vtxOutAttrs += fmt::format("\n    @location({}) pbr_v5e: vec4f,", vtxOutIdx++);
       vtxXfrAttrs += fmt::format("\n    out.pbr_v5e = vec4f(2.0 * pow(abs({0}.rgb), vec3f(2.2)), {0}.a);",
                                  vtx_attr(config, GX_VA_CLR0));
     }
   }
-  if (config.pbrKind == 29) {
+  if (config.pbrKind == PbrKind::HoloGlassB) {
     // And takes the depth factor per vertex: the near plane over the view depth, capped by
     // vp_c1[0].x (shield row 4 y and z).
     vtxOutAttrs += fmt::format("\n    @location({}) pbr_vxe: f32,", vtxOutIdx++);
@@ -1124,8 +1126,8 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   const bool layered = mapStage[4] != -1;
   // The fragment's screen position, for everything below that reads the screen copy (map 7): the
   // layered block's glass/holo/field/shield branches, kind 34, and kinds 23/30. Declared once here.
-  if (screen && (layered || config.pbrKind == 34 || config.pbrKind == 36 ||
-                 ((config.pbrKind == 23 || config.pbrKind == 30) && mapStage[2] != -1))) {
+  if (screen && (layered || config.pbrKind == PbrKind::DualGlass || config.pbrKind == PbrKind::InventoryGlass ||
+                 ((config.pbrKind == PbrKind::RefractGlass || config.pbrKind == PbrKind::RefractGlassB) && mapStage[2] != -1))) {
     vtxOutAttrs += fmt::format("\n    @location({}) pbr_scr: vec4f,", vtxOutIdx++);
     vtxXfrAttrs += "\n    out.pbr_scr = out.pos;";
   }
@@ -1134,11 +1136,11 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // diffuse light, so the reflection and the glow are not dimmed with it.
   // Kinds 36/37 (inventory visor): BCLR x DIFC is the albedo and BCLR.a^2 x DIFC.a the opacity, explicit (no TEV
   // alpha, no vertex alpha, no generic fade). Kind 36 premultiplies the diffuse by it, like kind 34.
-  const bool inventory = (config.pbrKind == 36 || config.pbrKind == 37) && mapStage[0] != -1 && !layered;
+  const bool inventory = (config.pbrKind == PbrKind::InventoryGlass || config.pbrKind == PbrKind::InventoryAdd) && mapStage[0] != -1 && !layered;
   const std::string& alphaTint = inventory ? std::string() : tintAlpha;
   const std::string diffTint =
-      inventory ? (config.pbrKind == 36 ? tint + " * inv_a" : tint)
-      : (config.pbrKind == 10 || config.pbrKind == 34)
+      inventory ? (config.pbrKind == PbrKind::InventoryGlass ? tint + " * inv_a" : tint)
+      : (config.pbrKind == PbrKind::PremulGlass || config.pbrKind == PbrKind::DualGlass)
           ? fmt::format("{} * ({}{})", tint, layered ? "1.0" : "prev.a", tintAlpha)
           : tint;
   // Remastered's diffuse vertex colour (MFVC) is decoded in its vertex shader as
@@ -1225,7 +1227,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // Only a cutout's config (pbrCut) has the cut tests: elsewhere pbr_cut is false and the discard
   // would only force late depth. Without the marker the config has no cut caster either.
   const bool cutTests = config.pbrCut && mapStage[4] == -1;
-  if (cutTests && config.pbrKind == 24) {
+  if (cutTests && config.pbrKind == PbrKind::DecalCut) {
     // The decal cutouts (kind 24: e538b757, 42fe2ed0): t = clamp((A - 0.5 + c) / 2c), cut where t²(3 - 2t) < 0.25,
     // with c = CCH0.x = 0.5 on all of them, so t = A. A is the alpha map's red (42fe2ed0's TCH0, map 3), else
     // the base alpha squared; no vertex alpha.
@@ -1411,7 +1413,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // the vertex alpha (2 va + a^2.2 - 1, squared) says, the albedo is that colour; the vertex blue (with the
     // AO cavity) masks the CCH3 glow. The vertex colour is raw. The glow is added at the inverse of the exposure
     // (see liquid below).
-    if (config.pbrKind == 21 && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::Phazon && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
       kinds += fmt::format(R"""(
       let pbr_zc0 = ubuf.pbr_shield[0];
       let pbr_zc1 = ubuf.pbr_shield[1];
@@ -1443,7 +1445,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // ramp's weight; the ramp's column is offset and scaled by CCH0.z/.w; a second ramp read at (a^2.2 + CCH2.z +
     // CCH2.x) CCH2.y on row 0 gives the alpha that, with the vertex green, lights the CCH3 cavity glow (no
     // phase); the ramp glow is 4 t va.r CCH0.x CCH0.y grad. There is no DIFC, and no exposure factor on the glow.
-    if (config.pbrKind == 22 && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::PhazonB && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
       kinds += fmt::format(R"""(
       let pbr_zc0 = ubuf.pbr_shield[0];
       let pbr_zc1 = ubuf.pbr_shield[1];
@@ -1476,7 +1478,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // N.pos, and at z = fract(t CCH1.x + BCLR.a CCH1.y). It scales the normal map's tilt (max(1.25 n, 0.1)) and
     // lowers the roughness; the ramp is read at (n + f, f) for the fresnel f = (N.V)^CCH0.x CCH0.y of the
     // geometric normal, and its colour times CCH0.w is the glow (times the exposure, as every glow here).
-    if (config.pbrKind == 32 && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::PhazonPool && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
       kinds += fmt::format(R"""(
       let pbr_pc0 = ubuf.pbr_shield[0];
       let pbr_pc1 = ubuf.pbr_shield[1];
@@ -1555,7 +1557,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // lift over 0.25 through the smoothstep of (1 - m) 9.99999809 is discarded. Map 4 is TCH1, the edge ramp, read at
     // (1 - m, 0); its colour times m CCH0.y is the glow (times the exposure, as every glow here); ICMC is added with
     // none. The albedo is the base map times DIFC.rgb.
-    if (config.pbrKind == 35 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::PhazonVeins && mapStage[4] != -1 && mapStage[5] != -1) {
       kinds += fmt::format(R"""(
       if (pbr_kind > 34.5 && pbr_kind < 35.5) {{
           let pbr_vc0 = ubuf.pbr_shield[0];
@@ -1840,7 +1842,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // scene term too, so what shows through is added after the tone curve and blended by alpha.
     const auto& inner4 = config.tevStages[mapStage[4]];
     std::string through;
-    if (screen && config.pbrKind != 31) {
+    if (screen && config.pbrKind != PbrKind::XrayGhost) {
       through = fmt::format(R"""(
           let pbr_gn = ({0} - 0.5) * ubuf.pbr_param.x * vec2f(1.0, -1.0);
           let pbr_guv = in.pbr_scr.xy / in.pbr_scr.w * vec2f(0.5, -0.5) + 0.5 + pbr_gn;
@@ -1915,23 +1917,23 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       })""";
     // Kind 21's glow, at the inverse of the exposure: the pulsing CCH3 glow in the AO cavities (blue mask) and the
     // ramp's colour where the vertex alpha says, scaled by the vertex red (pbr_ei).
-    if (config.pbrKind == 21 && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::Phazon && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
       liquid += R"""(
       pbr_glow += ((pbr_zph + 2.0) * ubuf.pbr_shield[3].rgb * (ubuf.pbr_shield[0].z * pbr_zs2) +
                    pbr_zgrad * (pbr_zt2 * pbr_vraw.r * ubuf.pbr_shield[0].x * ubuf.pbr_shield[0].y)) * pbr_ei;)""";
     }
     // Kind 32's glow: the ramp colour times CCH0.w at inverse exposure (c4[0].z, pbr_ei), plus ICMC, bare (pbr_eb).
-    if (config.pbrKind == 32 && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::PhazonPool && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
       liquid += R"""(
       pbr_glow += pbr_pramp * pbr_pc0.w * pbr_ei + ubuf.pbr_shield[6].rgb * pbr_eb;)""";
     }
     // Kind 35's ICMC, bare (pbr_eb).
-    if (config.pbrKind == 35 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::PhazonVeins && mapStage[4] != -1 && mapStage[5] != -1) {
       liquid += R"""(
       pbr_glow += ubuf.pbr_shield[6].rgb * pbr_eb;)""";
     }
     // Kind 22's glow: Remastered adds it with no exposure factor, bare (pbr_eb).
-    if (config.pbrKind == 22 && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::PhazonB && mapStage[2] != -1 && mapStage[4] != -1 && mapStage[5] != -1) {
       liquid += R"""(
       pbr_glow += (pbr_zcav * ubuf.pbr_shield[3].rgb +
                    pbr_zgrad * (4.0 * pbr_zt * pbr_vraw.r * ubuf.pbr_shield[0].x * ubuf.pbr_shield[0].y)) * pbr_eb;)""";
@@ -2017,7 +2019,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     if (screen && mapStage[0] != -1 && mapStage[5] != -1 && mapStage[6] != -1) {
       // The vertex colour and depth factor: E2644678 (shield row 5 y) takes VS002's, per vertex. Only
       // a kind 29 pipeline has those outputs; any other never takes this branch.
-      const bool holo = config.pbrKind == 29;
+      const bool holo = config.pbrKind == PbrKind::HoloGlassB;
       std::string holoVertex =
           "let pbr_v5f = vec4f(2.0 * pow(abs(pbr_vraw.rgb), vec3f(2.2)), pbr_vraw.a);\n"
           "          let pbr_vxf = min(abs(1.0 / min(in.pbr_pos.z, -1e-3)), 1.0);\n"
@@ -2197,7 +2199,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // plus the room cube's reflection (F0 0.04, no metal, no AO, no direct light). On a lightmap the
   // diffuse part is the baked level L0 x BLCM for what the vertex alpha leaves of the glass.
   // Opaque (alpha 1); the room comes through pbr_pass, after the tone curve.
-  if ((config.pbrKind == 23 || config.pbrKind == 30) && screen && mapStage[2] != -1) {
+  if ((config.pbrKind == PbrKind::RefractGlass || config.pbrKind == PbrKind::RefractGlassB) && screen && mapStage[2] != -1) {
     liquid += fmt::format(R"""(
       if ((pbr_kind > 22.5 && pbr_kind < 23.5) || (pbr_kind > 29.5 && pbr_kind < 30.5)) {{
           let pbr_xr = {0}.a * {0}.a;
@@ -2305,11 +2307,11 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
         pbr_pass = vec3f(0.0);
     }})""",
                         base, underlying(config.tevStages[mapStage[0]].texMapId),
-                        config.pbrKind == 45 ? "pbr_vraw.rg" : "2.0 * pow(abs(pbr_vraw.rg), vec2f(2.2))",
-                        config.pbrKind == 45 ? "clamp(pbr_yc3.x * pbr_yd.a, 0.0, 1.0)" : "1.0",
-                        config.pbrKind == 45 ? "pbr_yc1.z" : "max(pbr_yc1.z, 1e-4)",
-                        config.pbrKind == 45 ? "pbr_yc0.x" : "select(1e-4, pbr_yc0.x, abs(pbr_yc0.x) > 1e-4)",
-                        config.pbrKind == 45 ? "abs(pbr_ng.z)" : "max(abs(pbr_ng.z), 1e-6)");
+                        config.pbrKind == PbrKind::RouteHologram ? "pbr_vraw.rg" : "2.0 * pow(abs(pbr_vraw.rg), vec2f(2.2))",
+                        config.pbrKind == PbrKind::RouteHologram ? "clamp(pbr_yc3.x * pbr_yd.a, 0.0, 1.0)" : "1.0",
+                        config.pbrKind == PbrKind::RouteHologram ? "pbr_yc1.z" : "max(pbr_yc1.z, 1e-4)",
+                        config.pbrKind == PbrKind::RouteHologram ? "pbr_yc0.x" : "select(1e-4, pbr_yc0.x, abs(pbr_yc0.x) > 1e-4)",
+                        config.pbrKind == PbrKind::RouteHologram ? "abs(pbr_ng.z)" : "max(abs(pbr_ng.z), 1e-6)");
   }
   // EnergyField 9C867F3C, both shipped fragment permutations. Its VS passes raw
   // colour/alpha and UV0; rows 4/5 reconstruct Remastered world X/Y.
@@ -2349,7 +2351,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // BCLR (tex8) by CCH0.w x c1[0].x (0.2), which scrolls by (CCH1.w, CCH2.w) at CCH1.x. Unlit and
   // premultiplied: rgb = BCLR x CCH1.y x (1 + clamp(w) x CCH1.z) x DIFC x alpha, alpha = BCLR.a x
   // the vertex alpha x DIFC.a. The glow has no exposure factor of its own: bare (pbr_eb).
-  if (config.pbrKind == 46 && mapStage[0] != -1 && mapStage[4] != -1) {
+  if (config.pbrKind == PbrKind::ChozoLore && mapStage[0] != -1 && mapStage[4] != -1) {
     liquid += fmt::format(R"""(
     if (pbr_kind > 45.5 && pbr_kind < 46.5) {{
         let lr0 = ubuf.pbr_shield[0];
@@ -2414,7 +2416,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // reflection, probe-rotated, at LOD rough x 7 (pbr_cubel), with no BRDF table, fresnel or AO. Row 7 = DIFC, row 6 =
   // ICNC + ICMC. Alpha = BCLR.a^2 x DIFC.a. No exposure factor of its own (kb: bare): the converter sets mode bit
   // 131072, so backlight.rgb holds the exposure the static one (tone row 0 w) leaves, and both give the frame's.
-  if (config.pbrKind == 38) {
+  if (config.pbrKind == PbrKind::UnlitCube) {
     liquid += fmt::format(R"""(
     if (pbr_kind > 37.5 && pbr_kind < 38.5) {{
         let pbr_ue = max(ubuf.pbr_backlight.rgb, vec3f(0.0)) *
@@ -2433,7 +2435,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   //   rgb = DIFT x DIFC x vcol + ICNC + ICMC   alpha = DIFT.a^2 x vcol.a x DIFC.a
   // Row 6 = ICNC + ICMC, row 7 = DIFC. The kb does not say how the vertex colour is decoded: this takes pbr_vraw, the
   // port's usual MFVC decode (2 |c|^2.2, alpha raw) - inferred, not read from the shader.
-  if (config.pbrKind == 39) {
+  if (config.pbrKind == PbrKind::UnlitVertex) {
     liquid += fmt::format(R"""(
     if (pbr_kind > 38.5 && pbr_kind < 39.5) {{
         let pbr_yi = ubuf.pbr_shield[6];
@@ -2449,7 +2451,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // Kind 42, Remastered's 1fbafbca (the Varia spider ball's glass, permutation 002 assumed; kb material/1fbafbca.md):
   // kind 25's lighting and matcap plus ICAN (map 3) x ICNC (row 5); row 6 = ICMC (w the retail konst alpha), row 7 = DIFC.
   // No exposure in the shader; c4[5]'s light scale (unverified) taken as 1, as kind 25's.
-  if (config.pbrKind == 42 && mapStage[4] != -1 && mapStage[5] != -1) {
+  if (config.pbrKind == PbrKind::BallGlass && mapStage[4] != -1 && mapStage[5] != -1) {
     liquid += fmt::format(R"""(
     if (pbr_kind > 41.5 && pbr_kind < 42.5) {{
         let pbr_gl = pbr_ambd + pbr_lnl;
@@ -2468,7 +2470,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // matcap with no light and no exposure,
   //   rgb = DIFT x DIFC + REFS(0.5 + 0.5 n.xy) x REFV + ICNC + ICMC   alpha = DIFT.a^2 x DIFC.a
   // Map 4 is REFS, map 5 REFV (the assignment inferred from the matcap coordinate, kb). Row 6 = ICNC + ICMC, row 7 = DIFC.
-  if (config.pbrKind == 40 && mapStage[4] != -1 && mapStage[5] != -1) {
+  if (config.pbrKind == PbrKind::UnlitMatcap && mapStage[4] != -1 && mapStage[5] != -1) {
     liquid += fmt::format(R"""(
     if (pbr_kind > 39.5 && pbr_kind < 40.5) {{
         let pbr_zs = max(textureSampleLevel(tex{0}, tex{0}_samp, 0.5 + 0.5 * pbr_n.xy, 0.0).rgb, vec3f(0.0));
@@ -2485,7 +2487,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   //   rgb = METL.x x BCLR x (1 - METL.z) x DIFC + ICAN x ICNC + ICMC   alpha = BCLR.a^2 x DIFC.a
   // METL.x and .z are the MR map's r and b (pbr_ao, pbr_metal). Row 5 = ICMC, row 6 = ICNC, row 7 = DIFC. ICAN is map 3
   // on its reference's texcoord (the kb's uv set 1 for it is a guess).
-  if (config.pbrKind == 41) {
+  if (config.pbrKind == PbrKind::UnlitAdd) {
     liquid += fmt::format(R"""(
     if (pbr_kind > 40.5 && pbr_kind < 41.5) {{
         let pbr_xi = max({1}.rgb, vec3f(0.0));
@@ -2544,8 +2546,8 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // (w = 1 for df3e3423).
   // Kind 33, 65e90e82: the same with DIFC for ICNC (row 2), ICAN always, TCH0 (map 1) in rgb - 2 x TCH0 and, with CCH1.z != 0,
   // alpha = fade x fr + mean(TCH0) (then x DIFC.a); fade alone otherwise.
-  if (config.pbrKind == 31 || config.pbrKind == 33) {
-    const bool map65 = config.pbrKind == 33;
+  if (config.pbrKind == PbrKind::XrayGhost || config.pbrKind == PbrKind::XrayMap) {
+    const bool map65 = config.pbrKind == PbrKind::XrayMap;
     liquid += fmt::format(R"""(
     if (pbr_kind > 30.5) {{
         let pbr_c0 = ubuf.pbr_shield[0];
@@ -2582,7 +2584,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // Kind 27, Remastered's 17e458cd (a decal with an alpha map): g = clamp(2 va (1 + TCH0.x) - 1), c = CCH0.x
   // (pbr_layer.x), t = clamp((g - 0.5 + c) / 2c), alpha = t²(3 - 2t). BCLR.a is not used; no discard.
   std::string decalAlpha;
-  if (config.pbrKind == 27 && mapStage[3] != -1) {
+  if (config.pbrKind == PbrKind::DecalAlpha && mapStage[3] != -1) {
     decalAlpha = fmt::format(R"""(
       if (pbr_kind > 26.5 && pbr_kind < 27.5) {{
           let pbr_dg = clamp(2.0 * pbr_vraw.a * (1.0 + sampled{}.x) - 1.0, 0.0, 1.0);
@@ -2598,7 +2600,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
 {1}
       let inv_b = max({0}.rgb, vec3f(0.0)) * ubuf.pbr_model_diffuse.rgb;
       let inv_a = {2};)""",
-                         base, config.pbrKind == 36 ? "\n      let inv_c = ubuf.pbr_model_coverage.x;" : "", InvAlphaExpr);
+                         base, config.pbrKind == PbrKind::InventoryGlass ? "\n      let inv_c = ubuf.pbr_model_coverage.x;" : "", InvAlphaExpr);
   }
   if (icy) {
     // Kind 47's glow: a rim, NdotV^CCH0.x x CCH0.y, darkening a 0.3 base lifted by a tenth of the
@@ -3068,7 +3070,7 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
                      // A sky's ICAN is its base map (the converter writes a black emissive map where
                      // it copies the base), and its glow ICAN x ICNC is most of what it shows. The
                      // map's last mip, its mean, tells that black map from one with dark texels.
-                     mapStage[3] == -1 || config.pbrKind == 20 || config.pbrKind == 24 || config.pbrKind == 27
+                     mapStage[3] == -1 || config.pbrKind == PbrKind::VertexBlend || config.pbrKind == PbrKind::DecalCut || config.pbrKind == PbrKind::DecalAlpha
                          ? "vec4f(0.0)"s
                          : fmt::format("select({0}, {1}, pbr_sky && dot(textureSampleLevel(tex3, tex3_samp, "
                                        "vec2f(0.5), 16.0).rgb, vec3f(1.0)) < 0.004)",
@@ -3081,7 +3083,7 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
                      (layered ? "\n      if (pbr_kind < 0.5 && ubuf.pbr_emissive.w <= 0.0) {\n          pbr_alpha = pbr_lalpha;\n      }"
                                 "\n      if (pbr_kind > 25.5 && pbr_kind < 26.5) {\n          pbr_alpha = pbr_lma;\n      }"s
                               : ""s) + decalAlpha);
-  if (config.pbrKind == 34 && screen) {
+  if (config.pbrKind == PbrKind::DualGlass && screen) {
     const size_t at = find_anchor(source, "      // A model fading (w of the light scale)");
     source.insert(at, R"""(
       if (pbr_kind > 33.5 && pbr_kind < 34.5) {
@@ -3097,7 +3099,7 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
           pbr_alpha = 1.0;
       })""");
   }
-  if (config.pbrKind == 0 || config.pbrKind == 3) {
+  if (config.pbrKind == PbrKind::Standard || config.pbrKind == PbrKind::Lava) {
     // A model tint (GXSetPBRModelModulation outside the pause visor): Remastered feeds the model colour to the
     // material as DIFC (id 0x20) or ICMC (id 0x24) (kb topic/model-flags-fade-tint.md, "Per-shader use"). Only the
     // kinds that read them through the generic albedo take it: kind 0 (bfb300b6 and its 0a52b67f/ae819893/60989bc1
@@ -3117,7 +3119,7 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
     const size_t out = find_anchor(source, "      let pbr_out = max(pbr_lo + pbr_glow, vec3f(0.0));");
     source.insert(out, R"""(      pbr_glow += ubuf.pbr_model_incan.rgb;
 )""");
-    if (config.pbrKind == 36) {
+    if (config.pbrKind == PbrKind::InventoryGlass) {
       // Kind 36's output is (lit + ICMC) * C (4c37625c), and the tone then acts on the scene it lands in: the
       // coverage scales the light before the curve, as the HDR scene has it. A toe has no offset (tone(0) = 0),
       // so C = 0 still leaves the scene unchanged.
@@ -3125,7 +3127,7 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
       const size_t at = find_anchor(source, what);
       source.replace(at, what.size(), "      let pbr_out = max(pbr_lo + pbr_glow, vec3f(0.0)) * inv_c;");
     }
-    if (config.pbrKind == 36 && screen) {
+    if (config.pbrKind == PbrKind::InventoryGlass && screen) {
       const size_t at = find_anchor(source, "      // A model fading (w of the light scale)");
       source.insert(at, fmt::format(R"""(
       if (pbr_kind > 35.5 && pbr_kind < 36.5) {{
@@ -3265,7 +3267,7 @@ R"""(      // Encoded as Remastered's sRGB swapchain does it: the exact piecewis
     // 9d53cf06 FS002/003 read no froxel fog.
     kind("pbr_glow = lrs.rgb * lr1.y * (1.0 + lrg) * lrd.rgb * pbr_alpha;",
          "pbr_glow = lrs.rgb * lr1.y * (1.0 + lrg) * lrd.rgb * pbr_alpha;\n          pbr_vfon = false;");
-    if (config.pbrKind == 45) {
+    if (config.pbrKind == PbrKind::RouteHologram) {
       // 5586D988 FS000..003 have no froxel inputs or fog sample.
       kind("pbr_glow = pbr_yri + pbr_yx * pbr_yg * (1.0 + pbr_yrm * pbr_yc3.y) + ubuf.pbr_shield[6].rgb;",
            "pbr_glow = pbr_yri + pbr_yx * pbr_yg * (1.0 + pbr_yrm * pbr_yc3.y) + ubuf.pbr_shield[6].rgb;\n          pbr_vfon = false;");
@@ -3633,7 +3635,7 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
   // the world translation in their w) applied to a per-axis sine, scaled by the vertex
   // colour's alpha. The impulse terms (c4[4..11]) are zero without a source.
   // The sway as WGSL: wind_pos from the model-space position and the vertex colour (its alpha is the weight).
-  const bool hasWind = config.pbr && config.pbrKind == 0 && config.attrs[GX_VA_CLR0].attrType != GX_NONE;
+  const bool hasWind = config.pbr && config.pbrKind == PbrKind::Standard && config.attrs[GX_VA_CLR0].attrType != GX_NONE;
   const auto windCode = [&](const std::string& pos, const std::string& clr) {
     return fmt::format(
         "\n    var wind_pos = {0};"
@@ -3658,7 +3660,7 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
   // The pickup's (kind 15, Remastered's PickUp 3E95A9FE, perm 000_1) travelling bump: the skinned model-space
   // position moves along its unit normal by sin(CCH3.y t - CCH3.x p.y) CCH3.z a, a = the vertex colour's alpha
   // (raw), times vp_c1[0].x (an engine constant, 1 here). CCH3 is pbr_shield[3], t is pbr_param.x.
-  const bool hasBump = config.pbr && config.pbrKind == 15 && config.attrs[GX_VA_CLR0].attrType != GX_NONE &&
+  const bool hasBump = config.pbr && config.pbrKind == PbrKind::Pickup && config.attrs[GX_VA_CLR0].attrType != GX_NONE &&
                        config.attrs[GX_VA_NRM].attrType != GX_NONE;
   const auto bumpCode = [&](const std::string& pos, const std::string& clr, const std::string& nrm) {
     return fmt::format(
@@ -3703,7 +3705,7 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
   }
   if (config.lineMode == 0) {
     std::string windPos = vtx_attr(config, GX_VA_POS);
-    if (config.pbrKind == 45) {
+    if (config.pbrKind == PbrKind::RouteHologram) {
       // 5586D988 VS000 c1[0].x: NVN control+0x700 points to stage+0x500,
       // binary32 0x3dcccccd. Import conjugates source X/Z scaling by its affine
       // transform: layer-height.xyz is source Y, the next three scalars its dual.
@@ -3717,7 +3719,7 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
 )", windPos, config.attrs[GX_VA_CLR0].attrType != GX_NONE ? vtx_attr(config, GX_VA_CLR0) : "vec4f(1.0)");
       windPos = "holo_pos";
     }
-    if (config.pbrKind == 46) {
+    if (config.pbrKind == PbrKind::ChozoLore) {
       // 9d53cf06 VS002: the wave w (vp_c5[0] = CCH2, row 2; vp_c4[0].x the time) pushes the vertex
       // along its normal by w x col.a x CCH2.y x vp_c1[0].x (0.1, binary32 0x3dcccccd at 002_1+0x4d0).
       // The map's texcoord is the object position on Remastered's Z and Y (the port's Y and Z) times
@@ -3782,7 +3784,7 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
       "\n    let nrm_tmp = vec4f({}, 0.0) * ubuf.nrm_mtx[in_pnmtxidx];"
       "\n    let mv_nrm = select(nrm_tmp, normalize(nrm_tmp), dot(nrm_tmp, nrm_tmp) > 1e-10);",
       vtx_attr(config, GX_VA_NRM));
-  if (config.pbr != 0 && config.pbrKind == 47 && config.lineMode == 0) {
+  if (config.pbr != 0 && config.pbrKind == PbrKind::Icy && config.lineMode == 0) {
     // Kind 47, RenderIcy's vertex stage (Remastered 0xfc4794): in Remastered's world space R = (-x, z, y)
     // (pbr_shield[4..6] turn view space into the game's world), each vertex goes out along its normal by
     // c.x times the distance to the nearest point of a jittered grid at c.z x its xy, then along the freeze
