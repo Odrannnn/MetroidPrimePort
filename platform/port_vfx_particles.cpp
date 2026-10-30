@@ -74,8 +74,9 @@ Tm EvalTrss(CRealElement* const* r, int frame) {
   t.c = EvalReal(r[2], frame, 1.f);
   t.d = EvalReal(r[3], frame, 1.f);
   const float e = PortVfxTrssAngle(EvalReal(r[4], frame, 0.f));
-  t.cosE = std::cos(e);
-  t.sinE = std::sin(e);
+  // cos(0) = 1 and sin(0) = 0 exactly.
+  t.cosE = e == 0.f ? 1.f : std::cos(e);
+  t.sinE = e == 0.f ? 0.f : std::sin(e);
   t.f = EvalReal(r[5], frame, 0.f);
   return t;
 }
@@ -593,7 +594,8 @@ void CElementGen::PortRenderParticlesVfx() {
   const float* pivot = kPivot[std::min< u32 >(mat.spriteCenter, 8)];
 
   // Retail's SORT: farthest first (view y descending).
-  std::vector< CParticleListItem > order;
+  static thread_local std::vector< CParticleListItem > order;
+  order.clear();
   order.reserve(particleCount);
   for (int i = 0; i < particleCount; ++i) {
     const CParticle& p = x30_particles[i];
@@ -612,7 +614,8 @@ void CElementGen::PortRenderParticlesVfx() {
   CParticleGlobals::SetEmitterTime(x74_curFrame);
   CParticle* savedParticle = CParticleGlobals::mCurrentParticle;
 
-  std::vector< aurora::gfx::vfx::Vertex > verts;
+  static thread_local std::vector< aurora::gfx::vfx::Vertex > verts;
+  verts.clear();
   verts.reserve(static_cast< size_t >(std::min< uint >(particleCount, kMaxQuadsPerDraw)) * 4);
   auto flush = [&]() {
     if (!verts.empty()) {
@@ -725,6 +728,23 @@ void CElementGen::PortRenderParticlesVfx() {
     const u8 shapeId = x28_loadedGenDesc->xPortSpriteShape;
     const PortSpriteShape* const shape = shapeId >= 3 && shapeId <= 6 ? &kShapes[shapeId - 3] : nullptr;
     const int polyQuads = shape != nullptr ? shape->triangles : 1;
+    // Everything but pos and uv (and the VisorSplat world position) is the particle's.
+    aurora::gfx::vfx::Vertex tmpl{};
+    for (int i = 0; i < 4; ++i) {
+      tmpl.color[i] = color[i];
+      for (int j = 0; j < 4; ++j) {
+        tmpl.extra[i][j] = p.xPortVpmt[i][j];
+      }
+    }
+    const bool visorSplat = (desc.features & aurora::gfx::vfx::VisorSplat) != 0;
+    if (visorSplat) {
+      for (int j = 0; j < 4; ++j) {
+        tmpl.extra[3][j] = splatInv[j];
+      }
+    }
+    tmpl.vec[0] = vec[0];
+    tmpl.vec[1] = vec[1];
+    tmpl.vec[2] = vec[2];
     for (int pq = 0; pq < polyQuads * 4; ++pq) {
       float qx, qy;
       if (shape != nullptr) {
@@ -744,7 +764,7 @@ void CElementGen::PortRenderParticlesVfx() {
       const float w = ox * sinT + oy * cosT;
       const CVector3f pos = center + axisU * u + axisW * w;
 
-      aurora::gfx::vfx::Vertex v{};
+      aurora::gfx::vfx::Vertex v = tmpl;
       v.pos[0] = pos.GetX();
       v.pos[1] = pos.GetY();
       v.pos[2] = pos.GetZ();
@@ -756,26 +776,14 @@ void CElementGen::PortRenderParticlesVfx() {
         v.uv[s][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
         v.uv[s][2] = t.f;
       }
-      for (int i = 0; i < 4; ++i) {
-        v.color[i] = color[i];
-        for (int j = 0; j < 4; ++j) {
-          v.extra[i][j] = p.xPortVpmt[i][j];
-        }
-      }
-      if ((desc.features & aurora::gfx::vfx::VisorSplat) != 0) {
+      if (visorSplat) {
         // The shader reads PMTR rows 0 and 1 only; rows 2 and 3 carry the world position and the axes.
         const CVector3f world = systemModelMatrix * pos;
         v.extra[2][0] = world.GetX();
         v.extra[2][1] = world.GetY();
         v.extra[2][2] = world.GetZ();
         v.extra[2][3] = 0.f;
-        for (int j = 0; j < 4; ++j) {
-          v.extra[3][j] = splatInv[j];
-        }
       }
-      v.vec[0] = vec[0];
-      v.vec[1] = vec[1];
-      v.vec[2] = vec[2];
       verts.push_back(v);
     }
     if (verts.size() >= static_cast< size_t >(kMaxQuadsPerDraw - 8) * 4) {
