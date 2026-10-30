@@ -316,6 +316,8 @@ Texture packs replace the game's textures with Aurora-format images named
 - **Your own pack:** put it in `user_textures` in the [user folder](#installing-mods), or wherever
   `MP_USER_TEXTURES` points, so updates never touch it. It is layered over the folder above, with
   the same folder rules. The overlay's Mods page has a Reload button.
+  Its Import texture pack .zip button extracts a `.zip`'s `.png`/`.dds` files (keeping its
+  folders) over the current pack, which is swapped in once the copy finishes.
 - **Android:** Mods > Texture pack > Choose texture pack folder opens the system folder picker
   and copies the folder's `.png`/`.dds` files into the data folder (pick it again after changing
   it; Remove deletes the copy). Import texture pack .zip does the same from a `.zip` file,

@@ -898,7 +898,7 @@ void ProcessTexturePackZipPick(const char* root) {
     return;
   }
   SetTexturePackStatus("Copying the texture pack... 0 textures");
-  std::thread(ImportTexturePackZip, std::move(*pick), std::string(root)).detach();
+  std::thread(ImportTexturePackZip, std::move(*pick), std::string(root != nullptr ? root : "")).detach();
 }
 } // namespace
 #endif

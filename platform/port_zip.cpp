@@ -74,19 +74,24 @@ bool ReadDirectory(std::ifstream& in, std::vector< Entry >& entries, std::string
   const uint64_t eocdPos = fileSize - window + eocd;
   if (total == 0xFFFF || dirSize == 0xFFFFFFFFu || dirOffset == 0xFFFFFFFFu) {
     uint8_t locator[20];
-    if (eocdPos < sizeof(locator) || !ReadAt(in, eocdPos - sizeof(locator), locator, sizeof(locator)) ||
-        Le32(locator) != 0x07064b50) {
+    const bool hasLocator = eocdPos >= sizeof(locator) &&
+                            ReadAt(in, eocdPos - sizeof(locator), locator, sizeof(locator)) &&
+                            Le32(locator) == 0x07064b50;
+    // A plain archive of exactly 65535 entries saturates the count without ZIP64.
+    if (!hasLocator && (dirSize == 0xFFFFFFFFu || dirOffset == 0xFFFFFFFFu)) {
       error = "missing ZIP64 end of central directory";
       return false;
     }
-    uint8_t rec[56];
-    if (!ReadAt(in, Le64(locator + 8), rec, sizeof(rec)) || Le32(rec) != 0x06064b50) {
-      error = "bad ZIP64 end of central directory";
-      return false;
+    if (hasLocator) {
+      uint8_t rec[56];
+      if (!ReadAt(in, Le64(locator + 8), rec, sizeof(rec)) || Le32(rec) != 0x06064b50) {
+        error = "bad ZIP64 end of central directory";
+        return false;
+      }
+      total = Le64(rec + 32);
+      dirSize = Le64(rec + 40);
+      dirOffset = Le64(rec + 48);
     }
-    total = Le64(rec + 32);
-    dirSize = Le64(rec + 40);
-    dirOffset = Le64(rec + 48);
   }
   if (dirOffset > fileSize || dirSize > fileSize - dirOffset || dirSize > (1ull << 31)) {
     error = "bad central directory";
@@ -260,20 +265,20 @@ bool TexturePackFilter(std::string& name) {
     return false;
   }
   size_t start = 0;
-  bool first = true;
   while (start <= name.size()) {
     size_t end = name.find('/', start);
     if (end == std::string::npos) {
       end = name.size();
     }
     const std::string part = name.substr(start, end - start);
-    if (part.empty() || part == "." || part == ".." || part == "__MACOSX" || (first && part.find(':') != std::string::npos)) {
+    // ':' is a drive letter in the first part and an NTFS alternate stream in any other.
+    if (part.empty() || part == "." || part == ".." || part == "__MACOSX" ||
+        part.find(':') != std::string::npos) {
       return false;
     }
     if (end == name.size() && part.compare(0, 2, "._") == 0) {
       return false;
     }
-    first = false;
     start = end + 1;
   }
   return true;

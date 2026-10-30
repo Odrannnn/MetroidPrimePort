@@ -231,6 +231,7 @@ set(MP_PORT_SOURCES
     platform/sdk_stubs.cpp
     platform/port_embedded.cpp
     platform/port_textures.cpp
+    platform/port_zip.cpp
     platform/port_prompts.cpp
     platform/port_controls.cpp
     platform/input/port_input_devices.cpp
@@ -845,6 +846,10 @@ if(MP_BUILD_TESTS)
     mp_port_test(port_disc_verify_tests
         SOURCES tests/port_disc_verify.cpp platform/port_disc_verify_core.cpp
         INCLUDES platform/include platform
+        LIBRARIES ZLIB::ZLIB)
+    mp_port_test(port_zip_tests
+        SOURCES tests/port_zip.cpp platform/port_zip.cpp
+        INCLUDES platform/include
         LIBRARIES ZLIB::ZLIB)
     mp_port_test(port_mouse_tests SOURCES tests/port_mouse.cpp INCLUDES platform/include)
     # Header-only (port_input_gate.h): pad 0's neutral-while-F1-is-open gate.
