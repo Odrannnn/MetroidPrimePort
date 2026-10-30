@@ -1370,20 +1370,31 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
         tangents ? "vec2f(dot(pbr_tu, in.pbr_pos), -dot(normalize(cross(pbr_ngs, pbr_tu)), in.pbr_pos))"
                  : "vec2f(dot(pbr_t * inverseSqrt(max(dot(pbr_t, pbr_t), 1e-30)), in.pbr_pos),\n"
                    "                           dot(pbr_b * inverseSqrt(max(dot(pbr_b, pbr_b), 1e-30)), in.pbr_pos))";
+    std::string parallaxOffset;
+    if (config.pbrKind == PbrKind::Parallax) {
+      parallaxOffset = fmt::format(
+          "pbr_poff = {1} * ({0}.a * ubuf.pbr_param.w / dot(pbr_ng, in.pbr_pos));", base, parallaxBasis);
+      if (!tangents) parallaxOffset = "if (pbr_tlen > 1e-24) {\n          " + parallaxOffset + "\n      }";
+    }
+    // Kind 1 (and 26) weighs the second layer by the first layer's normal along up.
+    std::string upBlend;
+    if (config.pbrKind == PbrKind::UpLayer || config.pbrKind == PbrKind::ProjectedBlend) {
+      upBlend = fmt::format(R"""(
+          {{{0}
+              let pbr_va2 = max(pbr_vraw.a * 2.0, 1e-4);
+              pbr_lw = max(0.0, (dot(pbr_n1, ubuf.pbr_up.xyz) + pbr_va2 - 1.0) / pbr_va2) * 2.0 - 1.0;
+          }})""",
+                            first);
+    }
     layer += fmt::format(R"""(
       var pbr_poff = vec2f(0.0);
-      if (pbr_kind > 3.5 && pbr_kind < 4.5{6}) {{
-          pbr_poff = {1} * ({0}.a * ubuf.pbr_param.w / dot(pbr_ng, in.pbr_pos));
-      }}
+      {6}
       let pbr_inner = max(textureSampleBias(tex{4}, tex{4}_samp, tex{5}_uv + pbr_poff, ubuf.tex{4}_size_bias.z).rgb,
                           vec3f(0.0));
       var pbr_ls = 0.0;
       if (ubuf.pbr_layer.x > 0.0) {{
           var pbr_lw = pbr_vraw.a * 2.0 - 1.0;
-          if ((pbr_kind > 0.5 && pbr_kind < 1.5) || (pbr_kind > 25.5 && pbr_kind < 26.5)) {{{3}
-              let pbr_va2 = max(pbr_vraw.a * 2.0, 1e-4);
-              pbr_lw = max(0.0, (dot(pbr_n1, ubuf.pbr_up.xyz) + pbr_va2 - 1.0) / pbr_va2) * 2.0 - 1.0;
-          }}
+          {3}
           let pbr_lh = clamp(sampled{2}.a * ubuf.pbr_layer_height.z + ubuf.pbr_layer_height.w, 0.0, 1.0) -
                        clamp({0}.a * ubuf.pbr_layer_height.x + ubuf.pbr_layer_height.y, 0.0, 1.0);
           let pbr_lt = ubuf.pbr_layer.x;
@@ -1394,15 +1405,13 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       // the blended alpha squared times DIFC.a (1 on all of them), not the vertex alpha, which is the weight.
       let pbr_lma = mix({0}.a, sampled{2}.a, pbr_ls);
       let pbr_lalpha = pbr_lma * pbr_lma;)""",
-                         base, parallaxBasis, mapStage[4], first, underlying(inner.texMapId), underlying(inner.texCoordId),
-                         tangents ? "" : " && pbr_tlen > 1e-24");
+                         base, parallaxBasis, mapStage[4], upBlend, underlying(inner.texMapId), underlying(inner.texCoordId),
+                         parallaxOffset);
     // Kind 20 (E9DF2188): map 3 is a detail map (the kind has no glow). The albedo is the blend times the
     // vertex colour (2 |c|^2.2, applied below) times 2 times the detail as stored.
-    if (mapStage[3] != -1) {
+    if (config.pbrKind == PbrKind::VertexBlend && mapStage[3] != -1) {
       kinds += fmt::format(R"""(
-      if (pbr_kind > 19.5 && pbr_kind < 20.5) {{
-          pbr_base = pbr_base * max(sampled{}.rgb, vec3f(0.0)) * 2.0;
-      }})""",
+      pbr_base = pbr_base * max(sampled{}.rgb, vec3f(0.0)) * 2.0;)""",
                            mapStage[3]);
     }
     // Kind 21, Remastered's Phazon3 (CC96C27D, the Phazon Mines' stone), permutation 034_0. Constants are
@@ -1522,11 +1531,14 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // own format decides which byte that is). Kind 4: the
     // inside shows where the surface is seen edge on (a fresnel that also takes it to the
     // vertex colour) and where the base map's alpha says it is clear, and glows there.
+    if (config.pbrKind == PbrKind::Detail) {
+      kinds += fmt::format(R"""(
+      pbr_base = pbr_base * max(sampled{1}.rgb, vec3f(0.0)) * 2.0;)""",
+                           base, mapStage[4]);
+    }
+    if (config.pbrKind == PbrKind::Parallax)
     kinds += fmt::format(R"""(
-      if (pbr_kind > 1.5 && pbr_kind < 2.5) {{
-          pbr_base = pbr_base * max(sampled{1}.rgb, vec3f(0.0)) * 2.0;
-      }}
-      if (pbr_kind > 3.5 && pbr_kind < 4.5) {{
+      {{
           let pbr_kf = pow(clamp(dot(pbr_ng, normalize(-in.pbr_pos)), 0.0, 1.0), max(ubuf.pbr_param.x, 0.001)) *
                        ubuf.pbr_param.y;
           // 2F3FB02B's vertex shader hands the pixel shader |c|^2.2 (no doubling): 034_1 o3, 034_0 temp_245.
@@ -1540,8 +1552,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // charge (pbr_param.x, times pbr_param.y) eats into. What it leaves, unless the base
     // map's alpha squared times pbr_param.z keeps it, is discarded, and the edge glows
     // pbr_layer_height times pbr_layer.z.
+    if (config.pbrKind == PbrKind::FrozenShell)
     kinds += fmt::format(R"""(
-      if (pbr_kind > 11.5 && pbr_kind < 12.5) {{
+      {{
           let pbr_dt = clamp(sampled{1}.r - ubuf.pbr_param.x * ubuf.pbr_param.y + 1.0, 0.0, 1.0);
           let pbr_de = clamp(9.99999809 * (1.0 - pbr_dt), 0.0, 1.0);
           if (pbr_de * pbr_de * (3.0 - 2.0 * pbr_de) * ({0}.a * {0}.a * ubuf.pbr_param.z + pbr_dt) < 0.25) {{
@@ -1559,7 +1572,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // none. The albedo is the base map times DIFC.rgb.
     if (config.pbrKind == PbrKind::PhazonVeins && mapStage[4] != -1 && mapStage[5] != -1) {
       kinds += fmt::format(R"""(
-      if (pbr_kind > 34.5 && pbr_kind < 35.5) {{
+      {{
           let pbr_vc0 = ubuf.pbr_shield[0];
           let pbr_vdf = ubuf.pbr_shield[7];
           let pbr_vm = clamp(sampled{1}.x + pbr_vraw.a * pbr_vc0.w - pbr_vdf.w * pbr_vc0.z * (pbr_vc0.w + 2.0) + 1.0,
@@ -1578,9 +1591,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // rescaled by 255/128 as in the shader) turns the view-space normal, at 0.5 + 0.5 xy with
     // no flip. Its colour times pbr_layer.z (CCH0.z) times pbr_emissive (DIFC) is the albedo,
     // and the lighting is the standard PBR one on map 1 (a METL map: AO, roughness, metal).
-    if (mapStage[2] != -1) {
+    if (config.pbrKind == PbrKind::MatcapShell && mapStage[2] != -1) {
       kinds += fmt::format(R"""(
-      if (pbr_kind > 12.5 && pbr_kind < 13.5) {{
+      {{
           let pbr_mt = (sampled{0}.rg * 1.9921875 - 1.0) * ubuf.pbr_param.z;
           let pbr_ms = select(0.0, inverseSqrt(pbr_tlen), pbr_tlen > 1e-24);
           // c83e6fcd uses the mapped normal as it is, never normalised.
@@ -1608,9 +1621,10 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       let pbr_fuv1 = dpdx(tex{0}_uv);
       let pbr_fuv2 = dpdy(tex{0}_uv);)""",
                            underlying(inner.texCoordId));
+      kinds += "\n      var pbr_kalpha = 1.0;";
+      if (config.pbrKind == PbrKind::Waterfall)
       kinds += fmt::format(R"""(
-      var pbr_kalpha = 1.0;
-      if (pbr_kind > 6.5 && pbr_kind < 7.5) {{
+      {{
           let pbr_ft = ubuf.pbr_param.x;
           let pbr_fr = fract(vec2f(ubuf.pbr_layer_height.x, ubuf.pbr_layer_height.y) * pbr_ft) * vec2f(1.0, -1.0);
           let pbr_fg = fract(vec2f(ubuf.pbr_layer_height.z, ubuf.pbr_layer_height.w) * pbr_ft) * vec2f(1.0, -1.0);
@@ -1638,9 +1652,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // format is), so the sampler linearises the noise as well as the ramp; the vertex colour is
     // a plain UNORM attribute and stays as it is. The ramp's sampler repeats (TCH1 wrap 1 =
     // NVN repeat), so u, which runs well past 0..1, wraps round it.
-    if (mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::GunGlow && mapStage[5] != -1) {
       kinds += fmt::format(R"""(
-      if (pbr_kind > 8.5 && pbr_kind < 9.5) {{
+      {{
           let pbr_gt = ubuf.pbr_param.x;
           let pbr_gr = fract(ubuf.pbr_layer_height.xy * pbr_gt) * vec2f(1.0, -1.0);
           let pbr_gg = fract(ubuf.pbr_layer_height.zw * pbr_gt) * vec2f(1.0, -1.0);
@@ -1662,10 +1676,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       orm = fmt::format("mix({}, sampled{}, pbr_ls)", orm, mapStage[5]);
     }
     // Glass keeps its roughness in map 4's blue: map 5 is its distortion noise.
-    orm = fmt::format("select({}, vec4f(1.0, sampled{}.b, 0.0, 1.0), pbr_kind > 7.5 && pbr_kind < 8.5)", orm,
-                      mapStage[4]);
+    if (config.pbrKind == PbrKind::Glass) orm = fmt::format("vec4f(1.0, sampled{}.b, 0.0, 1.0)", mapStage[4]);
     // Glass_DX11 reads its cube at level 1 of a smooth surface.
-    orm = fmt::format("select({}, vec4f(1.0, 0.1, 0.0, 1.0), pbr_kind > 10.5 && pbr_kind < 11.5)", orm);
+    if (config.pbrKind == PbrKind::HoloGlass) orm = "vec4f(1.0, 0.1, 0.0, 1.0)";
     if (mapStage[6] != -1 && mapStage[2] != -1) {
       normalXy2 = fmt::format("sampled{}.rg", mapStage[6]);
     }
@@ -1688,8 +1701,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // vertex alpha, the flow's speed and a slight shimmer) pick the colour from map 0, a ramp
     // (Remastered's ps b9c24545 004_0). pbr_param is the phase, the flow's reach and the
     // pattern's scale; pbr_layer_height the noise's scale, the heat's gain and the period.
+    if (config.pbrKind == PbrKind::LavaPool)
     kinds += fmt::format(R"""(
-      if (pbr_kind > 5.5 && pbr_kind < 6.5) {{
+      {{
           let pbr_qs = vec2f(ubuf.pbr_param.z, ubuf.pbr_param.w);
           let pbr_qns = vec2f(pbr_qs.x * ubuf.pbr_layer_height.x / max(pbr_qs.y, 1e-4), ubuf.pbr_layer_height.x);
           let pbr_qnoise = textureSampleGrad(tex{2}, tex{2}_samp, tex{4}_uv * pbr_qns, pbr_quv1 * pbr_qns,
