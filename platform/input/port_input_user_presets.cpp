@@ -16,7 +16,9 @@ using PortInput::Family;
 
 constexpr std::string_view kMagic = "#! controls-preset = 1";
 
-const char* FamilyName(Family f) { return f == Family::Pad ? "pad" : "keyboard"; }
+const char* FamilyName(Family f) {
+  return f == Family::Pad ? "pad" : f == Family::Touch ? "touch" : "keyboard";
+}
 
 void Put(std::string& s, const char* key, long value) {
   s += "#! ";
@@ -100,8 +102,10 @@ std::string Serialize(const Preset& preset) {
   s += "\n#! name = ";
   s += l.name;
   s += '\n';
-  Put(s, "twin_stick", l.twinStick);
-  if (l.family == Family::Pad) {
+  // Touch is bindings only: no Aurora layer, no settings.
+  if (l.family != Family::Touch) Put(s, "twin_stick", l.twinStick);
+  if (l.family == Family::Touch) {
+  } else if (l.family == Family::Pad) {
     Put(s, "swap_scan_xray", l.swapScanXray);
     Put(s, "shift_pad", l.shift[2]);
     for (const auto& b : l.padButtons) PutInts(s, "pad_button", b.native, b.pad);
@@ -149,6 +153,7 @@ bool Parse(std::string_view text, Preset& out, std::string* error) {
     if (key == "family") {
       if (value == "keyboard") l.family = Family::Keyboard;
       else if (value == "pad") l.family = Family::Pad;
+      else if (value == "touch") l.family = Family::Touch;
       else return fail("unknown family");
       haveFamily = true;
     } else if (key == "name") {

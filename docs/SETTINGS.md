@@ -136,7 +136,7 @@
   the Mouse & keyboard layout; "Use twin-stick controller" turns on twin stick and applies the
   Remastered layout to all controllers (greyed out with a GameCube adapter). Both replace your own
   bindings for that device (Remap > Presets...) and are saved. "Save current as..." in Remap > My presets...
-  keeps a device's bindings as a preset of your own (see Control presets).
+  keeps your bindings as a preset of your own (see Control presets).
 - `MP_TWIN_STICK=1` (Controls > Options, persisted as `twin_stick`): twin-stick aiming. The
   right stick feeds the first-person aim through the same path as the mouse (so
   the same sensitivity/invert apply, tuned by `stick_aim_rate`, default 900 px/s, 50-10000; the F1
@@ -324,13 +324,15 @@
   none): a second controller button or trigger per GameCube button. Aurora maps
   one native button to each PAD button, so the port reads the alt one itself and
   ORs it in (`PortControls::HeldAltPadButtons`, from `CDolphinController`).
-- Your own presets (Remap > My presets... > "Save current as...", per device: keyboard or controller, not touch): a
-  snapshot of the device's Remap bindings with its custom actions, the controller's button/axis mapping and the
-  device's settings (twin stick, mouse aim, shift buttons, mouse button actions, alt buttons; not turbo). Saved
-  in their own popup beside Presets...; one click applies it (replacing your own bindings for that device), x
-  deletes it. One file per preset, `control_presets/<keyboard|pad>-<name>.toml` in the user folder: valid
-  `controls.toml` text with `#! key = value` header lines, so it can be shared. Console: `keypreset|padpreset
-  <saved name>` applies, `... save <name>` saves.
+- Your own presets (Remap > My presets... > "Save current as..."): one list; a preset covers every device the
+  Remap page shows. It snapshots the keyboard & mouse bindings, the touch bindings (when there are any) and, when a
+  controller is connected, the controller bindings, each with its custom actions, plus the controller's button/axis
+  mapping and the device settings (twin stick, mouse aim, shift buttons, mouse button actions, alt buttons; not
+  turbo). Saved in their own popup beside Presets...; one click applies every part it has (replacing your own
+  bindings for those devices), x deletes it; saving over a name replaces all its parts. One file per device
+  part, `control_presets/<keyboard|pad|touch>-<name>.toml` in the user folder: valid `controls.toml` text with
+  `#! key = value` header lines, so it can be shared. Older single-device files are still listed and apply to
+  their device. Console: `keypreset|padpreset <saved name>` applies, `... save <name>` saves, per device.
 - Control presets (Controls > Remap, "Presets..." beside the device list: one click applies a layout to Keyboard & mouse or to all Controllers, replacing your own bindings there; a selected kind or model keeps its own on top). Keyboard: **Classic** (the first-run layout)
   and **Mouse & keyboard** (WASD, E fire, Space jump, left ctrl/C morph, F
   missile, Q lock on, left alt free look, Tab/M map, 1-4 beams and 5-8 visors

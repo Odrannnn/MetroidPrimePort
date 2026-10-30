@@ -1,11 +1,13 @@
 #pragma once
 
-// The player's own binding presets (issue #232): a snapshot of one device's
-// Remap bindings that My presets... applies, beside the built-in layouts. One file per
-// preset in <user folder>/control_presets/, "<keyboard|pad>-<slug>.toml": valid
-// controls.toml text (the Default profile's rows of that family and the custom
-// actions they name) with the Aurora and settings layers in "#! key = value"
-// comment lines, which the TOML parser skips.
+// The player's own binding presets (issue #232): a snapshot of the Remap bindings
+// that My presets... applies, beside the built-in layouts. A preset is one file per
+// device family it covers in <user folder>/control_presets/,
+// "<keyboard|pad|touch>-<slug>.toml": valid controls.toml text (the Default
+// profile's rows of that family and the custom actions they name) with the Aurora
+// and settings layers in "#! key = value" comment lines, which the TOML parser
+// skips (touch has bindings only). A preset named N is the files of slug(N) that
+// exist; the *All functions work on all of them, the per-family ones on one.
 
 #include "port_input_bindings.h"
 
@@ -91,5 +93,19 @@ bool Save(PortInput::Family family, std::string_view name);
 // matched case-insensitively). False when there is none.
 bool Apply(PortInput::Family family, std::string_view name);
 bool Delete(PortInput::Family family, std::string_view name);
+
+// A preset across families: the union of the names, grouped by slug.
+struct Entry {
+  std::string name;
+  bool keyboard = false, pad = false, touch = false;
+};
+std::vector<Entry> ListAll();
+// Saves the keyboard part always, the pad part when a controller is in port 1 and
+// the touch part when touch has bindings; the slug's other parts are deleted first.
+// True when the keyboard part was written.
+bool SaveAll(std::string_view name);
+// Applies every part that exists; true when any did.
+bool ApplyAll(std::string_view name);
+bool DeleteAll(std::string_view name);
 
 } // namespace PortInputUserPresets

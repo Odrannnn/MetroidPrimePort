@@ -23,14 +23,17 @@ Preset Sample(Family family) {
   Preset p;
   p.layout.family = family;
   p.layout.name = "My \"Layout\" #1";
-  p.layout.twinStick = true;
-  if (family == Family::Pad) {
+  if (family == Family::Touch) {
+    // bindings only: the layout stays default
+  } else if (family == Family::Pad) {
+    p.layout.twinStick = true;
     p.layout.padButtons = {{1, 2}, {3, 4}};
     p.layout.padAxes = {{0, -1, 5, 6}, {2, 1, -1, 3}};
     p.layout.swapScanXray = true;
     p.layout.shift[2] = 7;
     p.layout.padAlt = {-1, 3, 4};
   } else {
+    p.layout.twinStick = true;
     p.layout.keyButtons = {{0, 44, 2}, {1, 30, 4}};
     p.layout.keyAxes = {{0, 44, 1, 100}};
     p.layout.mouseAim = true;
@@ -47,9 +50,13 @@ Preset Sample(Family family) {
   UserProfile prof;
   prof.name = "Default";
   prof.unbind = {{Action::PadZ, family}};
-  const Input in = family == Family::Pad ? Input{Device::PadButton, 0, 50, 1} : Input{Device::Key, 0, 50, 44};
+  const Input in = family == Family::Pad     ? Input{Device::PadButton, 0, 50, 1}
+                   : family == Family::Touch ? Input{Device::Touch, 0, 50, 1}
+                                             : Input{Device::Key, 0, 50, 44};
   prof.bindings.push_back(Bind(Action::BeamWave, in));
-  const Input in2 = family == Family::Pad ? Input{Device::PadButton, 0, 50, 2} : Input{Device::Key, 0, 50, 30};
+  const Input in2 = family == Family::Pad     ? Input{Device::PadButton, 0, 50, 2}
+                    : family == Family::Touch ? Input{Device::Touch, 0, 50, 2}
+                                              : Input{Device::Key, 0, 50, 30};
   prof.bindings.push_back(Bind(CustomAction(3), in2));
   p.bindings.profiles.push_back(prof);
   return p;
@@ -66,7 +73,7 @@ void TestSlugAndName() {
 
 void TestRoundTrip() {
   SetKeyNames(FakeKeyName, FakeKeyParse);
-  for (Family f : {Family::Keyboard, Family::Pad}) {
+  for (Family f : {Family::Keyboard, Family::Pad, Family::Touch}) {
     const Preset p = Sample(f);
     const std::string text = Serialize(p);
     Preset back;
@@ -83,10 +90,15 @@ void TestRoundTrip() {
   Preset bad;
   REQUIRE(!Parse("", bad));
   REQUIRE(!Parse("[[profile]]\nname = \"Default\"\n", bad)); // no header
-  REQUIRE(!Parse("#! controls-preset = 1\n#! family = touch\n#! name = x\n", bad));
+  REQUIRE(!Parse("#! controls-preset = 1\n#! family = tablet\n#! name = x\n", bad));
   REQUIRE(!Parse("#! controls-preset = 1\n#! family = pad\n", bad)); // no name
   std::string broken = Serialize(Sample(Family::Pad)) + "\n[[bogus\n";
   REQUIRE(!Parse(broken, bad));
+  // Touch is bindings only: no settings lines in the file.
+  const std::string touch = Serialize(Sample(Family::Touch));
+  REQUIRE(touch.find("family = touch") != std::string::npos);
+  REQUIRE(touch.find("twin_stick") == std::string::npos);
+  REQUIRE(touch.find("key_button") == std::string::npos && touch.find("pad_button") == std::string::npos);
   SetKeyNames(nullptr, nullptr);
 }
 
