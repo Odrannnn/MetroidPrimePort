@@ -48,7 +48,7 @@ constexpr float scene_weight(float alpha) { return 1.0f - alpha; }
 
 TEST(GxSuitGlass, EmittedSourceUsesPremultipliedBackgroundWeight) {
   const std::string source = build_shader_source(kind34());
-  ASSERT_NE(source.find("pbr_kind > 33.5 && pbr_kind < 34.5"), std::string::npos) << "kind 34 block missing";
+  ASSERT_NE(source.find("// Kind 34, Remastered's 788360de"), std::string::npos) << "kind 34 block missing";
   EXPECT_NE(source.find("pbr_pass += pbr_sdst * vec3f(1.0 - pbr_alpha);"), std::string::npos);
   // The old base-tinted transmission must be gone.
   EXPECT_EQ(source.find("pbr_sdst * (vec3f(1.0) - pbr_base * (1.0 - pbr_alpha))"), std::string::npos);

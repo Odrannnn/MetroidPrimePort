@@ -263,7 +263,7 @@ TEST(GxInventoryVisor, OtherKindsDoNotReadModulation) {
 TEST(GxModelTint, StdKindsApplyDiffuseAndIncan) {
   for (const int kind : {0, 3}) {
     const std::string src = build_shader_source(inventoryConfig(kind, false));
-    const size_t diff = pos(src, "let pbr_diff = select(pbr_base * ubuf.pbr_model_diffuse.rgb * (1.0 - pbr_metal)");
+    const size_t diff = pos(src, "let pbr_diff = pbr_base * ubuf.pbr_model_diffuse.rgb * (1.0 - pbr_metal)");
     EXPECT_NE(diff, std::string::npos) << "kind " << kind;
     const size_t glow = pos(src, "pbr_glow += ubuf.pbr_model_incan.rgb;");
     const size_t out = pos(src, "let pbr_out = max(pbr_lo + pbr_glow, vec3f(0.0));");
