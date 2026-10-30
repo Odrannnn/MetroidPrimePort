@@ -242,6 +242,7 @@
 {"Mods", "", "Textures", "Remove texture pack", "texture pack remove delete"},
 #else
 {"Mods", "", "Textures", "Reload texture pack", "texture pack reload refresh"},
+{"Mods", "", "Textures", "Import texture pack .zip...", "texture pack zip archive import hd textures"},
 #endif
 {"Randomizer", "", "Goal", "Required artifacts", "chozo artifacts count goal finish"},
 {"Randomizer", "", "Goal", "Final bosses", "bosses ridley prime finish goal"},

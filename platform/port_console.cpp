@@ -2363,7 +2363,7 @@ std::string PresetNameArg(size_t first) {
   return name;
 }
 
-// A saved preset (Remap > Presets...) of that name, matched case-insensitively.
+// A saved preset (Remap > My presets...) of that name, matched case-insensitively.
 bool ApplySavedPreset(PortInput::Family family) {
   const std::string name = PresetNameArg(1);
   return !name.empty() && PortInputUserPresets::Apply(family, name);

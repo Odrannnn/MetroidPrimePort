@@ -1,7 +1,7 @@
 #pragma once
 
 // The player's own binding presets (issue #232): a snapshot of one device's
-// Remap bindings that Presets... applies next to the built-in layouts. One file per
+// Remap bindings that My presets... applies, beside the built-in layouts. One file per
 // preset in <user folder>/control_presets/, "<keyboard|pad>-<slug>.toml": valid
 // controls.toml text (the Default profile's rows of that family and the custom
 // actions they name) with the Aurora and settings layers in "#! key = value"

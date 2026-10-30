@@ -319,8 +319,8 @@ void DrawUpdateSection() {
   }
 }
 
-#if defined(__ANDROID__)
-// The folder picker's progress, set from the Java copy thread.
+// The texture pack import's progress: set from the Java copy thread on Android,
+// from the zip import thread on desktop.
 std::mutex sTexturePackStatusMutex;
 std::string sTexturePackStatus;
 
@@ -333,6 +333,8 @@ void SetTexturePackStatus(std::string status) {
   std::lock_guard lock(sTexturePackStatusMutex);
   sTexturePackStatus = std::move(status);
 }
+
+#if defined(__ANDROID__)
 
 // MetroidPrimeActivity.pickTexturePack opens the system folder (or, with zip,
 // file) picker and copies the chosen pack in the background, reporting back

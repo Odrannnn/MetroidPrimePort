@@ -135,7 +135,7 @@
 - Quick setup (Controls > Options): "Use mouse & keyboard" turns on mouse aim (with twin stick) and applies
   the Mouse & keyboard layout; "Use twin-stick controller" turns on twin stick and applies the
   Remastered layout to all controllers (greyed out with a GameCube adapter). Both replace your own
-  bindings for that device (Remap > Presets...) and are saved. "Save current as..." in the same popup
+  bindings for that device (Remap > Presets...) and are saved. "Save current as..." in Remap > My presets...
   keeps a device's bindings as a preset of your own (see Control presets).
 - `MP_TWIN_STICK=1` (Controls > Options, persisted as `twin_stick`): twin-stick aiming. The
   right stick feeds the first-person aim through the same path as the mouse (so
@@ -324,10 +324,10 @@
   none): a second controller button or trigger per GameCube button. Aurora maps
   one native button to each PAD button, so the port reads the alt one itself and
   ORs it in (`PortControls::HeldAltPadButtons`, from `CDolphinController`).
-- Your own presets (Remap > Presets... > "Save current as...", per device: keyboard or controller, not touch): a
+- Your own presets (Remap > My presets... > "Save current as...", per device: keyboard or controller, not touch): a
   snapshot of the device's Remap bindings with its custom actions, the controller's button/axis mapping and the
   device's settings (twin stick, mouse aim, shift buttons, mouse button actions, alt buttons; not turbo). Saved
-  under the buttons of the built-in layouts; one click applies it (replacing your own bindings for that device), x
+  in their own popup beside Presets...; one click applies it (replacing your own bindings for that device), x
   deletes it. One file per preset, `control_presets/<keyboard|pad>-<name>.toml` in the user folder: valid
   `controls.toml` text with `#! key = value` header lines, so it can be shared. Console: `keypreset|padpreset
   <saved name>` applies, `... save <name>` saves.
