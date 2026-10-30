@@ -1713,7 +1713,10 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
                                              clamp(vec2f(pbr_qxy.x + pbr_qd * (3.0 - 2.0 * pbr_qt) * pbr_qt * pbr_qt, pbr_qheat),
                                                    vec2f(0.02), vec2f(0.98)), 0.0).rgb;
           pbr_base = vec3f(0.0);
-          pbr_kglow = max(pbr_qramp, vec3f(0.0)) * ubuf.pbr_layer.z;
+          // 004_0 writes the ramp times c4[0].z and nothing else: a bare term, not an
+          // inverse-exposure one, so it nets pbr_eb below: the bare gain (pbr_up.w) here, the
+          // glow's tone w after.
+          pbr_kglow = max(pbr_qramp, vec3f(0.0)) * ubuf.pbr_layer.z * select(1.0, ubuf.pbr_up.w, ubuf.pbr_up.w > 0.0);
       }})""",
                          mapOf(0), mapOf(4), mapOf(5), mapStage[6], uv);
     // Kind 5, water: the normal is two copies of map 2 moving across each other
