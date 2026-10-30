@@ -2657,6 +2657,18 @@ void CmdStackBeams() {
   Finish();
 }
 
+void CmdAimLockOn() {
+  if (sCmd.args.size() > 1) {
+    const std::string& v = sCmd.args[1];
+    if (v != "0" && v != "1") {
+      return Finish("usage: aimlockon [0|1]");
+    }
+    PortDebug::SetAimLockOn(v == "1");
+  }
+  Out(PortDebug::AimLockOn() ? "aimlockon 1" : "aimlockon 0");
+  Finish();
+}
+
 void CmdRadial() {
   const auto& a = sCmd.args;
   if (a.size() == 2 && a[1] == "release") {
@@ -4355,6 +4367,8 @@ const CommandSpec kCommands[] = {
      "mapui [0|1]                 the map's extra legend entries and the Mark room prompt"},
     {"stackbeams", CmdStackBeams, nullptr,
      "stackbeams [0|1]           every shot also fires the other owned beams' projectiles (stack_beams)"},
+    {"aimlockon", CmdAimLockOn, nullptr,
+     "aimlockon [0|1]            lock-on picks the target nearest the crosshair (aim_lock_on)"},
     {"radial", CmdRadial, nullptr,
      "radial [beam|visor [x y] | release]  holds a radial menu with its selection (x right, y up); radial_menus"},
     {"walkspeed", CmdWalkSpeed, nullptr,

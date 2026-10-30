@@ -1174,6 +1174,13 @@ bool LockOnToggle() {
 
 void SetLockOnToggle(bool enabled) { StoreSetting(sInput.lockOnToggle, enabled); }
 
+bool AimLockOn() {
+  EnsureInitialized();
+  return sInput.aimLockOn && !sOriginalExperience;
+}
+
+void SetAimLockOn(bool enabled) { StoreSetting(sInput.aimLockOn, enabled); }
+
 bool StickyCharge() {
   EnsureInitialized();
   return sInput.stickyCharge && !sOriginalExperience;

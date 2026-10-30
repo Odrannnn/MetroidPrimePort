@@ -375,6 +375,13 @@
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
   input is disabled. The console's `status` prints the game's L/A and the charge.
+- Aim Lock-On (Controls > Options and pause Options > Controller, persisted as
+  `aim_lock_on`, off by default, issue #236): lock-on picks the target nearest
+  the crosshair, measured as an angle (screen x weighed by the aspect ratio).
+  Retail prefers a target nearer the player by more than the orbit distance
+  threshold even when it is off to the side, and weighs screen offset only
+  between targets at about the same distance. Grapple points and the scan visor
+  keep retail's pick. Off under Original Experience.
 - Remastered charge (Controls > Options, "Remastered charge (rapid fire)", persisted as
   `rapid_charge`, off by default, `MP_RAPID_CHARGE=<0|1>`): as in Remastered, holding
   fire fires a few shots before charging (3 in all with Power, 2 with Wave or Plasma,

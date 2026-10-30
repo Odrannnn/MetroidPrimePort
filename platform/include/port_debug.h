@@ -641,6 +641,10 @@ void SetFastMorph(bool enabled);
 // apply only unmorphed, in gameplay (port_hold_toggle.h).
 bool LockOnToggle();
 void SetLockOnToggle(bool enabled);
+// Aim Lock-On: lock onto the target nearest the crosshair instead of retail's
+// pick, which prefers a nearer target (CPlayer::FindBestOrbitableObject).
+bool AimLockOn();
+void SetAimLockOn(bool enabled);
 bool StickyCharge();
 void SetStickyCharge(bool enabled);
 // Remastered charge: holding fire shoots a few quick shots after the press shot

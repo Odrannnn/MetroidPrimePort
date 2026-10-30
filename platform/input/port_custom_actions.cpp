@@ -142,6 +142,8 @@ constexpr BoolSetting kBoolSettings[] = {
      &PortDebug::RadialMenus, &PortDebug::SetRadialMenus},
     {"lock_on_toggle", "Toggle Lock-On", "Controls > Options > Buttons", &PortDebug::LockOnToggle,
      &PortDebug::SetLockOnToggle},
+    {"aim_lock_on", "Aim Lock-On", "Controls > Options > Buttons", &PortDebug::AimLockOn,
+     &PortDebug::SetAimLockOn},
     {"sticky_charge", "Sticky Charge", "Controls > Options > Buttons", &PortDebug::StickyCharge,
      &PortDebug::SetStickyCharge},
     {"rapid_charge", "Remastered charge (rapid fire)", "Controls > Options > Buttons", &PortDebug::RapidCharge,

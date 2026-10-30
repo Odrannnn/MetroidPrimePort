@@ -72,6 +72,12 @@ void DrawControlsOptions() {
   }
   ItemHelp("Press L once to lock on, scan or grapple, and again to let go. With no target, L works "
            "as usual.");
+  bool aimLockOn = sInput.aimLockOn;
+  if (ImGui::Checkbox("Aim Lock-On", &aimLockOn)) {
+    SetAimLockOn(aimLockOn);
+  }
+  ItemHelp("Lock onto the target nearest the crosshair. The original prefers a nearer target even "
+           "when it is off to the side. Scanning works as usual.");
   bool stickyCharge = sInput.stickyCharge;
   if (ImGui::Checkbox("Sticky Charge", &stickyCharge)) {
     SetStickyCharge(stickyCharge);
