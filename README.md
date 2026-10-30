@@ -1,5 +1,10 @@
 # Metroid Prime Unbound - native port
 
+> **Disclaimer:** this is an independent project, not affiliated with or endorsed
+> by [PrimeDecomp](https://github.com/PrimeDecomp/prime). It builds on their
+> decompilation, but they don't maintain or support this port: please report
+> problems here, not to them.
+
 **Looking for the sequel? See the [Metroid Prime 2: Echoes native port](https://github.com/Odrannnn/MetroidPrime2Port).**
 
 **Make sure to check out the F1 (Or start+back on controller) menu for all the additional features and QoL!**
@@ -90,14 +95,56 @@ macOS, the CMake options and what CI runs are in
 - **Settings in a bad state**: F1 > System > Settings > **Reset configuration...**
   backs up and resets every setting and mapping; saves are not touched.
 
-## Credits and licensing
+## Credits
 
-This is a fork of the [PrimeDecomp/prime](https://github.com/PrimeDecomp/prime)
-decompilation, which the game logic is built from. Aurora (`extern/aurora`) and
-MusyX (`extern/musyx`) are MIT-licensed vendored snapshots, and the button
-prompt icons come from Kenney's Input Prompts pack (CC0), vendored under
-`tools/prompt_icons`. Their licences are kept alongside them and are copied into
-release packages.
+This port would not exist without the work of these projects. Thank you.
+
+**Foundation**
+
+- [PrimeDecomp](https://github.com/PrimeDecomp/prime): the decompilation the game
+  code is built from, and the decompiled Dolphin SDK.
+- [Aurora](https://github.com/encounter/aurora): the GameCube graphics, input and
+  platform layer over SDL3 and WebGPU.
+- [MusyX](https://github.com/AxioDL/musyx): the audio mixer.
+- [nod](https://github.com/encounter/nod): the disc image reader.
+
+**Randomizer and Archipelago**
+
+- [randomprime](https://github.com/aprilwade/randomprime): the room patches for
+  skippable cutscenes and Archipelago pickups, the room and elevator tables, and
+  the custom pickup and door assets are generated from it.
+- The [Metroid Prime APWorld](https://github.com/UltiNaruto/MetroidAPrime): the
+  door table, and the game this client connects to.
+- The Metroid Prime AP PopTracker pack: the Archipelago logic rules.
+- [Archipelago](https://archipelago.gg): the multiworld itself.
+
+**Remastered import**
+
+- [astc-encoder](https://github.com/ARM-software/astc-encoder): the ASTC texture encoder.
+- tegra_swizzle, bcdec_rs and astc-decode, ported to C++ for the texture importer.
+
+**Platform and input**
+
+- [libadrenotools](https://github.com/bylaws/libadrenotools): custom Vulkan drivers on Android.
+- [GamepadMotionHelpers](https://github.com/JibbSmart/GamepadMotionHelpers): gyro
+  calibration and aiming spaces.
+- [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) (CC0): the
+  controller button icons.
+- [Dolphin](https://dolphin-emu.org): the texture pack and save formats the port reads and writes.
+
+**Libraries**
+
+[SDL3](https://libsdl.org), [Dawn](https://dawn.googlesource.com/dawn),
+[Dear ImGui](https://github.com/ocornut/imgui), [RmlUi](https://github.com/mikke89/RmlUi),
+[fmt](https://github.com/fmtlib/fmt), [Abseil](https://abseil.io), [FreeType](https://freetype.org),
+libpng, zlib-ng, [zstd](https://github.com/facebook/zstd), [xxHash](https://github.com/Cyan4973/xxHash),
+[SQLite](https://sqlite.org) and OpenSSL.
+
+## Licensing
+
+Every third-party component keeps its own licence; the full list, with where each
+licence text lives, is in [`NOTICE`](NOTICE), and the texts are copied into every
+release package.
 
 `LICENSE` covers this project's own work — the platform layer, the build and
 packaging scripts, and the Android and Flatpak integration. It does **not** cover
