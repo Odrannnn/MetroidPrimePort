@@ -872,8 +872,8 @@ TEST_F(SceneHdrTest, ScreenKindsFogAsTheirFogPermsInHdr) {
       EXPECT_EQ(count(ldr, "pbr_sdst * (pbr_df.a *"), 0u);
     }
     if (kind == 29) {
-      // Kinds 11 and 29 share one source (branched on pbr_kind), each with its own keep line.
-      EXPECT_EQ(count(hdr, "pbr_keep = pbr_sdst * (vec3f(1.0) - pbr_vfw);"), 2u);
+      // Kind 11's block is no longer emitted into 29's shader, only 29's own keep line.
+      EXPECT_EQ(count(hdr, "pbr_keep = pbr_sdst * (vec3f(1.0) - pbr_vfw);"), 1u);
     }
     EXPECT_EQ(module_error(ldr), "");
     EXPECT_EQ(module_error(hdr), "");

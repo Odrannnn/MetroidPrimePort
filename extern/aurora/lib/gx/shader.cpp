@@ -1737,9 +1737,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // Kind 5, water: the normal is two copies of map 2 moving across each other
     // (pbr_layer_height is their speeds, pbr_param.x the time, pbr_layer.z the strength).
     // Lava has no normal map.
-    if (mapStage[2] != -1) {
+    if (config.pbrKind == 5 && mapStage[2] != -1) {
       liquid = fmt::format(R"""(
-        if (pbr_kind > 4.5 && pbr_kind < 5.5 && pbr_tlen > 1e-24) {{
+        if (pbr_tlen > 1e-24) {{
             let pbr_qw0 = textureSampleGrad(tex{0}, tex{0}_samp, tex{1}_uv + ubuf.pbr_layer_height.xy * ubuf.pbr_param.x,
                                             pbr_quv1, pbr_quv2).rg * 2.0 - 1.0;
             let pbr_qw1 = textureSampleGrad(tex{0}, tex{0}_samp,
@@ -1766,30 +1766,39 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // the vectors, which keeps more tilt at mid weights. Kind 1 (9EFE0D2E) and kind 20
     // (E9DF2188) mix the maps' xy and rebuild z.
     std::string tn = "vec3f(pbr_ts, sqrt(max(0.0, 1.0 - dot(pbr_ts, pbr_ts))))";
+    const bool mixXy = config.pbrKind == PbrKind::UpLayer || config.pbrKind >= 20;
     if (!normalXy2.empty()) {
-      tn = fmt::format(
-          "select(normalize(mix({}, vec3f(pbr_ts2, sqrt(max(0.0, 1.0 - dot(pbr_ts2, pbr_ts2)))), pbr_ls)), "
-          "vec3f(pbr_tsm, sqrt(max(0.0, 1.0 - dot(pbr_tsm, pbr_tsm)))), (pbr_kind > 0.5 && pbr_kind < 1.5) || pbr_kind > 19.5)",
-          tn);
+      if (mixXy) {
+        tn = "vec3f(pbr_tsm, sqrt(max(0.0, 1.0 - dot(pbr_tsm, pbr_tsm))))";
+      } else {
+        tn = fmt::format("normalize(mix({}, vec3f(pbr_ts2, sqrt(max(0.0, 1.0 - dot(pbr_ts2, pbr_ts2)))), pbr_ls))", tn);
+      }
       normal = fmt::format("\n      let pbr_ts2 = {} * 1.9921875 - 1.0;", normalXy2);
     }
+    // Kind 4 scales the tilt by pbr_param.z, kind 28 by CCH0.z, kind 32 by pbr_kns.
+    std::string tiltScale;
+    if (config.pbrKind == PbrKind::Parallax) tiltScale = " * ubuf.pbr_param.z";
+    if (config.pbrKind == PbrKind::Ice) tiltScale = " * ubuf.pbr_shield[0].z";
+    if (config.pbrKind == PbrKind::PhazonPool) tiltScale = " * pbr_kns";
+    // 07acff46 (kind 32) lights the mapped normal as it is, never normalised (kb material/07acff46.md);
+    // so does 2F3FB02B (kind 4, 034_0 temp_125..127).
+    const char* mappedN =
+        config.pbrKind == PbrKind::PhazonPool || config.pbrKind == PbrKind::Parallax ? "pbr_nu" : "normalize(pbr_nu)";
     normal += fmt::format(R"""(
-      let pbr_ts = ({0} * 1.9921875 - 1.0) * select(select(1.0, ubuf.pbr_param.z, pbr_kind > 3.5 && pbr_kind < 4.5), ubuf.pbr_shield[0].z, pbr_kind > 27.5 && pbr_kind < 28.5) * select(1.0, pbr_kns, pbr_kind > 31.5 && pbr_kind < 32.5);
+      let pbr_ts = ({0} * 1.9921875 - 1.0) {3};
       {2}let pbr_tn = {1};
       if (pbr_tlen > 1e-24) {{
         let pbr_s = inverseSqrt(pbr_tlen);
         let pbr_nu = pbr_t * (pbr_s * pbr_tn.x) - pbr_b * (pbr_s * pbr_tn.y) + pbr_ng * pbr_tn.z;
-        // 07acff46 (kind 32) lights the mapped normal as it is, never normalised (kb material/07acff46.md);
-        // so does 2F3FB02B (kind 4, 034_0 temp_125..127).
-        pbr_n = select(normalize(pbr_nu), pbr_nu, (pbr_kind > 31.5 && pbr_kind < 32.5) || (pbr_kind > 3.5 && pbr_kind < 4.5));
+        pbr_n = {4};
       }})""",
                           normalXy, tn,
-                          normalXy2.empty() ? "" : "let pbr_tsm = mix(pbr_ts, pbr_ts2, pbr_ls);\n      ");
-    if (tangents2 && !normalXy2.empty() && !layeredMacro) {
+                          normalXy2.empty() ? "" : "let pbr_tsm = mix(pbr_ts, pbr_ts2, pbr_ls);\n      ", tiltScale, mappedN);
+    if (tangents2 && !normalXy2.empty() && !layeredMacro && !mixXy) {
       // A978D507 / D363D694 (LayerBaseNormal_2TangentStream): each layer's normal is built in
       // its own tangent frame (TANGENT_0 for map 1, TANGENT_1 for map 2) and the two are mixed.
       normal += R"""(
-      if (pbr_tlen > 1e-24 && !((pbr_kind > 0.5 && pbr_kind < 1.5) || pbr_kind > 19.5)) {
+      if (pbr_tlen > 1e-24) {
         let pbr_s2 = inverseSqrt(pbr_tlen);
         let pbr_nl1 = normalize(pbr_t * (pbr_s2 * pbr_ts.x) - pbr_b * (pbr_s2 * pbr_ts.y) +
                                 pbr_ng * sqrt(max(0.0, 1.0 - dot(pbr_ts, pbr_ts))));
@@ -1800,10 +1809,12 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     }
     // 231F8383 (kind 8) lerps the map's normal in by the vertex colour's blue:
     // normalize(Ng + (N - Ng) x v4.z) (kb material/231f8383.md).
-    normal += R"""(
-      if (pbr_kind > 7.5 && pbr_kind < 8.5) {
+    if (config.pbrKind == PbrKind::Glass) {
+      normal += R"""(
+      {
         pbr_n = normalize(pbr_ng + (pbr_n - pbr_ng) * pbr_vraw.b);
       })""";
+    }
   }
   const int macroStage = layered ? (layeredMacro ? mapStage[7] : -1) : mapStage[6];
   if (macroStage != -1) {
@@ -1832,9 +1843,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   // the surroundings' reflection where it is seen at a grazing angle (Schlick, pbr_param.w
   // at the normal), and more opaque the more it reflects. pbr_param.z is the opacity seen
   // straight on, pbr_emissive the colour.
-  if (!liquid.empty()) {
+  if (!liquid.empty()) { // only kind 5 sets it above
     liquid = R"""(
-      if (pbr_kind > 4.5 && pbr_kind < 5.5) {
+      {
           let pbr_qf = ubuf.pbr_param.w + (1.0 - ubuf.pbr_param.w) * pow(1.0 - pbr_nv, 5.0);
           pbr_alpha = mix(ubuf.pbr_param.z, 1.0, pbr_qf);
           pbr_lo = (max(ubuf.pbr_emissive.rgb, vec3f(0.0)) * pbr_ambd * (ubuf.pbr_param.z * (1.0 - pbr_qf)) +
@@ -1843,10 +1854,10 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
       })""";
   }
   if (layered) {
-    liquid += R"""(
-      if (pbr_kind > 6.5 && pbr_kind < 7.5) {
-          pbr_alpha = pbr_kalpha;
-      })""";
+    if (config.pbrKind == PbrKind::Waterfall) {
+      liquid += R"""(
+          pbr_alpha = pbr_kalpha;)""";
+    }
     // Kind 8, glass (Remastered's 231F8383): map 4 is a mask (red how clear, green the
     // glow, alpha the opacity, each lifted by the vertex colour), and the room behind it
     // (map 7) is seen through it, bent by map 5's noise (pbr_param.x) and tinted
@@ -1864,8 +1875,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
           pbr_pass = srgb_dec(pbr_gs) * max(ubuf.pbr_emissive.rgb, vec3f(0.0)) * pbr_gt;)""",
                             mapStage[5] == -1 ? "vec2f(0.5)"s : fmt::format("sampled{}.rg", mapStage[5]));
     }
+    if (config.pbrKind == PbrKind::Glass)
     liquid += fmt::format(R"""(
-      if (pbr_kind > 7.5 && pbr_kind < 8.5) {{
+      {{
           let pbr_gm = sampled{0};
           let pbr_gt = clamp(pbr_gm.r * pbr_vraw.b + pbr_vraw.r, 0.0, 1.0);
           pbr_alpha = clamp(pbr_gm.a * pow(max(1.0 - pbr_gt, 1e-6), ubuf.pbr_param.z) * pbr_vraw.a, 0.0, 1.0);
@@ -1909,8 +1921,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
                      pbr_sdst * (vec3f(1.0) - pbr_df.a * (vec3f(1.0) - ubuf.pbr_emissive.rgb * (1.0 - pbr_vraw.a)));)""",
                          underlying(inner4.texMapId), underlying(inner4.texCoordId));
     }
+    if (config.pbrKind == PbrKind::HoloGlass)
     liquid += fmt::format(R"""(
-      if (pbr_kind > 10.5 && pbr_kind < 11.5) {{
+      {{
           let pbr_df = ubuf.pbr_shield[7];
           pbr_alpha = 1.0;
           pbr_lo = (pbr_envspec * (pbr_ab.x * pbr_vraw.a * ubuf.pbr_layer_height.z + pbr_ab.y) +
@@ -1923,8 +1936,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // Kind 13's opacity is the vertex alpha times DIFC.a (pbr_layer_height.y), blended. Its
     // rim, 1 - |n.z|^pbr_param.x - pbr_param.w (CCH0.x, CCH1.y), times the vertex colour and
     // pbr_param.y (CCH0.y), is at inverse exposure (c4[0].z): pbr_ei (see the room-exposure scaling).
+    if (config.pbrKind == PbrKind::MatcapShell)
     liquid += R"""(
-      if (pbr_kind > 12.5 && pbr_kind < 13.5) {
+      {
           pbr_alpha = clamp(pbr_vraw.a * ubuf.pbr_layer_height.y, 0.0, 1.0);
           let pbr_mrim = clamp(1.0 - pow(abs(pbr_n.z), max(ubuf.pbr_param.x, 1e-3)) - ubuf.pbr_param.w, 0.0, 1.0);
           pbr_glow += pbr_mrim * pbr_vraw.rgb * ubuf.pbr_param.y * pbr_ei;
@@ -1958,9 +1972,9 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
     // the time. Unlit and alpha-blended: the glow is written at the exposure's inverse (pbr_ei),
     // and the screen behind (map 7), bent by the noise,
     // comes through pbr_pass.
-    if (screen && mapStage[5] != -1) {
+    if (config.pbrKind == PbrKind::BoundaryShield && screen && mapStage[5] != -1) {
       liquid += fmt::format(R"""(
-      if (pbr_kind > 13.5 && pbr_kind < 14.5) {{
+      {{
           let pbr_c0 = ubuf.pbr_shield[0];
           let pbr_c1 = ubuf.pbr_shield[1];
           let pbr_c2 = ubuf.pbr_shield[2];
