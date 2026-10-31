@@ -249,6 +249,10 @@ constexpr ShaderTwin kShaderTwins[] = {
     {0xD809A1FD, 0x62F671E0}, {0xC2296CB7, 0x62F671E0}, {0xFD51FCBB, kShaderPickUp}, {0x5BF5E648, 0x547E64E5},
     {0xB0937395, kShaderGunPanel}, {0x7159ECC8, kShaderUnlitAdd}, {0xF2DA2392, kShaderUnlitMatcap},
     {0x1350D65D, kShaderUnlitVertex},
+    // f07e9761 has all 57 of 98f0556d's perms; 3ef54cc4 and 35acebd7 (copies of each other) have 57 where 4bc890c1
+    // ships only 018 and 042, and those two match. Each skinned vertex perm reads the same vp_c3 slots, writes the
+    // same outputs and adds one inversesqrt (the skinned N); the bones come from vp_c4 here.
+    {0xF07E9761, kShaderGunFx}, {0x3EF54CC4, kShaderLambertFx}, {0x35ACEBD7, kShaderLambertFx},
     // Every perm the same as bc1509e8's.
     {0xF43E3C13, kShaderUnlitAddMasked}, {0x68EEC2A3, kShaderUnlitAddMasked},
     // Same fragment perms; the vertex perms differ in the UVs: one side passes the model's sets through, the other
