@@ -1610,7 +1610,10 @@ bool Draw(const CStateManager& mgr, const CGameArea& gameArea, const CFrustumPla
     return (bounds.GetMaxPoint() - bounds.GetMinPoint()).Magnitude() < minSpan * std::sqrt(distanceSq(bounds));
   };
   // Remastered's switch distances are the model's own, so a scaled item's are scaled with it.
-  const float lodScaleSq = LodDistance() * LodDistance();
+  // Performance mode switches at half the distance.
+  const float lodScale =
+      LodDistance() * ((GXPortGetPerformance() & GX_PORT_PERF_COARSE_LOD) != 0 ? 0.5f : 1.f);
+  const float lodScaleSq = lodScale * lodScale;
   // The last level loaded whose distance the bounds are past, -1 for the full model. `usable`
   // caps it, for a cluster's merged levels.
   const auto pickLevel = [&](const Model& model, size_t usable, const CAABox& bounds, float scaleSq) {

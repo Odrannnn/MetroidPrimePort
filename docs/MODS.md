@@ -249,6 +249,9 @@ as before.
 - In first person with the combat visor, the arm cannon's depth is laid before the world, so the
   world behind it is never shaded (the exposure measure leaves that area out; frames that copy
   the screen while drawing the world, such as glass, turn this off for a few frames).
+- Room models switch to their coarser levels of detail at half the distance (on top of the
+  Detail distance setting); 0.4 to 1.7 ms on a 2-CU Ryzen 7000 iGPU at 1080p, with no visible
+  change.
 
 Console `roomgeo perf [mask]` turns on single shortcuts for comparison.
 

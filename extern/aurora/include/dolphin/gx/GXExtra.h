@@ -50,7 +50,8 @@ enum {
   GX_PORT_PERF_SMALL_MEASURE = 1u << 1,   // the exposure measure starts at a quarter of the scene
   GX_PORT_PERF_BLEND_FOG = 1u << 2,       // volumetric fog blended onto the scene, not copied and rewritten
   GX_PORT_PERF_GUN_FIRST = 1u << 3,       // the gun's depth is laid before the world, hiding it there
-  GX_PORT_PERF_ALL = (1u << 4) - 1,
+  GX_PORT_PERF_COARSE_LOD = 1u << 4,      // room models switch to coarser levels at half the distance
+  GX_PORT_PERF_ALL = (1u << 5) - 1,
 };
 void GXPortSetPerformance(u32 flags);
 u32 GXPortGetPerformance(void);

@@ -1373,8 +1373,9 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
 - `remastered_performance=<0|1>` (Mods > Prime Remastered > Performance mode;
   default 1): faster Remastered drawing that is no longer exact (glass copy
   every second frame, quarter-size exposure measure, blended volumetric fog,
-  arm cannon depth laid first); see `docs/MODS.md`. Console `roomgeo perf
-  [mask]` sets single shortcuts (1 glass, 2 measure, 4 fog, 8 gun), not saved.
+  arm cannon depth laid first, room models' coarser levels at half the
+  distance); see `docs/MODS.md`. Console `roomgeo perf [mask]` sets single
+  shortcuts (1 glass, 2 measure, 4 fog, 8 gun, 16 LOD), not saved.
 - `phazon_shell=<0|1>` (Mods > Prime Remastered > Phazon Suit aura; default 1):
   the Phazon Suit wears Remastered's aura, its silhouette shell (on Samus, the
   third-person body and the pause screen's doll). Off: the suit draws the
