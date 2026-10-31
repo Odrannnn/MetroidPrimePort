@@ -2659,15 +2659,17 @@ void PbrGen::surfaceKinds3() {
   // no light and no exposure,
   //   rgb = METL.x x BCLR x (1 - METL.z) x DIFC + ICAN x ICNC + ICMC   alpha = BCLR.a^2 x DIFC.a
   // METL.x and .z are the MR map's r and b (pbr_ao, pbr_metal). Row 5 = ICMC, row 6 = ICNC, row 7 = DIFC. ICAN is map 3
-  // on its reference's texcoord (the kb's uv set 1 for it is a guess).
+  // on its reference's texcoord (the kb's uv set 1 for it is a guess). Row 6.w = 1 is bc1509e8 (kb material/bc1509e8.md):
+  //   rgb = ... + ICAN x ICNC x BCLR.a + ICMC   alpha = DIFC.a
   if (config.pbrKind == PbrKind::UnlitAdd) {
     liquid += fmt::format(R"""(
     {{
         let pbr_xi = max({1}.rgb, vec3f(0.0));
         pbr_lo = vec3f(0.0);
         pbr_glow = (pbr_ao * max({0}.rgb, vec3f(0.0)) * (1.0 - pbr_metal) * ubuf.pbr_shield[7].rgb +
-                    pbr_xi * ubuf.pbr_shield[6].rgb + ubuf.pbr_shield[5].rgb) * pbr_eb;
-        pbr_alpha = clamp({0}.a * {0}.a * ubuf.pbr_shield[7].w, 0.0, 1.0);
+                    pbr_xi * ubuf.pbr_shield[6].rgb * mix(1.0, {0}.a, ubuf.pbr_shield[6].w) +
+                    ubuf.pbr_shield[5].rgb) * pbr_eb;
+        pbr_alpha = clamp(mix({0}.a * {0}.a, 1.0, ubuf.pbr_shield[6].w) * ubuf.pbr_shield[7].w, 0.0, 1.0);
         pbr_pass = vec3f(0.0);
     }})""",
                           base, mapStage[3] == -1 ? "vec4f(0.0)"s : sampled(3, "vec4f(0.0)"));

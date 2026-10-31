@@ -154,6 +154,9 @@ constexpr uint32_t kShaderUnlitMatcap = 0x664EE5CA;
 // 67053ffe (the gun fx CCFE3C49's CAdd layer; kb material/67053ffe.md): unlit METL-weighted BCLR x DIFC + ICAN x ICNC +
 // ICMC (kind 41).
 constexpr uint32_t kShaderUnlitAdd = 0x67053FFE;
+// bc1509e8 (kb material/bc1509e8.md): 67053ffe's maps, constants and vertex perms, its incandescence masked by BCLR.a
+// (its materials set USE_DIFFUSE_ALPHA_AS_INCAN_MASK) and its alpha DIFC.a alone. Kind 41 with row 6.w = 1.
+constexpr uint32_t kShaderUnlitAddMasked = 0xBC1509E8;
 // Unlit, the vertex colour times the base map (a door shield's noise), which
 // scrolls at (CCH0.y, -CCH0.z) a second over texcoords scaled by CCH1.yz. Its
 // vertex shader linearises the colour and doubles it (2 pow(|c|, 2.2)), the base
@@ -242,6 +245,8 @@ constexpr ShaderTwin kShaderTwins[] = {
     {0xD809A1FD, 0x62F671E0}, {0xC2296CB7, 0x62F671E0}, {0xFD51FCBB, kShaderPickUp}, {0x5BF5E648, 0x547E64E5},
     {0xB0937395, kShaderGunPanel}, {0x7159ECC8, kShaderUnlitAdd}, {0xF2DA2392, kShaderUnlitMatcap},
     {0x1350D65D, kShaderUnlitVertex},
+    // Every perm the same as bc1509e8's.
+    {0xF43E3C13, kShaderUnlitAddMasked}, {0x68EEC2A3, kShaderUnlitAddMasked},
 };
 uint32_t ShaderFamily(uint32_t shader) {
   for (const ShaderTwin& t : kShaderTwins)
@@ -1417,11 +1422,13 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
       out.shieldRows[28 + i] = c.difc[i];
     }
   }
-  if (shader == kShaderUnlitAdd && out.maps[kBase].has && out.maps[kMr].has) {
+  if ((shader == kShaderUnlitAdd || shader == kShaderUnlitAddMasked) && out.maps[kBase].has && out.maps[kMr].has) {
     // Unlit (perm 002 assumed): METL.x x BCLR x (1 - METL.z) x DIFC + ICAN x ICNC + ICMC, alpha BCLR.a^2 x DIFC.a, no
     // exposure (kind 41). Row 5 = ICMC, row 6 = ICNC (apart: only ICNC scales ICAN), row 7 = DIFC. ICAN keeps the
-    // texcoord its reference names (the kb guesses it is the sampler on uv set 1; unverified).
+    // texcoord its reference names (the kb guesses it is the sampler on uv set 1; unverified). bc1509e8 sets row
+    // 6.w: ICAN x ICNC x BCLR.a, alpha DIFC.a. The kind sets its own glow and alpha, so the incan-mask mode is moot.
     out.kind = 41;
+    out.shieldRows[27] = shader == kShaderUnlitAddMasked ? 1.0 : 0.0;
     out.tint[0] = out.tint[1] = out.tint[2] = 0.0;
     const ShaderColors c = ReadShaderColors(mat);
     for (int i = 0; i < 3; ++i) {
