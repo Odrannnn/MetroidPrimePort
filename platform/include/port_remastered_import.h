@@ -108,7 +108,8 @@ namespace ImportStage {
 // 84: every Lava2EmissiveOnly shader draws as kind 6 (Monitor Station's pool is 696EA755).
 // 85: 34 more shader twins (exact, attribute-location-only and skinned copies) route to their handled family.
 // 86: bc1509e8 and its twins f43e3c13, 68eec2a3 draw as kind 41 with ICAN masked by BCLR.a and alpha DIFC.a.
-inline constexpr int kConverter = 86;
+// 87: 16 more shader twins whose vertex shaders differ in the UVs only (AUVI and animated UVs) route to their family.
+inline constexpr int kConverter = 87;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.

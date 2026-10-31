@@ -247,6 +247,16 @@ constexpr ShaderTwin kShaderTwins[] = {
     {0x1350D65D, kShaderUnlitVertex},
     // Every perm the same as bc1509e8's.
     {0xF43E3C13, kShaderUnlitAddMasked}, {0x68EEC2A3, kShaderUnlitAddMasked},
+    // Same fragment perms; the vertex perms differ in the UVs: one side passes the model's sets through, the other
+    // feeds each channel the set AUVI names through an animated-UV transform. None of these materials has ANUV, and
+    // the port applies AUVI itself (port_remastered_uv.h), so both draw the same. Some also add or drop the bone
+    // fetch (d7e924e8, ee7307aa, 7ce6fe00, ecf71237) or shift an input attribute (2ce6bda0 and its copies), as above.
+    // f8cdff01 is left out: its vertex shader can also project a UV from the position.
+    {0x8C5D6F3C, kShaderUnlitAdd},     {0x4CD6322A, kShaderPhazonPool},    {0xD7E924E8, kShaderPhazonPool},
+    {0x294466B6, kShaderHoloGlassE264}, {0xDB22A8D4, kShaderHoloGlassC}, {0xFCE8531B, kShaderHoloGlassC},
+    {0xC2758D23, 0x27A91776}, {0xEE7307AA, 0x27A91776}, {0x61DC2B75, 0xB9E899F3},
+    {0x2CE6BDA0, 0x557A7DE4}, {0xAF89E54E, 0x557A7DE4}, {0x49050489, 0x557A7DE4}, {0x55B23C73, 0x557A7DE4},
+    {0x963919C8, 0x557A7DE4}, {0x7CE6FE00, 0xF495B260}, {0xECF71237, 0xF495B260},
 };
 uint32_t ShaderFamily(uint32_t shader) {
   for (const ShaderTwin& t : kShaderTwins)
