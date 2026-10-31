@@ -72,6 +72,8 @@ public final class MetroidPrimeActivity extends SDLActivity {
     private static native boolean nativeFramePresented();
     // Implemented in platform/port_memory_log.cpp; level -1 is onLowMemory.
     private static native void nativeMemoryWarning(int level, long availableKb, long thresholdKb, boolean low);
+    // Implemented in platform/debug_ui/android_jni.cpp.
+    private static native void nativeDrawInsets(int left, int top, int right, int bottom);
 
     // How the previous run ended, for the log (issue #102): a low-memory kill leaves
     // no crash report, so the system's exit record is the only trace. Read by
@@ -262,6 +264,20 @@ public final class MetroidPrimeActivity extends SDLActivity {
             mLayout.addView(touchControls, new android.widget.RelativeLayout.LayoutParams(
                 android.widget.RelativeLayout.LayoutParams.MATCH_PARENT,
                 android.widget.RelativeLayout.LayoutParams.MATCH_PARENT));
+            // SDL's safe area includes the gesture zones, which stay reported
+            // with the bars hidden (a ~140 px band along the top on ColorOS).
+            // The settings window's top edge only needs to avoid the cutout and
+            // a bar on screen (window.cpp DrawArea); the insets still reach
+            // SDLSurface and the overlay below.
+            if (Build.VERSION.SDK_INT >= 30) {
+                mLayout.setOnApplyWindowInsetsListener((view, insets) -> {
+                    android.graphics.Insets draw = insets.getInsets(
+                        android.view.WindowInsets.Type.systemBars() |
+                        android.view.WindowInsets.Type.displayCutout());
+                    nativeDrawInsets(draw.left, draw.top, draw.right, draw.bottom);
+                    return insets;
+                });
+            }
             showStartupCover();
         }
         preferHighestRefreshRate();

@@ -342,6 +342,12 @@ ImGuiWindow* ScrollableWindowAt(ImGuiWindow* window);
 // window.cpp
 bool TouchScrolling(); // a finger drag is scrolling a page, taken from the widget it began on
 
+#if defined(__ANDROID__)
+// android_jni.cpp: the cutout and visible system bars, in pixels; false until
+// the activity has sent them.
+bool DrawInsetsPx(int& left, int& top, int& right, int& bottom);
+#endif
+
 // ui_common.cpp
 bool PageLayout();
 SDL_Window* MainWindow();

@@ -412,6 +412,32 @@ Java_org_metroidprime_port_TouchControlsView_nativeToggleDebugOverlay(JNIEnv*, j
   PortDebug::RequestToggle();
 }
 
+// SDL's safe area also keeps clear of the gesture zones, which Android still
+// reports in immersive mode (the swipe-down band at the top, the back-gesture
+// edges). Right for touch controls, too strict for a window that only has to
+// stay clear of the cutout and any bar on screen; the activity sends those.
+namespace {
+std::atomic< int > sDrawInsets[4] = {-1, -1, -1, -1};
+} // namespace
+
+bool PortDebug::DrawInsetsPx(int& left, int& top, int& right, int& bottom) {
+  left = sDrawInsets[0].load(std::memory_order_relaxed);
+  top = sDrawInsets[1].load(std::memory_order_relaxed);
+  right = sDrawInsets[2].load(std::memory_order_relaxed);
+  bottom = sDrawInsets[3].load(std::memory_order_relaxed);
+  return left >= 0 && top >= 0 && right >= 0 && bottom >= 0;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_metroidprime_port_MetroidPrimeActivity_nativeDrawInsets(JNIEnv*, jclass, jint left,
+                                                                 jint top, jint right,
+                                                                 jint bottom) {
+  sDrawInsets[0].store(left, std::memory_order_relaxed);
+  sDrawInsets[1].store(top, std::memory_order_relaxed);
+  sDrawInsets[2].store(right, std::memory_order_relaxed);
+  sDrawInsets[3].store(bottom, std::memory_order_relaxed);
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_org_metroidprime_port_MetroidPrimeActivity_nativeTexturePackStatus(JNIEnv* env, jclass,
                                                                        jstring status) {
