@@ -55,6 +55,12 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.37.0" date="2026-10-31">
+      <description>
+        <p>Controls: an Aim Lock-On option that locks onto the target nearest the crosshair, and a Dodge binding (also a touch button) that dashes sideways while strafing, locked on or not. Cheats: infinite missiles and power bombs. Texture packs: import a pack from a .zip on desktop and Android, and toggle it with a Port binding (F7). Input: saved binding presets cover every device and get their own button. Remastered: frozen enemies draw Remastered's frozen model and icy shell, also in the thermal and X-ray visors; lava pools, crystals and many more materials draw with their proper shading; animated platforms and Monitor Station's spinner bridge move with the game; room lighting is read from the master pak too. Fixes: the Windows log copy, the Archipelago received-items table, the Android settings window in fullscreen, and particle effects no longer rebuild their state every frame.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.37.0</url>
+    </release>
     <release version="0.36.0" date="2026-10-29">
       <description>
         <p>Third person: a sidestep strafe, a backpedal, stopping and idling animations, a grapple arm that reaches for its point, the free arm swinging while aiming, and a crosshair clear of the shoulder pad with the charge effect on the body's cannon. Remastered: room fog and grading switched by trigger volumes, the X-ray visor drawing room geometry, the Chozo Lore sheets, the frozen-enemy icy shell, cutscene suit models, many glow and exposure fixes, a Phazon Suit aura toggle and a choice of which parts of the import load. Input: your own binding presets, inverted map rotation options, larger button prompts. Fixes: skipping the Frigate's item-loss cutscene takes the items, the F1 menu at high frame rates, simulation timing at non-60 Hz rates, stacked beams no longer running out of object slots, safer saving, and the cheat menu's Chozo Artifacts.</p>
