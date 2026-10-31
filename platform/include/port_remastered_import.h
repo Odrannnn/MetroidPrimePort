@@ -270,7 +270,8 @@ inline constexpr int kEffects = 139;   // Queen barrier shield/glow models back-
 // 71: roomenv version 33, the ice darkeners fired at load (ActorIceDarkenerMP1 0xf798e0).
 // 72: animated platforms are left to retail's Platform (they looped as scenery, without collision).
 // 74: a platform's model is drawn only riding its retail Platform; unbound or animated, retail draws it.
-inline constexpr int kRooms = 74;
+// 75: the grid is the LTPB the ROOM's BLIT names, found in the master pak too (25 rooms had none).
+inline constexpr int kRooms = 75;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

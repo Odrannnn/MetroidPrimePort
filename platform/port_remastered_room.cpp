@@ -240,8 +240,8 @@ private:
   void ReadSuns(const RoomData& r, const SceneryScripts& scripts, const Mat34& xf, std::vector<SunData>& out) const;
   void ReadPointLights(const RoomData& r, const SceneryScripts& scripts, const Mat34& xf,
                        std::vector<PointLightData>& out) const;
-  bool Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>& check, std::vector<uint8_t>& out,
-            std::string& note) const;
+  bool Grid(const RoomPak& rp, const Id16& id, const Vec3& shift, const std::vector<Vec3>& check,
+            std::vector<uint8_t>& out, std::string& note) const;
   // Tells RoomIO::retailModel where the room's retail models stand (RetailPlacement), and
   // keeps the entities that placed one in m_retailEntities, for WriteGeometry to leave out.
   void PairRetailModels(const RoomData& r, const Area& area);
@@ -1527,18 +1527,17 @@ bool ReadGridTextures(const std::vector<uint8_t>& d, const std::function<bool(co
 // of such tiles: each loaded area registers its own copy of every tile it bakes, and which
 // copy is mapped depends on the load order (see port_room_env_tiles.h), so the runtime
 // decides that, and nothing here borrows from a neighbour.
-bool Writer::Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>& check, std::vector<uint8_t>& out,
-                  std::string& note) const {
+// The LTPB is the one the ROOM's BLIT names: 25 rooms keep theirs in the world's master pak.
+bool Writer::Grid(const RoomPak& rp, const Id16& id, const Vec3& shift, const std::vector<Vec3>& check,
+                  std::vector<uint8_t>& out, std::string& note) const {
   out.clear();
   std::vector<uint8_t> d;
-  const PakAsset* asset = rp.pak != nullptr ? FirstOfType(*rp.pak, FourCC("LTPB")) : nullptr;
-  if (asset == nullptr) {
+  if (id == Id16{}) {
     note = "no grid";
     return false;
   }
-  std::string error;
-  if (!rp.pak->ReadAsset(*asset, d, error)) {
-    note = "grid not decoded";
+  if (!FindResource(id.data(), FourCC("LTPB"), rp, d, nullptr, nullptr)) {
+    note = "grid not found";
     return false;
   }
   size_t phdr = std::string::npos;
@@ -3446,7 +3445,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   std::string gnote = "grid not placed";
   const auto it = placed.find(r.name);
   if (it != placed.end() && Distance(it->second.pos, {trans[0], trans[1], trans[2]}) < 0.5) {
-    Grid(RoomPak{r.name, r.pak}, shift, gdoors, grid, gnote);
+    Grid(RoomPak{r.name, r.pak}, r.room.Lighting().grid, shift, gdoors, grid, gnote);
   }
   const LightmapData& lightmap = Lightmap(r);
   const bool withLightmap = lightmap.ok && lightmap.lit != 0;

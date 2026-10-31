@@ -139,6 +139,10 @@ bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
           }
           m_blit.lookups[g] = v;
         }
+        const size_t g = at + 4 + 16 * m;
+        if ((m_blit.flags & 2) != 0 && size - g >= 16) {
+          std::memcpy(m_blit.grid.data(), b + g, 16);
+        }
       }
     }
   }

@@ -443,6 +443,7 @@ struct Blit {
   uint32_t flags = 0;  // 1 lightmap, 2 probe
   Id16 lightmap{};     // the TXTR's id in property byte order
   std::map<Id16, std::array<float, 4>> lookups;
+  Id16 grid{};  // the LTPB's id in property byte order, which may live in the world's master pak
   bool HasLightmap() const { return present && (flags & 1) != 0 && lightmap != Id16{}; }
 };
 
