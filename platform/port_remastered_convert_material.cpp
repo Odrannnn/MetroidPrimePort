@@ -32,8 +32,11 @@ constexpr uint32_t kShaderParallax = 0x2F3FB02B;  // TCH0 is seen inside the sur
 constexpr uint32_t kShaderGlass = 0x231F8383;
 // A lava pool's surface (a LavaRenderVolume's model): BCLR is a colour ramp, TCH0 a pattern
 // carried along TCH2's flow map in two phases that TCH1's noise offsets, CCH0 the flow's
-// strength, its period in seconds and the brightness, CCH1 the maps' scales.
-constexpr uint32_t kShaderLavaPool[] = {0x3ADE58B7, 0xB9C24545, 0xBB4CD79B};
+// strength, its period in seconds and the brightness, CCH1 the maps' scales. Every
+// Lava2EmissiveOnly shader: their fragment perms are the same code, and the vertex perms
+// differ only in which attribute holds the vertex colour.
+constexpr uint32_t kShaderLavaPool[] = {0x3ADE58B7, 0x4140EA84, 0x5089A70F, 0x5C2F3604, 0x696EA755,
+                                        0xA58218EC, 0xB9C24545, 0xBB4CD79B, 0xDAC8BF61};
 // The arm cannon's beam glow (Wave, Plasma), over a lit surface: TCH0's three
 // channels scroll at CCH1's and CCH2.xy's speeds (times CCH0.y) and, less twice
 // the vertex colour, plus CCH0.w, pick a colour from TCH1, a ramp whose row is
