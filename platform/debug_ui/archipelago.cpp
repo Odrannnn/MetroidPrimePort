@@ -240,12 +240,18 @@ void DrawArchipelagoSession() {
     if (tracked.empty()) {
       ImGui::TextDisabled("Nothing yet.");
     } else {
-      // Half the space the section has left, so the table does not push the
-      // settings below it off the tab.
+      // Tall enough for every row, up to half the window, so a long list
+      // scrolls inside the table rather than pushing the settings below it off
+      // the tab. Not the space left below: on a page already taller than the
+      // window that is about nothing, and the table shrank to a sliver.
+      const float rowHeight =
+          ImGui::GetTextLineHeight() + ImGui::GetStyle().CellPadding.y * 2.0f + 1.0f;
+      const float height = std::min(rowHeight * static_cast< float >(tracked.size() + 1),
+                                    ImGui::GetWindowHeight() * 0.5f);
       if (ImGui::BeginTable("apTracked", 3,
                             ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
                                 ImGuiTableFlags_BordersInnerH,
-                            ImVec2(0.0f, ImGui::GetContentRegionAvail().y * 0.5f))) {
+                            ImVec2(0.0f, height))) {
         ImGui::TableSetupColumn("Item");
         ImGui::TableSetupColumn("From");
         ImGui::TableSetupColumn("Step");
