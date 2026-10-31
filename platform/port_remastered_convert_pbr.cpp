@@ -39,7 +39,7 @@ bool BackLightScale(const RemMaterial& m) {
          !m.colorUnlit;
 }
 
-bool ColorUnlitDraw(const RemMaterial& m) { return m.colorUnlit && m.unlit && m.tinted; }
+bool ColorUnlitDraw(const RemMaterial& m) { return m.colorUnlit && m.unlit && (m.tinted || m.colorUnlitWhite); }
 
 // The PBR record's mode word: 1 unlit, 2 glow masked by the base alpha, 4 tinted by the vertex
 // colour, 8 ColorUnlit's draw, 32 a glow the runtime exposes (ExposedGlow), 64 a kind's
@@ -279,7 +279,9 @@ Blob PbrMaterial(const RetailMaterial& pm, uint32_t vtx, const uint32_t* texIdx,
     const uint32_t* t = tev[rem.maps[kEmissive].detail && i == kEmissive ? 2 : std::min(i, kLayeredMaps - 1)];
     const bool gain = colorUnlit && i == 1;
     const bool emissiveStage = emissiveKonst && i == kEmissive;
-    P32(b, gain ? 0x7B80Fu : emissiveStage ? 0x390Fu : t[0]);  // gain: ZERO, CPREV, KONST, ZERO, then x2; emissive: ZERO, TEXC, KONST, CPREV
+    // White ColorUnlit: the base alone (ZERO, ZERO, ZERO, TEXC), no channel colour.
+    const bool white = colorUnlit && rem.colorUnlitWhite && i == 0;
+    P32(b, gain ? 0x7B80Fu : emissiveStage ? 0x390Fu : white ? 0x43DEFu : t[0]);  // gain: ZERO, CPREV, KONST, ZERO, then x2; emissive: ZERO, TEXC, KONST, CPREV
     P32(b, i == 0 && vertexGlow ? 0x39487u : t[1]);  // ZERO, TEXA, RASA, ZERO: base x vertex alpha
     P32(b, gain ? 0x140u : 0x100u);
     P32(b, 0x100);

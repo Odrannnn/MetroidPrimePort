@@ -444,6 +444,7 @@ struct RemMaterial {
   // ColorUnlit's colour: twice the vertex colour linearised, times the base map
   // and CCH0.x x CCH1.x (kept in backlight, which an unlit surface has no use for).
   bool colorUnlit = false;
+  bool colorUnlitWhite = false;  // its variant without the vertex colour: white instead
   // LITS, the shader's LightBleedScale: what a back-facing pixel's light is scaled by (see
   // BackLightScale). hasLits is false for a material that carries none.
   bool hasLits = false;

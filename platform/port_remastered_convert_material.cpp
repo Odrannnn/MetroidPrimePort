@@ -257,7 +257,12 @@ constexpr ShaderTwin kShaderTwins[] = {
     {0xC2758D23, 0x27A91776}, {0xEE7307AA, 0x27A91776}, {0x61DC2B75, 0xB9E899F3},
     {0x2CE6BDA0, 0x557A7DE4}, {0xAF89E54E, 0x557A7DE4}, {0x49050489, 0x557A7DE4}, {0x55B23C73, 0x557A7DE4},
     {0x963919C8, 0x557A7DE4}, {0x7CE6FE00, 0xF495B260}, {0xECF71237, 0xF495B260},
+    // ColorUnlit without the vertex colour (ColorUnlitWhite below): the same scroll and CCH0.x, no CCH1.x term, white
+    // where ColorUnlit reads the vertex.
+    {0x568B8E25, kShaderColorUnlit}, {0x8AFAC076, kShaderColorUnlit}, {0xEE2D9846, kShaderColorUnlit},
 };
+// kb topic/shader-twins.md "ColorUnlit-white": out = base x CCH0.x, alpha base.a; no vertex colour, no CCH1.x.
+bool ColorUnlitWhite(uint32_t shader) { return shader == 0x568B8E25 || shader == 0x8AFAC076 || shader == 0xEE2D9846; }
 uint32_t ShaderFamily(uint32_t shader) {
   for (const ShaderTwin& t : kShaderTwins)
     if (t.copy == shader) return t.of;
@@ -412,6 +417,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
   out.shader = rawShader;
   out.family = shader;
   out.role = ShaderRole(shader);
+  if (ColorUnlitWhite(rawShader)) out.role = "color-unlit-white";
   out.shell = shader == kShaderMatcapShell;
   out.shield = shader == kShaderBoundaryShield || shader == kShaderForceField || shader == kShaderPickUp || shader == kShaderHolo ||
                shader == kShaderHoloRefl || shader == kShaderHologram || shader == kShaderRouteHologram || shader == kShaderGunFx || IsEyeGloss(shader) ||
@@ -428,7 +434,8 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
       std::find(std::begin(kShaderPremulGlass), std::end(kShaderPremulGlass), shader) != std::end(kShaderPremulGlass);
   // Plain MFVC shaders (882014EE, F22FEB5B, the layered ones) multiply only the diffuse;
   // every kShaderTints shader multiplies the albedo, so its F0 is tinted too.
-  out.tintF0 = std::find(std::begin(kShaderTints), std::end(kShaderTints), shader) != std::end(kShaderTints);
+  out.tintF0 = std::find(std::begin(kShaderTints), std::end(kShaderTints), shader) != std::end(kShaderTints) &&
+               !ColorUnlitWhite(rawShader);
   out.tinted = (mat.unk1 & kVertexColorFlag) != 0 && (!custom || premulGlass || out.tintF0);
   // What the alpha a shader writes is made of is only in its code. Every one
   // read writes the base map's alpha squared, times the vertex alpha, bar these:
@@ -1492,6 +1499,12 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
   if (shader == kShaderColorUnlit) {
     out.colorUnlit = true;
     out.backlight = (cch[0] ? ShortestDouble(cch[0]->color[0]) : 1.0) * (cch[1] ? ShortestDouble(cch[1]->color[0]) : 1.0);
+    // The white variant is base x CCH0.x: half of it here, as the draw doubles the
+    // (white) vertex colour.
+    if (ColorUnlitWhite(rawShader)) {
+      out.colorUnlitWhite = true;
+      out.backlight = 0.5 * (cch[0] ? ShortestDouble(cch[0]->color[0]) : 1.0);
+    }
   }
   // Both layers' base maps and an edge width make a blend; the shader's own
   // floor on the width is not known, so a zero one is the thinnest edge.

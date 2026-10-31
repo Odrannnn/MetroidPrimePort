@@ -920,7 +920,7 @@ void Converter::State::Convert(const Model& model, const ConvertOptions& opt) {
     // A door shield (ColorUnlit, all vertex colour) is one-sided in Remastered, whose door
     // prefab turns its front to the room. The retail shield actors face either way (their
     // model was two-sided), so the port draws it from both sides.
-    if (mesh.twoSided || mats[mesh.material].colorUnlit) {
+    if (mesh.twoSided || (mats[mesh.material].colorUnlit && !mats[mesh.material].colorUnlitWhite)) {
       // Seen from behind too: Remastered draws the mesh with culling off (its MESH
       // chunk's one-bit map; every material flagged 0x400 plus holograms and glow
       // planes), the game culls back faces, so the back is drawn as a copy: each
