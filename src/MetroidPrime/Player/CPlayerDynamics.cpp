@@ -75,8 +75,8 @@ static bool RemasteredJump(const CPlayer& player, const CStateManager& mgr) {
 static bool sStickFrame = false;
 static float sStickRight = 0.f;
 static float sStickForward = 1.f;
-// The Dodge action (issue #236): retail's sideways dash without a lock-on
-// target. A press on the ground while strafing starts a jump (kDodgeHop); the
+// The Dodge action (issue #236): retail's sideways dash, also without a lock-on
+// target. Not locked on, a press on the ground while strafing starts a jump (kDodgeHop); the
 // next tick starts the dash as a tapped jump does in ComputeDash, and it moves
 // in a straight line along the body's right axis at that moment, at the dash's
 // speeds, until it lands or times out (kDodgeDash).
@@ -85,6 +85,9 @@ static EDodgePhase sDodgePhase = kDodgeNone;
 static float sDodgeStrafe = 0.f;
 static CVector3f sDodgeRight = CVector3f(1.f, 0.f, 0.f);
 static CVector3f sDodgeForward = CVector3f(0.f, 1.f, 0.f);
+// Locked on, a Dodge press does what a jump tapped while strafing does: it
+// starts the jump, and ComputeDash starts retail's dash on the same tick.
+static bool sDodgeOrbitDash = false;
 #endif
 
 // walk_speed (PortDebug::WalkSpeed): on foot, the top speed, the acceleration and
@@ -349,7 +352,16 @@ void CPlayer::ComputeDash(const CFinalInput& input, float dt, CStateManager& mgr
     x388_dashButtonHoldTime += dt;
   }
   if (!x37c_sidewaysDashing) {
+#ifdef TARGET_PC
+    const bool dodge = sDodgeOrbitDash && !x9c5_28_slidingOnWall && !x9c5_29_hitWall &&
+                       x304_orbitState == kOS_OrbitObject &&
+                       CMath::AbsF(strafeInput) >= CMath::AbsF(forwardInput) &&
+                       CMath::AbsF(strafeInput) > gpTweakPlayer->GetDashStrafeInputThreshold();
+    sDodgeOrbitDash = false;
+    if (dodge || SidewaysDashAllowed(strafeInput, forwardInput, input, mgr)) {
+#else
     if (SidewaysDashAllowed(strafeInput, forwardInput, input, mgr)) {
+#endif
       x37c_sidewaysDashing = true;
       x380_strafeInputAtDash = strafeInput;
       x38c_doneSidewaysDashing = true;
@@ -435,7 +447,9 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
   // is only taken once the strafe input and the ground allow it, as
   // SidewaysDashAllowed asks of a dash.
   bool dodgePressed = false;
-  if (sDodgePhase == kDodgeNone && x304_orbitState == kOS_NoOrbit &&
+  sDodgeOrbitDash = false;
+  const bool lockedOn = x304_orbitState == kOS_OrbitObject;
+  if (sDodgePhase == kDodgeNone && (x304_orbitState == kOS_NoOrbit || lockedOn) &&
       x258_movementState == NPlayer::kMS_OnGround && !IsMorphBallTransitioning() &&
       gpTweakPlayer->GetDashEnabled() && !x9c5_28_slidingOnWall && !x9c5_29_hitWall) {
     const float strafe = ControlMapper::GetAnalogInput(ControlMapper::kC_StrafeRight, input) -
@@ -448,8 +462,12 @@ void CPlayer::ComputeMovement(const CFinalInput& input, CStateManager& mgr, floa
         CMath::AbsF(strafe) > gpTweakPlayer->GetDashStrafeInputThreshold() &&
         right.CanBeNormalized() && PortDebug::TakeDodgeRequest()) {
       SetMoveState(NPlayer::kMS_Jump, mgr);
-      sDodgePhase = kDodgeHop;
-      dodgePressed = true;
+      if (lockedOn) {
+        sDodgeOrbitDash = true;
+      } else {
+        sDodgePhase = kDodgeHop;
+        dodgePressed = true;
+      }
       sDodgeStrafe = strafe;
       sDodgeRight = right.AsNormalized();
       sDodgeForward = CVector3f(-sDodgeRight.GetY(), sDodgeRight.GetX(), 0.f);

@@ -4417,7 +4417,7 @@ const CommandSpec kCommands[] = {
     {"aimlockon", CmdAimLockOn, nullptr,
      "aimlockon [0|1]            lock-on picks the target nearest the crosshair (aim_lock_on)"},
     {"dodge", CmdDodge, nullptr,
-     "dodge                      a Dodge press (sideways dash without a lock-on; needs a strafe held)"},
+     "dodge                      a Dodge press (sideways dash, locked on or not; needs a strafe held)"},
     {"radial", CmdRadial, nullptr,
      "radial [beam|visor [x y] | release]  holds a radial menu with its selection (x right, y up); radial_menus"},
     {"walkspeed", CmdWalkSpeed, nullptr,
