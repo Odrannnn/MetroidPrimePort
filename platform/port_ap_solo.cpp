@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -18,6 +19,7 @@ namespace {
 constexpr int64_t kSlot = 1;
 constexpr int64_t kGoalComplete = 30; // ClientStatus.CLIENT_GOAL
 constexpr int64_t kStartLocation = -2; // what Archipelago gives a starting item
+constexpr int64_t kCommandLocation = -1; // what MultiServer gives an item a command sent
 
 void IdList(port::JsonWriter& json, const char* key, const std::vector< int64_t >& ids) {
   json.Key(key).BeginArray();
@@ -59,6 +61,43 @@ std::vector< int64_t > Ids(const PortJson::Value* list) {
   }
   return ids;
 }
+
+std::string Join(const std::vector< std::string >& names) {
+  std::string text;
+  for (const std::string& name : names)
+    text += (text.empty() ? "" : ", ") + name;
+  return text;
+}
+
+// The index of the name `query` picks: the one it matches ignoring case, else
+// the only one containing it. -1, with `error` saying why, when none or several do.
+int Pick(const std::vector< std::string >& names, const std::string& query, const char* what, std::string& error) {
+  const std::string wanted = port::Lower(query);
+  std::vector< int > hits;
+  for (size_t i = 0; i < names.size(); ++i) {
+    const std::string name = port::Lower(names[i]);
+    if (name == wanted)
+      return int(i);
+    if (!wanted.empty() && name.find(wanted) != std::string::npos)
+      hits.push_back(int(i));
+  }
+  if (hits.size() == 1)
+    return hits[0];
+  if (hits.empty()) {
+    error = std::string("No ") + what + " is called \"" + query + "\".";
+  } else {
+    std::vector< std::string > choices;
+    for (const int hit : hits)
+      choices.push_back(names[hit]);
+    error = "\"" + query + "\" could be: " + Join(choices) + ".";
+  }
+  return -1;
+}
+
+constexpr const char* kCommandHelp =
+    "Commands: !getitem <item>, !send_location <location>, !hint <item>, !hint_location <location>, "
+    "!missing, !checked, !remaining, !status, !release (or !collect), !players. Server forms such as "
+    "/send Samus <item>, /send_location Samus <location> and !admin <command> work too.";
 
 bool WriteAtomic(const std::string& path, const std::string& text) {
   std::error_code ec;
@@ -130,10 +169,27 @@ bool Server::OpenSeed(const PortRandoGen::Seed& seed, const std::string& statePa
     std::ifstream file(mStatePath, std::ios::binary);
     text = port::ReadAllText(file);
   }
+  mGiven.clear();
   PortJson::Value state;
   if (!text.empty() && PortJson::Parse(text, state, offset, &reason) && state.IsObject()) {
-    for (const int64_t location : Ids(state.Find("checked")))
-      Check(location);
+    // Command grants go back between the checks they were made between, so
+    // every item keeps its index.
+    std::vector< std::pair< size_t, int64_t > > given;
+    if (const PortJson::Value* list = state.Find("given"); list != nullptr && list->IsArray()) {
+      for (const PortJson::Value& entry : list->AsArray()) {
+        if (entry.IsArray() && entry.AsArray().size() == 2 && entry.AsArray()[0].IsNumber() &&
+            entry.AsArray()[1].IsNumber())
+          given.push_back({size_t(std::max< int64_t >(0, entry.AsArray()[0].AsInt())), entry.AsArray()[1].AsInt()});
+      }
+    }
+    const std::vector< int64_t > checks = Ids(state.Find("checked"));
+    size_t next = 0;
+    for (size_t i = 0; i <= checks.size(); ++i) {
+      while (next < given.size() && (given[next].first <= i || i == checks.size()))
+        Give(given[next++].second);
+      if (i < checks.size())
+        Check(checks[i]);
+    }
   }
   mOpen = true;
   // The first thing a server says; the client's Connect answers it.
@@ -254,6 +310,12 @@ bool Server::Check(int64_t location) {
   return true;
 }
 
+// An item from nowhere, as MultiServer's cheat console sends one (location -1).
+void Server::Give(int64_t item) {
+  mGiven.push_back({mChecked.size(), item});
+  mReceived.push_back({item, kCommandLocation});
+}
+
 void Server::SaveState() {
   if (mStatePath.empty())
     return;
@@ -262,8 +324,164 @@ void Server::SaveState() {
   port::JsonWriter json;
   json.BeginObject();
   IdList(json, "checked", mChecked);
+  if (!mGiven.empty()) {
+    json.Key("given").BeginArray();
+    for (const auto& [checks, item] : mGiven)
+      json.BeginArray().Number(int64_t(checks)).Number(item).EndArray();
+    json.EndArray();
+  }
   if (!WriteAtomic(mStatePath, json.EndObject().Take() + "\n"))
     Queue(PrintJson("Tutorial", "Could not save the seed's progress to " + mStatePath));
+}
+
+// A chat command. The player is the only one in the room, so they are its
+// admin too: MultiServer's client commands, its server console commands and
+// "!admin <command>" all run here, on the player's own slot.
+void Server::Command(const std::string& text) {
+  namespace Mp = PortAp::MetroidPrime;
+  const auto reply = [this](const std::string& line) { Queue(PrintJson("CommandResult", line)); };
+  const auto split = [](std::string& line) {
+    const size_t space = line.find(' ');
+    std::string word = port::Lower(line.substr(0, space));
+    line = space == std::string::npos ? std::string() : port::Trim(line.substr(space + 1));
+    return word;
+  };
+  std::string rest = port::Trim(text.substr(1));
+  std::string word = split(rest);
+  if (word == "admin") {
+    if (rest.empty() || port::Lower(rest).rfind("login", 0) == 0) {
+      reply("A solo game has no admin password: every command is yours already.");
+      return;
+    }
+    if (rest[0] == '/' || rest[0] == '!')
+      rest.erase(0, 1);
+    word = split(rest);
+  }
+  // A server command names the player first; the only one is optional here.
+  const auto dropSlot = [&rest] {
+    const std::string slot = port::Lower(kSlotName);
+    const std::string lower = port::Lower(rest);
+    if (lower == slot || lower.rfind(slot + " ", 0) == 0)
+      rest = port::Trim(rest.substr(slot.size()));
+  };
+
+  std::vector< int64_t > itemIds;
+  std::vector< std::string > itemNames;
+  for (int64_t id = Mp::kItemBase; id < Mp::kItemBase + 256; ++id) {
+    if (const char* name = Mp::ItemName(id)) {
+      itemIds.push_back(id);
+      itemNames.emplace_back(name);
+    }
+  }
+  std::vector< int64_t > locationIds;
+  std::vector< std::string > locationNames;
+  for (const auto& [location, item] : mSeed.placements) {
+    const Mp::Location* known = Mp::FindLocation(location);
+    locationIds.push_back(location);
+    locationNames.push_back(known != nullptr ? known->name : "location " + std::to_string(location));
+  }
+  const auto itemName = [&](int64_t item) {
+    const char* name = Mp::ItemName(item);
+    return name != nullptr ? std::string(name) : "item " + std::to_string(item);
+  };
+  const auto checked = [this](int64_t location) {
+    return std::find(mChecked.begin(), mChecked.end(), location) != mChecked.end();
+  };
+  const size_t before = mReceived.size();
+  std::string error;
+
+  if (word == "help" || word.empty()) {
+    reply(kCommandHelp);
+  } else if (word == "getitem" || word == "send" || word == "send_multiple") {
+    int64_t amount = 1;
+    if (word == "send_multiple") {
+      const std::string count = split(rest);
+      amount = std::strtoll(count.c_str(), nullptr, 10);
+      if (amount < 1 || amount > 100) {
+        reply("Usage: /send_multiple <amount> Samus <item>");
+        return;
+      }
+    }
+    if (word != "getitem")
+      dropSlot();
+    if (rest.empty()) {
+      reply("Usage: !getitem <item>");
+      return;
+    }
+    const int pick = Pick(itemNames, rest, "item", error);
+    if (pick < 0) {
+      reply(error);
+      return;
+    }
+    for (int64_t i = 0; i < amount; ++i)
+      Give(itemIds[pick]);
+    reply("Cheat console: sending \"" + itemNames[pick] + "\"" + (amount > 1 ? " x" + std::to_string(amount) : "") +
+          " to " + kSlotName + ".");
+  } else if (word == "send_location" || word == "hint_location") {
+    if (word == "send_location")
+      dropSlot();
+    if (rest.empty()) {
+      reply("Usage: !" + word + " <location>");
+      return;
+    }
+    const int pick = Pick(locationNames, rest, "location", error);
+    if (pick < 0) {
+      reply(error);
+      return;
+    }
+    const int64_t location = locationIds[pick];
+    const std::string item = itemName(mSeed.placements.at(location));
+    if (word == "hint_location")
+      reply(locationNames[pick] + " holds " + item + (checked(location) ? " (found)." : " (not found)."));
+    else if (Check(location))
+      reply("Checked " + locationNames[pick] + ": " + item + ".");
+    else
+      reply(locationNames[pick] + " was checked already.");
+  } else if (word == "hint") {
+    if (rest.empty()) {
+      reply("Usage: !hint <item>");
+      return;
+    }
+    const int pick = Pick(itemNames, rest, "item", error);
+    if (pick < 0) {
+      reply(error);
+      return;
+    }
+    std::vector< std::string > where;
+    for (size_t i = 0; i < locationIds.size(); ++i) {
+      if (mSeed.placements.at(locationIds[i]) == itemIds[pick])
+        where.push_back(locationNames[i] + (checked(locationIds[i]) ? " (found)" : ""));
+    }
+    reply(where.empty() ? "This seed has no " + itemNames[pick] + "."
+                        : itemNames[pick] + " is at " + Join(where) + ".");
+  } else if (word == "missing" || word == "checked" || word == "remaining") {
+    std::vector< std::string > names;
+    for (size_t i = 0; i < locationIds.size(); ++i) {
+      if (checked(locationIds[i]) == (word == "checked"))
+        names.push_back(word == "remaining" ? itemName(mSeed.placements.at(locationIds[i])) : locationNames[i]);
+    }
+    if (word == "remaining")
+      std::sort(names.begin(), names.end());
+    const char* what = word == "missing" ? " locations missing" : word == "checked" ? " locations checked"
+                                                                                    : " items left";
+    reply(std::to_string(names.size()) + what + (names.empty() ? "." : ": " + Join(names) + "."));
+  } else if (word == "status") {
+    reply(std::string(kSlotName) + " (Metroid Prime): " + std::to_string(mChecked.size()) + " of " +
+          std::to_string(locationIds.size()) + " locations checked.");
+  } else if (word == "players") {
+    reply(std::string(kSlotName) + " (Metroid Prime) is the only player.");
+  } else if (word == "release" || word == "collect") {
+    size_t count = 0;
+    for (const int64_t location : locationIds)
+      count += Check(location) ? 1 : 0;
+    reply(std::to_string(count) + " locations checked, their items sent.");
+  } else {
+    reply("Unknown command \"" + word + "\". " + kCommandHelp);
+  }
+  if (mReceived.size() != before) {
+    SaveState();
+    Queue(ReceivedItemsJson(before));
+  }
 }
 
 void Server::Handle(const PortJson::Value& packet) {
@@ -320,8 +538,8 @@ void Server::Handle(const PortJson::Value& packet) {
     }
   } else if (command == "Say") {
     const std::string text = packet.StringOr("text");
-    if (!text.empty() && text[0] == '!') {
-      Queue(PrintJson("CommandResult", "Commands are not available in a solo game."));
+    if (!text.empty() && (text[0] == '!' || text[0] == '/')) {
+      Command(text);
     } else {
       Queue(PrintJson("Chat", std::string(kSlotName) + ": " + text, true, &text));
     }

@@ -48,11 +48,17 @@ switch.
   in-process server (`platform/port_ap_solo.cpp`, server `solo:<name>`, slot
   `Samus`), so the item models, scan text, temple hints, elevator and door
   patches, tracker and per-seed save cards all come from slot data as in a
-  multiworld.
+  multiworld. The player is that server's admin, so the Chat box takes
+  `!getitem <item>`, `!send_location <location>`, `!hint`, `!hint_location`,
+  `!missing`, `!checked`, `!remaining`, `!status` and `!release`/`!collect`,
+  plus the server forms `/send Samus <item>`, `/send_location Samus
+  <location>` and `!admin <command>` (`!help` lists them). Names match
+  ignoring case, or by any unique part.
 - **Files** (`platform/port_rando_seed.cpp`): `<user dir>/randomizer_seeds/
   <name>.json` holds the options, slot data, start items, placements and the
   spoiler; `<name>.state.json` beside it the locations checked, in order
-  (items are numbered by it). A different seed under a taken name is saved as
+  (items are numbered by it), and the items commands granted, each with
+  the number of checks made before it. A different seed under a taken name is saved as
   `<name>-2`, `-3`, ....
 
 ## Seed files from other tools

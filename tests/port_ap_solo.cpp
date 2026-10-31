@@ -210,7 +210,7 @@ void Golden(const std::filesystem::path& testDir, const PortRandoGen::Seed& base
     CHECK_MSG(server.SendText("[" + Session::BuildLocationChecks({locations[1].id, 42}) + "," +
                               Session::BuildLocationScouts({locations[0].id, 42, locations[3].id}) + "]"),
               "checks and scouts sent");
-    CHECK_MSG(server.SendText("[" + Session::BuildSay("hello \"there\"\n") + "," + Session::BuildSay("!help") + "," +
+    CHECK_MSG(server.SendText("[" + Session::BuildSay("hello \"there\"\n") + "," + Session::BuildSay("!players") + "," +
                               Session::BuildGoal() + "]"),
               "chat and goal sent");
     CHECK_MSG(server.SendText(R"([{"cmd":"Get","keys":["a\"b",3,"c"]},{"cmd":"SetNotify","keys":[]},)"
@@ -224,8 +224,8 @@ void Golden(const std::filesystem::path& testDir, const PortRandoGen::Seed& base
         "\"player\":1,\"flags\":1}]}]\n[{\"cmd\":\"PrintJSON\",\"type\":\"Chat\","
         "\"team\":0,\"slot\":1,\"message\":\"hello \\\"there\\\"\\n\",\"data\":[{\"type\":\"text\","
         "\"text\":\"Samus: hello \\\"there\\\"\\n\"}]}]\n[{\"cmd\":\"PrintJSON\","
-        "\"type\":\"CommandResult\",\"data\":[{\"type\":\"text\",\"text\":\"Commands are not available in a solo "
-        "game.\"}]}]\n[{\"cmd\":\"PrintJSON\",\"type\":\"Goal\",\"team\":0,\"slot\":1,"
+        "\"type\":\"CommandResult\",\"data\":[{\"type\":\"text\",\"text\":\"Samus (Metroid Prime) is the "
+        "only player.\"}]}]\n[{\"cmd\":\"PrintJSON\",\"type\":\"Goal\",\"team\":0,\"slot\":1,"
         "\"data\":[{\"type\":\"text\",\"text\":\"Samus has completed their goal.\"}]}]\n"
         "[{\"cmd\":\"Retrieved\",\"keys\":{\"a\\\"b\":null,\"c\":null}}]\n[{\"cmd\":\"Retrieved\","
         "\"keys\":{}}]\n[{\"cmd\":\"SetReply\",\"key\":\"k\\n\",\"value\":\"solo\","
@@ -560,7 +560,7 @@ int main() {
                          [&wanted](const std::string& entry) { return entry.find(wanted) != std::string::npos; });
     };
     CHECK_MSG(has("Chat|Samus: hello"), "chat is echoed");
-    CHECK_MSG(has("CommandResult|Commands are not available in a solo game."), "commands are declined");
+    CHECK_MSG(has("CommandResult|Usage: !hint <item>"), "a command answers");
     CHECK_MSG(has("Goal|Samus has completed their goal."), "the goal is announced");
 
     saved = session.GetState();
@@ -604,6 +604,62 @@ int main() {
               "a fresh client gets the start items, then every check's item in order");
     for (size_t i = 0; i < grants.size(); ++i)
       CHECK_MSG(grants[i].index == static_cast<int64_t>(i), "the indices count up from 0");
+  }
+
+  // Chat commands: the player is the solo room's admin.
+  {
+    const std::string commandState = (testDir / "commands.state.json").string();
+    std::filesystem::remove(commandState);
+    PortApSolo::Server server;
+    std::string error;
+    CHECK_MSG(server.OpenSeed(seed, commandState, error), "the seed opens for commands");
+    Session session = MakeSession();
+    Pump(server, session);
+    std::vector<ItemGrant> grants;
+    const auto say = [&](const std::string& text) {
+      CHECK_MSG(server.SendText("[" + Session::BuildSay(text) + "]"), "a command is sent");
+      grants = Pump(server, session);
+      std::string reply;
+      PortAp::Protocol::ChatLine line;
+      while (session.TakeChatLine(line))
+        reply += line.type + "|" + line.text + "\n";
+      return reply;
+    };
+    const auto has = [](const std::string& reply, const char* wanted) {
+      return reply.find(wanted) != std::string::npos;
+    };
+    std::string reply = say("!getitem energy TANK");
+    CHECK_MSG(has(reply, "CommandResult|Cheat console: sending \"Energy Tank\" to Samus.") && grants.size() == 1 &&
+                  grants[0].itemId == items[0] && grants[0].index == 1,
+              "!getitem grants the item at the next index");
+    reply = say(std::string("!admin /send_location Samus ") + locations[1].name);
+    CHECK_MSG(has(reply, "Checked ") && grants.size() == 1 && grants[0].itemId == items[1] && grants[0].index == 2,
+              "!admin /send_location checks the location and grants its item");
+    reply = say(std::string("!send_location ") + locations[1].name);
+    CHECK_MSG(has(reply, "was checked already") && grants.empty(), "a location is checked once");
+    CHECK_MSG(has(say("!getitem no such thing"), "No item is called \"no such thing\".") && grants.empty(),
+              "an unknown item is named back");
+    CHECK_MSG(has(say(std::string("!hint_location ") + locations[3].name), "holds Artifact of Truth (not found)."),
+              "!hint_location names the item there");
+    CHECK_MSG(has(say("!hint missile launcher"), "Missile Launcher is at ") &&
+                  has(say("!status"), "Samus (Metroid Prime): 1 of 4 locations checked.") &&
+                  has(say("!admin login secret"), "no admin password") && has(say("!frob"), "Unknown command \"frob\"."),
+              "hints, status, admin login and unknown commands answer");
+    CHECK_GOLDEN(ReadText(commandState), "{\"checked\":[" + std::to_string(locations[1].id) +
+                                             "],\"given\":[[0," + std::to_string(items[0]) + "]]}\n");
+    server.Close();
+
+    // The grant keeps its index across a relaunch, and !release sends the rest.
+    PortApSolo::Server again;
+    CHECK_MSG(again.OpenSeed(seed, commandState, error), "the seed reopens with its commands");
+    Session fresh = MakeSession();
+    grants = Pump(again, fresh);
+    CHECK_MSG(grants.size() == 3 && grants[1].itemId == items[0] && grants[2].itemId == items[1],
+              "a granted item comes back in its place");
+    CHECK_MSG(again.SendText("[" + Session::BuildSay("/release") + "]"), "release sent");
+    grants = Pump(again, fresh);
+    CHECK_MSG(grants.size() == 3 && grants[0].index == 3 && again.CheckedLocations().size() == 4,
+              "!release checks every location left");
   }
 
   // Wrong slot and server strings.
