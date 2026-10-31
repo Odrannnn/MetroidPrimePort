@@ -1,4 +1,6 @@
 # Metroid Prime Unbound - native port
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FOdrannnn%2FMetroidPrimePort.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FOdrannnn%2FMetroidPrimePort?ref=badge_shield)
+
 
 > **Disclaimer:** this is an independent project, not affiliated with or endorsed
 > by [PrimeDecomp](https://github.com/PrimeDecomp/prime). It builds on their
@@ -153,6 +155,9 @@ and remains Nintendo's. See `NOTICE`.
 
 Metroid Prime is a trademark of Nintendo. This project is unaffiliated with
 Nintendo and Retro Studios, and ships no game data.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FOdrannnn%2FMetroidPrimePort.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FOdrannnn%2FMetroidPrimePort?ref=badge_large)
 
 ## Documentation
 
