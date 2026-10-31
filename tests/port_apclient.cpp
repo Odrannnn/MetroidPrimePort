@@ -1499,9 +1499,12 @@ int main() {
           object(0x11, 0x041A04C5, 234), object(0x86, 0x141A0126, 793),
           object(0x15, 0x141A0328, 1), object(0x08, 0x001A03D9, 300)};
       quarters[1].connections.push_back({14, 13, 0x141A0328});
+      quarters[0].props[6 + 8] = 0x3F, quarters[0].props[6 + 9] = 0xC0; // z 1.5
       const std::vector< uint8_t > omega = PortApWorld::RoomOps(plain, 0x3953C353, quarters);
-      CHECK_MSG(omega.size() == 3 * 17 && omega[0] == 4 && omega[17] == 4 && omega[34] == 3 &&
-                    omega[35] == 0x14,
+      CHECK_MSG(omega.size() == 4 * 17 && omega[0] == 2 && omega[10] == 8 && omega[13] == 0x40 &&
+                    omega[14] == 0x60 && omega[15] == 0 && omega[16] == 0,
+                "the Elite Quarters item stands 2 units higher");
+      CHECK_MSG(omega[17] == 4 && omega[34] == 4 && omega[51] == 3 && omega[52] == 0x14,
                 "the Elite Quarters item unlocks the room, the Omega Pirate no longer does");
       CHECK_MSG(PortApWorld::RoomOps(plain, 0x49175472, {object(0x3A, 0x0035013A, 70)}).size() == 5,
                 "Gravity Chamber keeps its stalactite");

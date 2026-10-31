@@ -1681,11 +1681,20 @@ void LogicOps(uint32_t mrea, const std::vector< PortSkipCutscenes::ScriptObject 
     real(0x000D02F2, 0, 5.f);
 
   // Elite Quarters: taking the item is what unlocks the room, not the Omega
-  // Pirate's death.
+  // Pirate's death. The item stands 2 units higher (patch_op_death_pickup_spawn):
+  // at the retail spot a replacement model's box sinks into the floor, where it
+  // can be neither taken nor scanned, and the room never unlocks.
   if (mrea == kEliteQuarters) {
     for (uint32_t pickup : {0x001A04B8u, 0x041A04C5u}) {
       if (!has(pickup, kPickupType))
         continue;
+      if (const PortSkipCutscenes::ScriptObject* o = find(pickup, kPickupType, 12)) {
+        const uint8_t* z = o->props.data() + NameEnd(o->props) + 8;
+        const uint32_t bits = uint32_t(z[0]) << 24 | uint32_t(z[1]) << 16 | uint32_t(z[2]) << 8 | z[3];
+        float height;
+        std::memcpy(&height, &bits, sizeof(height));
+        real(pickup, 8, height + 2.f);
+      }
       if (exists(0x041A0348))
         link(pickup, {kArrivedState, kSetToZeroMsg, 0x041A0348});
       if (exists(0x001A03D9))
