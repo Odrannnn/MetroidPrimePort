@@ -152,7 +152,8 @@ inline constexpr int kTextures = 5;
 //     an ANCS binding one pair in several characters is rebound in the named one only.
 // 28: retail CMDL 119683F6 (Monitor Station's spinner bridge, ANCS 2220567B) is in the table,
 //     paired with 96b2cc02, the skinned model of its CHPR.
-inline constexpr int kModels = 28;
+// 29: the Puffer (E7CDBAF2) is paired with its CHPR's plain skin 5a42cd1b, not Metal.Skin 36d02b0c.
+inline constexpr int kModels = 29;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.
