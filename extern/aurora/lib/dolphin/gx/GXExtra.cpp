@@ -483,14 +483,15 @@ void GXSetArrayBaseIndex(GXAttr attr, u32 base) {
 
 static u32 sPBRCostTest = 0;
 
-void GXSetPBRCostTest(u32 test) { sPBRCostTest = test <= 15 ? test : 0; }
+void GXSetPBRCostTest(u32 test) { sPBRCostTest = test <= 16 ? test : 0; }
 
 u32 GXGetPBRCostTest() { return sPBRCostTest; }
 
 void GXSetPBR(GXBool enable) {
   GX_WRITE_AURORA(GX_AURORA_SET_PBR);
-  // Tests 10 and 11 are outside the shading.
-  GX_WRITE_U8(enable ? static_cast<u8>(1 + (sPBRCostTest <= 9 ? sPBRCostTest : 0)) : 0);
+  // Tests 10 to 15 are outside the shading.
+  const bool shading = sPBRCostTest <= 9 || sPBRCostTest == 16;
+  GX_WRITE_U8(enable ? static_cast<u8>(1 + (shading ? sPBRCostTest : 0)) : 0);
 }
 
 void GXSetSDF(u8 edge) {

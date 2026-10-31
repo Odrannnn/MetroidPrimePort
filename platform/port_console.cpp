@@ -4286,7 +4286,7 @@ const CommandSpec kCommands[] = {
     {"roomgeo", nullptr, nullptr,
      "roomgeo perf [mask]       performance-mode shortcuts (bits: 1 glass every 2nd frame, 2 quarter-size measure, 4 blended fog,\n"
      "                          8 gun depth first, 16 half LOD distance; 0 exact); no mask prints them\n"
-     "roomgeo costtest <n>      PBR shading cost test: 0 off, 1 flat, 2 no lights, 3 no volume, 4 no cube, 5 no normal maps, 6 no ORM/emissive, 7 maps only, 8 no aniso, 9 no aniso or mip blend, 10 no post-processing, 11 no screen copies"},
+     "roomgeo costtest <n>      PBR shading cost test: 0 off, 1 flat, 2 no lights, 3 no volume, 4 no cube, 5 no normal maps, 6 no ORM/emissive, 7 maps only, 8 no aniso, 9 no aniso or mip blend, 10 no post-processing, 11 no screen copies, 16 volume reads fixed"},
     {"gpuselftest", CmdGpuSelfTest, nullptr,
      "gpuselftest               render known patterns offscreen, compare the readback, log PASS/FAIL per case"},
     {"gputimes", CmdGpuTimes, nullptr,
