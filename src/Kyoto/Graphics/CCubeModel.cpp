@@ -698,7 +698,8 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   if ((values[13] > 4.5f && values[13] < 7.5f) || (values[13] > 8.5f && values[13] < 9.5f) ||
       (values[13] > 10.5f && values[13] < 11.5f) || (values[13] > 13.5f && values[13] < 15.5f) || (values[13] > 17.5f && values[13] < 18.5f) ||
       (values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 28.5f && values[13] < 29.5f) ||
-       (values[13] > 31.5f && values[13] < 32.5f) || (values[13] > 42.5f && values[13] < 46.5f)) {
+       (values[13] > 31.5f && values[13] < 32.5f) || (values[13] > 42.5f && values[13] < 46.5f) ||
+      (values[13] > 47.5f && values[13] < 48.5f)) {
     // The Phazon3 stone and the PhazonPool blister read Remastered's scene clock (stops while paused, wraps at 15120 s).
     values[15] *= ((values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 31.5f && values[13] < 32.5f))
                       ? CGraphics::GetSimTime()
@@ -802,7 +803,7 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   }
   // Only the boundary shield, the pickup, the holograms (16-18), the Phazon3 stone (21) and the others listed
   // (the unlit cube surface, 38, the unlit vertex-coloured fx, 39, the unlit matcap, 40, and the unlit
-  // METL-weighted fx, 41, the spider ball's glass, 42, and the simple glass, 43, and the Chozo Lore, 46: DIFC and their glow) have constants;
+  // METL-weighted fx, 41, the spider ball's glass, 42, and the simple glass, 43, the Chozo Lore, 46, and the crystal, 48: DIFC and their glow) have constants;
   // every other material clears the last one's.
   GXSetPBRShield(wind || aurora::IsShieldKind(pk) ? reinterpret_cast< const f32(*)[4] >(shield) : nullptr);
   // World up as the shader sees it: view space is right, up, -forward.

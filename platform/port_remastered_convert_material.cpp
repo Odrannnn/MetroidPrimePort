@@ -199,6 +199,10 @@ constexpr uint32_t kShaderRefractGlassB = 0xCC8AFD0F;
 // SimpleGlass_DX11_1 (kind 43, kb material/084a8db5.md): HoloGlass (3991da00) without TCH1, TCH2 and DIFC. TCH0
 // bends both the scrolled BCLR and the screen copy, whose blur follows the scrolled BCLR's alpha.
 constexpr uint32_t kShaderSimpleGlass = 0x084A8DB5;
+// Crystal (kind 48, kb material/54b4021f.md): unlit, alpha CCH3.w. BCLR (its alpha a weight), the NMAP-bent normal's
+// fresnel on the vertex colour, TCH0 at a time-scrolled, tangent-parallaxed uv, TCH1 at the bent normal and the
+// blurred screen copy, bent by NMAP and the normal.
+constexpr uint32_t kShaderCrystal = 0x54B4021F;
 // FB2BC671 and DF3E3423 (the ids as the reports print them), the ChozoGhost's X-ray materials, static and skinned
 // (kind 31, kb material/fb2bc671.md, df3e3423.md).
 constexpr uint32_t kShaderXrayStatic = 0xFB2BC671;
@@ -373,6 +377,7 @@ std::string ShaderRole(uint32_t shader) {
   add(shader == kShaderHoloGlassB || shader == kShaderHoloGlassC || shader == kShaderHoloGlassE264, "holo-glass-b");
   add(shader == kShaderDualGlass, "dual-glass");
   add(shader == kShaderSimpleGlass, "simple-glass");
+  add(shader == kShaderCrystal, "crystal");
   add(shader == kShaderInventoryGlass, "inventory-glass");
   add(shader == kShaderInventoryAdd, "inventory-add");
   add(IsXrayGhost(shader), "xray-ghost");
@@ -1185,6 +1190,24 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     }
     out.shieldRows[20] = SimpleGlassTinted(rawShader) ? 1.0 : 0.0;  // row 5 x: tint and dual-source terms
     out.shieldRows[27] = out.refl.has ? 1.0 : 0.0;
+  } else if (shader == kShaderCrystal && out.maps[kBase].has && out.maps[kNormal].has && tch[0] && tch[1] && cch[0] && cch[1] &&
+             cch[2] && cch[3] && cch[4]) {
+    out.kind = 48;
+    out.vcolor = true;
+    // BCLR (raw; its alpha weighs the blur and the parallax) and NMAP are maps 0 and 2; TCH0 (scrolled, parallaxed
+    // by the view tangent) is the second layer's base and TCH1 (read at the bent normal's xy) its MR, both raw.
+    // Rows 0-4 CCH0..CCH4 (c5[n] = CCHn, as the kb page reads the fold); no cube, LUT, DIFC or lights.
+    set(kBase, tch[0]->texture, &out.layer[kBase]);
+    set(kMr, tch[1]->texture, &out.layer[kMr]);
+    out.layer[kBase].raw = out.layer[kMr].raw = true;
+    out.kindParam[0] = 1.0;  // the game multiplies it by the time
+    out.tint[0] = out.tint[1] = out.tint[2] = 0.0;
+    for (int r = 0; r < 5; ++r) {
+      for (int i = 0; i < 4; ++i) {
+        out.shieldRows[r * 4 + i] = ShortestDouble(cch[r]->color[i]);
+      }
+    }
+    out.shieldRows[27] = 0.0;
   } else if ((shader == kShaderBoundaryShield || shader == kShaderForceField) && out.maps[kBase].has && tch[0] && tch[1] && cch[0] && cch[1] &&
              cch[2] && cch[3] && cch[4] && cch[5] && cch[6]) {
     out.kind = 14;
@@ -1560,6 +1583,16 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     out.backlight = out.backlightTop = 0.0;
     out.maps[kMr].has = out.maps[kNormal].has = out.maps[kEmissive].has = false;
   }
+  if (out.kind == 48) {
+    // Unlit and alpha blended; every colour is the shader's, the normal map is kept (it bends the layers and the
+    // screen copy's uv) and it reads the screen copy.
+    out.layered = out.blended = true;
+    out.cutout = out.tinted = out.mask = out.unlit = false;
+    out.height = 0.0;
+    out.emissive = 0.0;
+    out.backlight = out.backlightTop = 0.0;
+    out.maps[kMr].has = out.maps[kEmissive].has = false;
+  }
   if (out.kind == 15) {
     // Unlit and blended; every colour is the shader's, and the normal map is kept (it bends the rim).
     out.layered = out.blended = true;
@@ -1706,7 +1739,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
                                              "frozen-shell", "matcap-shell", "boundary-shield", "pickup",
                                              "holo",         "holo-refl",    "hologram",     "gun-fx", "vertex-blend", "phazon", "projected-blend", "decal-alpha", "phazon-pool", "phazon-veins",
                                              "inventory-glass", "inventory-add", "unlit-cube", "unlit-vertex", "unlit-matcap", "unlit-add",
-                                             "simple-glass"};
+                                             "simple-glass", "crystal"};
     for (const char* name : kKindRoles) {
       if (out.role.find(name) != std::string::npos) {
         out.reason += std::string("fallback: ") + name + " shader without its maps/params (or blend); ";

@@ -59,6 +59,7 @@ enum class PbrKind : uint8_t {
   RouteHologram = 45,  // route hologram: DIFC from the draw's colour
   ChozoLore = 46,      // Chozo Lore
   Icy = 47,            // the frozen actor overlay (CCubeModel's RenderIcy path, no record)
+  Crystal = 48,        // 54b4021f, Monitor Station's crystals: unlit layers and a blurred screen copy
 };
 
 // The kind a float (pbr_layer.y, a record's values[13]) holds, as gx.cpp builds it into the key.
@@ -115,6 +116,7 @@ constexpr const char* PbrKindName(PbrKind k) {
   case PbrKind::EnergyField: return "energy-field";
   case PbrKind::RouteHologram: return "route-hologram";
   case PbrKind::ChozoLore: return "chozo-lore";
+  case PbrKind::Crystal: return "crystal";
   default: return "kind?";
   }
 }
@@ -148,6 +150,7 @@ constexpr bool IsShieldKind(PbrKind k) {
   case PbrKind::EnergyField:
   case PbrKind::RouteHologram:
   case PbrKind::ChozoLore:
+  case PbrKind::Crystal:
     return true;
   default:
     return false;
@@ -166,6 +169,7 @@ constexpr bool IsScreenCopyKind(PbrKind k) {
   case PbrKind::DualGlass:
   case PbrKind::InventoryGlass:
   case PbrKind::SimpleGlass:
+  case PbrKind::Crystal:
     return true;
   default:
     return false;
@@ -175,7 +179,7 @@ constexpr bool IsScreenCopyKind(PbrKind k) {
 // The screen-copy kinds that read a blurred copy: the copy gets mips.
 constexpr bool IsScreenMipsKind(PbrKind k) {
   return k == PbrKind::RefractGlass || k == PbrKind::HoloGlassB || k == PbrKind::RefractGlassB ||
-         k == PbrKind::SimpleGlass;
+         k == PbrKind::SimpleGlass || k == PbrKind::Crystal;
 }
 
 // Kinds a standalone model sorts as glass (the converter's rmat 3): the screen-copy kinds and the

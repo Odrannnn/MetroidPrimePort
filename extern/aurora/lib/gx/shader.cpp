@@ -2310,6 +2310,64 @@ void PbrGen::layeredGlass5() {
                           underlying(config.tevStages[mapStage[4]].texCoordId),
                           underlying(config.tevStages[mapStage[0]].texMapId));
     }
+    // Kind 48, Remastered's Crystal (54B4021F, kb material/54b4021f.md), FS 002_0/003_0 (no fog perm). Map 0 is
+    // BCLR (raw; its alpha weighs the blur and the parallax), map 2 NMAP, map 4 TCH0 and map 5 TCH1 (raw), map 7
+    // the screen copy (mipped). Rows 0-4 are CCH0..CCH4. Every map reads the one UV (map 0's). N and T are the
+    // view-space normal and tangent; the bent normal n is not normalised. Unlit, alpha CCH3.w: the sum is all
+    // glow (bare, pbr_eb), the bent room comes through pbr_pass.
+    if (config.pbrKind == PbrKind::Crystal && screen && mapStage[0] != -1 && mapStage[2] != -1 && mapStage[4] != -1 &&
+        mapStage[5] != -1) {
+      liquid += fmt::format(R"""(
+      {{
+          let pbr_cr0 = ubuf.pbr_shield[0];
+          let pbr_cr1 = ubuf.pbr_shield[1];
+          let pbr_cr2 = ubuf.pbr_shield[2];
+          let pbr_cr3 = ubuf.pbr_shield[3];
+          let pbr_cr4 = ubuf.pbr_shield[4];
+          let pbr_cruv = tex{1}_uv;
+          let pbr_crnm = sampled{2}.xy;
+          // T unit (the vertex tangent, or the derivative frame's U) and B = cross(N, T) * w, which is the
+          // port's -pbr_b over its length.
+          var pbr_crt = vec3f(1.0, 0.0, 0.0);
+          var pbr_crb = vec3f(0.0, 1.0, 0.0);
+          if (pbr_tlen > 1e-24) {{
+              let pbr_crps = inverseSqrt(pbr_tlen);
+              pbr_crt = pbr_t * pbr_crps;
+              pbr_crb = -pbr_b * pbr_crps;
+          }}
+          let pbr_crab = pbr_cr0.x * (pbr_crnm * 1.9921875 - 1.0);
+          let pbr_crn = pbr_crab.x * pbr_crt + pbr_crab.y * pbr_crb +
+                        sqrt(1.0 - saturate(dot(pbr_crab, pbr_crab))) * pbr_ng;
+          let pbr_crf = saturate(pow(abs(pbr_crn.z), pbr_cr0.z));
+          let pbr_crg = saturate(pow(abs(pbr_ng.z), pbr_cr1.x));
+          let pbr_crw = {0}.a * pbr_cr1.w;
+          // v4.x: VS002's min(|vp_c4[0].w / -viewZ|, vp_c1[0].x), with both taken as 1 (kind 29's pbr_vxf; unverified).
+          let pbr_crvx = min(abs(1.0 / min(in.pbr_pos.z, -1e-3)), 1.0);
+          let pbr_crd = 2.0 * (pbr_crnm - 0.5) * pbr_cr1.z + 2.0 * (pbr_ng.xy - 0.5) * ((1.0 - pbr_crg) * pbr_cr1.y);
+          // The screen uv is Remastered's fragment xy over the target size (taken as top-left, as pbr_scr's) plus (dx, -dy).
+          let pbr_crsuv = in.pbr_scr.xy / in.pbr_scr.w * vec2f(0.5, -0.5) + 0.5 + pbr_crd * vec2f(1.0, -1.0) * pbr_crvx;
+          // An absolute level of Remastered's copy chain, read as the same level of map 7's (its size is unverified).
+          let pbr_crlod = max(0.0, mix(pbr_cr2.y, pbr_cr2.z, pbr_crw) - 1.0);
+          let pbr_crs = srgb_dec(textureSampleLevel(tex7, tex7_samp, clamp(pbr_crsuv, vec2f(0.0), vec2f(1.0)), pbr_crlod).rgb);
+          // TCH0: tiled by CCH3.z, U scrolled by 0.1 x CCH3.y a second (0.1 the FS literal c1[0].x), parallaxed by T.
+          let pbr_crk = pbr_crw * pbr_cr2.w * 0.1;
+          let pbr_cr0uv = pbr_cruv * pbr_cr3.z + vec2f(0.1 * pbr_cr3.y * ubuf.pbr_param.x, 0.0) + pbr_crt.xy / pbr_crt.z * pbr_crk;
+          let pbr_crl0 = textureSampleGrad(tex{3}, tex{3}_samp, pbr_cr0uv, dpdx(pbr_cr0uv), dpdy(pbr_cr0uv)).rgb;
+          let pbr_cr1uv = pbr_crn.xy * 0.5 + 0.5;
+          let pbr_crl1 = textureSampleGrad(tex{4}, tex{4}_samp, pbr_cr1uv, dpdx(pbr_cr1uv), dpdy(pbr_cr1uv)).rgb;
+          let pbr_crv = 2.0 * pow(abs(pbr_vraw.rgb), vec3f(2.2));
+          pbr_alpha = clamp(pbr_cr3.w, 0.0, 1.0);
+          pbr_lo = vec3f(0.0);
+          pbr_glow = ({0}.rgb * pbr_cr1.w + pbr_crf * pbr_crv * pbr_cr0.w + pbr_crg * pbr_crl0 * pbr_cr3.x +
+                      pbr_crl1 * pbr_cr0.y) * pbr_eb;
+          pbr_pass = pbr_crs * (pbr_cr2.x * pbr_cr4.rgb);
+      }})""",
+                          base,
+                          underlying(config.tevStages[mapStage[0]].texCoordId),
+                          mapStage[2],
+                          underlying(config.tevStages[mapStage[4]].texMapId),
+                          underlying(config.tevStages[mapStage[5]].texMapId));
+    }
     // Kind 15, Remastered's PickUp (3E95A9FE, the item pickups' rings and beams), permutation 000_0.
     // Its constants are GXSetPBRShield's rows: CCH0..CCH3, rows 4 and 5 (world x and y as a dot
     // of the view-space position with xyz, plus w; the game fills them) and DIFC in row 7. Map 0
@@ -3495,6 +3553,9 @@ void PbrGen::patchSceneHdr() {
          "pbr_pass = pbr_sscene * pbr_h3.z * pbr_h1.rgb * pbr_df.rgb * pbr_df.a;\n"
          "              pbr_vfw = pbr_df.a * (vec3f(1.0) - pbr_h1.rgb * (1.0 - pbr_v5.a));\n"
          "              pbr_keep = pbr_sdst * (vec3f(1.0) - pbr_vfw);");
+    // 54b4021f FS002/003 read no froxel fog.
+    kind("pbr_pass = pbr_crs * (pbr_cr2.x * pbr_cr4.rgb);",
+         "pbr_pass = pbr_crs * (pbr_cr2.x * pbr_cr4.rgb);\n          pbr_vfon = false;");
     kind("pbr_pass = pbr_gscene * pbr_h3.z;",
          "pbr_pass = pbr_gscene * pbr_h3.z;\n"
          "          pbr_vfw = vec3f(pbr_alpha);\n          pbr_vfk = true;");
