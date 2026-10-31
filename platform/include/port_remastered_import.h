@@ -106,7 +106,8 @@ namespace ImportStage {
 // 82: the surface's visor word keeps mesh bits 19 and 22 (the thermal visor's hot and cold passes).
 // 83: 9D53CF06 (the Chozo Lore statues' sheet) draws as kind 46, its waved, bent, premultiplied glow.
 // 84: every Lava2EmissiveOnly shader draws as kind 6 (Monitor Station's pool is 696EA755).
-inline constexpr int kConverter = 84;
+// 85: 34 more shader twins (exact, attribute-location-only and skinned copies) route to their handled family.
+inline constexpr int kConverter = 85;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.

@@ -224,6 +224,24 @@ constexpr ShaderTwin kShaderTwins[] = {
     // ed8ab6e7 differ in AUVI only; 937a8c35 has no MTRL: inferred).
     {0x96009286, kShaderRefractGlassB}, {0xA5BD3ED7, kShaderPickUp}, {0xED8AB6E7, kShaderPickUp},
     {0x937A8C35, kShaderBoundaryShield},
+    // More verbatim copies (mpr/twins/twins.py, every perm compared; kb topic/shader-twins.md "2026-10-31"). Until
+    // these were listed their materials drew as plain PBR (kind 0).
+    {0x77F88A3C, kShaderUnlitCubeNormal}, {0xDC4DBF16, kShaderUnlitCubeNormal}, {0x39EDAB28, kShaderUnlitCubeNormal},
+    {0x32971316, kShaderUnlitAdd}, {0xE7ADAD1F, kShaderUnlitAdd}, {0xBF68E8CA, kShaderGlass},
+    {0x54697605, kShaderHoloGlassC}, {0x85B93D0E, kShaderHoloGlassE264}, {0xF4AD13BE, kShaderHoloGlass},
+    {0x1A8CFA41, kShaderSimpleGlass}, {0x22EB51BB, kShaderColorUnlit}, {0xB246EEEC, kShaderPickUp},
+    {0xA2DB9122, 0xA469DAAD}, {0x206BC9E8, 0x0C22AB97}, {0xACA2344D, kShaderEyeGloss3},
+    {0xC44295BC, kShaderEyeGloss}, {0xEB208CFD, 0x0C0B6119 /* kShaderXrayRim */}, {0x9871B590, 0x131ED7F0},
+    {0xB1637667, 0x131ED7F0}, {0x3EA28466, 0xC78982B4},
+    // 63fa0a93 (ForceField) has 8 perms fewer than 6c1a4768; the ones it has are the same code.
+    {0x63FA0A93, kShaderBoundaryShield},
+    // Same fragment perms; the vertex perms differ only in an input attribute's location.
+    {0x156E5E53, kShaderPhazonPool}, {0xEBFFBA88, 0x131ED7F0}, {0x9D7E74C7, kShaderUnlitAdd},
+    {0x0A2CAF60, kShaderUnlitAdd}, {0x6F1F0438, kShaderUnlitAdd},
+    // Same fragment perms; one side's vertex perms add the bone fetch, as the skinned variants above.
+    {0xD809A1FD, 0x62F671E0}, {0xC2296CB7, 0x62F671E0}, {0xFD51FCBB, kShaderPickUp}, {0x5BF5E648, 0x547E64E5},
+    {0xB0937395, kShaderGunPanel}, {0x7159ECC8, kShaderUnlitAdd}, {0xF2DA2392, kShaderUnlitMatcap},
+    {0x1350D65D, kShaderUnlitVertex},
 };
 uint32_t ShaderFamily(uint32_t shader) {
   for (const ShaderTwin& t : kShaderTwins)
