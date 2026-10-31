@@ -447,6 +447,9 @@ static const TableEntry kEntries[] = {
   // The Puffer. Its CHPR (8DC8052E) has two skins: Skin (5a42cd1b, puffer_IBL_mat) and Metal.Skin
   // (36d02b0c, puffer_plated_IBL_mat). Retail's gold/green body is the plain one.
   {0xE7CDBAF2, {0x5a, 0x42, 0xcd, 0x1b, 0x09, 0xf7, 0x4d, 0x2f, 0xbe, 0x73, 0x8b, 0xb6, 0x1d, 0xce, 0x48, 0x98}, {0, 0, -1, -1, 0, 0, 0, 1, 0}, {0.0, 0.0, 0.0}, 133, 1, -1, true, 0xFFFFFFFF, -1},
+  // Remastered's Tower of Light (14_tl_base01) names skin "Metal" for its puffers; every other room
+  // names "Puffer", the default. Key 1 is that look (ScriptLoader's LoadPuffer picks it by room).
+  {0xE7CDBAF2, {0x36, 0xd0, 0x2b, 0x0c, 0x14, 0x13, 0x45, 0x86, 0xb4, 0x12, 0xe1, 0xbf, 0x39, 0x63, 0x4b, 0xe7}, {0, 0, -1, -1, 0, 0, 0, 1, 0}, {0.0, 0.0, 0.0}, 133, 1, -1, true, 0x8DC8052E, 1},
   // The beam troopers. Retail draws them all with power_trooper's model, tinted per beam; Remastered
   // has a model per beam. The looks are keyed by weapon type (CSpacePirate::PortTrooperLook), and the
   // other troopers' own characters get their beam's model too.

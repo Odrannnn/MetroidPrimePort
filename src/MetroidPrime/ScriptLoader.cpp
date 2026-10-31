@@ -20,6 +20,7 @@
 #include "port_apclient.h"
 #include "port_hints.h"
 #include "port_log.h"
+#include "port_model_variant.h"
 #include "port_randomizer.h"
 #include "port_room_effects.h"
 #include "port_skip_cutscenes.h"
@@ -4194,9 +4195,20 @@ CEntity* ScriptLoader::LoadPuffer(CStateManager& mgr, CInputStream& in, int prop
   CDamageInfo explosionDamage(in);
   ushort sfxId = in.ReadLong();
 
+  CAssetId acsFile = pInfo.GetAnimationParameters().GetACSFile();
+#ifdef TARGET_PC
+  // Remastered plates the Tower of Light's puffers (its room names skin "Metal"); the mod imports
+  // that look as variant 1 of the puffer's ANCS.
+  if (mgr.GetWorld()->IGetAreaAlways(info.GetAreaId())->IGetAreaAssetId() == 0x0D72F1F7) {
+    const CAssetId variant = PortModelVariant::Id(acsFile, 1);
+    if (gpResourceFactory->GetResourceTypeById(variant) == 'ANCS')
+      acsFile = variant;
+  }
+#endif
+
   return rs_new CPuffer(
       mgr.AllocateUniqueId(), head.x0_actorHead.x0_name, info, head.x0_actorHead.x10_transform,
-      CModelData(CAnimRes(pInfo.GetAnimationParameters().GetACSFile(),
+      CModelData(CAnimRes(acsFile,
                           pInfo.GetAnimationParameters().GetCharacter(), head.x40_scale,
                           pInfo.GetAnimationParameters().GetInitialAnimation(), true)),
       actParms, pInfo, hoverSpeed, cloudEffect, cloudDamage, cloudSteam, f2, b1, b2, b3,
