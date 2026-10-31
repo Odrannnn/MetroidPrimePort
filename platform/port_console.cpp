@@ -2705,6 +2705,15 @@ void CmdAimLockOn() {
   Finish();
 }
 
+// As the Dodge action's press: the player takes it within its window, on the
+// ground while strafing (hold one with `press sx:<n>`).
+void CmdDodge() {
+  PortDebug::RequestDodge();
+  Out(PortDebug::OriginalExperience() ? "dodge requested (off under original experience)"
+                                      : "dodge requested");
+  Finish();
+}
+
 void CmdRadial() {
   const auto& a = sCmd.args;
   if (a.size() == 2 && a[1] == "release") {
@@ -4407,6 +4416,8 @@ const CommandSpec kCommands[] = {
      "stackbeams [0|1]           every shot also fires the other owned beams' projectiles (stack_beams)"},
     {"aimlockon", CmdAimLockOn, nullptr,
      "aimlockon [0|1]            lock-on picks the target nearest the crosshair (aim_lock_on)"},
+    {"dodge", CmdDodge, nullptr,
+     "dodge                      a Dodge press (sideways dash without a lock-on; needs a strafe held)"},
     {"radial", CmdRadial, nullptr,
      "radial [beam|visor [x y] | release]  holds a radial menu with its selection (x right, y up); radial_menus"},
     {"walkspeed", CmdWalkSpeed, nullptr,

@@ -384,6 +384,13 @@
   threshold even when it is off to the side, and weighs screen offset only
   between targets at about the same distance. Grapple points and the scan visor
   keep retail's pick. Off under Original Experience.
+- Dodge (Controls > Move and aim, binding `dodge`, unbound by default, issue #236):
+  pressed on the ground while strafing (strafe at least as strong as forward/back)
+  and not locked on, it does retail's lock-on dash (same hop, speed, length, sound
+  and rumble) straight sideways along the facing at the press. Mouse/stick look
+  stays free during it. A press is kept for 0.12 s, so pressing just before the
+  strafe works. Like any digital action it can be added as a touch button in the
+  touch layout editor. Off under Original Experience; the lock-on dash is unchanged.
 - Remastered charge (Controls > Options, "Remastered charge (rapid fire)", persisted as
   `rapid_charge`, off by default, `MP_RAPID_CHARGE=<0|1>`): as in Remastered, holding
   fire fires a few shots before charging (3 in all with Power, 2 with Wave or Plasma,

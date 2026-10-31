@@ -848,6 +848,11 @@ bool BeamRequested(int beam);
 // save-state hotkeys (1 save, 2 load; F5/F9 send the same).
 void RequestSpringBall();
 bool SpringBallRequested();
+// Issue #236: the Dodge action, a sideways dash without a lock-on target. The
+// request lasts a short window; CPlayer takes it once (false under Original
+// experience).
+void RequestDodge();
+bool TakeDodgeRequest();
 void RequestSaveStateHotkey(int which);
 bool TouchMapTap();
 void SetTouchMapTap(bool on);
