@@ -2293,6 +2293,16 @@ void PbrGen::layeredGlass5() {
           pbr_glow = (pbr_scube * (pbr_sab.x * (pbr_v5.a * pbr_h0.y) + pbr_sab.y) + pbr_gbc.rgb * pbr_h0.w +
                       pbr_v5.rgb * pbr_h2.x) * pbr_eb;
           pbr_pass = pbr_gscene * pbr_h3.z;
+          if (ubuf.pbr_shield[5].x > 0.5) {{
+              // 74c655e4: kind 29's dual-source variant less DIFC. The bent room is tinted by CCH1 and
+              // o1 = 1 - CCH1 x (1 - vertex alpha) under One / InvSrc1Color (kb material/74c655e4.md):
+              // drawn opaque, the room behind (map 7 at the fragment, unbent) keeps 1 - o1 of itself.
+              let pbr_h1 = ubuf.pbr_shield[1];
+              let pbr_sdst = srgb_dec(textureSampleLevel(tex7, tex7_samp,
+                                      clamp(in.pbr_scr.xy / in.pbr_scr.w * vec2f(0.5, -0.5) + 0.5, vec2f(0.0), vec2f(1.0)), 0.0).rgb);
+              pbr_alpha = 1.0;
+              pbr_pass = pbr_gscene * pbr_h3.z * pbr_h1.rgb + pbr_sdst * (pbr_h1.rgb * (1.0 - pbr_v5.a));
+          }}
       }})""",
                           base,
                           underlying(config.tevStages[mapStage[0]].texCoordId),

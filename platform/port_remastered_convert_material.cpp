@@ -260,7 +260,13 @@ constexpr ShaderTwin kShaderTwins[] = {
     // ColorUnlit without the vertex colour (ColorUnlitWhite below): the same scroll and CCH0.x, no CCH1.x term, white
     // where ColorUnlit reads the vertex.
     {0x568B8E25, kShaderColorUnlit}, {0x8AFAC076, kShaderColorUnlit}, {0xEE2D9846, kShaderColorUnlit},
+    // 353d6547: 3991da00's fragment math on texcoord set 0 (no AUVI); kb material/353d6547.md.
+    {0x353D6547, kShaderHoloGlassB},
+    // 74c655e4: 084a8db5 plus the CCH1 tint on the bent room and a second output, 1 - CCH1 x (1 - vertex
+    // alpha), as 2f95a061's (SimpleGlassTinted below); kb material/74c655e4.md.
+    {0x74C655E4, kShaderSimpleGlass},
 };
+bool SimpleGlassTinted(uint32_t shader) { return shader == 0x74C655E4; }
 // kb topic/shader-twins.md "ColorUnlit-white": out = base x CCH0.x, alpha base.a; no vertex colour, no CCH1.x.
 bool ColorUnlitWhite(uint32_t shader) { return shader == 0x568B8E25 || shader == 0x8AFAC076 || shader == 0xEE2D9846; }
 uint32_t ShaderFamily(uint32_t shader) {
@@ -1177,6 +1183,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
         out.shieldRows[r * 4 + i] = ShortestDouble(cch[r]->color[i]);
       }
     }
+    out.shieldRows[20] = SimpleGlassTinted(rawShader) ? 1.0 : 0.0;  // row 5 x: tint and dual-source terms
     out.shieldRows[27] = out.refl.has ? 1.0 : 0.0;
   } else if ((shader == kShaderBoundaryShield || shader == kShaderForceField) && out.maps[kBase].has && tch[0] && tch[1] && cch[0] && cch[1] &&
              cch[2] && cch[3] && cch[4] && cch[5] && cch[6]) {
