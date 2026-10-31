@@ -44,9 +44,10 @@ std::string Path();
 std::string SharedPath();
 #if defined(_WIN32)
 // The copying process Start launches on Windows (`--log-copy <pipe> <file>
-// [<terminal>]`, the handles' values, 0 for no terminal): copies the pipe into the
-// file, redacted, and into the terminal as it is, until the game has gone.
-int RunCopy(const char* pipe, const char* file, const char* terminal);
+// <terminal> <ready>`, the handles' values, 0 for no terminal): signals the ready
+// event, then copies the pipe into the file, redacted, and into the terminal as it
+// is, until the game has gone.
+int RunCopy(const char* pipe, const char* file, const char* terminal, const char* ready);
 // The program is a GUI one (no console window of its own). Started from a
 // terminal, with nothing redirected, it prints to that terminal instead.
 void AttachParentConsole();
