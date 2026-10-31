@@ -656,7 +656,11 @@ struct ShaderConfig {
   // Model_ThermalOverride's grey in place of the shading. A bit of the same byte, so a config with
   // it off keeps its bytes and cache keys.
   u8 pbrThermal : 1 = 0;
-  u8 padding0 : 2 = 0;
+  // With pbr, pbr_static_flags (below): the flags that are the same for the whole game (the BRDF
+  // table, the tone and exposure, the material gain), all on, are constants in the shader in place
+  // of runtime tests; and no debug view is set, so its tests go. Both are bits of the same byte.
+  u8 pbrPlain : 1 = 0;
+  u8 pbrNoDebug : 1 = 0;
   // GX_AURORA_PORT_ACTOR_SHADOW decal: the draw is a receiver redrawn as Remastered's actor shadow
   // decal (multiplies the frame by the shadow, shadowUniform holds its view-space planes). The old
   // padding byte, so other configs keep their bytes and cache keys.
@@ -725,6 +729,16 @@ struct BindGroupRanges {
 // of the same draws gives: the last of the nearest draws at a pixel wins either way.
 bool depth_prepass_eligible(u8 lineMode) noexcept;
 void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXVtxFmt fmt) noexcept;
+// ShaderConfig::pbrPlain and pbrNoDebug from the current state: bit 0 and bit 1. The tests
+// PbrGen::foldStatic replaces, each as the shader makes it from the uniforms (shader_info.cpp):
+// pbr_light_scale.z, pbr_tone[1].x, pbr_tone[0].w, pbr_up.w; pbr_volume[5].w and pbr_layer.w are
+// the debug views.
+inline u8 pbr_static_flags() noexcept {
+  const bool plain = g_gxState.pbrBrdfLut && g_gxState.pbrTone[1].x() > 0.f && g_gxState.pbrTone[0].w() > 0.f &&
+                     g_gxState.pbrUp.w() > 0.f;
+  const bool noDebug = !(g_gxState.pbrVolumeRows[5].w() > 0.5f) && !(g_gxState.pbrLayer.w() > 0.5f);
+  return (plain ? 1 : 0) | (noDebug ? 2 : 0);
+}
 // aurora_set_per_pixel_lighting; any thread.
 void set_per_pixel_lighting(bool enabled) noexcept;
 bool per_pixel_lighting() noexcept;

@@ -687,7 +687,11 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
                              cache.config.shaderConfig.sceneHdr == gfx::scene_hdr_pass_active() &&
                              // A lit config made before aurora_set_per_pixel_lighting changed.
                              cache.config.shaderConfig.perPixelLight ==
-                                 wants_per_pixel_light(cache.config.shaderConfig);
+                                 wants_per_pixel_light(cache.config.shaderConfig) &&
+                             // A PBR config made before its static flags (tone, BRDF table, debug view) changed.
+                             (cache.config.shaderConfig.pbr == 0 ||
+                              (cache.config.shaderConfig.pbrPlain | cache.config.shaderConfig.pbrNoDebug << 1) ==
+                                  pbr_static_flags());
   if (!pipelineValid) {
     const bool hadPipeline = cache.hasPipeline;
     const auto prevSampledTextures = cache.shaderInfo.sampledTextures;

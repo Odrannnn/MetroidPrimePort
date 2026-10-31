@@ -477,6 +477,8 @@ static void strip_to_flat_shading(ShaderConfig& sc) noexcept {
   sc.pbrKind = 0;
   sc.pbrCut = 0;
   sc.pbrThermal = 0;
+  sc.pbrPlain = 0;
+  sc.pbrNoDebug = 0;
   sc.pbrBindPos = false;
   sc.pbrBindLe = false;
   sc.pbrLightmapAttr = GX_VA_NULL;
@@ -559,6 +561,9 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
       config.shaderConfig.pbrLightmapAttr = lightmapAttr;
     }
     config.shaderConfig.pbrThermal = config.shaderConfig.sceneHdr && g_gxState.pbrThermal.w() > 0.5f;
+    const u8 flags = pbr_static_flags();
+    config.shaderConfig.pbrPlain = (flags & 1) != 0;
+    config.shaderConfig.pbrNoDebug = (flags & 2) != 0;
   }
   if (bind_pos_active()) {
     config.shaderConfig.pbrBindPos = true;

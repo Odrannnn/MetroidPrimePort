@@ -1046,6 +1046,7 @@ struct PbrGen {
   void buildSource();
   void patchSource();
   void patchSceneHdr();
+  void foldStatic();
 };
 
 
@@ -3478,6 +3479,36 @@ void PbrGen::patchSource() {
   }
 }
 
+// ShaderConfig::pbrPlain and pbrNoDebug (pbr_static_flags): the runtime tests they stand for become
+// constants, so the compiler drops the branches. On an iGPU that is about 1 ms of the main pass
+// (build/s-pbrspec-20261031). Compound tests go first, before their parts.
+void PbrGen::foldStatic() {
+  std::vector<std::pair<std::string_view, std::string_view>> folds;
+  if (config.pbrPlain) {
+    folds.insert(folds.end(), {
+        {"ubuf.pbr_tone[1].x > 0.0 && ubuf.pbr_tone[0].w > 0.0", "true"},
+        {"ubuf.pbr_tone[1].x > 0.0", "true"},
+        {"ubuf.pbr_tone[1].x <= 0.0", "false"},
+        {"ubuf.pbr_light_scale.z > 0.0", "true"},
+        {"ubuf.pbr_up.w > 0.0", "true"},
+    });
+  }
+  if (config.pbrNoDebug) {
+    folds.insert(folds.end(), {
+        {"ubuf.pbr_volume[5].w > 1.5 && ubuf.pbr_volume[5].w < 2.5", "false"},
+        {"ubuf.pbr_volume[5].w < 1.5", "true"},
+        {"ubuf.pbr_volume[5].w > 0.5", "false"},
+        {"ubuf.pbr_volume[5].w > 2.5", "false"},
+        {"ubuf.pbr_layer.w > 0.5", "false"},
+    });
+  }
+  for (const auto& [what, with] : folds) {
+    for (size_t at = source.find(what); at != std::string::npos; at = source.find(what, at + with.size())) {
+      source.replace(at, what.size(), with);
+    }
+  }
+}
+
 void PbrGen::patchSceneHdr() {
   if (config.sceneHdr) {
     // Into the HDR scene: the exposed light (exposure applied once, above) plus the pass-through,
@@ -3661,6 +3692,7 @@ auto pbr_func(const ShaderConfig& config, const ShaderInfo& info, std::string& v
   g.buildSource();
   g.patchSource();
   g.patchSceneHdr();
+  g.foldStatic();
   return std::move(g.source);
 }
 
