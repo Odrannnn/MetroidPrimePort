@@ -993,6 +993,8 @@ bool VolFogEnabled();
 bool FogOwnsRoom();
 // Debug: leave the fog regions out (console `roomenv fogregions on|off`).
 void SetFogRegionsEnabled(bool on);
+// Debug: leave out the view area's region `index` (console `roomenv fogregion <i> on|off`).
+void SetFogRegionEnabled(uint32_t index, bool on);
 // The console's `roomenv fog`: the fog now, and each fog hint of the camera area.
 std::string FogInfo();
 // A retail script object (`sender`: its editor id without the area bits) of the area `mrea`

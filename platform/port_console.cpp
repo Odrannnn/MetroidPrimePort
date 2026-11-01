@@ -3362,6 +3362,9 @@ void CmdRoomEnv() {
     } else if (arg == "fogregions" && sCmd.args.size() > 2 &&
                (Lower(sCmd.args[2]) == "on" || Lower(sCmd.args[2]) == "off")) {
       PortRoomEnv::SetFogRegionsEnabled(Lower(sCmd.args[2]) == "on");
+    } else if (arg == "fogregion" && sCmd.args.size() > 3 &&
+               (Lower(sCmd.args[3]) == "on" || Lower(sCmd.args[3]) == "off")) {
+      PortRoomEnv::SetFogRegionEnabled(uint32_t(std::atoi(sCmd.args[2].c_str())), Lower(sCmd.args[3]) == "on");
     } else if (arg == "state" && sCmd.args.size() > 3) {
       PortRoomEnv::SendScriptState(uint32_t(std::strtoul(sCmd.args[2].c_str(), nullptr, 16)) & 0x3ffffff,
                                    std::atoi(sCmd.args[3].c_str()));
@@ -3384,7 +3387,7 @@ void CmdRoomEnv() {
     } else {
       return Finish("usage: roomenv [on|off|info [<x> <y> <z>]|auto on|off|static on|off|"
                     "arealights on|off|balllight on|off|<scale>|blend on|off|bloom on|off|"
-                    "grade on|off|grades|fog|volfog on|off|fogregions on|off|"
+                    "grade on|off|grades|fog|volfog on|off|fogregions on|off|fogregion <i> on|off|"
                     "volume on|off|ambient <scale>|"
                     "show off|coords|light]");
     }

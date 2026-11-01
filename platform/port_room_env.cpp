@@ -81,6 +81,7 @@ uint64_t sRegionOrder = 0;
 int sVolFog = -1;
 // Console `roomenv fogregions on|off`: drop the fog regions to see what they add.
 bool sFogRegions = true;
+uint64_t sFogRegionsHidden = 0; // the view area's, by index (debug)
 bool sPlayerFluid = false;
 bool sCameraWater = false;
 uint8_t sExposureSwap = 1;
@@ -1573,6 +1574,11 @@ bool FogOwnsRoom() {
 }
 
 void SetFogRegionsEnabled(bool on) { sFogRegions = on; }
+void SetFogRegionEnabled(uint32_t index, bool on) {
+  if (index < 64) {
+    sFogRegionsHidden = on ? sFogRegionsHidden & ~(uint64_t(1) << index) : sFogRegionsHidden | uint64_t(1) << index;
+  }
+}
 
 void UpdateFog(LayerActive layerActive, void* context, float dt) {
   FogFade& f = sFog;
@@ -1670,9 +1676,11 @@ void FogRegions(std::vector<const FogRegion*>& out) {
   }
   // The proxies' add order: the areas in the order they loaded, each in file order.
   std::vector<const Area*> areas;
+  const Area* view = nullptr;
   for (const auto& [mrea, area] : sAreas) {
     if (area.hasFile && !area.live.empty()) {
       areas.push_back(&area);
+      view = mrea == sViewArea ? &area : view;
     }
   }
   std::sort(areas.begin(), areas.end(), [](const Area* a, const Area* b) { return a->serial < b->serial; });
@@ -1683,7 +1691,8 @@ void FogRegions(std::vector<const FogRegion*>& out) {
       const bool layer = region.layer < 0 || region.layer >= 64 || (area->layers >> region.layer & 1) != 0;
       // UpdateRenderState's fluid gate.
       const bool fluid = region.fluid == 1 ? sCameraWater : region.fluid == 2 ? !sCameraWater : true;
-      if (on && layer && fluid) {
+      const bool hidden = area == view && i < 64 && (sFogRegionsHidden >> i & 1) != 0;
+      if (on && layer && fluid && !hidden) {
         out.push_back(&region);
       }
     }
