@@ -700,10 +700,16 @@ void CGameArea::StartStreamIn(CStateManager& mgr) {
     }
     // The Remastered room geometry's file is read and parsed while the area streams in.
     PortRoomGeo::Prefetch(static_cast< uint32_t >(x84_mrea));
-    // A lazy pipeline cache builds the pipelines this area drew last time, in the background.
+    // A lazy pipeline cache builds the pipelines this area drew last time, in the background, then
+    // (once per world) every other area's of this world, so a door opened later finds them built.
     if (const CWorld* world = mgr.GetWorld()) {
-      aurora_pipeline_prefetch(
-          PortPipelineAreaContext(static_cast< uint32_t >(world->IGetWorldAssetId()), x4_selfIdx.Value()));
+      const uint32_t mlvl = static_cast< uint32_t >(world->IGetWorldAssetId());
+      aurora_pipeline_prefetch(PortPipelineAreaContext(mlvl, x4_selfIdx.Value()));
+      static uint32_t sPrefetchedWorld = 0xFFFFFFFFu;
+      if (mlvl != sPrefetchedWorld) {
+        sPrefetchedWorld = mlvl;
+        aurora_pipeline_prefetch(AURORA_PIPELINE_CONTEXT_WORLD(mlvl));
+      }
     }
 #endif
     VerifyTokenList(mgr);
