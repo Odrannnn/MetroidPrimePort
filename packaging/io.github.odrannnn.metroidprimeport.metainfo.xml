@@ -55,6 +55,12 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.38.0" date="2026-11-01">
+      <description>
+        <p>Controls: a Grapple binding with Toggle Grapple and Shoot While Grappling options, a Spider Ball toggle, and the left hand resting on the cannon when standing still. HUD: per-visor crosshair toggles for X-Ray and Thermal. Suits: colours for the four Dread Samus suits. Video: a Morph Ball black bars option. Audio: music and sound effects volume above 100%, and fixed sample loop ends. Third person: legs step around on turns, backpedal and sidestep from the ready stance, reach for the ground when falling, and the morph ball camera follows on from the third-person view. Remastered: a performance mode that switches room models to coarser levels sooner, the Puffer's proper skin, and LambertFx materials lit by the room's baked probe. Performance: a world's shader pipelines are prepared on entering it. Fixes: top speed and moving platforms off 60 Hz, the Archipelago Elite Quarters item, chat commands in the solo randomizer server, and the touch back arrow in menus.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.38.0</url>
+    </release>
     <release version="0.37.0" date="2026-10-31">
       <description>
         <p>Controls: an Aim Lock-On option that locks onto the target nearest the crosshair, and a Dodge binding (also a touch button) that dashes sideways while strafing, locked on or not. Cheats: infinite missiles and power bombs. Texture packs: import a pack from a .zip on desktop and Android, and toggle it with a Port binding (F7). Input: saved binding presets cover every device and get their own button. Remastered: frozen enemies draw Remastered's frozen model and icy shell, also in the thermal and X-ray visors; lava pools, crystals and many more materials draw with their proper shading; animated platforms and Monitor Station's spinner bridge move with the game; room lighting is read from the master pak too. Fixes: the Windows log copy, the Archipelago received-items table, the Android settings window in fullscreen, and particle effects no longer rebuild their state every frame.</p>
