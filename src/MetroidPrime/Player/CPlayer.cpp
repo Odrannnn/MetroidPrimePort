@@ -3859,6 +3859,6 @@ void CPlayer::PortApplyDeferredRiderCarry(uint tick) {
 void CPlayer::PortEndMovementTick(uint tick) {
   PortApplyDeferredRiderCarry(tick);
   // DecayRiderFrameCount (PostSimulation): a rider set this tick carries next tick.
-  xa3c_rider.Decay();
+  xa3c_rider.Decay(PortDebug::TickPeriod() * 60.f);
 }
 #endif

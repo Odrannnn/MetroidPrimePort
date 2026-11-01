@@ -118,17 +118,25 @@ inline bool Admit(const Candidate& c) { return AdmitGrounded(c) && !c.rotated; }
 
 // The rider controller (object +0x1220 side, SetRiderController 0xc1631c): set to 2 by a
 // grounded tick that picked a rider, decayed once at the end of every movement tick.
+// The count is in 60 Hz frames: off 60 Hz a tick spends ticks60 of it (dt * 60), so the
+// controller outlives its tick by 1/60 s at any sim rate. Counted in ticks, a 300 Hz jump
+// lost the platform's carry and its floor offset after 1/300 s, and a rising lift caught
+// up with her and was skipped as a floor she was moving away from (issue #248).
 struct RiderController {
   std::uint32_t owner = kTerrainOwner;
-  int count = 0;
+  float count = 0.f;
 
   void Set(std::uint32_t o) {
     owner = o;
-    count = 2;
+    count = 2.f;
   }
-  void Decay() {
-    if (count > 0 && --count == 0) {
-      owner = kTerrainOwner;
+  void Decay(float ticks60 = 1.f) {
+    if (count > 0.f) {
+      count -= ticks60;
+      if (count <= 1e-3f) {
+        count = 0.f;
+        owner = kTerrainOwner;
+      }
     }
   }
   bool Active() const { return count > 0 && owner != kTerrainOwner; }

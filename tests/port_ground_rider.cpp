@@ -177,6 +177,14 @@ int main() {
     assert(rider.count == 0 && !rider.Active() && rider.owner == kTerrainOwner);
     rider.Decay();
     assert(rider.count == 0);
+    // At 300 Hz it lasts the same 1/30 s: the setting tick and nine more.
+    rider.Set(0x10022);
+    for (int i = 0; i < 9; ++i) {
+      rider.Decay(60.f / 300.f);
+      assert(rider.Active());
+    }
+    rider.Decay(60.f / 300.f);
+    assert(!rider.Active() && rider.count == 0 && rider.owner == kTerrainOwner);
   }
 
   // 7. Gate: only an active platform with a tree or a box is admitted, and unrotated when
