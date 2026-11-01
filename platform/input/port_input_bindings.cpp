@@ -33,7 +33,7 @@ constexpr std::string_view kPadAxisNames[] = {"leftx", "lefty", "rightx", "right
                                               "righttrigger"};
 constexpr std::string_view kGyroNames[] = {"pitch", "yaw", "roll"};
 // Touch codes: the overlay's control ids (TouchControlsView.CONTROL_IDS, the names
-// its saved layout uses), then the overlay's own signals at 32..34, its Morph Ball
+// its saved layout uses), then the overlay's own signals at 32..35, its Morph Ball
 // page's buttons at 40..44, then the buttons added in its layout editor at 64..127
 // (their layout ids, k0..k63).
 constexpr std::string_view kTouchNames[] = {
@@ -41,7 +41,7 @@ constexpr std::string_view kTouchNames[] = {
     "z",      "visor",  "beam",    "start", "menu", "map", "eye",        "rstick",     "jump",
     "fire",   "morph",  "missile", "lt",    "lb",   "rt",  "rb",         "tz",         "tr",
     "turbo",  "tturbo", "",        "",      "",     "beam_shift", "turbo_held", "map_tap",
-    "", "", "", "", "", "bbomb", "bboost", "bpbomb", "bspider", "bunmorph",
+    "menu_back", "", "", "", "", "bbomb", "bboost", "bpbomb", "bspider", "bunmorph",
     "", "", "", "", "", "", "", "", "", "",
     "", "", "", "", "", "", "", "", "", "k0",
     "k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9", "k10",

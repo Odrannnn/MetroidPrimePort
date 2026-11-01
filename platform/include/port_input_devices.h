@@ -30,6 +30,9 @@ constexpr int kTouchControlCount = 29;
 constexpr int kTouchBeamShift = 32;
 constexpr int kTouchTurbo = 33;
 constexpr int kTouchMapTap = 34; // one poll of Z after a minimap tap
+// The menus' back arrow: B in menus and the map whatever the pad preset (it used
+// to send the virtual pad's East, which only the GameCube preset maps to B).
+constexpr int kTouchMenuBack = 35;
 // The Morph Ball page's own buttons (Bomb, Boost, Power Bomb, Spider, Unmorph:
 // TouchControlsView's C_BALL + i), drawn only in the ball.
 constexpr int kTouchBallBase = 40;

@@ -103,7 +103,8 @@ void TestInputText() {
   REQUIRE(InputToText(In(Device::Touch, 3)) == "touch:a");
   REQUIRE(InputToText(In(Device::Touch, 28)) == "touch:tturbo");
   REQUIRE(InputToText(In(Device::Touch, 32)) == "touch:beam_shift");
-  REQUIRE(InputToText(In(Device::Touch, 35)) == "touch:35");
+  REQUIRE(InputToText(In(Device::Touch, 35)) == "touch:menu_back");
+  REQUIRE(InputToText(In(Device::Touch, 36)) == "touch:36");
   REQUIRE(InputToText(In(Device::Touch, 40)) == "touch:bbomb");
   REQUIRE(InputToText(In(Device::Touch, 44)) == "touch:bunmorph");
   REQUIRE(InputToText(In(Device::Touch, 45)) == "touch:45");

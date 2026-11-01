@@ -395,6 +395,7 @@ void BindPortControls(Profile& p) {
   }
   Bind(p, Action::PadA, Make(Device::Touch, kTouchTurbo), turboHz);
   Bind(p, Action::PadZ, Make(Device::Touch, kTouchMapTap));
+  BindIn(p, Action::PadB, Make(Device::Touch, kTouchMenuBack), PortInput::kCtxMenu | PortInput::kCtxMap);
 
   // The port's own keys and the pad's overlay chord. Back + Start is ordered both
   // ways, so either can be held first; the chord also keeps Start from pausing.
@@ -794,7 +795,7 @@ bool SetUserBindings(const PortInput::UserBindings& bindings) {
 }
 
 static bool TouchControlCode(int control) {
-  return (control >= 0 && control < kTouchControlCount) ||
+  return (control >= 0 && control < kTouchControlCount) || control == kTouchMenuBack ||
          (control >= kTouchBallBase && control < kTouchBallBase + kTouchBallCount) ||
          (control >= kTouchCustomBase && control < kTouchCustomBase + kTouchCustomCount);
 }
