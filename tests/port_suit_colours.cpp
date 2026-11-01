@@ -44,6 +44,7 @@ double Hue(const uint8_t* t) {
 }
 
 uint8_t* At(Image& image, int x, int y) { return &image.rgba[(size_t(y) * image.width + x) * 4]; }
+const uint8_t* At(const Image& image, int x, int y) { return &image.rgba[(size_t(y) * image.width + x) * 4]; }
 
 // A Power Suit texture: gold on the left, red on the right, with a cyan
 // visor patch in the gold and a grey patch in the red.
@@ -110,6 +111,54 @@ void TestTransfer() {
   CHECK(Hue(At(varia, 10, 40)) < 40.0);  // left half stays orange
 }
 
+// The Dread Power Suit's base slot: its white plates, and nothing else.
+void TestBase() {
+  constexpr int kDreadPower = PSC::kDreadFirst;
+  const PSC::Suit& info = PSC::SuitInfo(kDreadPower);
+  CHECK(info.base && info.slots == 3);
+  CHECK(!PSC::SuitInfo(kPower).base && !PSC::SuitInfo(PSC::kDreadFirst + 3).base);
+  Image image;
+  image.width = image.height = 64;
+  image.rgba.resize(64 * 64 * 4);
+  for (int y = 0; y < 64; ++y) {
+    for (int x = 0; x < 64; ++x) {
+      uint8_t* t = At(image, x, y);
+      if (y < 8) {
+        Rgb(0, 0.0, 0.1, t);  // black under-suit
+      } else if (x < 32) {
+        Rgb(200, 0.6, 0.74, t);  // blue primary
+      } else {
+        Rgb(249, 0.05, 0.75 + 0.002 * y, t);  // white plates, shaded
+      }
+    }
+  }
+  const Image original = image;
+  PSC::Picks picks{};
+  picks[0] = 0x20C040;
+  Image primary = image;
+  PSC::Recolour(primary, kDreadPower, picks);
+  CHECK(std::equal(At(primary, 40, 30), At(primary, 40, 30) + 4, At(image, 40, 30)));  // the plates stay
+
+  picks = {};
+  picks[2] = 0xFF2020;
+  CHECK(PSC::Recolour(image, kDreadPower, picks) > 1000);
+  const uint8_t red[4] = {0xFF, 0x20, 0x20, 255};
+  CHECK_MSG(std::fabs(Hue(At(image, 40, 30)) - Hue(red)) < 3.0, "plates take the picked hue");
+  CHECK(At(image, 40, 30)[0] > 200 && At(image, 40, 30)[1] < 80);
+  CHECK(At(image, 40, 60)[0] > At(image, 40, 10)[0]);  // their shading kept
+  for (const auto& [x, y] : {std::pair{10, 30}, {40, 2}}) {
+    CHECK(std::equal(At(image, x, y), At(image, x, y) + 4, At(original, x, y)));
+  }
+
+  // Its own colour back is (nearly) the original.
+  image = original;
+  picks[2] = PSC::DefaultColour(kDreadPower, 2);
+  PSC::Recolour(image, kDreadPower, picks);
+  for (int c = 0; c < 3; ++c) {
+    CHECK(std::abs(int(At(image, 40, 30)[c]) - int(At(original, 40, 30)[c])) <= 3);
+  }
+}
+
 void TestPicks() {
   CHECK(PSC::ParseColour("#ff00aa") == std::optional<uint32_t>(0xFF00AA));
   CHECK(PSC::ParseColour("00FF00") == std::optional<uint32_t>(0x00FF00));
@@ -163,6 +212,7 @@ void TestPicks() {
 int main() {
   TestRecolour();
   TestTransfer();
+  TestBase();
   TestPicks();
   if (port_test::Failures() == 0) {
     std::printf("port_suit_colours: all passed\n");

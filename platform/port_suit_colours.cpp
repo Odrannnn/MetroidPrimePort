@@ -17,33 +17,37 @@ namespace {
 // ball textures (hue clusters seeded per suit, refined by circular k-means).
 const Suit kSuits[kSuitCount] = {
     {"power", "Power Suit", 2, {{{43.4, 0.826, 0.969}, {5.3, 0.912, 0.839}, {}}},
-     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, true, false},
+     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, true, false, false},
     {"gravity", "Gravity Suit", 3, {{{246.4, 0.356, 0.482}, {43.4, 0.839, 0.969}, {8.2, 0.906, 0.871}}},
-     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false},
+     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false, false},
     {"varia", "Varia Suit", 2, {{{33.7, 0.866, 0.969}, {13.1, 0.906, 0.882}, {}}},
-     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, true, false},
+     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, true, false, false},
     {"phazon", "Phazon Suit", 2, {{{107.1, 1.0, 0.49}, {12.4, 0.81, 0.741}, {}}},
-     {"glow", "accent", nullptr}, {"Glow", "Accent", nullptr}, false, true},
+     {"glow", "accent", nullptr}, {"Glow", "Accent", nullptr}, false, true, false},
     {"fusion", "Fusion Suit", 3, {{{188.0, 1.0, 0.737}, {54.9, 0.68, 0.871}, {337.6, 0.851, 0.871}}},
-     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false},
+     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false, false},
     {"fusion_gravity", "Fusion Gravity Suit", 3,
      {{{166.3, 0.725, 0.647}, {263.7, 0.364, 0.482}, {337.6, 0.853, 0.871}}},
-     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false},
+     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false, false},
     {"fusion_varia", "Fusion Varia Suit", 3, {{{67.2, 1.0, 0.969}, {315.0, 0.631, 0.761}, {337.6, 0.853, 0.871}}},
-     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false},
+     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false, false},
     {"fusion_phazon", "Fusion Phazon Suit", 3, {{{32.8, 0.869, 0.969}, {54.9, 0.746, 0.871}, {4.1, 0.851, 0.871}}},
-     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, true, false},
+     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, true, false, false},
     // The Dread Samus import's, measured the same way over its BCLR textures
     // (cutscene, game and doll bodies, and the ball). Its Power Suit's green
     // lights (90-105) and its Varia's olive under-suit stay out of the gates.
-    {"dread_power", "Power Suit (Dread)", 2, {{{200.2, 0.606, 0.741}, {8.9, 0.651, 0.776}, {}}},
-     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, false, false},
-    {"dread_gravity", "Gravity Suit (Dread)", 3, {{{267.4, 0.579, 0.71}, {303.9, 0.85, 0.773}, {8.8, 0.623, 0.902}}},
-     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false},
-    {"dread_varia", "Varia Suit (Dread)", 2, {{{38.9, 0.867, 0.937}, {6.6, 0.644, 0.843}, {}}},
-     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, true, false},
+    // A base slot's median is of the light texels (saturation under 0.12,
+    // value over 0.6).
+    {"dread_power", "Power Suit (Dread)", 3, {{{200.2, 0.606, 0.741}, {8.9, 0.651, 0.776}, {249.0, 0.079, 0.804}}},
+     {"primary", "secondary", "base"}, {"Primary", "Secondary", "White"}, false, false, true},
+    {"dread_gravity", "Gravity Suit (Dread)", 4,
+     {{{267.4, 0.579, 0.71}, {303.9, 0.85, 0.773}, {8.8, 0.623, 0.902}, {242.9, 0.035, 0.937}}},
+     {"primary", "secondary", "accent", "base"}, {"Primary", "Secondary", "Accent", "White"}, false, false, true},
+    {"dread_varia", "Varia Suit (Dread)", 3, {{{38.9, 0.867, 0.937}, {6.6, 0.644, 0.843}, {260.0, 0.054, 0.882}}},
+     {"primary", "secondary", "base"}, {"Primary", "Secondary", "White"}, true, false, true},
+    // The Metroid Suit has no white parts (under 0.1% of its texels).
     {"dread_phazon", "Metroid Suit (Dread)", 2, {{{90.6, 0.621, 0.592}, {10.8, 0.462, 0.388}, {}}},
-     {"primary", "accent", nullptr}, {"Primary", "Accent", nullptr}, false, false},
+     {"primary", "accent", nullptr}, {"Primary", "Accent", nullptr}, false, false, false},
 };
 
 // Tuned by eye on contact sheets of every suit.
@@ -55,10 +59,15 @@ constexpr int kIslandMin = 40;         // smaller islands take their majority wh
 constexpr double kIslandHue = 60.0;    // but only texels this near that slot's hue
 constexpr double kSeamValue = 0.18;    // darker texels part islands
 constexpr double kScaleMax = 4.0;      // saturation and value scale at most this much
+constexpr double kBaseLow = 0.45;      // a base slot takes no texel darker than this
+constexpr double kBaseHigh = 0.60;     // and all of one this light (or lighter)
 
 std::mutex sMutex;
 std::array<Picks, kSuitCount> sPicks{};
 std::array<std::string, kSuitCount> sServed{};
+
+// The slots that go by hue: all but a base slot.
+int HueSlots(const Suit& info) { return info.slots - (info.base ? 1 : 0); }
 
 double Smooth(double x, double a, double b) {
   const double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
@@ -153,7 +162,7 @@ struct Analysis {
 
 Analysis Analyse(const PortRemastered::Image& image, int suit, const std::vector<int>* transfer) {
   const Suit& info = kSuits[suit];
-  const int n = info.slots;
+  const int n = HueSlots(info);
   Analysis a;
   a.width = image.width;
   a.height = image.height;
@@ -312,11 +321,13 @@ void Randomise(int suit, uint32_t seed) {
   std::mt19937 random(seed);
   std::uniform_real_distribution<double> unit(0.0, 1.0);
   const double start = unit(random) * 360.0;
-  // The golden angle apart, jittered, so the slots never share a hue.
+  // The golden angle apart, jittered, so the slots never share a hue. A base
+  // slot stays pale, so the white parts still read against the rest.
   for (int slot = 0; slot < kSuits[suit].slots; ++slot) {
+    const bool pale = kSuits[suit].base && slot == kSuits[suit].slots - 1;
     const double h = start + slot * 137.5 + (unit(random) - 0.5) * 30.0;
-    const double s = 0.55 + 0.45 * unit(random);
-    const double v = 0.6 + 0.4 * unit(random);
+    const double s = pale ? 0.1 + 0.25 * unit(random) : 0.55 + 0.45 * unit(random);
+    const double v = pale ? 0.8 + 0.2 * unit(random) : 0.6 + 0.4 * unit(random);
     double rgb[3];
     FromHsv(h, s, v, rgb);
     uint32_t value = 0;
@@ -413,7 +424,8 @@ size_t Recolour(PortRemastered::Image& image, int suit, const Picks& picks, cons
     transferSlots = Analyse(*transfer, transferSuit, nullptr).slot;
   }
   const Analysis a = Analyse(image, suit, transferSlots.empty() ? nullptr : &transferSlots);
-  const int n = info.slots;
+  const int n = HueSlots(info);
+  const int base = info.base ? info.slots - 1 : -1;
   const size_t count = a.hsv.size();
 
   // Each slot's share of a texel: the 3x3 mix of slots round it, so a border
@@ -434,7 +446,7 @@ size_t Recolour(PortRemastered::Image& image, int suit, const Picks& picks, cons
 
   std::array<Hsv, kMaxSlots> targets{};
   bool anyPick = false;
-  for (int j = 0; j < n; ++j) {
+  for (int j = 0; j < info.slots; ++j) {
     if (picks[j]) {
       const uint32_t c = *picks[j];
       targets[j] = ToHsv(((c >> 16) & 255) / 255.0, ((c >> 8) & 255) / 255.0, (c & 255) / 255.0);
@@ -444,6 +456,7 @@ size_t Recolour(PortRemastered::Image& image, int suit, const Picks& picks, cons
   if (!anyPick) {
     return 0;
   }
+  const bool basePicked = base >= 0 && picks[base].has_value();
 
   size_t changed = 0;
   for (size_t i = 0; i < count; ++i) {
@@ -452,10 +465,13 @@ size_t Recolour(PortRemastered::Image& image, int suit, const Picks& picks, cons
     if (info.warm) {
       gate *= 1.0 - Smooth(t.h, 70.0, 75.0) * (1.0 - Smooth(t.h, 200.0, 205.0));
     }
-    if (gate <= 0.0) {
+    uint8_t* texel = &image.rgba[i * 4];
+    // The white parts: light texels the hue slots leave.
+    const double baseGate =
+        basePicked && texel[3] > 127 ? (1.0 - a.coloured[i]) * Smooth(t.v, kBaseLow, kBaseHigh) : 0.0;
+    if (gate <= 0.0 && baseGate <= 0.0) {
       continue;
     }
-    uint8_t* texel = &image.rgba[i * 4];
     const double original[3] = {double(texel[0]), double(texel[1]), double(texel[2])};
     // A soft-edge texel outside every slot moves with its nearest slot.
     std::array<double, kMaxSlots> weight{};
@@ -499,9 +515,19 @@ size_t Recolour(PortRemastered::Image& image, int suit, const Picks& picks, cons
         out[c] += weight[j] * rgb[c];
       }
     }
+    // Their hue means nothing, so the picked one; their saturation is added to.
+    double white[3] = {original[0], original[1], original[2]};
+    if (baseGate > 0.0) {
+      const Hsv& m = info.medians[base];
+      const Hsv& to = targets[base];
+      const double s = std::clamp(t.s + to.s - m.s, 0.0, 1.0);
+      const double v = std::clamp(t.v * std::min(kScaleMax, to.v / std::max(m.v, 1e-3)), 0.0, 1.0);
+      FromHsv(to.h, s, v, white);
+    }
     bool differs = false;
     for (int c = 0; c < 3; ++c) {
-      const double mixed = gate * out[c] + (1.0 - gate) * original[c];
+      double mixed = gate * out[c] + (1.0 - gate) * original[c];
+      mixed = baseGate * white[c] + (1.0 - baseGate) * mixed;
       const uint8_t byte = uint8_t(std::clamp(std::floor(mixed + 0.5), 0.0, 255.0));
       differs |= byte != texel[c];
       texel[c] = byte;

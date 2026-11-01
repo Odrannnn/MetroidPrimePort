@@ -587,10 +587,12 @@
   generator or the disc change). A texture a mod brings (the Remastered import) is left as
   it is. With "Suit-coloured morph balls" off, a suit that borrows another's ball shows
   that suit's colours on it. While the Dread Samus import is on (DREAD_SAMUS.md), the list
-  also has its four suits, `suit_colour_dread_power` (primary, secondary),
-  `suit_colour_dread_gravity` (primary, secondary, accent), `suit_colour_dread_varia` and
-  `suit_colour_dread_phazon` (the Metroid Suit; primary, accent): they recolour the import's
-  own body, cannon and ball textures the same way, kept in `generated/suit-colours/dread_<suit>/`
+  also has its four suits, `suit_colour_dread_power` (primary, secondary, white),
+  `suit_colour_dread_gravity` (primary, secondary, accent, white), `suit_colour_dread_varia`
+  (primary, secondary, white) and `suit_colour_dread_phazon` (the Metroid Suit; primary,
+  accent): they recolour the import's own body, cannon and ball textures the same way. The
+  white slot takes the light, unsaturated parts (the white plates; the retail suits have
+  none): they take the picked hue, keeping their shading. Kept in `generated/suit-colours/dread_<suit>/`
   (remade when the picks or the import change). The Phazon Suit's Dread cannon is Gravity's,
   so it takes Gravity's colours.
 - `MP_HUD_WIDE=0|1` (Video > Display, persisted as `hud_wide`, default on): widescreen HUD. The

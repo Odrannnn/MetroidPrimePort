@@ -148,6 +148,7 @@
 {"Video", "Display", "Suit colours", "Secondary", "suit colour color secondary"},
 {"Video", "Display", "Suit colours", "Accent", "suit colour color accent trim"},
 {"Video", "Display", "Suit colours", "Glow", "phazon suit glow colour color"},
+{"Video", "Display", "Suit colours", "White", "dread suit white plates base colour color"},
 {"Video", "Display", "Suit colours", "Random", "suit colour color random randomise randomize shuffle surprise"},
 {"Video", "Display", "Suit colours", "Apply suit colours", "suit colour color apply reload"},
 {"Video", "Display", "HUD and view", "Widescreen HUD (spread to edges)", "hud widescreen edges stretch"},

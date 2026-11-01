@@ -141,6 +141,8 @@ void DrawVideoDisplay() {
       }
       if (sSuitColoursSuit == 3) {
         ImGui::SetItemTooltip("The Phazon Suit's body is nearly black: only its glow and accent change.");
+      } else if (suit.base && slot == suit.slots - 1) {
+        ImGui::SetItemTooltip("The white plates: the light, unsaturated parts, which keep their shading.");
       }
       ImGui::SameLine();
       ImGui::BeginDisabled(!picked);

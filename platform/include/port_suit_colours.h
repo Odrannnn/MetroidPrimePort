@@ -26,6 +26,10 @@
 // The Dread Samus import (port_dread_samus_mod.h, issue #221) brings its own
 // suits, with their own colours: four more entries, after the retail eight,
 // recolour its .dds textures (CollectDread), which its dread-suits.txt lists.
+// Its Power, Gravity and Varia suits have white plates, which no hue slot can
+// reach (no saturation to scale), so their last slot is a base slot: light,
+// unsaturated texels outside the hue slots take the picked hue and its
+// saturation (added to theirs), value scaled by picked / median as above.
 
 #include "port_mods.h"
 #include "port_remastered_image.h"
@@ -48,7 +52,7 @@ inline constexpr int kVersion = 1;
 // same order from kDreadFirst (Power, Gravity, Varia, Phazon's Metroid Suit).
 inline constexpr int kDreadFirst = 8;
 inline constexpr int kSuitCount = 12;
-inline constexpr int kMaxSlots = 3;
+inline constexpr int kMaxSlots = 4;
 
 // A slot's colour on the disc: the median of its texels, hue in degrees,
 // saturation and value in 0..1.
@@ -67,6 +71,7 @@ struct Suit {
   std::array<const char*, kMaxSlots> slotNames;
   bool warm;      // never touch hues 70-205
   bool glowOnly;  // Phazon: only bright, saturated texels count as coloured
+  bool base;      // the last slot is the white parts' (medians: their light texels')
 };
 const Suit& SuitInfo(int suit);
 
