@@ -21,6 +21,17 @@ int main() {
   q.height = 0.f;
   CHECK(Near(ComputeEye(eye, fwd, right, up, q), Vec3{9.f, 19.f, 30.f}));
 
+  // Framing: unchanged at the reference view; a wider screen moves her out sideways only, a
+  // wider FOV both ways; nonsense views keep the settings.
+  const Params ref = Framed(p, kRefTanHalfFov, kRefAspect);
+  CHECK(std::fabs(ref.shoulder - 0.9f) < 1e-5f && std::fabs(ref.height - 0.25f) < 1e-5f);
+  const Params phone = Framed(p, kRefTanHalfFov, kRefAspect * 1.25f);
+  CHECK(std::fabs(phone.shoulder - 1.125f) < 1e-5f && std::fabs(phone.height - 0.25f) < 1e-5f);
+  CHECK(phone.distance == p.distance);
+  const Params wide = Framed(p, kRefTanHalfFov * 2.f, kRefAspect);
+  CHECK(std::fabs(wide.shoulder - 1.8f) < 1e-5f && std::fabs(wide.height - 0.5f) < 1e-5f);
+  CHECK(Framed(p, 0.f, 1.f).shoulder == p.shoulder && Framed(p, 1.f, NAN).height == p.height);
+
   const Vec3 pivot{0.f, 0.f, 0.f}, desired{0.f, -4.f, 0.f};
   CHECK(Near(PullIn(pivot, desired, -1.f), desired));            // no hit
   CHECK(Near(PullIn(pivot, desired, 4.f), desired));             // hit at the end: not closer

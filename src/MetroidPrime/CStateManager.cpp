@@ -4122,7 +4122,8 @@ void CStateManager::DrawWorld() const {
     // FOV (a view-model FOV), so a wide view doesn't shrink it or push it off
     // the screen's corner.
     const CGameCamera& gunCam = x870_cameraManager->GetCurrentCamera(*this);
-    const bool gunFov = x870_cameraManager->IsInFPCamera() &&
+    // Not in third person: its charge fx and grapple beam form on the body, in the world's view.
+    const bool gunFov = x870_cameraManager->IsInFPCamera() && !PortThirdPerson::Active() &&
                         gunCam.GetFov() != PortDebug::kFovRetail;
     const CGraphics::CProjectionState gunProj = CGraphics::GetProjectionState();
     if (gunFov) {
