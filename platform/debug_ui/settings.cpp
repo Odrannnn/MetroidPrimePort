@@ -272,12 +272,12 @@ const SettingKey kSettingKeys[] = {
      [](std::ostream& out) { out << PortThirdPerson::GetParams().distance; }, false, "2.5", "4"},
     {"third_person_shoulder",
      // Every save writes every key, so files written before 69b52d4a3 hold the old defaults
-     // (shoulder 0.5, height 0.1), which put the crosshair on her pad: those move to the new ones.
+     // (shoulder 0.6, height 0.1), which put the crosshair on her pad: those move to the new ones.
      [](const std::string& value) {
        const float shoulder = std::strtof(value.c_str(), nullptr);
-       PortThirdPerson::SetShoulder(shoulder == 0.5f ? PortThirdPerson::Params{}.shoulder : shoulder);
+       PortThirdPerson::SetShoulder(shoulder == 0.6f ? PortThirdPerson::Params{}.shoulder : shoulder);
      },
-     [](std::ostream& out) { out << PortThirdPerson::GetParams().shoulder; }, false, "0.6", "-0.5"},
+     [](std::ostream& out) { out << PortThirdPerson::GetParams().shoulder; }, false, "0.7", "-0.5"},
     {"third_person_height",
      [](const std::string& value) {
        const float height = std::strtof(value.c_str(), nullptr);
