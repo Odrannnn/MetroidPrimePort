@@ -153,6 +153,8 @@
 {"Video", "Display", "HUD and view", "Crosshair style", "crosshair reticle classic remastered look"},
 {"Video", "Display", "HUD and view", "Crosshair opacity", "crosshair transparency alpha"},
 {"Video", "Display", "HUD and view", "Custom crosshair colour", "crosshair color reticle tint"},
+{"Video", "Display", "HUD and view", "Crosshair in X-Ray", "crosshair reticle visor xray x-ray hide per visor"},
+{"Video", "Display", "HUD and view", "Crosshair in Thermal", "crosshair reticle visor thermal hide per visor"},
 {"Video", "Display", "HUD and view", "Secondary crosshairs", "crosshair secondary extra"},
 {"Video", "Display", "HUD and view", "Hide helmet", "helmet visor frame hide first person"},
 {"Video", "Display", "HUD and view", "Third-person camera", "third person camera behind shoulder body over the shoulder view"},

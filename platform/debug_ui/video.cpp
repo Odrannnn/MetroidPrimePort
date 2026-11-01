@@ -230,6 +230,16 @@ void DrawVideoDisplay() {
     MarkDirty();
   }
   ImGui::EndDisabled();
+  if (ImGui::Checkbox("Crosshair in X-Ray", &sCrosshairXRay)) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("Off hides the aiming crosshair in the X-Ray Visor.");
+  ImGui::SameLine();
+  if (ImGui::Checkbox("Crosshair in Thermal", &sCrosshairThermal)) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("Off hides the aiming crosshair in the Thermal Visor, whose HUD\n"
+                        "otherwise all moves with the visor. On under Original experience.");
   if (ImGui::Checkbox("Secondary crosshairs", &sSecondaryCrosshairs)) {
     MarkDirty();
   }

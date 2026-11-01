@@ -693,7 +693,12 @@ void CCompoundTargetReticle::UpdateOrbitZoneGroup(float dt, const CStateManager&
   }
 
   if (mgr.GetPlayer()->IsCrosshairsOpen() &&
-      mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan) {
+      mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan
+#ifdef TARGET_PC
+      // Port: the per-visor crosshair setting (issue #241) fades it out as Scan does.
+      && PortDebug::CrosshairInVisor(mgr.GetPlayerState()->GetCurrentVisor())
+#endif
+  ) {
     x1e8_crosshairsScale =
         rstl::min_val(x1e8_crosshairsScale + dt / gpTweakTargeting->x1c4_crosshairsScaleDur, 1.f);
   } else {
@@ -2075,7 +2080,9 @@ void CCompoundTargetReticle::PortTriUpdateCombat(float dt, const CStateManager& 
   x258_aimArmAlpha = (1.f - x264_aimTarget) * (200.f / 255.f) + x264_aimTarget * (160.f / 255.f);
   x260_aimCenterAlpha = 1.f; // fn_80015D2C: port pointer always valid/on-screen.
   if (player.GetGunHolsterState() == CPlayer::kGH_Holstered ||
-      !PortTriReticle::AimVisible(x20_prevState)) x258_aimArmAlpha = x260_aimCenterAlpha = 0.f;
+      !PortTriReticle::AimVisible(x20_prevState) ||
+      !PortDebug::CrosshairInVisor(mgr.GetPlayerState()->GetCurrentVisor()))
+    x258_aimArmAlpha = x260_aimCenterAlpha = 0.f;
   if (x388_triOffScreenTicks != 0.f) { // fn_80236E24: unreachable for port pointer sources.
     x254_aimArmColor = x25c_aimCenterColor = skTriScanOverrideColor;
   }

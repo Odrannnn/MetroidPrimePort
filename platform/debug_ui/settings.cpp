@@ -151,6 +151,8 @@ const SettingKey kSettingKeys[] = {
      },
      [](std::ostream& out) { out << sHintDelay; }, false, "0", "30"},
     BoolKey< &sSecondaryCrosshairs >("secondary_crosshairs"),
+    BoolKey< &sCrosshairXRay >("crosshair_xray"),
+    BoolKey< &sCrosshairThermal >("crosshair_thermal"),
     BoolKey< &sMenuStandardButtons >("menu_standard_buttons"),
     {"pointer_menus", [](const std::string& value) { PortPointer::SetEnabled(ParseBool(value)); },
      [](std::ostream& out) { WriteBool(out, PortPointer::Enabled()); }, false, "1", "0"},

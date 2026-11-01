@@ -271,6 +271,10 @@ bool ConsumeShowHintRequest();
 // The next-target reticles (combat seeker, X-ray ring, thermal crosshair). Off hides them;
 // lock-on and scan reticles stay. On under Original experience.
 bool SecondaryCrosshairs();
+// Whether the crosshair (and Trilogy's aiming cursor) shows in a visor (a
+// CPlayerState::EPlayerVisor). Combat and Scan follow the game; X-Ray and Thermal
+// can be turned off (issue #241). On under Original experience.
+bool CrosshairInVisor(int visor);
 // Menus and the map read a remapped pad's standard buttons (F1 Controls > Remap).
 bool MenuStandardButtons();
 void SetMenuStandardButtons(bool enabled);

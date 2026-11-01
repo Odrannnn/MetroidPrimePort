@@ -25,6 +25,7 @@
 
 #include "MetroidPrime/Player/CGameOptions.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
+#include "MetroidPrime/Player/CPlayerState.hpp"
 
 #include <aurora/gfx.h>
 #include <dolphin/gx/GXExtra.h>
@@ -543,6 +544,21 @@ void SetMapSwapFingers(bool swap) {
 bool SecondaryCrosshairs() {
   EnsureInitialized();
   return sSecondaryCrosshairs || sOriginalExperience;
+}
+
+bool CrosshairInVisor(int visor) {
+  EnsureInitialized();
+  if (sOriginalExperience) {
+    return true;
+  }
+  switch (visor) {
+  case CPlayerState::kPV_XRay:
+    return sCrosshairXRay;
+  case CPlayerState::kPV_Thermal:
+    return sCrosshairThermal;
+  default:
+    return true;
+  }
 }
 
 int HudOpacity(HudOpacityPart part) {
