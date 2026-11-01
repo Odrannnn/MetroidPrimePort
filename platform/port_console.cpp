@@ -2714,6 +2714,41 @@ void CmdDodge() {
   Finish();
 }
 
+// As the Grapple action held for `seconds` (default 1; 0 lets go): it grapples
+// when a grapple point is the lock-on target.
+void CmdGrapple() {
+  float seconds = 1.f;
+  if (sCmd.args.size() > 2 || (sCmd.args.size() == 2 && !ParseFloat(sCmd.args[1], seconds)) ||
+      seconds < 0.f) {
+    return Finish("usage: grapple [seconds]");
+  }
+  PortDebug::HoldGrapple(seconds);
+  Out(PortDebug::OriginalExperience() ? "grapple held (off under original experience)"
+                                      : "grapple held");
+  Finish();
+}
+
+// `<name> [0|1]` for a boolean setting: sets it, then prints it.
+void BoolSettingCmd(const char* name, bool (*get)(), void (*set)(bool)) {
+  if (sCmd.args.size() > 1) {
+    const std::string& v = sCmd.args[1];
+    if (sCmd.args.size() > 2 || (v != "0" && v != "1")) {
+      return Finish((std::string("usage: ") + name + " [0|1]").c_str());
+    }
+    set(v == "1");
+  }
+  Out("%s %d", name, get() ? 1 : 0);
+  Finish();
+}
+
+void CmdSpiderToggle() {
+  BoolSettingCmd("spidertoggle", PortDebug::SpiderToggle, PortDebug::SetSpiderToggle);
+}
+
+void CmdLockToggle() {
+  BoolSettingCmd("locktoggle", PortDebug::LockOnToggle, PortDebug::SetLockOnToggle);
+}
+
 void CmdRadial() {
   const auto& a = sCmd.args;
   if (a.size() == 2 && a[1] == "release") {
@@ -4418,6 +4453,12 @@ const CommandSpec kCommands[] = {
      "aimlockon [0|1]            lock-on picks the target nearest the crosshair (aim_lock_on)"},
     {"dodge", CmdDodge, nullptr,
      "dodge                      a Dodge press (sideways dash, locked on or not; needs a strafe held)"},
+    {"grapple", CmdGrapple, nullptr,
+     "grapple [seconds]          holds the Grapple action (default 1 s, 0 lets go): grapples at a grapple point"},
+    {"spidertoggle", CmdSpiderToggle, nullptr,
+     "spidertoggle [0|1]         an R press holds the spider ball on its track until the next (spider_toggle)"},
+    {"locktoggle", CmdLockToggle, nullptr,
+     "locktoggle [0|1]           an L press holds a lock-on or grapple until the next (lock_on_toggle)"},
     {"radial", CmdRadial, nullptr,
      "radial [beam|visor [x y] | release]  holds a radial menu with its selection (x right, y up); radial_menus"},
     {"walkspeed", CmdWalkSpeed, nullptr,

@@ -1189,6 +1189,13 @@ bool LockOnToggle() {
 
 void SetLockOnToggle(bool enabled) { StoreSetting(sInput.lockOnToggle, enabled); }
 
+bool SpiderToggle() {
+  EnsureInitialized();
+  return sInput.spiderToggle && !sOriginalExperience;
+}
+
+void SetSpiderToggle(bool enabled) { StoreSetting(sInput.spiderToggle, enabled); }
+
 bool AimLockOn() {
   EnsureInitialized();
   return sInput.aimLockOn && !sOriginalExperience;

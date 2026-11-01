@@ -670,6 +670,7 @@ void RouteDirectActions(const PortInput::Output& out) {
   PushCyclePick(false, visorDir != 0 ? CycleTarget(false, visorDir) : visorPick);
   if (out.Pressed(Action::SpringBall)) PortDebug::RequestSpringBall();
   if (out.Pressed(Action::Dodge)) PortDebug::RequestDodge();
+  PortDebug::SetGrappleHeld(out.Held(Action::Grapple));
 }
 
 // The port's own actions: polled every frame by PollPortActions, not with the game

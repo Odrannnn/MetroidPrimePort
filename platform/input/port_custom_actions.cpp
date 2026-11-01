@@ -154,6 +154,8 @@ constexpr BoolSetting kBoolSettings[] = {
      &PortDebug::SetRapidCharge},
     {"fast_morph", "Fast Morph", "Controls > Options > Morph ball", &PortDebug::FastMorph,
      &PortDebug::SetFastMorph},
+    {"spider_toggle", "Toggle Spider Ball", "Controls > Options > Morph ball", &PortDebug::SpiderToggle,
+     &PortDebug::SetSpiderToggle},
     {"spring_ball", "Spring Ball (C-stick up)", "Controls > Options > Morph ball", &PortDebug::SpringBall,
      &PortDebug::SetSpringBall},
 };

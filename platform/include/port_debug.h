@@ -651,6 +651,10 @@ void SetFastMorph(bool enabled);
 // apply only unmorphed, in gameplay (port_hold_toggle.h).
 bool LockOnToggle();
 void SetLockOnToggle(bool enabled);
+// Toggle Spider Ball (issue #243): an R press that attaches the spider ball
+// latches until pressed again or the ball leaves its track; morph ball only.
+bool SpiderToggle();
+void SetSpiderToggle(bool enabled);
 // Aim Lock-On: lock onto the target nearest the crosshair instead of retail's
 // pick, which prefers a nearer target (CPlayer::FindBestOrbitableObject).
 bool AimLockOn();
@@ -856,6 +860,12 @@ bool SpringBallRequested();
 // experience).
 void RequestDodge();
 bool TakeDodgeRequest();
+// Issue #243: the Grapple action's state, set by the input routing each frame;
+// HoldGrapple holds it for a time (console). CStateManager turns it into L at a
+// grapple point (port_hold_toggle.h GrappleKey).
+void SetGrappleHeld(bool held);
+void HoldGrapple(float seconds);
+bool GrappleHeld();
 void RequestSaveStateHotkey(int which);
 bool TouchMapTap();
 void SetTouchMapTap(bool on);

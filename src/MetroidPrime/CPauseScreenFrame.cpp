@@ -209,6 +209,7 @@ enum EPortOption {
   kPO_OriginalExperience,
   kPO_PhotoMode,
   kPO_AimLockOn,
+  kPO_SpiderToggle,
 };
 #define PORT_OPTION(opt) static_cast< EGameOption >(opt)
 
@@ -259,6 +260,7 @@ static const SGameOption skPortControllerOptions[] = {
     {PORT_OPTION(kPO_CrosshairSize), -1, PortDebug::kCrosshairSizeMin,
      PortDebug::kCrosshairSizeMax, 5.f, kOT_Float},
     {PORT_OPTION(kPO_FastMorph), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_SpiderToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_LockOnToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_AimLockOn), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_StickyCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
@@ -274,16 +276,17 @@ static const SGameOption skPortControllerOptionsNoAim[] = {
     {PORT_OPTION(kPO_CrosshairSize), -1, PortDebug::kCrosshairSizeMin,
      PortDebug::kCrosshairSizeMax, 5.f, kOT_Float},
     {PORT_OPTION(kPO_FastMorph), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_SpiderToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_LockOnToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_AimLockOn), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_StickyCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_RapidCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {kGO_RestoreDefaults, 35, 0.f, 1.f, 1.f, kOT_RestoreDefaults},
 };
-static const SOptionCategory skPortControllerCategoryNoAim = {11, skPortControllerOptionsNoAim};
+static const SOptionCategory skPortControllerCategoryNoAim = {12, skPortControllerOptionsNoAim};
 static SOptionCategory skPauseOptions[] = {
     {11, skPortVisorOptions},     {12, skPortDisplayOptions}, {4, skSoundOptions},
-    {12, skPortControllerOptions}, {0, nullptr},
+    {13, skPortControllerOptions}, {0, nullptr},
 };
 
 static bool IsPortOption(EGameOption option) { return option > kGO_RestoreDefaults; }
@@ -302,6 +305,8 @@ static const wchar_t* PortOptionTitle(EGameOption option) {
     return L"Fast Morph";
   case kPO_LockOnToggle:
     return L"Toggle Lock-On";
+  case kPO_SpiderToggle:
+    return L"Toggle Spider Ball";
   case kPO_AimLockOn:
     return L"Aim Lock-On";
   case kPO_StickyCharge:
@@ -353,6 +358,8 @@ static int GetPortOption(EGameOption option) {
     return PortDebug::FastMorph() ? 1 : 0;
   case kPO_LockOnToggle:
     return PortDebug::LockOnToggle() ? 1 : 0;
+  case kPO_SpiderToggle:
+    return PortDebug::SpiderToggle() ? 1 : 0;
   case kPO_AimLockOn:
     return PortDebug::AimLockOn() ? 1 : 0;
   case kPO_StickyCharge:
@@ -409,6 +416,7 @@ static bool IsOriginalLocked(EGameOption option) {
   case kPO_WidescreenHUD:
   case kPO_FastMorph:
   case kPO_LockOnToggle:
+  case kPO_SpiderToggle:
   case kPO_AimLockOn:
   case kPO_StickyCharge:
   case kPO_RapidCharge:
@@ -450,6 +458,9 @@ static void SetPortOption(EGameOption option, int value) {
     break;
   case kPO_LockOnToggle:
     PortDebug::SetLockOnToggle(value > 0);
+    break;
+  case kPO_SpiderToggle:
+    PortDebug::SetSpiderToggle(value > 0);
     break;
   case kPO_AimLockOn:
     PortDebug::SetAimLockOn(value > 0);
@@ -691,6 +702,7 @@ void CGameOptions::TryRestoreDefaults(const CFinalInput& input, int category, in
         PortDebug::SetCrosshairSize(PortDebug::kCrosshairSizeDefault);
         PortDebug::SetFastMorph(false);
         PortDebug::SetLockOnToggle(false);
+        PortDebug::SetSpiderToggle(false);
         PortDebug::SetAimLockOn(false);
         PortDebug::SetStickyCharge(false);
         PortDebug::SetRapidCharge(false);

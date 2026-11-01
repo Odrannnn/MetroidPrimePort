@@ -203,6 +203,8 @@ public:
   void SetDisableSpiderBallTime(float time);
 #ifdef TARGET_PC
   void PortResetTimeSinceBombJump() { xPortTimeSinceBombJump = 0.f; }
+  // Damage keeps the spider ball off its track for this long (Toggle Spider Ball).
+  float PortDamageTimer() const { return x191c_damageTimer; }
 #endif
 
   u32 GetMorphballModelShader() const { return x5c_ballModelShader; } // name?

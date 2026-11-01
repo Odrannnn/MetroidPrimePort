@@ -52,6 +52,8 @@ std::atomic<int> sBeamRequest{-1};
 std::atomic<uint64_t> sBeamRequestUntilNs{0};
 std::atomic<uint64_t> sSpringRequestUntilNs{0};
 std::atomic<uint64_t> sDodgeRequestUntilNs{0};
+std::atomic<bool> sGrappleHeld{false};
+std::atomic<uint64_t> sGrappleHoldUntilNs{0};
 constexpr uint64_t kWheelRequestNs = 120'000'000;
 std::mutex sMinimapMutex;
 bool sMinimapValid = false;
@@ -923,6 +925,16 @@ void RequestDodge() { sDodgeRequestUntilNs.store(SDL_GetTicksNS() + kWheelReques
 bool TakeDodgeRequest() {
   const uint64_t until = sDodgeRequestUntilNs.exchange(0);
   return SDL_GetTicksNS() < until && !OriginalExperience();
+}
+
+void SetGrappleHeld(bool held) { sGrappleHeld.store(held, std::memory_order_relaxed); }
+
+void HoldGrapple(float seconds) {
+  sGrappleHoldUntilNs.store(SDL_GetTicksNS() + static_cast<uint64_t>(seconds * 1e9f));
+}
+
+bool GrappleHeld() {
+  return sGrappleHeld.load(std::memory_order_relaxed) || SDL_GetTicksNS() < sGrappleHoldUntilNs.load();
 }
 
 void RequestSaveStateHotkey(int which) {

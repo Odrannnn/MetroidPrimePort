@@ -3342,6 +3342,7 @@ std::string ShortLabel(const std::string& key) {
   if (key == "visor_prev") return "Visor -";
   if (key == "spring_ball") return "Spring";
   if (key == "dodge") return "Dodge";
+  if (key == "grapple") return "Grapple";
   if (key == "port_menu") return "Menu";
   if (key == "save_state") return "Save";
   if (key == "load_state") return "Load";

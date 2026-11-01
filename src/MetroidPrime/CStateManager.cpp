@@ -63,6 +63,8 @@
 #include "MetroidPrime/HUD/CSamusHud.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
+#include "MetroidPrime/Player/CMorphBall.hpp"
+#include "MetroidPrime/ScriptObjects/CScriptGrapplePoint.hpp"
 #include "MetroidPrime/Player/CGrappleArm.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "MetroidPrime/Weapons/CPowerBomb.hpp"
@@ -1845,32 +1847,54 @@ void CStateManager::Update(float dt) {
 }
 
 #ifdef TARGET_PC
-// Toggle lock-on and sticky charge (F1 Input, pause Options > Controller). Edges
-// come from the combined digital/analog state, since a GameCube L passes the
-// analog threshold and clicks on different ticks and would toggle twice.
-static void ApplyHoldToggle(CFinalInput& input, const CPlayer* player,
+// Toggle lock-on, the Grapple key, sticky charge and Toggle Spider Ball (F1
+// Input, pause Options > Controller). Edges come from the combined digital/analog
+// state, since a GameCube trigger passes the analog threshold and clicks on
+// different ticks and would toggle twice.
+static void ApplyHoldToggle(CFinalInput& input, const CStateManager& mgr, const CPlayer* player,
                             const CPlayerState* playerState, bool enabled) {
   static PortHoldToggle::Toggle sLockOn;
+  static PortHoldToggle::GrappleKey sGrapple;
   static PortHoldToggle::Sticky sCharge;
+  static PortHoldToggle::Toggle sSpider;
+  static PortHoldToggle::Grace sSpiderOn;
   static bool sPrevL = false;
+  static bool sPrevGrapple = false;
+  static bool sPrevR = false;
 
   const bool unmorphed =
       enabled && player != nullptr && player->GetMorphballTransitionState() == CPlayer::kMS_Unmorphed;
+  const CPlayer::EPlayerOrbitState orbit =
+      player != nullptr ? player->GetOrbitState() : CPlayer::kOS_NoOrbit;
 
-  const bool heldL = input.DL() || input.DLTrigger();
+  // The Grapple key stands in for L at a grapple point: the next target while
+  // not orbiting, the orbited one while the lock turns into a grapple.
+  const bool grappleKey = PortDebug::GrappleHeld();
+  const bool grapplePress = grappleKey && !sPrevGrapple;
+  sPrevGrapple = grappleKey;
+  bool atPoint = false;
+  if (unmorphed && grappleKey) {
+    const TUniqueId target =
+        orbit == CPlayer::kOS_NoOrbit ? player->GetOrbitNextTargetId() : player->GetOrbitTargetId();
+    atPoint = TCastToConstPtr< CScriptGrapplePoint >(mgr.GetObjectById(target)) != nullptr;
+  }
+  const bool grappleL = sGrapple.Update(unmorphed && !PortDebug::OriginalExperience(), grappleKey,
+                                        grapplePress, atPoint, orbit == CPlayer::kOS_Grapple,
+                                        input.Time());
+
+  const bool padL = input.DL() || input.DLTrigger();
+  const bool heldL = padL || grappleL;
   const bool pressL = heldL && !sPrevL;
   sPrevL = heldL;
   // Only a lock on an object counts: a killed target leaves the player orbiting
   // its carcass, and a lost look angle a fixed point, both of which hold the aim
   // in place for as long as L is held.
-  const CPlayer::EPlayerOrbitState orbit =
-      player != nullptr ? player->GetOrbitState() : CPlayer::kOS_NoOrbit;
   const bool locked = orbit == CPlayer::kOS_OrbitObject ||
                       orbit == CPlayer::kOS_ForcedOrbitObject || orbit == CPlayer::kOS_Grapple;
   const PortHoldToggle::Output outL =
       sLockOn.Update(unmorphed && PortDebug::LockOnToggle(), heldL, pressL, locked,
                      input.Time());
-  if (sLockOn.Latched() || outL.held != heldL) {
+  if (sLockOn.Latched() || outL.held != padL || grappleL) {
     input.PortSetL(outL.held, outL.pressed);
   }
 
@@ -1881,6 +1905,28 @@ static void ApplyHoldToggle(CFinalInput& input, const CPlayer* player,
   const PortHoldToggle::Output outA = sCharge.Update(charge, heldA, pressA, input.Time());
   if (outA.held != heldA || outA.pressed != pressA) {
     input.PortSetA(outA.held, outA.pressed);
+  }
+
+  // Toggle Spider Ball: the spider ball's hold on its track is the lock. Damage
+  // knocks a latched ball off for a moment (CMorphBall's damage timer), which is
+  // not the end of the track; a hit away from a track doesn't latch a plain hold.
+  const bool morphed =
+      enabled && player != nullptr && player->GetMorphballTransitionState() == CPlayer::kMS_Morphed;
+  const CMorphBall* const ball = player != nullptr ? player->GetMorphBall() : nullptr;
+  const bool heldR = input.DR() || input.DRTrigger();
+  const bool pressR = heldR && !sPrevR;
+  sPrevR = heldR;
+  const bool spider = morphed && PortDebug::SpiderToggle() && ball != nullptr;
+  const bool onTrack =
+      spider && sSpiderOn.Update(ball->GetSpiderBallState() == CMorphBall::kSBS_Active ||
+                                     (sSpider.Latched() && ball->PortDamageTimer() > 0.f),
+                                 input.Time());
+  if (!spider) {
+    sSpiderOn.Reset();
+  }
+  const PortHoldToggle::Output outR = sSpider.Update(spider, heldR, pressR, onTrack, input.Time());
+  if (sSpider.Latched() || outR.held != heldR) {
+    input.PortSetR(outR.held, outR.pressed);
   }
 }
 #endif
@@ -1908,12 +1954,12 @@ void CStateManager::ProcessInput(const CFinalInput& input) {
 #ifdef TARGET_PC
       // Twin stick's raw right stick (Spring Ball) is input too.
       PortDebug::SetTwinStickRightY(0.f);
-      ApplyHoldToggle(xb54_finalInput, x84c_player, GetPlayerState(), false);
+      ApplyHoldToggle(xb54_finalInput, *this, x84c_player, GetPlayerState(), false);
 #endif
     } else {
       xb54_finalInput = input;
 #ifdef TARGET_PC
-      ApplyHoldToggle(xb54_finalInput, x84c_player, GetPlayerState(), true);
+      ApplyHoldToggle(xb54_finalInput, *this, x84c_player, GetPlayerState(), true);
 #endif
     }
   }

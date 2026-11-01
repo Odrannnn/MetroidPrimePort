@@ -273,6 +273,8 @@ bool ApplySetting(std::string_view keyView, std::string_view valueView) {
     s.fastMorph = ParseBool(value);
   } else if (key == "lock_on_toggle") {
     s.lockOnToggle = ParseBool(value);
+  } else if (key == "spider_toggle") {
+    s.spiderToggle = ParseBool(value);
   } else if (key == "aim_lock_on") {
     s.aimLockOn = ParseBool(value);
   } else if (key == "sticky_charge") {
@@ -338,6 +340,7 @@ void WriteControlSettings(std::ostream& out) {
 void WriteGameplaySettings(std::ostream& out) {
   const Settings& s = Get();
   out << "lock_on_toggle=" << (s.lockOnToggle ? 1 : 0) << '\n';
+  out << "spider_toggle=" << (s.spiderToggle ? 1 : 0) << '\n';
   out << "aim_lock_on=" << (s.aimLockOn ? 1 : 0) << '\n';
   out << "sticky_charge=" << (s.stickyCharge ? 1 : 0) << '\n';
   out << "rapid_charge=" << (s.rapidCharge ? 1 : 0) << '\n';

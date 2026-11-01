@@ -71,7 +71,7 @@ void DrawControlsOptions() {
     SetLockOnToggle(lockOnToggle);
   }
   ItemHelp("Press L once to lock on, scan or grapple, and again to let go. With no target, L works "
-           "as usual.");
+           "as usual. Also makes the Grapple binding a toggle.");
   bool aimLockOn = sInput.aimLockOn;
   if (ImGui::Checkbox("Aim Lock-On", &aimLockOn)) {
     SetAimLockOn(aimLockOn);
@@ -162,6 +162,12 @@ void DrawControlsOptions() {
     SetFastMorph(fastMorph);
   }
   ItemHelp("Morphing is quick and keeps your momentum, as in Metroid Prime 4.");
+  bool spiderToggle = sInput.spiderToggle;
+  if (ImGui::Checkbox("Toggle Spider Ball", &spiderToggle)) {
+    SetSpiderToggle(spiderToggle);
+  }
+  ItemHelp("Press R once to cling to a Spider Ball track, and again to let go. Leaving the track "
+           "lets go by itself. Away from a track, R works as usual.");
   const int springRule = PortAp::SpringBallRule();
   ImGui::BeginDisabled(springRule >= 0);
   bool springBall = sInput.springBall;

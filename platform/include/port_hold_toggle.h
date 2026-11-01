@@ -138,4 +138,50 @@ private:
   float mHeldTime = 0.f;
 };
 
+// Keeps a condition true for kGrace after it ends, so a one-tick drop (a spider
+// ball crossing a seam in its track) doesn't count as the end.
+class Grace {
+public:
+  static constexpr float kGrace = 0.15f;
+
+  bool Update(bool on, float dt) {
+    mLeft = on ? kGrace : (mLeft > dt ? mLeft - dt : 0.f);
+    return on || mLeft > 0.f;
+  }
+  void Reset() { mLeft = 0.f; }
+
+private:
+  float mLeft = 0.f;
+};
+
+// The Grapple key: a press while a grapple point is the lock-on target (or
+// while grappling) is taken as L, held for as long as the key is; a press with
+// no grapple point does nothing, so the key never strafes or locks onto an
+// enemy. A take that never reaches a grapple point (the point left range) lets
+// go after Grace::kGrace.
+class GrappleKey {
+public:
+  // atPoint: a grapple point is the next or current lock-on target. grappling:
+  // the player is grappling.
+  bool Update(bool active, bool held, bool pressed, bool atPoint, bool grappling, float dt) {
+    if (!active || !held) {
+      mTaken = false;
+      mGrace.Reset();
+      return false;
+    }
+    if (pressed && (atPoint || grappling)) {
+      mTaken = true;
+    }
+    if (mTaken && !mGrace.Update(atPoint || grappling, dt)) {
+      mTaken = false;
+    }
+    return mTaken;
+  }
+  bool Taken() const { return mTaken; }
+
+private:
+  Grace mGrace;
+  bool mTaken = false;
+};
+
 } // namespace PortHoldToggle

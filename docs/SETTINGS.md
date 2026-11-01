@@ -377,6 +377,13 @@
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
   input is disabled. The console's `status` prints the game's L/A and the charge.
+- Toggle Spider Ball (Controls > Options > Morph ball and pause Options > Controller,
+  persisted as `spider_toggle`, off by default, issue #243): an R press that attaches
+  the spider ball to a track latches it held and the next press lets go. Away from a
+  track R is a plain hold (it latches if the ball attaches while it is held). The
+  latch lets go by itself when the ball leaves the track for more than 0.15 s; the
+  moment a hit knocks the ball off does not count. Morph ball only; off under
+  Original Experience. Console: `spidertoggle`.
 - Aim Lock-On (Controls > Options and pause Options > Controller, persisted as
   `aim_lock_on`, off by default, issue #236): lock-on picks the target nearest
   the crosshair, measured as an angle (screen x weighed by the aspect ratio).
@@ -393,6 +400,12 @@
   before the strafe works. Like any digital action it can be added as a touch
   button in the touch layout editor. Off under Original Experience; the jump-tap
   dash is unchanged.
+- Grapple (Controls > Move and aim, binding `grapple`, unbound by default, issue #243):
+  pressed while a grapple point is the lock-on target (its reticle shows), it grapples
+  as L would, without holding L; letting go of the key lets go of the grapple. A press
+  with no grapple point in reach does nothing, so the key never strafes or locks onto
+  an enemy. With Toggle Lock-On on it toggles instead: press to grapple, press again
+  to let go. Also a touch button. Off under Original Experience. Console: `grapple`.
 - Remastered charge (Controls > Options, "Remastered charge (rapid fire)", persisted as
   `rapid_charge`, off by default, `MP_RAPID_CHARGE=<0|1>`): as in Remastered, holding
   fire fires a few shots before charging (3 in all with Power, 2 with Wave or Plasma,
