@@ -146,6 +146,8 @@ constexpr BoolSetting kBoolSettings[] = {
      &PortDebug::RadialMenus, &PortDebug::SetRadialMenus},
     {"lock_on_toggle", "Toggle Lock-On", "Controls > Options > Buttons", &PortDebug::LockOnToggle,
      &PortDebug::SetLockOnToggle},
+    {"grapple_toggle", "Toggle Grapple", "Controls > Options > Buttons", &PortDebug::GrappleToggle,
+     &PortDebug::SetGrappleToggle},
     {"grapple_shoot", "Shoot While Grappling", "Controls > Options > Buttons", &PortDebug::GrappleShoot,
      &PortDebug::SetGrappleShoot},
     {"aim_lock_on", "Aim Lock-On", "Controls > Options > Buttons", &PortDebug::AimLockOn,

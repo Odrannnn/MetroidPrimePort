@@ -2749,6 +2749,10 @@ void CmdGrappleShoot() {
   BoolSettingCmd("grappleshoot", PortDebug::GrappleShoot, PortDebug::SetGrappleShoot);
 }
 
+void CmdGrappleToggle() {
+  BoolSettingCmd("grappletoggle", PortDebug::GrappleToggle, PortDebug::SetGrappleToggle);
+}
+
 void CmdLockToggle() {
   BoolSettingCmd("locktoggle", PortDebug::LockOnToggle, PortDebug::SetLockOnToggle);
 }
@@ -4463,6 +4467,8 @@ const CommandSpec kCommands[] = {
      "spidertoggle [0|1]         an R press holds the spider ball on its track until the next (spider_toggle)"},
     {"grappleshoot", CmdGrappleShoot, nullptr,
      "grappleshoot [0|1]         the arm cannon stays out and fires while grappling (grapple_shoot)"},
+    {"grappletoggle", CmdGrappleToggle, nullptr,
+     "grappletoggle [0|1]        an L press at a grapple point holds the grapple until the next (grapple_toggle)"},
     {"locktoggle", CmdLockToggle, nullptr,
      "locktoggle [0|1]           an L press holds a lock-on until the next (lock_on_toggle)"},
     {"radial", CmdRadial, nullptr,

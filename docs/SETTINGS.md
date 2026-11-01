@@ -370,7 +370,8 @@
   person behind the transition filter.
 - Toggle Lock-On (Controls > Options and pause Options > Controller, persisted as
   `lock_on_toggle`, off by default): a press of L that locks on (target, scan
-  point, grapple point) latches it held and the next press lets go. With nothing
+  point; grapple points follow Toggle Grapple) latches it held and the next press
+  lets go. With nothing
   to lock on, L is a plain hold (strafe while held). The latch also lets go by
   itself when its lock ends (target dead or out of range). Sticky
   Charge (`sticky_charge`, off by default, needs the Charge Beam): holding fire
@@ -389,6 +390,12 @@
   while the grapple beam holds a grapple point, so it can fire mid-swing. Off, the
   cannon is put away as in the original game. Off under Original Experience.
   Console: `grappleshoot`.
+- Toggle Grapple (Controls > Options > Buttons and pause Options > Controller,
+  persisted as `grapple_toggle`, off by default, issue #243): an L press at a grapple
+  point grapples as the Grapple key does, held until the next L press or a jump,
+  independent of Toggle Lock-On. A settings file from before it takes its value from
+  `lock_on_toggle`, which used to latch grapples too. Off under Original Experience.
+  Console: `grappletoggle`.
 - Aim Lock-On (Controls > Options and pause Options > Controller, persisted as
   `aim_lock_on`, off by default, issue #236): lock-on picks the target nearest
   the crosshair, measured as an angle (screen x weighed by the aspect ratio).

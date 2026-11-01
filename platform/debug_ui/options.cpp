@@ -1212,6 +1212,13 @@ bool GrappleShoot() {
 
 void SetGrappleShoot(bool enabled) { StoreSetting(sInput.grappleShoot, enabled); }
 
+bool GrappleToggle() {
+  EnsureInitialized();
+  return sInput.grappleToggle && !sOriginalExperience;
+}
+
+void SetGrappleToggle(bool enabled) { StoreSetting(sInput.grappleToggle, enabled); }
+
 bool SpiderToggle() {
   EnsureInitialized();
   return sInput.spiderToggle && !sOriginalExperience;

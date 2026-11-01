@@ -659,6 +659,8 @@ void SetLockOnToggle(bool enabled);
 // the grapple beam holds a grapple point.
 bool GrappleShoot();
 void SetGrappleShoot(bool enabled);
+bool GrappleToggle();
+void SetGrappleToggle(bool enabled);
 // Toggle Spider Ball (issue #243): an R press that attaches the spider ball
 // latches until pressed again or the ball leaves its track; morph ball only.
 bool SpiderToggle();

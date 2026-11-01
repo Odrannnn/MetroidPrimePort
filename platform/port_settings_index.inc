@@ -36,6 +36,7 @@
 {"Controls", "Options", "Quick setup", "Use twin-stick controller", "twin stick dual sticks right stick aim controller gamepad remastered preset layout quick setup"},
 {"Controls", "Options", "On-screen prompts", "Button glyphs", "button icons prompts controller xbox playstation"},
 {"Controls", "Options", "Buttons", "Toggle Lock-On", "lock on target toggle hold"},
+{"Controls", "Options", "Buttons", "Toggle Grapple", "grapple swing toggle hold latch"},
 {"Controls", "Options", "Buttons", "Shoot While Grappling", "grapple swing shoot fire cannon beam"},
 {"Controls", "Options", "Buttons", "Aim Lock-On", "lock on target crosshair aim priority nearest"},
 {"Controls", "Options", "Buttons", "Sticky Charge", "charge beam hold fire"},
