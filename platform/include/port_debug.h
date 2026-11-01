@@ -793,8 +793,10 @@ bool TapUpdateToast(float x, float y);
 // Called during simulation, using the effective unbobbed camera direction.
 // pointerHold: under pointer aim, a lock that keeps the pointer where it is instead of
 // re-centring it (the Scan Visor's point orbit, CPlayer::UpdateMouseAim).
+// pointerStays: a pointerLock with no target (an empty lock under pointer aim). The view
+// holds, so the pointer keeps its place as the lock starts and ends.
 bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool pointerLock = false,
-                    bool pointerHold = false);
+                    bool pointerHold = false, bool pointerStays = false);
 void SynchronizeMouseAim(float x, float y, float z);
 // Turns the mouse-look yaw by dyaw radians (the game turned the player: a rotating
 // platform's rider carry). No effect until the aim is initialized.

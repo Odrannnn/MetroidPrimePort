@@ -385,7 +385,8 @@ public:
   void Update(float dt, CStateManager& mgr);
   bool MouseControlsAllowed(const CStateManager& mgr) const;
   bool MouseLookIsFree(const CStateManager& mgr) const;
-  // port: lock-on free aim, a combat lock a pointer moves under.
+  // port: lock-on free aim, a combat lock a pointer moves under (and, under pointer aim,
+  // any empty lock).
   bool PortLockFreeAim(const CStateManager& mgr) const;
   // port: whether the free-aim crosshair is forced open (not over Trilogy's own cursor).
   bool PortAimCrosshairsOpen(const CStateManager& mgr) const;

@@ -93,6 +93,8 @@ PortMouse::PointerAim sPointerAim;
 bool sPointerAimFree = false;
 // The last update left the pointer free under a lock (lock-on free aim).
 bool sPointerAimLocked = false;
+// That lock had no target (UpdateMouseAim's pointerStays): its end leaves the pointer put.
+bool sPointerAimLockStays = false;
 // The last update held the pointer still under a lock (UpdateMouseAim's pointerHold).
 bool sPointerAimHeld = false;
 // A locked update this tick moved the pointer (TickAim's job for the pointer under a lock).
@@ -502,6 +504,7 @@ void ResetMouseAim() {
   sPointerAim.Center();
   sPointerAimFree = false;
   sPointerAimLocked = false;
+  sPointerAimLockStays = false;
   sPointerAimHeld = false;
   sMouseGameplayActive = false;
   sMouseButtonGate.Reset();
@@ -630,22 +633,24 @@ void ClearMouseButtons() { sMouseHeldButtons.Clear(); }
 unsigned MouseHeldButtons() { return sMouseHeldButtons.Held(); }
 
 bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool pointerLock,
-                    bool pointerHold) {
+                    bool pointerHold, bool pointerStays) {
   SetMouseGameplayActive(active);
   const PortMouse::AimState lastAim = sMouseAimState;
   const PortMouse::PointerAim lastPointer = sPointerAim;
   // Lock-on free aim: the lock owns the view and a pointer moves over it, pointer aim's
   // or, without pointer aim, one for the lock only. It starts and ends a lock at the
-  // centre, where the target is.
-  const bool lockFree = active && locked && pointerLock && LockOnFreeAim();
+  // centre, where the target is. Under pointer aim an empty lock frees it too (CPlayer
+  // decides which locks through pointerLock); having no target, it leaves the pointer put.
+  const bool lockFree = active && locked && pointerLock && (LockOnFreeAim() || PointerAim());
   const bool pointer = PointerAim() || lockFree;
   // A held pointer stays where the lock found it, and neither moves nor turns the view.
   const bool held = active && locked && !lockFree && pointerHold && PointerAim();
   sPointerAimHeld = held;
   if (lockFree != sPointerAimLocked) {
-    sPointerAim.Center();
+    if (!(lockFree ? pointerStays : sPointerAimLockStays)) sPointerAim.Center();
     sPointerAimLocked = lockFree;
   }
+  sPointerAimLockStays = lockFree && pointerStays;
   // Reset aim: under pointer aim recentre the pointer, otherwise look level
   // (pitch 0; yaw stays). reset_aim_both does both either way.
   if (sResetAimRequested.exchange(false, std::memory_order_acq_rel)) {

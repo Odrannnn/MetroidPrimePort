@@ -1282,7 +1282,9 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   earlier turned the view at twice the set speed). The mouse
   sensitivity slider scales the pointer speed for every input (the default follows the
   cursor), on top of the stick aim, gyro and touch aim speeds; Invert X/Y do not apply. The crosshair is always shown. Lock-on, scanning and grappling
-  re-centre the pointer and aim as before; auto-aim does not bend pointer shots.
+  re-centre the pointer and aim as before; auto-aim does not bend pointer shots. An
+  empty lock (L with nothing targeted, outside the Scan Visor) holds the view and leaves
+  the pointer free, as Trilogy's Z does, whatever Lock-on free aim says.
   Lock-on owns the camera while held; releasing it resumes at the actual locked
   direction rather than at accumulated mouse angles. Jump/fall auto-pitch is
   bypassed during free mouse aim. Capture/UI transitions cancel held charges and
