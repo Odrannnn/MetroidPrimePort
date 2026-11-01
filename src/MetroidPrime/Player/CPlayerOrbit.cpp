@@ -1608,6 +1608,10 @@ void CPlayer::UpdateGrappleState(const CFinalInput& input, CStateManager& mgr) {
               mgr.RayStaticIntersection(eyePosition, playerToPoint.AsNormalized(),
                                         playerToPoint.Magnitude(), kLineOfSightFilter);
           if (result.IsInvalid()) {
+#ifdef TARGET_PC
+            // Shoot While Grappling keeps the arm cannon out.
+            if (!PortDebug::GrappleShoot())
+#endif
             HolsterGun(mgr);
             switch (x3b8_grappleState) {
             case kGS_Firing:

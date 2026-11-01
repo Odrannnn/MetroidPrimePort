@@ -2610,7 +2610,11 @@ void CPlayerGun::UpdateWeaponFire(float dt, CPlayerState& playerState, CStateMan
         if (morphState == CPlayer::kMS_Unmorphed &&
             playerState.ItemEnabled(CPlayerState::kIT_ChargeBeam) &&
             player.GetGunHolsterState() == CPlayer::kGH_Drawn &&
+#ifdef TARGET_PC
+            (player.GetGrappleState() == CPlayer::kGS_None || PortDebug::GrappleShoot()) &&
+#else
             player.GetGrappleState() == CPlayer::kGS_None &&
+#endif
             mgr.GetPlayerState()->GetTransitioningVisor() != CPlayerState::kPV_Scan &&
             mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan &&
             (x2ec_lastFireButtonStates & 0x1) != 0 && !chargeRequested) {

@@ -579,7 +579,12 @@ void CPlayer::UpdateGunState(const CFinalInput& input, CStateManager& mgr) {
       needsDraw = true;
     }
 
-    if (x3b8_grappleState != kGS_None ||
+#ifdef TARGET_PC
+    const bool grappleHolsters = x3b8_grappleState != kGS_None && !PortDebug::GrappleShoot();
+#else
+    const bool grappleHolsters = x3b8_grappleState != kGS_None;
+#endif
+    if (grappleHolsters ||
         mgr.GetPlayerState()->GetCurrentVisor() == CPlayerState::kPV_Scan ||
         mgr.GetPlayerState()->GetTransitioningVisor() == CPlayerState::kPV_Scan) {
       needsDraw = false;

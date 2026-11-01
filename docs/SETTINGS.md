@@ -384,6 +384,11 @@
   latch lets go by itself when the ball leaves the track for more than 0.15 s; the
   moment a hit knocks the ball off does not count. Morph ball only; off under
   Original Experience. Console: `spidertoggle`.
+- Shoot While Grappling (Controls > Options > Buttons and pause Options > Controller,
+  persisted as `grapple_shoot`, off by default, issue #243): the arm cannon stays out
+  while the grapple beam holds a grapple point, so it can fire mid-swing. Off, the
+  cannon is put away as in the original game. Off under Original Experience.
+  Console: `grappleshoot`.
 - Aim Lock-On (Controls > Options and pause Options > Controller, persisted as
   `aim_lock_on`, off by default, issue #236): lock-on picks the target nearest
   the crosshair, measured as an angle (screen x weighed by the aspect ratio).

@@ -655,6 +655,10 @@ void SetFastMorph(bool enabled);
 // apply only unmorphed, in gameplay (port_hold_toggle.h).
 bool LockOnToggle();
 void SetLockOnToggle(bool enabled);
+// Shoot While Grappling (issue #243): the arm cannon stays out and fires while
+// the grapple beam holds a grapple point.
+bool GrappleShoot();
+void SetGrappleShoot(bool enabled);
 // Toggle Spider Ball (issue #243): an R press that attaches the spider ball
 // latches until pressed again or the ball leaves its track; morph ball only.
 bool SpiderToggle();

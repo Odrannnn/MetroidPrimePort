@@ -72,6 +72,12 @@ void DrawControlsOptions() {
   }
   ItemHelp("Press L once to lock on, scan or grapple, and again to let go. With no target, L works "
            "as usual.");
+  bool grappleShoot = sInput.grappleShoot;
+  if (ImGui::Checkbox("Shoot While Grappling", &grappleShoot)) {
+    SetGrappleShoot(grappleShoot);
+  }
+  ItemHelp("The arm cannon stays out while you grapple, so you can fire mid-swing. Off: the cannon "
+           "is put away, as in the original game.");
   bool aimLockOn = sInput.aimLockOn;
   if (ImGui::Checkbox("Aim Lock-On", &aimLockOn)) {
     SetAimLockOn(aimLockOn);
