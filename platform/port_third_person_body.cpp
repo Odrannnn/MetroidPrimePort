@@ -91,10 +91,12 @@ constexpr LocoSlot kForwardTiers[] = {kSlowWalk, kWalk, kSlowRun, kFastRun};
 constexpr LocoSlot kBackTiers[] = {kWalkBack};
 // The clips played once (or held) for a stance or over the upper body, as phases of the clip:
 // from, to (held there once reached). The jump is the run-and-jump's push-off into its tuck; the
-// fall holds the tuck's airborne pose, legs drawn up and the cannon forward (the crater jump's
-// drop is a dive, crouched with an arm flung up, and read as a stumble); the landing the hangar landing's crouch and rise (after it she
-// turns to the ship); the flinch the Omega intro's lean back from the blast; the scan the scan
-// cutscene's hand at the visor. Their root height is held at the skeleton's (Ground): the
+// fall the hangar landing's descent, the legs reaching down for the ground, under the tuck's upper
+// body (held; the tuck alone read as a frozen hunch, and the landing's own upper body leans back
+// out of a flip; the crater jump's drop is a dive, crouched with an arm flung up); the landing
+// that clip's touchdown on from there, its crouch and rise (after it she turns to the ship), so
+// the fall flows into it; the flinch the Omega intro's lean back from the blast; the scan the
+// scan cutscene's hand at the visor. Their root height is held at the skeleton's (Ground): the
 // player's own movement carries the body.
 struct OneShot {
   const char* name;
@@ -102,8 +104,8 @@ struct OneShot {
   float to;
 };
 constexpr OneShot kJump{"01_Intro_Hanger_runandjump_samus", 0.66f, 0.7f};
-constexpr OneShot kFall{"01_Intro_Hanger_runandjump_samus", 0.7f, 0.72f};
-constexpr OneShot kLand{"01_Intro_Hanger_landintoship_samus", 0.06f, 0.3f};
+constexpr OneShot kFall{"01_Intro_Hanger_landintoship_samus", 0.03f, 0.04f};
+constexpr OneShot kLand{"01_Intro_Hanger_landintoship_samus", 0.05f, 0.3f};
 // The flinch ends back at the ready (0.36): from 0.38 she raises the cannon overhead.
 constexpr OneShot kFlinch{"Omega_Intro_Samus_01_flinch", 0.2f, 0.36f};
 constexpr OneShot kScan{"Scan_Cine_forward", 0.03f, 0.03f};
@@ -970,6 +972,22 @@ CQuaternion ModelRotation(const CHierarchyPoseBuilder& pb, const CCharLayoutInfo
   return rot;
 }
 
+// upper's upper body over out's legs, the spine kept as it faces in the model in upper, so the
+// torso does not lean with the other clip's hips.
+void UpperOver(CAnimData& data, Pose& out, const Pose& upper) {
+  if (s.spine == CSegId::Invalid()) {
+    Overlay(out, upper, 1.f, true);
+    return;
+  }
+  ModelRotations(data, upper, sModel);
+  const CQuaternion spine = sModel.rot[s.spine.val()];
+  Overlay(out, upper, 1.f, true);
+  ModelRotations(data, out, sModel);
+  const int sp = s.spine.val();
+  const CQuaternion parent = sModel.rot[sp] * out.rot[sp].BuildInverted();
+  out.rot[sp] = parent.BuildInverted() * spine;
+}
+
 // Walking any way but forward, posed rather than sampled (no clip walks backward well, #216, and
 // none sidesteps): the ready pose above the hips, the cannon held, and below them each foot on its
 // BackpedalFoot path along the way she goes (s.stepAngle), planted feet sliding the other way under
@@ -984,15 +1002,7 @@ void Backpedal(CAnimData& data, Pose& out) {
   Sample(data, s.ready, Wrap(s.clock / readyDuration), sUpper);
   const float idleDuration = std::max(data.GetAnimationDuration(s.idle), 0.1f);
   Sample(data, s.idle, Wrap(s.clock / idleDuration), out);
-  if (s.spine != CSegId::Invalid()) {
-    ModelRotations(data, sUpper, sModel);
-    const CQuaternion spine = sModel.rot[s.spine.val()];
-    Overlay(out, sUpper, 1.f, true);
-    ModelRotations(data, out, sModel);
-    const int sp = s.spine.val();
-    const CQuaternion parent = sModel.rot[sp] * out.rot[sp].BuildInverted();
-    out.rot[sp] = parent.BuildInverted() * spine;
-  }
+  UpperOver(data, out, sUpper);
   CHierarchyPoseBuilder& pb = data.PoseBuilder();
   const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
   const float leg = 0.5f * (s.thigh[0] + s.shin[0] + s.thigh[1] + s.shin[1]);
@@ -1162,6 +1172,12 @@ void PoseBody(CAnimData& data) {
     const float w = s.stanceWeight[int(e.stance)];
     if (w > 0.f && e.clip.Valid()) {
       Sample(e.clip, ShotPhase(e.clip, e.shot, s.stanceTime[int(e.stance)]), sTmp);
+      if (e.stance == Stance::Fall && s.jump.Valid()) {
+        // The descent's legs under the jump's tucked upper body: the landing clip comes out of a
+        // flip, leaning back with an arm flung up.
+        Sample(s.jump, kJump.to, sUpper);
+        UpperOver(data, sTmp, sUpper);
+      }
       Ground(sTmp);
       Mix(sAcc, total, sTmp, w, false);
     }
