@@ -10,6 +10,7 @@
 #include "port_shell.h"
 #include "port_third_person.h"
 
+#include "Kyoto/Animation/CAnimTreeNode.hpp"
 #include "Kyoto/Animation/CCharLayoutInfo.hpp"
 #include "Kyoto/CResFactory.hpp"
 #include "Kyoto/CSimplePool.hpp"
@@ -109,6 +110,14 @@ constexpr OneShot kLand{"01_Intro_Hanger_landintoship_samus", 0.05f, 0.3f};
 // The flinch ends back at the ready (0.36): from 0.38 she raises the cannon overhead.
 constexpr OneShot kFlinch{"Omega_Intro_Samus_01_flinch", 0.2f, 0.36f};
 constexpr OneShot kScan{"Scan_Cine_forward", 0.03f, 0.03f};
+// Turning in place, the turn clip's legs step around as far as the player has turned (TurnPhase):
+// B_180turn_samus, half a turn (its root carries the turn, which the body drops: the player's
+// own turn carries it). samus_turnaround does not turn: the cutscene turns the actor. The
+// clip's root turn is sampled this finely (Measure).
+constexpr const char* kTurn = "B_180turn_samus";
+constexpr int kTurnSamples = 32;
+// Facing turning faster than this (radians a second) turns the legs.
+constexpr float kTurnRate = 0.5f;
 // A hit of at least this much flinches the body: what makes the first-person cannon jolt
 // (CPlayerGun::TakeDamage), so heat and poison don't.
 constexpr float kFlinchDamage = 10.f;
@@ -186,7 +195,12 @@ struct State {
   float locoLead[kLocoSlots][kLeadSamples] = {};
   float stopLead[kStopSamples] = {};
   float stopStart = 0.f; // the Stop clip's phase this stop began at (StopStart)
-  Clip jump, fall, land, flinch, scan;
+  Clip jump, fall, land, flinch, scan, turn;
+  float turnYaw[kTurnSamples + 1] = {}; // the turn clip's root turn at each sample, unwrapped
+  // Turning in place: the facing last tick (radians), how far the body has turned since it
+  // started (TurnPhase), and the turn clip's share of the idle, eased.
+  bool haveYaw = false;
+  float lastYaw = 0.f, turned = 0.f, turnWeight = 0.f;
   AimCell aim[9] = {};
   bool aimLayer = false;
   // The cannon's yaw and pitch in each aim cell (radians, model space, + right and up), and
@@ -824,6 +838,20 @@ void Measure(CAnimData& data) {
 
   s.stopStart = 0.f;
 
+  // The turn clip's root turn about the model's up (+ right), unwrapped.
+  std::fill(std::begin(s.turnYaw), std::end(s.turnYaw), 0.f);
+  const CSegId root = s.hips != CSegId::Invalid() ? layout.GetOriginalParent(s.hips) : CSegId::Invalid();
+  if (s.turn.Valid() && root != CSegId::Invalid() && root != CSegId::Character()) {
+    float last = 0.f;
+    for (int k = 0; k <= kTurnSamples; ++k) {
+      Sample(s.turn, std::min(float(k) / kTurnSamples, 0.999f), sTmp);
+      const CVector3f f = s.turn.data->GetRootAnimationTree()->GetRotation(root).Transform(CVector3f(0.f, 1.f, 0.f));
+      const float yaw = std::atan2(f.GetX(), f.GetY());
+      s.turnYaw[k] = k == 0 ? 0.f : s.turnYaw[k - 1] + std::remainder(yaw - last, 2.f * 3.14159265f);
+      last = yaw;
+    }
+  }
+
   // The aim grid: every cell its clips (missing ones the ready pose), then each row's columns
   // put on the side their cannon points to.
   const int ready = data.GetCharacterInfo().GetAnimationIndex(rstl::string_l(kReady));
@@ -1136,8 +1164,15 @@ void PoseBody(CAnimData& data) {
   float total = 0.f;
   const float idleDuration = std::max(data.GetAnimationDuration(s.idle), 0.1f);
   if (s.stanceWeight[int(Stance::Idle)] > 0.f) {
-    Sample(data, s.idle, Wrap(s.clock / idleDuration), sTmp);
-    Mix(sAcc, total, sTmp, s.stanceWeight[int(Stance::Idle)], false);
+    const float turnWeight = s.turn.Valid() ? s.turnWeight : 0.f;
+    if (turnWeight < 1.f) {
+      Sample(data, s.idle, Wrap(s.clock / idleDuration), sTmp);
+      Mix(sAcc, total, sTmp, s.stanceWeight[int(Stance::Idle)] * (1.f - turnWeight), false);
+    }
+    if (turnWeight > 0.f) {
+      Sample(s.turn, std::min(TurnPhase(s.turned, s.turnYaw, kTurnSamples), 0.999f), sTmp);
+      Mix(sAcc, total, sTmp, s.stanceWeight[int(Stance::Idle)] * turnWeight, false);
+    }
   }
   if (s.stanceWeight[int(Stance::Stop)] > 0.f) {
     // Played once: held on its last frame (phase 1 would wrap to its first).
@@ -1317,6 +1352,8 @@ void StandStill() {
   s.aimWeight = 0.f;
   s.reachWeight = 0.f;
   s.haveLast = false;
+  s.haveYaw = false;
+  s.turned = s.turnWeight = 0.f;
 }
 
 void Build(CStateManager& mgr) {
@@ -1394,6 +1431,7 @@ void Build(CStateManager& mgr) {
   s.land = FindClip(kLand.name);
   s.flinch = FindClip(kFlinch.name);
   s.scan = FindClip(kScan.name);
+  s.turn = FindClip(kTurn);
   Measure(*data);
   FindLegBones(*data);
   StandStill();
@@ -1474,6 +1512,7 @@ void Update(CStateManager& mgr, float dt) {
   }
   if (!s.body || !s.animating) {
     s.haveLast = false;
+    s.haveYaw = false;
     return;
   }
   PumpBeam(mgr);
@@ -1487,6 +1526,7 @@ void Update(CStateManager& mgr, float dt) {
     s.aimWeight = 0.f;
     s.reachWeight = 0.f;
     s.haveLast = false;
+    s.haveYaw = false;
     return;
   }
   const CTransform4f& xf = player.GetTransform();
@@ -1535,6 +1575,24 @@ void Update(CStateManager& mgr, float dt) {
     s.changes[s.changeCount++] = {s.clock, stance, fwd, side, vel.GetZ()};
   }
   s.stance = stance;
+  // Turning on the spot: the turn clip steps the legs around as far as the facing turned, so
+  // the planted feet stay put while the body turns over them.
+  const CVector3f facing = xf.GetForward();
+  const float yaw = std::atan2(facing.GetX(), facing.GetY());
+  const float turn = s.haveYaw ? std::remainder(yaw - s.lastYaw, 2.f * 3.14159265f) : 0.f;
+  s.lastYaw = yaw;
+  s.haveYaw = true;
+  const bool turning = stance == Stance::Idle && dt > 0.f && std::fabs(turn) > kTurnRate * dt;
+  if (stance == Stance::Idle && s.turnWeight > 0.f) {
+    s.turned += turn;
+  }
+  if (turning && s.turnWeight == 0.f) {
+    s.turned = turn;
+  }
+  s.turnWeight = Approach(s.turnWeight, turning ? 1.f : 0.f, dt / kBlendSeconds);
+  if (s.turnWeight == 0.f) {
+    s.turned = 0.f;
+  }
   for (int i = 0; i < int(Stance::Count); ++i) {
     s.stanceWeight[i] = Approach(s.stanceWeight[i], i == int(stance) ? 1.f : 0.f, dt / kBlendSeconds);
     s.stanceTime[i] += dt;
@@ -1872,7 +1930,10 @@ std::string DescribeFeet() {
                   s.locoPeak[i], s.locoWeight[i]);
     out += line;
   }
-  std::snprintf(line, sizeof(line), "stop start %.2f\n", s.stopStart);
+  std::snprintf(line, sizeof(line), "turn %s turned %+.2f phase %.2f w %4.2f\n", s.turn.Valid() ? "ok " : "---",
+                s.turned, TurnPhase(s.turned, s.turnYaw, kTurnSamples), s.turnWeight);
+  out += line;
+    std::snprintf(line, sizeof(line), "stop start %.2f\n", s.stopStart);
   out += line;
   static const char* const kStanceNames[] = {"idle", "stop", "loco", "jump", "fall", "land"};
   std::snprintf(line, sizeof(line), "stance %s air %.2f flinch %.2f scan %.2f; clips jump %d fall %d land %d flinch %d scan %d\n",

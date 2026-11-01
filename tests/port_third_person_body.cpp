@@ -186,5 +186,18 @@ int main() {
   CHECK(Near(StopStart(-0.39f / 0.39f, false, stop, 16), 8.f / 16) || Near(StopStart(-0.39f / 0.39f, false, stop, 16), 7.f / 16));
   CHECK(StopStart(1.f, true, stop, 16) <= 3.f / 16); // past the clip's widest: nearest is its peak
   CHECK(Near(StopStart(0.5f, true, nullptr, 0), 0.f));
+
+  // TurnPhase: the clip's root turns slowly, then fast, then holds; a dip back is held.
+  const float turnYaw[5] = {0.f, 0.2f, 1.6f, 1.5f, 3.f};
+  CHECK(Near(TurnPhase(0.f, turnYaw, 4), 0.f));
+  CHECK(Near(TurnPhase(0.1f, turnYaw, 4), 0.5f / 4));
+  CHECK(Near(TurnPhase(0.9f, turnYaw, 4), 1.5f / 4));
+  CHECK(Near(TurnPhase(2.3f, turnYaw, 4), 3.5f / 4));
+  CHECK(Near(TurnPhase(3.1f, turnYaw, 4), 0.5f / 4));  // a whole turn on: the clip again
+  CHECK(Near(TurnPhase(-0.7f, turnYaw, 4), 3.5f / 4)); // the other way: backward from its end
+  const float leftYaw[3] = {0.f, -1.f, -2.f};
+  CHECK(Near(TurnPhase(-0.5f, leftYaw, 2), 0.25f));
+  CHECK(Near(TurnPhase(0.5f, leftYaw, 2), 0.75f));
+  CHECK(Near(TurnPhase(1.f, turnYaw, 0), 0.f));
   return port_test::Failures() == 0 ? 0 : 1;
 }
