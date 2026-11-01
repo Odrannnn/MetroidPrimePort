@@ -916,7 +916,7 @@ constexpr float kSideLoop = 0.8f;
 constexpr float kSideCadence = 2.4f;
 constexpr float kStepGap = 0.12f;
 
-// The legs' bones and lengths, and the ready pose's feet, for Backpedal (s.legs if all there).
+// The legs' bones and lengths, and the relaxed ready's feet, for Backpedal (s.legs if all there).
 void FindLegBones(CAnimData& data) {
   const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
   static const char* const kNames[2][4] = {{"L_hip", "L_knee", "L_ankle", "L_ball"},
@@ -933,7 +933,7 @@ void FindLegBones(CAnimData& data) {
   if (!s.legs) {
     return;
   }
-  Sample(data, s.ready, 0.f, sTmp);
+  Sample(data, s.idle, 0.f, sTmp);
   for (int f = 0; f < 2; ++f) {
     const CVector3f hip = SegPosition(data, s.leg[f][0]);
     const CVector3f knee = SegPosition(data, s.leg[f][1]);
@@ -942,6 +942,22 @@ void FindLegBones(CAnimData& data) {
     s.thigh[f] = (knee - hip).Magnitude();
     s.shin[f] = (s.restAnkle[f] - knee).Magnitude();
     s.legs = s.legs && s.thigh[f] > 1e-3f && s.shin[f] > 1e-3f;
+  }
+  // Walking, her feet fall under the hips (B_slowwalk_samus, about ±0.09), not at the ready's
+  // standing ±0.27: the gait's feet take the slow walk's mean across a loop, the rest kept.
+  const Clip& walk = s.loco[kSlowWalk];
+  if (walk.Valid()) {
+    constexpr int kSamples = 16;
+    float x[2] = {0.f, 0.f};
+    for (int i = 0; i < kSamples; ++i) {
+      Sample(walk, float(i) / kSamples, sTmp);
+      for (int f = 0; f < 2; ++f) {
+        x[f] += SegPosition(*walk.data, s.leg[f][2]).GetX() / kSamples;
+      }
+    }
+    for (int f = 0; f < 2; ++f) {
+      s.restAnkle[f] = CVector3f(x[f], s.restAnkle[f].GetY(), s.restAnkle[f].GetZ());
+    }
   }
 }
 
@@ -961,8 +977,22 @@ CQuaternion ModelRotation(const CHierarchyPoseBuilder& pb, const CCharLayoutInfo
 // ankle there, its knee bent forward; the hips crouch so the stretched leg reaches, and bob at
 // each step. Sidestepping, the feet stand wider so they never cross (StepWiden), and land flat.
 void Backpedal(CAnimData& data, Pose& out) {
+  // Below the hips the relaxed ready (s.idle) she stands in: B_ready_samus stands in a side-on
+  // lunge, and stepping from it splayed the legs wide and low. Above them the ready pose, the
+  // spine kept as it faces in the model so the cannon stays levelled over the other hips.
   const float readyDuration = std::max(data.GetAnimationDuration(s.ready), 0.1f);
-  Sample(data, s.ready, Wrap(s.clock / readyDuration), out);
+  Sample(data, s.ready, Wrap(s.clock / readyDuration), sUpper);
+  const float idleDuration = std::max(data.GetAnimationDuration(s.idle), 0.1f);
+  Sample(data, s.idle, Wrap(s.clock / idleDuration), out);
+  if (s.spine != CSegId::Invalid()) {
+    ModelRotations(data, sUpper, sModel);
+    const CQuaternion spine = sModel.rot[s.spine.val()];
+    Overlay(out, sUpper, 1.f, true);
+    ModelRotations(data, out, sModel);
+    const int sp = s.spine.val();
+    const CQuaternion parent = sModel.rot[sp] * out.rot[sp].BuildInverted();
+    out.rot[sp] = parent.BuildInverted() * spine;
+  }
   CHierarchyPoseBuilder& pb = data.PoseBuilder();
   const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
   const float leg = 0.5f * (s.thigh[0] + s.shin[0] + s.thigh[1] + s.shin[1]);
@@ -1843,6 +1873,10 @@ std::string DescribeFeet() {
                 : sBackWalk == BackWalk::Struggle ? "struggle"
                                                   : "reverse",
                 s.backWeight, s.backLoop, s.backDuty, s.backCrouch, int(s.legs), s.thigh[0], s.thigh[1], s.shin[0], s.shin[1]);
+  out += line;
+  std::snprintf(line, sizeof(line), "standing feet L %+.3f %+.3f %+.3f R %+.3f %+.3f %+.3f\n", s.restAnkle[0].GetX(),
+                s.restAnkle[0].GetY(), s.restAnkle[0].GetZ(), s.restAnkle[1].GetX(), s.restAnkle[1].GetY(),
+                s.restAnkle[1].GetZ());
   out += line;
   for (int i = 0; i < s.changeCount; ++i) {
     const auto& c = s.changes[i];

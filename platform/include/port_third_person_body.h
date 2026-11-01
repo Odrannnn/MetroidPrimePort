@@ -298,9 +298,9 @@ inline bool Stepping(float fwd, float side, bool stepping) {
   return stepping ? a > kStepAngle - kStepFlip : a > kStepAngle + kStepFlip;
 }
 
-// How far each foot stands out from the ready pose's place so the feet never come nearer than
+// How far each foot stands out from its standing place so the feet never come nearer than
 // minGap: across, the gait's share across the facing; half, how far a foot moves either way of
-// its place; gap, the ready pose's feet apart. Out of step by half a loop, they close by up to
+// its place; gap, the standing feet apart. Out of step by half a loop, they close by up to
 // 2 |across| half.
 inline float StepWiden(float across, float half, float gap, float minGap) {
   return std::max(std::fabs(across) * half - 0.5f * (gap - minGap), 0.f);
