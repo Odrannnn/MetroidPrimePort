@@ -778,7 +778,7 @@ Pose sArms;
 Pose sModel;
 Pose sBlended;
 Pose sUpper;
-Pose sWalkArm;
+Pose sFreeArm;
 
 // Pose p with each rotation turned into the model's frame (its parents' rotations times its
 // own); a segment RecalcPoseBuilder doesn't set keeps the pose builder's rotation.
@@ -1017,7 +1017,8 @@ void UpperOver(CAnimData& data, Pose& out, const Pose& upper) {
 }
 
 // Walking any way but forward, posed rather than sampled (no clip walks backward well, #216, and
-// none sidesteps): the ready pose above the hips, the cannon held, and below them each foot on its
+// none sidesteps): the ready pose above the hips, the cannon held (the free arm swinging or
+// hanging), and below them each foot on its
 // BackpedalFoot path along the way she goes (s.stepAngle), planted feet sliding the other way under
 // her at her ground speed (s.stride runs a loop per s.backLoop of ground). Two-bone IK puts each
 // ankle there, its knee bent forward; the hips crouch so the stretched leg reaches, and bob at
@@ -1030,6 +1031,7 @@ void Backpedal(CAnimData& data, Pose& out) {
   Sample(data, s.ready, Wrap(s.clock / readyDuration), sUpper);
   const float idleDuration = std::max(data.GetAnimationDuration(s.idle), 0.1f);
   Sample(data, s.idle, Wrap(s.clock / idleDuration), out);
+  sFreeArm = out;
   UpperOver(data, out, sUpper);
   CHierarchyPoseBuilder& pb = data.PoseBuilder();
   const CCharLayoutInfo& layout = *data.GetCharLayoutInfo();
@@ -1038,6 +1040,25 @@ void Backpedal(CAnimData& data, Pose& out) {
   const float dirX = std::sin(s.stepAngle);
   const float dirY = std::cos(s.stepAngle);
   const float across = std::fabs(dirX);
+  // The free arm not held out as in the ready pose: the walk's swing in step with the feet (the
+  // left foot furthest forward at stride 0, as below), hanging as in the relaxed ready sideways.
+  if (s.loco[kWalk].Valid()) {
+    Sample(s.loco[kWalk], Wrap(s.stride + s.locoPeak[kWalk]), sUpper);
+    for (const CSegId& seg : s.segs) {
+      const int i = seg.val();
+      if (s.freeArm[i]) {
+        sFreeArm.rot[i] = Blend(sUpper.rot[i], sFreeArm.rot[i], across);
+        sFreeArm.off[i] = sUpper.off[i] * (1.f - across) + sFreeArm.off[i] * across;
+      }
+    }
+  }
+  for (const CSegId& seg : s.segs) {
+    const int i = seg.val();
+    if (s.freeArm[i]) {
+      out.rot[i] = sFreeArm.rot[i];
+      out.off[i] = sFreeArm.off[i];
+    }
+  }
   // A foot is planted while it covers 2 * kBackHalf legs of ground (kSideHalf across), at most
   // kBackDuty of a loop.
   const float maxHalf = kBackHalf + (kSideHalf - kBackHalf) * across;
@@ -1267,36 +1288,26 @@ void PoseBody(CAnimData& data) {
       Mix(sArms, armsTotal, sModel, weights[j], true);
     }
     if (armsTotal > 0.f) {
-      // Walking, the free arm keeps the walk's swing under the aimed shoulders.
-      const float freeAim = s.aimWeight * (1.f - s.stanceWeight[int(Stance::Loco)] * (1.f - s.backWeight));
-      sWalkArm = sAcc;
+      // The free arm keeps the legs' pose under the aimed shoulders (the walk's swing, the relaxed
+      // ready's hang): the aim clips hold it straight out, frozen at kAimHold.
       ModelRotations(data, sAcc, sModel);
       const CCharLayoutInfo& layout = **data.PoseBuilder().CharLayoutInfo();
       for (const CSegId& seg : s.segs) {
         const int i = seg.val();
-        if (!s.upper[i]) {
+        if (!s.upper[i] || s.freeArm[i]) {
           continue;
         }
         sBlended.rot[i] = Blend(sModel.rot[i], sArms.rot[i], s.aimWeight);
       }
       for (const CSegId& seg : s.segs) {
         const int i = seg.val();
-        if (!s.upper[i]) {
+        if (!s.upper[i] || s.freeArm[i]) {
           continue;
         }
         const int parent = layout.GetOriginalParent(seg).val();
         const CQuaternion& parentModel = s.upper[parent] ? sBlended.rot[parent] : sModel.rot[parent];
         sAcc.rot[i] = parentModel.BuildInverted() * sBlended.rot[i];
         sAcc.off[i] = sAcc.off[i] * (1.f - s.aimWeight) + sArms.off[i] * s.aimWeight;
-      }
-      if (freeAim < s.aimWeight) {
-        for (const CSegId& seg : s.segs) {
-          const int i = seg.val();
-          if (s.freeArm[i]) {
-            sAcc.rot[i] = Blend(sWalkArm.rot[i], sAcc.rot[i], s.aimWeight > 0.f ? freeAim / s.aimWeight : 0.f);
-            sAcc.off[i] = sWalkArm.off[i] * (1.f - freeAim) + sArms.off[i] * freeAim;
-          }
-        }
       }
     }
   }
