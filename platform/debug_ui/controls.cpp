@@ -71,7 +71,7 @@ void DrawControlsOptions() {
     SetLockOnToggle(lockOnToggle);
   }
   ItemHelp("Press L once to lock on, scan or grapple, and again to let go. With no target, L works "
-           "as usual. Also makes the Grapple binding a toggle.");
+           "as usual.");
   bool aimLockOn = sInput.aimLockOn;
   if (ImGui::Checkbox("Aim Lock-On", &aimLockOn)) {
     SetAimLockOn(aimLockOn);

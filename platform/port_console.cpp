@@ -2714,8 +2714,8 @@ void CmdDodge() {
   Finish();
 }
 
-// As the Grapple action held for `seconds` (default 1; 0 lets go): it grapples
-// when a grapple point is the lock-on target.
+// A press of the Grapple action, held for `seconds` (default 1): it grapples
+// when a grapple point is the lock-on target, and the next press lets go.
 void CmdGrapple() {
   float seconds = 1.f;
   if (sCmd.args.size() > 2 || (sCmd.args.size() == 2 && !ParseFloat(sCmd.args[1], seconds)) ||
@@ -4454,11 +4454,11 @@ const CommandSpec kCommands[] = {
     {"dodge", CmdDodge, nullptr,
      "dodge                      a Dodge press (sideways dash, locked on or not; needs a strafe held)"},
     {"grapple", CmdGrapple, nullptr,
-     "grapple [seconds]          holds the Grapple action (default 1 s, 0 lets go): grapples at a grapple point"},
+     "grapple [seconds]          presses the Grapple action, held that long (default 1 s): grapples at a grapple point, or lets go"},
     {"spidertoggle", CmdSpiderToggle, nullptr,
      "spidertoggle [0|1]         an R press holds the spider ball on its track until the next (spider_toggle)"},
     {"locktoggle", CmdLockToggle, nullptr,
-     "locktoggle [0|1]           an L press holds a lock-on or grapple until the next (lock_on_toggle)"},
+     "locktoggle [0|1]           an L press holds a lock-on until the next (lock_on_toggle)"},
     {"radial", CmdRadial, nullptr,
      "radial [beam|visor [x y] | release]  holds a radial menu with its selection (x right, y up); radial_menus"},
     {"walkspeed", CmdWalkSpeed, nullptr,

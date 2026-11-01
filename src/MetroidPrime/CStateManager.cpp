@@ -1860,6 +1860,9 @@ static void ApplyHoldToggle(CFinalInput& input, const CStateManager& mgr, const 
   static PortHoldToggle::Grace sSpiderOn;
   static bool sPrevL = false;
   static bool sPrevGrapple = false;
+  static bool sPrevGrappleL = false;
+  static bool sPrevJump = false;
+  static bool sSwallowJump = false; // a jump that let go of the grapple, until released
   static bool sPrevR = false;
 
   const bool unmorphed =
@@ -1873,29 +1876,43 @@ static void ApplyHoldToggle(CFinalInput& input, const CStateManager& mgr, const 
   const bool grapplePress = grappleKey && !sPrevGrapple;
   sPrevGrapple = grappleKey;
   bool atPoint = false;
-  if (unmorphed && grappleKey) {
+  if (unmorphed && (grapplePress || sGrapple.Taken())) {
     const TUniqueId target =
         orbit == CPlayer::kOS_NoOrbit ? player->GetOrbitNextTargetId() : player->GetOrbitTargetId();
     atPoint = TCastToConstPtr< CScriptGrapplePoint >(mgr.GetObjectById(target)) != nullptr;
   }
-  const bool grappleL = sGrapple.Update(unmorphed && !PortDebug::OriginalExperience(), grappleKey,
-                                        grapplePress, atPoint, orbit == CPlayer::kOS_Grapple,
-                                        input.Time());
+  // A jump that lets go of the grapple only lets go: the game's grapple release
+  // already throws Samus, and the press would otherwise spend her double jump.
+  const bool jumpHeld = ControlMapper::GetDigitalInput(ControlMapper::kC_JumpOrBoost, input);
+  const bool jumpPress = jumpHeld && !sPrevJump;
+  sPrevJump = jumpHeld;
+  const bool grappleTaken = sGrapple.Taken();
+  const bool grappleL = sGrapple.Update(unmorphed && !PortDebug::OriginalExperience(),
+                                        grapplePress, jumpPress, atPoint,
+                                        orbit == CPlayer::kOS_Grapple, input.Time());
+  sSwallowJump = jumpHeld && (sSwallowJump || (grappleTaken && !grappleL && jumpPress));
+  if (sSwallowJump && ControlMapper::GetPressInput(ControlMapper::kC_JumpOrBoost, input)) {
+    input.PortSetB(input.DB(), false);
+  }
 
   const bool padL = input.DL() || input.DLTrigger();
-  const bool heldL = padL || grappleL;
-  const bool pressL = heldL && !sPrevL;
-  sPrevL = heldL;
+  const bool pressPadL = padL && !sPrevL;
+  sPrevL = padL;
   // Only a lock on an object counts: a killed target leaves the player orbiting
   // its carcass, and a lost look angle a fixed point, both of which hold the aim
   // in place for as long as L is held.
   const bool locked = orbit == CPlayer::kOS_OrbitObject ||
                       orbit == CPlayer::kOS_ForcedOrbitObject || orbit == CPlayer::kOS_Grapple;
   const PortHoldToggle::Output outL =
-      sLockOn.Update(unmorphed && PortDebug::LockOnToggle(), heldL, pressL, locked,
+      sLockOn.Update(unmorphed && PortDebug::LockOnToggle(), padL, pressPadL, locked,
                      input.Time());
+  // The Grapple key's L joins after Toggle Lock-On, which would otherwise latch
+  // it and keep the grapple after the key lets go.
+  const bool heldL = outL.held || grappleL;
+  const bool pressL = outL.pressed || (grappleL && !sPrevGrappleL);
+  sPrevGrappleL = grappleL;
   if (sLockOn.Latched() || outL.held != padL || grappleL) {
-    input.PortSetL(outL.held, outL.pressed);
+    input.PortSetL(heldL, pressL);
   }
 
   const bool heldA = input.DA();

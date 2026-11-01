@@ -402,10 +402,10 @@
   dash is unchanged.
 - Grapple (Controls > Move and aim, binding `grapple`, unbound by default, issue #243):
   pressed while a grapple point is the lock-on target (its reticle shows), it grapples
-  as L would, without holding L; letting go of the key lets go of the grapple. A press
-  with no grapple point in reach does nothing, so the key never strafes or locks onto
-  an enemy. With Toggle Lock-On on it toggles instead: press to grapple, press again
-  to let go. Also a touch button. Off under Original Experience. Console: `grapple`.
+  as L would and holds on without the key held: press again, or press jump, to let go
+  (the jump press only lets go, as releasing L would; it doesn't spend a double jump).
+  A press with no grapple point in reach does nothing, so the key never strafes or
+  locks onto an enemy. Toggle Lock-On doesn't change it. Also a touch button. Off under Original Experience. Console: `grapple`.
 - Remastered charge (Controls > Options, "Remastered charge (rapid fire)", persisted as
   `rapid_charge`, off by default, `MP_RAPID_CHARGE=<0|1>`): as in Remastered, holding
   fire fires a few shots before charging (3 in all with Power, 2 with Wave or Plasma,

@@ -154,28 +154,35 @@ private:
   float mLeft = 0.f;
 };
 
-// The Grapple key: a press while a grapple point is the lock-on target (or
-// while grappling) is taken as L, held for as long as the key is; a press with
-// no grapple point does nothing, so the key never strafes or locks onto an
-// enemy. A take that never reaches a grapple point (the point left range) lets
-// go after Grace::kGrace.
+// The Grapple key, always a toggle: a press while a grapple point is the
+// lock-on target (or while grappling) is taken as L and held until the next
+// press of the key or of jump. A press with no grapple point does nothing, so
+// the key never strafes or locks onto an enemy. A take that loses its grapple
+// point (out of range, the grapple broken) lets go after Grace::kGrace.
 class GrappleKey {
 public:
-  // atPoint: a grapple point is the next or current lock-on target. grappling:
-  // the player is grappling.
-  bool Update(bool active, bool held, bool pressed, bool atPoint, bool grappling, float dt) {
-    if (!active || !held) {
-      mTaken = false;
-      mGrace.Reset();
+  // pressed: a press of the key. jump: a press of jump. atPoint: a grapple point
+  // is the next or current lock-on target. grappling: the player is grappling.
+  bool Update(bool active, bool pressed, bool jump, bool atPoint, bool grappling, float dt) {
+    if (!active) {
+      Reset();
       return false;
+    }
+    if (mTaken) {
+      if (pressed || jump || !mGrace.Update(atPoint || grappling, dt)) {
+        Reset();
+      }
+      return mTaken;
     }
     if (pressed && (atPoint || grappling)) {
       mTaken = true;
-    }
-    if (mTaken && !mGrace.Update(atPoint || grappling, dt)) {
-      mTaken = false;
+      mGrace.Update(true, dt);
     }
     return mTaken;
+  }
+  void Reset() {
+    mTaken = false;
+    mGrace.Reset();
   }
   bool Taken() const { return mTaken; }
 

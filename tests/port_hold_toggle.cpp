@@ -155,41 +155,50 @@ int main() {
     }
     REQUIRE(ticks >= 8 && ticks <= 9);
   }
-  // GrappleKey: a press with no grapple point does nothing, even if one comes
-  // into reach while the key is held.
+  // GrappleKey (pressed, jump, atPoint, grappling): a press with no grapple point
+  // does nothing, even if one comes into reach afterwards.
   {
     PortHoldToggle::GrappleKey k;
-    REQUIRE(!k.Update(true, true, true, false, false, kDt));
-    REQUIRE(!k.Update(true, true, false, true, false, kDt));
+    REQUIRE(!k.Update(true, true, false, false, false, kDt));
     REQUIRE(!k.Update(true, false, false, true, false, kDt));
   }
-  // GrappleKey: a press at a point holds L through the grapple and lets go on
-  // release.
+  // GrappleKey: a press at a point holds L through the grapple, the key released,
+  // until the next press.
   {
     PortHoldToggle::GrappleKey k;
-    REQUIRE(k.Update(true, true, true, true, false, kDt));
     REQUIRE(k.Update(true, true, false, true, false, kDt));
+    REQUIRE(k.Update(true, false, false, true, false, kDt));
     for (int i = 0; i < 60; ++i) {
-      REQUIRE(k.Update(true, true, false, false, true, kDt)); // grappling
+      REQUIRE(k.Update(true, false, false, false, true, kDt)); // grappling
     }
-    REQUIRE(!k.Update(true, false, false, false, true, kDt));
+    REQUIRE(!k.Update(true, true, false, false, true, kDt));
     REQUIRE(!k.Taken());
+    REQUIRE(!k.Update(true, false, false, false, true, kDt));
+  }
+  // GrappleKey: a jump press lets go too; a jump with nothing taken does nothing.
+  {
+    PortHoldToggle::GrappleKey k;
+    REQUIRE(!k.Update(true, false, true, true, false, kDt));
+    REQUIRE(k.Update(true, true, false, true, false, kDt));
+    REQUIRE(k.Update(true, false, false, false, true, kDt));
+    REQUIRE(!k.Update(true, false, true, false, true, kDt));
+    REQUIRE(!k.Update(true, false, false, false, true, kDt));
   }
   // GrappleKey: a take that loses its point lets go after the grace and needs a
   // new press; inactive (morphed, Original Experience) drops it at once.
   {
     PortHoldToggle::GrappleKey k;
-    REQUIRE(k.Update(true, true, true, true, false, kDt));
+    REQUIRE(k.Update(true, true, false, true, false, kDt));
     for (int i = 0; i < 5; ++i) {
-      REQUIRE(k.Update(true, true, false, false, false, kDt));
+      REQUIRE(k.Update(true, false, false, false, false, kDt));
     }
     for (int i = 0; i < 10; ++i) {
-      k.Update(true, true, false, false, false, kDt);
+      k.Update(true, false, false, false, false, kDt);
     }
     REQUIRE(!k.Taken());
-    REQUIRE(!k.Update(true, true, false, true, false, kDt));
-    REQUIRE(k.Update(true, true, true, true, false, kDt));
-    REQUIRE(!k.Update(false, true, false, true, false, kDt));
+    REQUIRE(!k.Update(true, false, false, true, false, kDt));
+    REQUIRE(k.Update(true, true, false, true, false, kDt));
+    REQUIRE(!k.Update(false, false, false, true, false, kDt));
   }
   // Toggle as the spider ball uses it: R pressed away from a track is a hold,
   // attaching during it latches, leaving the track lets go.
