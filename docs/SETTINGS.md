@@ -385,7 +385,7 @@
   moment a hit knocks the ball off does not count. Morph ball only; off under
   Original Experience. Console: `spidertoggle`.
 - Shoot While Grappling (Controls > Options > Buttons and pause Options > Controller,
-  persisted as `grapple_shoot`, off by default, issue #243): the arm cannon stays out
+  persisted as `grapple_shoot`, on by default, issue #243): the arm cannon stays out
   while the grapple beam holds a grapple point, so it can fire mid-swing. Off, the
   cannon is put away as in the original game. Off under Original Experience.
   Console: `grappleshoot`.

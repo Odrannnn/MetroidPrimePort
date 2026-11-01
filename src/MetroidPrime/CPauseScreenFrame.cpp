@@ -714,7 +714,7 @@ void CGameOptions::TryRestoreDefaults(const CFinalInput& input, int category, in
         PortDebug::SetFastMorph(false);
         PortDebug::SetLockOnToggle(false);
         PortDebug::SetSpiderToggle(false);
-        PortDebug::SetGrappleShoot(false);
+        PortDebug::SetGrappleShoot(true);
         PortDebug::SetAimLockOn(false);
         PortDebug::SetStickyCharge(false);
         PortDebug::SetRapidCharge(false);

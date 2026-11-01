@@ -59,7 +59,7 @@ struct Settings {
   bool radialMenus = false;  // Trilogy discs: the Wii's radial beam and visor menus
   bool fastMorph = false;
   bool lockOnToggle = false;
-  bool grappleShoot = false;
+  bool grappleShoot = true;
   bool spiderToggle = false;
   bool aimLockOn = false;
   bool stickyCharge = false;
