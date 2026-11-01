@@ -854,11 +854,22 @@ void ClearVolumeHint();
 void SetProbeOverride(const float pos[3]);
 void ClearProbeOverride();
 bool ProbeOverride(float pos[3]);
+// Scopes nest (the grapple arm draws inside the gun's): leaving one restores the outer point.
 struct ProbeOverrideScope {
-  explicit ProbeOverrideScope(const float pos[3]) { SetProbeOverride(pos); }
-  ~ProbeOverrideScope() { ClearProbeOverride(); }
+  explicit ProbeOverrideScope(const float pos[3]) : mHadPrev(ProbeOverride(mPrev)) { SetProbeOverride(pos); }
+  ~ProbeOverrideScope() {
+    if (mHadPrev) {
+      SetProbeOverride(mPrev);
+    } else {
+      ClearProbeOverride();
+    }
+  }
   ProbeOverrideScope(const ProbeOverrideScope&) = delete;
   ProbeOverrideScope& operator=(const ProbeOverrideScope&) = delete;
+
+private:
+  float mPrev[3] = {};
+  bool mHadPrev;
 };
 // Whether a model announced for this area would get a volume: false until all of the
 // area's volumes are on the GPU.

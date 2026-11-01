@@ -1245,8 +1245,9 @@ void PbrGen::layerPrologue() {
       // 32768 = the vertex shader's procedural wind (Remastered's USE_PROCEDURAL_WIND_ANIMATION);
       // the fragment ignores it.
       // 65536 = the opacity is the vertex alpha alone (495899e7: o0.w = v5.w * DIFC.a, DIFC.a = 1).
-      // 262144 = flat ambient only: no baked lobes, grid volume or lightmap, and no BLCM (4bc890c1
-      // LambertFx, whose perms sample none of them and seed the light sum with the flat constant).
+      // 262144 = flat ambient only: no baked lobes, grid volume or lightmap, and no BLCM (the
+      // flat perms of LambertFx 7126ca03 042-057; the converter no longer emits it, since rooms
+      // with probe data take the BLPD / volume perms instead).
       // 524288 = the vertex colour is used raw (premultiplied glass 941068bf / bcc73459, whose
       // vertex shader has no log2/exp2 decode).
       // The mode word is a whole number (CCubeModel strips 32 and 64, which the shader never sees).
