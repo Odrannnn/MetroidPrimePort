@@ -1289,7 +1289,21 @@ float CPlayer::GetBallMaxVelocity() const {
   return gpTweakBall->GetBallTranslationMaxSpeed(GetSurfaceRestraint());
 }
 
+#ifdef TARGET_PC
+// The top speed the retail force law settles at depends on the tick: f*m*vmax/(A*dt)
+// grows as dt shrinks, and from about 100 Hz on it goes negative, so the footsteps
+// (which divide the speed by it) went silent and the camera bob stopped (issue #248).
+// Off 60 Hz the movement keeps the 60 Hz equilibrium (PortMouse::ForceLawAtRate) and
+// the friction is scaled to real time, so at any rate both top speeds are the 60 Hz ones.
+static float TopSpeedTick(float dt) {
+  return PortDebug::TickPeriod() * 60.f != 1.f ? 1.f / 60.f : dt;
+}
+#endif
+
 float CPlayer::GetActualFirstPersonMaxVelocity(float dt) const {
+#ifdef TARGET_PC
+  dt = TopSpeedTick(dt);
+#endif
   const float friction = WalkFriction(GetSurfaceRestraint());
   const float frictionForce = friction * GetMass();
   const float maxSpeed = WalkMaxSpeed(GetSurfaceRestraint());
@@ -1298,6 +1312,9 @@ float CPlayer::GetActualFirstPersonMaxVelocity(float dt) const {
 }
 
 float CPlayer::GetActualBallMaxVelocity(float dt) const {
+#ifdef TARGET_PC
+  dt = TopSpeedTick(dt);
+#endif
   const float friction = gpTweakBall->GetBallTranslationFriction(GetSurfaceRestraint());
   const float frictionForce = friction * GetMass();
   const float maxSpeed = gpTweakBall->GetBallTranslationMaxSpeed(GetSurfaceRestraint());
