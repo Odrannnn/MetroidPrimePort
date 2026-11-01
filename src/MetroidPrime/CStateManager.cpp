@@ -15,6 +15,7 @@
 #include "port_hold_toggle.h"
 #include "port_livesplit.h"
 #include "port_log.h"
+#include "port_motion_watch.h"
 #include "port_room_env.h"
 #include "port_room_geo.h"
 #include "port_room_liquid.h"
@@ -2044,6 +2045,9 @@ void CStateManager::UpdateAreaSounds() {
 void CStateManager::ApplyDamage(const TUniqueId damagerId, const TUniqueId damageeId,
                                 const TUniqueId radiusSender, const CDamageInfo& info,
                                 const CMaterialFilter& filter, const CVector3f& knockbackVec) {
+#ifdef TARGET_PC
+  const PortMotionWatch::DamagerScope motionDamager(*this, damagerId);
+#endif
   const CEntity* damagerEnt = GetObjectById(damagerId);
   CEntity* damageeEnt = ObjectById(damageeId);
   const CActor* const damager = TCastToConstPtr< CActor >(damagerEnt);
@@ -2298,6 +2302,9 @@ const bool CStateManager::TestRayDamage(const CVector3f& pos, const CActor& dama
 
 void CStateManager::ApplyRadiusDamage(const CActor& damager, const CVector3f& pos, CActor& damagee,
                                       const CDamageInfo& info) {
+#ifdef TARGET_PC
+  const PortMotionWatch::DamagerScope motionDamager(*this, damager.GetUniqueId());
+#endif
   CVector3f delta = damagee.GetTranslation() - pos;
   if (!(delta.MagSquared() < info.GetRadius() * info.GetRadius())) {
     if (!damagee.GetTouchBounds()) {
@@ -2485,6 +2492,9 @@ void CStateManager::KnockBackPlayer(CPlayer& player, const CVector3f& dir, float
   float angle = CVector3f::GetAngleDiff(dir, -player.GetVelocityWR()) * 0.5f;
   usePower *= 1.f - angle / M_PIF;
 
+#ifdef TARGET_PC
+  PortMotionWatch::NoteKnockback(dir, usePower);
+#endif
   player.ApplyImpulseWR(dir * usePower, CAxisAngle::Identity());
   player.UseCollisionImpulses();
   player.SetAccelerationChangeTimer(0.25f);

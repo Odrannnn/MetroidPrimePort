@@ -277,6 +277,7 @@ set(MP_PORT_SOURCES
     platform/port_crash.cpp
     platform/port_memory_log.cpp
     platform/port_watchdog.cpp
+    platform/port_motion_watch.cpp
     platform/port_savestate.cpp
     platform/port_savestate_format.cpp
     platform/port_dynamic_res.cpp

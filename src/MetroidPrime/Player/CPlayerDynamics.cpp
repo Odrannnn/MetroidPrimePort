@@ -1,5 +1,6 @@
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "port_debug.h"
+#include "port_motion_watch.h"
 #include "port_mouse.h"
 
 #include "MetroidPrime/Player/CGameState.hpp"
@@ -1400,6 +1401,9 @@ void CPlayer::BombJump(const CVector3f& position, CStateManager& mgr) {
 
 void CPlayer::Teleport(const CTransform4f& transform, CStateManager& mgr,
                        const bool resetBallCamera) {
+#ifdef TARGET_PC
+  PortMotionWatch::NoteWarp();
+#endif
   CVector3f direction = transform.GetForward();
   direction.SetZ(0.f);
   CPhysicsActor::Stop();

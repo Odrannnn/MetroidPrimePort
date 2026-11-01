@@ -33,6 +33,7 @@
 
 #ifdef TARGET_PC
 #include "port_debug.h"
+#include "port_motion_watch.h"
 #include "port_remastered_ground_policy.h"
 #endif
 
@@ -833,6 +834,7 @@ void CGameCollision::MovePlayer(CStateManager& mgr, CPhysicsActor& actor, float 
       player != nullptr && player->MouseControlsAllowed(mgr), PortDebug::RemasteredMovement()};
   const bool remasteredMoverTick = PortRemasteredGround::UsesRemasteredMover(moverGate);
   bool remasteredAirborneDispatch = false;
+  PortMotionWatch::TickScope motionWatch(mgr, player, colliderList);
   if (player != nullptr) {
     player->PortSetRetainedObjectState(PortRemasteredGround::RetainedEntryForTick(
         moverGate, player->PortRetainedObjectState()));
@@ -881,6 +883,9 @@ void CGameCollision::MovePlayer(CStateManager& mgr, CPhysicsActor& actor, float 
     // which invalidates the value for this tick: the ground mover then stands aside (see the
     // kMT_GroundCollider branch) until a verified airborne tick writes 0 and restores
     // validity. Retail movement (rm0) never reads the value.
+#ifdef TARGET_PC
+    motionWatch.Set(PortMotionWatch::Branch::Ball);
+#endif
     CBallFilter filter(actor);
     MoveAndCollide(mgr, actor, dt, filter, colliderList);
   } else if (actor.GetMaterialList().HasMaterial(kMT_GroundCollider)) {
@@ -899,6 +904,7 @@ void CGameCollision::MovePlayer(CStateManager& mgr, CPhysicsActor& actor, float 
       // retail ground ticks until a verified airborne tick restores it. Conservative by
       // design: ground replacement is off for a value the movers cannot vouch for.
       if (PortRemasteredGround::RetainedAllowsGroundMover(player->PortRetainedObjectState())) {
+        motionWatch.Set(PortMotionWatch::Branch::RemasteredGround);
         MoveGroundedRemastered(mgr, *player, dt, colliderList);
         actor.SetApplyRotationWhenInCollision(false);
         return;
@@ -906,17 +912,25 @@ void CGameCollision::MovePlayer(CStateManager& mgr, CPhysicsActor& actor, float 
     }
 #endif
     if (gkUseNewPlayerMovement) {
+#ifdef TARGET_PC
+      motionWatch.Set(PortMotionWatch::Branch::GroundNew);
+#endif
       CGroundMovement::MoveGroundCollider_New(mgr, actor, dt, colliderList);
     } else {
+#ifdef TARGET_PC
+      motionWatch.Set(PortMotionWatch::Branch::GroundOld);
+#endif
       CGroundMovement::MoveGroundCollider(mgr, actor, dt, colliderList);
     }
   } else {
 #ifdef TARGET_PC
     if (remasteredMoverTick) {
+      motionWatch.Set(PortMotionWatch::Branch::RemasteredAir);
       MoveAirborneStepped(mgr, *player, dt, colliderList);
       actor.SetApplyRotationWhenInCollision(false);
       return;
     }
+    motionWatch.Set(PortMotionWatch::Branch::Air);
 #endif
     CBallFilter filter(actor);
     MoveAndCollide(mgr, actor, dt, filter, colliderList);
