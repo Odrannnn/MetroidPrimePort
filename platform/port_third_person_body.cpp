@@ -1944,7 +1944,7 @@ std::string DescribeFeet() {
   std::snprintf(line, sizeof(line), "turn %s turned %+.2f phase %.2f w %4.2f\n", s.turn.Valid() ? "ok " : "---",
                 s.turned, TurnPhase(s.turned, s.turnYaw, kTurnSamples), s.turnWeight);
   out += line;
-    std::snprintf(line, sizeof(line), "stop start %.2f\n", s.stopStart);
+  std::snprintf(line, sizeof(line), "stop start %.2f\n", s.stopStart);
   out += line;
   static const char* const kStanceNames[] = {"idle", "stop", "loco", "jump", "fall", "land"};
   std::snprintf(line, sizeof(line), "stance %s air %.2f flinch %.2f scan %.2f; clips jump %d fall %d land %d flinch %d scan %d\n",
