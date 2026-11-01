@@ -760,7 +760,7 @@
   direct aim, and `remastered` draws the Remastered cursor where the aiming cursor is, without
   the old crosshair.
 - Crosshair in X-Ray and Crosshair in Thermal (Video > Display, `crosshair_xray` and
-  `crosshair_thermal`, default on, issue #241): off fades the aiming crosshair out in
+  `crosshair_thermal`, default off, issue #241): off fades the aiming crosshair out in
   that visor as the game does in the Scan Visor, whatever the crosshair style (on a
   Trilogy disc, the aiming cursor too). Lock-on and next-target reticles are unchanged.
   On under Original experience.
