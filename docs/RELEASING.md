@@ -200,7 +200,10 @@ ctest targets, all run by both CI jobs.
 
 Every build ships `assets/initial_pipeline_cache.db`: the pipeline configs of a tour
 of the front end and every room, so a first start compiles the game's shaders in the
-background instead of skipping draws as it meets them. It holds retail rows only. When
+background instead of skipping draws as it meets them. It holds retail rows only, plus
+the contexts (global, front end, each area) that used each one: lazy mode, always on
+Android, builds the global and front-end rows at startup and an area's rows when the game
+prefetches that area, so a seed without them builds nothing ahead of use. When
 aurora bumps a pipeline config version, aurora ignores the seed and the
 `port_pipeline_seed` test fails. To record it again, run
 `python3 tools/pipeline_seed.py tour`, then `merge` (see the script's `--help`).

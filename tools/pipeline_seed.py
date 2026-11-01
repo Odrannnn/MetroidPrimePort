@@ -2,7 +2,9 @@
 """Record and check the initial pipeline cache the port ships (assets/initial_pipeline_cache.db).
 
 aurora replays the seed's rows at startup and compiles them in the background, so a new
-install doesn't skip draws (or stutter) the first time it meets a shader. The rows are
+install doesn't skip draws (or stutter) the first time it meets a shader. Lazy mode (always on
+Android) compiles only what the seed's pipeline_use table names: the GLOBAL (player, gun, HUD)
+and FRONTEND contexts at startup, an area's rows when the game prefetches that area. The rows are
 raw pipeline configs; a version bump of one of them (GXPipelineConfigVersion,
 ClearPipelineConfigVersion, RmlPipelineConfigVersion) makes aurora ignore every row of
 that type, so the seed has to be recorded again:
@@ -54,7 +56,13 @@ CREATE TABLE pipeline_cache (
 );
 CREATE INDEX pipeline_cache_load_order_idx
   ON pipeline_cache(type, config_version, first_frame_used);
+CREATE TABLE pipeline_use (
+  context INTEGER NOT NULL,
+  hash INTEGER NOT NULL,
+  PRIMARY KEY (context, hash)
+) WITHOUT ROWID;
 """
+CONTEXT_GLOBAL, CONTEXT_FRONTEND = 0, 1  # AURORA_PIPELINE_CONTEXT_*
 
 
 def current_versions():
@@ -97,6 +105,17 @@ def read_rows(path):
         db.close()
 
 
+def read_uses(path):
+    """(context, hash) rows; none for a cache recorded before pipeline_use existed."""
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        return db.execute("SELECT context, hash FROM pipeline_use").fetchall()
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        db.close()
+
+
 def problems(rows, versions):
     """(row index, reason) for every row the seed must not hold."""
     out = []
@@ -126,8 +145,9 @@ def cmd_merge(a):
     if a.order:
         for n, line in enumerate(Path(a.order).read_text().split()):
             rank.setdefault(tuple(int(x) for x in line.split(":")), n)
-    kept, dropped = {}, {}
+    kept, dropped, uses = {}, {}, set()
     for src in a.inputs:
+        uses.update(read_uses(src))
         rows = read_rows(src)
         bad = {i: r for i, r in problems(rows, versions) if i >= 0}
         if any(i < 0 for i, _ in problems(rows, versions)):
@@ -156,6 +176,10 @@ def cmd_merge(a):
     ordered = sorted(kept.values(), key=lambda r: (r[5], r[0], r[1]))
     db.executemany("INSERT INTO pipeline_cache VALUES (?, ?, ?, ?, ?, ?)",
                    [(t, h, v, s, c, n) for n, (t, h, v, s, c, _f) in enumerate(ordered)])
+    # Uses of dropped rows go too: aurora joins pipeline_use to pipeline_cache by hash.
+    hashes = {h for _t, h in kept}
+    uses = sorted(u for u in uses if u[1] in hashes)
+    db.executemany("INSERT INTO pipeline_use VALUES (?, ?)", uses)
     db.commit()
     db.execute("VACUUM")
     db.close()
@@ -163,7 +187,9 @@ def cmd_merge(a):
     counts = {}
     for r in ordered:
         counts[TYPE_NAMES[r[0]]] = counts.get(TYPE_NAMES[r[0]], 0) + 1
-    print(f"{out}: {len(ordered)} rows {counts}, {out.stat().st_size // 1024} KiB; dropped {dropped or 'none'}")
+    contexts = len({c for c, _h in uses})
+    print(f"{out}: {len(ordered)} rows {counts}, {len(uses)} uses in {contexts} contexts, "
+          f"{out.stat().st_size // 1024} KiB; dropped {dropped or 'none'}")
 
 
 def cmd_check(a):
@@ -177,7 +203,17 @@ def cmd_check(a):
         sys.exit(1)
     if not any(r[0] == TYPE_GX for r in rows):
         sys.exit(f"{a.seed}: no GX rows")
-    print(f"{a.seed}: {len(rows)} rows, all current and retail")
+    uses = read_uses(a.seed)
+    hashes = {r[1] for r in rows}
+    orphans = sum(1 for _c, h in uses if h not in hashes)
+    if orphans:
+        sys.exit(f"{a.seed}: {orphans} pipeline_use rows name no pipeline_cache row")
+    contexts = {c for c, _h in uses}
+    # Lazy mode (always on Android) compiles nothing at startup without these.
+    for ctx, name in ((CONTEXT_GLOBAL, "GLOBAL"), (CONTEXT_FRONTEND, "FRONTEND")):
+        if ctx not in contexts:
+            sys.exit(f"{a.seed}: no {name} pipeline_use rows; re-record the seed")
+    print(f"{a.seed}: {len(rows)} rows, all current and retail; {len(uses)} uses in {len(contexts)} contexts")
 
 
 # --- tour -------------------------------------------------------------------
