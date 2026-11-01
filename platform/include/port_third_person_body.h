@@ -328,6 +328,9 @@ bool TakeMuzzle(CTransform4f& out);
 bool GrappleHand(const CPlayer& player, CVector3f& out);
 // Drops the body (third person off, a new world).
 void Release();
+// Third person paused (morph ball, a cinematic): keeps the body loaded and stands it idle, as
+// it comes back.
+void Suspend();
 
 // Debug (console `thirdperson clips`): the body's Samus clips, one line each: index, name,
 // duration, mean root speed.

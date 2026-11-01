@@ -74,6 +74,13 @@ float Blend() {
   return t;
 }
 
+// What the camera stops short of.
+const CMaterialFilter& WallFilter() {
+  static const CMaterialFilter filter = CMaterialFilter::MakeIncludeExclude(
+      CMaterialList(kMT_Solid), CMaterialList(kMT_ProjectilePassthrough));
+  return filter;
+}
+
 bool StateAllows(const CStateManager& mgr) {
   const CPlayer* player = mgr.GetPlayer();
   const CCameraManager* cams = mgr.GetCameraManager();
@@ -116,17 +123,21 @@ void Update(CStateManager& mgr, float dt) {
   if (!allowed) {
     sActive = false;
     sAimValid = false;
-    PortThirdPersonBody::Release();
+    // Off, the body goes; only paused (morph ball, a cinematic), it stays loaded so it stands
+    // there the tick she does, not a load later.
+    if (sEnabled) {
+      PortThirdPersonBody::Suspend();
+    } else {
+      PortThirdPersonBody::Release();
+    }
     return;
   }
   PortThirdPersonBody::Update(mgr, dt);
   const CTransform4f xf = mgr.GetCameraManager()->GetFirstPersonCamera()->GetTransform();
   const Geometry g = Compute(xf);
-  static const CMaterialFilter filter = CMaterialFilter::MakeIncludeExclude(
-      CMaterialList(kMT_Solid), CMaterialList(kMT_ProjectilePassthrough));
   float target = g.full;
   if (g.full > 0.f) {
-    const CRayCastResult hit = mgr.RayStaticIntersection(g.pivot, g.dir, g.full, filter);
+    const CRayCastResult hit = mgr.RayStaticIntersection(g.pivot, g.dir, g.full, WallFilter());
     target = PullInLength(g.full, hit.IsValid() ? hit.GetTime() : -1.f);
   }
   if (!sActive) {
@@ -184,6 +195,26 @@ CTransform4f TickView(const CTransform4f& game) {
   CTransform4f xf = game;
   xf.SetTranslation(g.pivot + g.dir * std::min(sLength, g.full));
   return xf;
+}
+
+bool MorphCameraPosition(const CStateManager& mgr, const CTransform4f& fp, CVector3f& out) {
+  if (Active()) {
+    out = TickView(fp).GetTranslation();
+    return true;
+  }
+  const CCameraManager* cams = mgr.GetCameraManager();
+  if (!sEnabled || cams == nullptr || cams->IsInCinematicCamera() ||
+      (PortFreeCam::Active() && !PortFreeCam::Drive())) {
+    return false;
+  }
+  const Geometry g = Compute(fp);
+  float len = g.full;
+  if (g.full > 0.f) {
+    const CRayCastResult hit = mgr.RayStaticIntersection(g.pivot, g.dir, g.full, WallFilter());
+    len = PullInLength(g.full, hit.IsValid() ? hit.GetTime() : -1.f);
+  }
+  out = g.pivot + g.dir * len;
+  return true;
 }
 
 CTransform4f View(const CTransform4f& game) {

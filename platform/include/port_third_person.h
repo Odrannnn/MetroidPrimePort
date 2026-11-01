@@ -99,5 +99,10 @@ CTransform4f View(const CTransform4f& game);
 // The same at this tick's camera distance, for what the simulation projects (orbit target
 // search, lock-on boxes); `game` when not active.
 CTransform4f TickView(const CTransform4f& game);
+// Where the camera is (while Active()) or would come to rest (behind her, pulled in at a wall)
+// for the first-person view `fp`: the morph ball camera starts there and ends there, so
+// morphing leaves and rejoins third person without a cut to the eye. False when third person
+// will not take the view once she stands (off, a cinematic, the free camera's own view).
+bool MorphCameraPosition(const CStateManager& mgr, const CTransform4f& fp, CVector3f& out);
 
 } // namespace PortThirdPerson

@@ -1254,6 +1254,24 @@ void PoseBody(CAnimData& data) {
   s.advanced = true;
 }
 
+// Idle, nothing raised or played: how the body starts, built or back from a pause.
+void StandStill() {
+  s.backWeight = 0.f;
+  s.stance = Stance::Idle;
+  std::fill(std::begin(s.stanceWeight), std::end(s.stanceWeight), 0.f);
+  s.stanceWeight[int(Stance::Idle)] = 1.f;
+  std::fill(std::begin(s.locoWeight), std::end(s.locoWeight), 0.f);
+  s.locoWeight[kWalk] = 1.f;
+  s.flinchTime = -1.f;
+  s.scanWeight = 0.f;
+  s.airTime = 0.f;
+  s.slowTime = s.brakeTime = s.lastSpeed = 0.f;
+  s.gunUp = 0.f;
+  s.aimWeight = 0.f;
+  s.reachWeight = 0.f;
+  s.haveLast = false;
+}
+
 void Build(CStateManager& mgr) {
   const CAnimRes res(s.ancs, s.loadedChar, CVector3f(kBodyScale, kBodyScale, kBodyScale), 0, true);
   s.body.reset(new CModelData(res));
@@ -1331,15 +1349,7 @@ void Build(CStateManager& mgr) {
   s.scan = FindClip(kScan.name);
   Measure(*data);
   FindLegBones(*data);
-  s.backWeight = 0.f;
-  s.stance = Stance::Idle;
-  std::fill(std::begin(s.stanceWeight), std::end(s.stanceWeight), 0.f);
-  s.stanceWeight[int(Stance::Idle)] = 1.f;
-  std::fill(std::begin(s.locoWeight), std::end(s.locoWeight), 0.f);
-  s.locoWeight[kWalk] = 1.f;
-  s.flinchTime = -1.f;
-  s.scanWeight = 0.f;
-  s.airTime = 0.f;
+  StandStill();
   s.suitModel.reset();
   s.suitSkin.reset();
 }
@@ -1757,6 +1767,12 @@ bool GrappleHand(const CPlayer& player, CVector3f& out) {
 }
 
 void Release() { Drop(); }
+
+void Suspend() {
+  if (s.body && s.animating) {
+    StandStill();
+  }
+}
 
 std::string DescribeClips() {
   if (!Ready()) {

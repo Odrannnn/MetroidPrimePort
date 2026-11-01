@@ -10,6 +10,10 @@
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "WorldFormat/CMetroidAreaCollider.hpp"
 
+#ifdef TARGET_PC
+#include "port_third_person.h"
+#endif
+
 bool CBallCamera::CheckTransitionLineOfSight(const CVector3f& eyePos, const CVector3f& behindPos,
                                              float& eyeToOccDist, float colRadius,
                                              const CStateManager& mgr) {
@@ -98,14 +102,30 @@ bool CBallCamera::UpdateTransitionFromBallCamera(CStateManager& mgr) {
   x47c_failsafeState->x90_splinePoints[1] += delta;
   x47c_failsafeState->x90_splinePoints[2] += delta;
   x47c_failsafeState->x90_splinePoints[3] += delta;
+  CVector3f endPos = eyePos;
+  CVector3f lookPos = eyePos;
+#ifdef TARGET_PC
+  // Third person: the spline ends where its camera will stand behind her, looking the way she
+  // faces (the look point slides from her eye to ahead of that camera), so it takes over
+  // without a cut back to the eye.
+  CTransform4f restXf = player.GetTransform();
+  restXf.SetTranslation(eyePos);
+  CVector3f tpPos;
+  if (PortThirdPerson::MorphCameraPosition(mgr, restXf, tpPos)) {
+    x47c_failsafeState->x90_splinePoints[3] = tpPos;
+    endPos = tpPos;
+    lookPos = eyePos + (tpPos + restXf.GetForward() * PortThirdPerson::GetParams().distance - eyePos) *
+                           morphFactor;
+  }
+#endif
   CVector3f splinePoint = GetFailsafeBezierPoint(x47c_failsafeState->x90_splinePoints, morphFactor);
-  float zDelta = splinePoint.GetZ() - eyePos.GetZ();
+  float zDelta = splinePoint.GetZ() - endPos.GetZ();
   zDelta *= CMath::Clamp(0.f, 1.f - 1.5f * morphFactor, 1.f);
-  splinePoint.SetZ(zDelta + eyePos.GetZ());
-  CVector3f deltaFlat = eyePos - splinePoint;
+  splinePoint.SetZ(zDelta + endPos.GetZ());
+  CVector3f deltaFlat = lookPos - splinePoint;
   deltaFlat.SetZ(0.f);
   if (deltaFlat.Magnitude() > FLT_EPSILON * 10000.f) {
-    SetTransform(CTransform4f::LookAt(splinePoint, eyePos, CVector3f::Up()));
+    SetTransform(CTransform4f::LookAt(splinePoint, lookPos, CVector3f::Up()));
   } else {
     SetTransform(mgr.GetCameraManager()->GetFirstPersonCamera()->GetTransform());
     SetTranslation(splinePoint);
