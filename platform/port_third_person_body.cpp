@@ -104,7 +104,8 @@ struct OneShot {
 constexpr OneShot kJump{"01_Intro_Hanger_runandjump_samus", 0.66f, 0.7f};
 constexpr OneShot kFall{"01_Intro_Hanger_runandjump_samus", 0.7f, 0.72f};
 constexpr OneShot kLand{"01_Intro_Hanger_landintoship_samus", 0.06f, 0.3f};
-constexpr OneShot kFlinch{"Omega_Intro_Samus_01_flinch", 0.2f, 0.45f};
+// The flinch ends back at the ready (0.36): from 0.38 she raises the cannon overhead.
+constexpr OneShot kFlinch{"Omega_Intro_Samus_01_flinch", 0.2f, 0.36f};
 constexpr OneShot kScan{"Scan_Cine_forward", 0.03f, 0.03f};
 // A hit of at least this much flinches the body: what makes the first-person cannon jolt
 // (CPlayerGun::TakeDamage), so heat and poison don't.
