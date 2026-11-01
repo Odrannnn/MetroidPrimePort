@@ -419,8 +419,9 @@ static int decodeSourceSamples(DSPvoice* vp, u32 voiceIdx, s32* out, int maxSamp
 
   for (; count < maxSamples; ++count) {
     if (state->srcPosHi >= end) {
-      if (smp->loopLength > 0 && smp->loop < end && smp->loopLength <= end - smp->loop) {
-        state->srcPosHi = smp->loop + ((state->srcPosHi - end) % smp->loopLength);
+      if (smp->loopLength > 0 && smp->loop < end && end - smp->loop <= smp->loopLength &&
+          smp->loopLength <= end - smp->loop + 1) {
+        state->srcPosHi = smp->loop + ((state->srcPosHi - end) % (end - smp->loop));
         resetVoiceLoopState(smp, voiceIdx);
       } else {
         *hitEnd = 1;

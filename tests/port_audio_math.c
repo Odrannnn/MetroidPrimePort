@@ -38,6 +38,7 @@ int main(void) {
   check(musyxPcAdpcmSample(block, 0, 0, coefficients, &h1, &h2) == 15);
   check(musyxPcLoopEnd(100, 14, 28) == 42);
   check(musyxPcLoopEnd(100, 0, 0) == 100);
+  check(musyxPcLoopEnd(100, 60, 41) == 100); // loop end one past the last sample: still a loop
   check(musyxPcLoopEnd(UINT32_MAX, UINT32_MAX - 2, 10) == UINT32_MAX);
   puts("ADPCM loop, signed PCM8 and wide-mix regressions passed");
   return 0;
