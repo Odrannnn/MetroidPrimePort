@@ -514,6 +514,10 @@ private:
   // beam picked while in the Phazon Beam, switched to once the exit morph is done (-1: none).
   bool mPortPhazonCheat = false;
   int mPortPhazonPendingBeam = -1;
+  // Hand on cannon (PortDebug::HandOnCannon): how long Samus has stood still under direct
+  // aim, and whether that holds R's free-look pose (left hand on the cannon).
+  float mPortStillTime = 0.f;
+  bool mPortHandOnCannon = false;
   int mPortRapidShots;
   float mPortRapidTimer;
   bool mPortPointerAimValid;

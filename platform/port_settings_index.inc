@@ -46,6 +46,7 @@
 {"Controls", "Options", "Aiming", "Dead box", "pointer aim dead zone box turn edge"},
 {"Controls", "Options", "Aiming", "Edge turn speed", "pointer aim edge turn speed rotate"},
 {"Controls", "Options", "Aiming", "Lock-on free aim", "lock on lockon free aim cursor pointer crosshair remastered"},
+{"Controls", "Options", "Aiming", "Hand on cannon when still", "left hand arm cannon idle rest still free aim trilogy primehack"},
 {"Controls", "Options", "Aiming", "Reset aim resets pointer and camera", "reset aim recentre center crosshair pointer camera level pitch"},
 {"Controls", "Options", "Morph ball", "Fast Morph", "morph ball speed quick transform"},
 {"Controls", "Options", "Morph ball", "Spring Ball (C-stick up)", "spring ball jump c-stick"},

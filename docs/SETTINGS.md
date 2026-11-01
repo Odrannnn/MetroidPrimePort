@@ -1275,6 +1275,11 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   locked target. Under pointer aim with
   gyro aim, the twin stick moves the crosshair too while locked, so either or both
   can aim. Scan locks and grapples still aim through the centre.
+- Hand on cannon when still (Controls > Options > Aiming, `hand_on_cannon`, default
+  off; needs Mouse aim, Twin stick or the modern touch layout), as in Trilogy and
+  PrimeHack: after a second standing on the ground without walking, Samus rests her
+  left hand on the cannon (the GameCube R free-look pose) and keeps it while she turns,
+  aims and fires. Walking, jumping, a lock-on, a grapple or the morph ball drops it.
 - `MP_DISABLE_AI_AUDIO=1`: start streamed AI audio muted. It can subsequently be
   enabled from the overlay. MusyX mute is independent.
 - `MP_FAST_BOOT=1`, `MP_SKIP_CUTSCENES=1`, `MP_CUTSCENE_SPEED=8`,

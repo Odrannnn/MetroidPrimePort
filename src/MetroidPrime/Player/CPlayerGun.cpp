@@ -1183,7 +1183,11 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   sPortRemasteredGun = x774_holoTransitionGen->PortIsRemastered();
 #endif
   x6a0_motionState.Update((x2f0_pressedFireButtonStates & 1) != 0 && x832_28_readyForShot &&
-                              x32c_chargePhase < kCP_AnimAndSfx && !player.IsInFreeLook(),
+                              x32c_chargePhase < kCP_AnimAndSfx && !player.IsInFreeLook()
+#ifdef TARGET_PC
+                              && !mPortHandOnCannon
+#endif
+                              ,
                           advDt, x4a8_gunWorldXf, mgr);
 
   beamModel.AdvanceParticles(GetGunMotionTransform(), advDt, mgr);
@@ -2732,7 +2736,19 @@ void CPlayerGun::ResetIdle(CStateManager& mgr) {
 void CPlayerGun::UpdateGunIdle(bool inStrikeCooldown, float camBobT, float dt, CStateManager& mgr) {
   CPlayer& player = *mgr.Player();
 
-  if (player.IsInFreeLook() && !x832_29_lockedOn && !x740_grappleArm->IsGrappling() &&
+  bool freeLook = player.IsInFreeLook();
+#ifdef TARGET_PC
+  // Port (#244): as in Trilogy and PrimeHack, standing still under direct aim rests the
+  // left hand on the cannon. Direct aim replaces R's free look, so its pose stands in;
+  // turning and firing keep it, walking or leaving the ground drops it.
+  const bool still = PortDebug::HandOnCannon() && player.MouseControlsAllowed(mgr) &&
+                     player.GetPlayerMovementState() == NPlayer::kMS_OnGround && camBobT <= 0.01f;
+  mPortStillTime = still ? mPortStillTime + dt : 0.f;
+  mPortHandOnCannon = mPortStillTime >= 1.f;
+  freeLook = freeLook || mPortHandOnCannon;
+#endif
+
+  if (freeLook && !x832_29_lockedOn && !x740_grappleArm->IsGrappling() &&
       x3a4_fidget.GetState() != CFidget::kS_HolsterBeam &&
       player.GetGunHolsterState() == CPlayer::kGH_Drawn && !x834_30_inBigStrike) {
     if (!IsWeaponStateSet(0x8)) {

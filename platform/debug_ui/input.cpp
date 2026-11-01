@@ -566,6 +566,10 @@ bool LockOnFreeAim() {
   EnsureInitialized();
   return sInput.lockOnFreeAim && DirectAim() && !sOriginalExperience;
 }
+bool HandOnCannon() {
+  EnsureInitialized();
+  return sInput.handOnCannon && DirectAim() && !sOriginalExperience;
+}
 void SetPointerAimPosition(float x, float y) {
   sPointerAim.Center();
   sPointerAim.Move(x, y);
