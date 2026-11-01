@@ -199,6 +199,9 @@ void SetHudWide(bool enabled);
 // below 16:9 the cinematic camera already renders the full shot, so it fills the
 // screen instead.
 bool CinemaBars();
+// The morph ball view's top/bottom bands (tweak BallViewportYReduction). Off by default:
+// the world fills the screen in ball mode, as below 4:3.
+bool BallBars();
 // Remastered's Phazon Suit aura (PortShell, the silhouette shell). On by default; off: the
 // Phazon Suit draws retail's distortion effect, as without the Remastered room environment.
 bool PhazonShell();

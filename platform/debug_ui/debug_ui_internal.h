@@ -70,6 +70,7 @@ extern float sDynScale;
 extern PortDebug::EAspectMode sAspectMode;
 extern bool sHudWide;
 extern bool sCinemaBars;
+extern bool sBallBars;
 extern bool sPhazonShell;
 extern bool sSharpScanWindow;
 extern bool sGeneratedBallLooks;

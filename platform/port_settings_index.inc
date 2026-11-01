@@ -140,6 +140,7 @@
 {"Video", "Display", "Display", "Vsync", "vertical sync tearing refresh"},
 {"Video", "Display", "Display", "Aspect ratio", "widescreen 4:3 16:9 stretch shape"},
 {"Video", "Display", "Display", "Cutscene black bars", "letterbox cinematic bars"},
+{"Video", "Display", "Display", "Morph ball black bars", "letterbox morph ball camera bars"},
 {"Video", "Display", "Display", "Sharp scan window", "scan visor window sharp pixel"},
 {"Video", "Display", "Display", "Suit-coloured morph balls", "spider ball morph ball power gravity phazon suit colour color look gold generated"},
 {"Video", "Display", "Suit colours", "Suit", "suit colour color customise customize recolour paint power varia gravity phazon fusion"},

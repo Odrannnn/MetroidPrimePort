@@ -74,6 +74,11 @@ void DrawVideoDisplay() {
   }
   ImGui::SetItemTooltip("Off: cutscenes narrower than 16:9 fill the screen with the full shot.\n"
                         "On: the original 16:9 letterbox.");
+  if (ImGui::Checkbox("Morph ball black bars", &sBallBars)) {
+    MarkDirty();
+  }
+  ImGui::SetItemTooltip("Off: the world fills the screen in morph ball.\n"
+                        "On: the original narrowed ball view.");
 
   if (ImGui::Checkbox("Sharp scan window", &sSharpScanWindow)) {
     MarkDirty();

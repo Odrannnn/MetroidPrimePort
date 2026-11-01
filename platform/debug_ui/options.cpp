@@ -445,6 +445,11 @@ bool CinemaBars() {
   return sCinemaBars || sOriginalExperience;
 }
 
+bool BallBars() {
+  EnsureInitialized();
+  return sBallBars || sOriginalExperience;
+}
+
 bool PhazonShell() {
   EnsureInitialized();
   return sPhazonShell;

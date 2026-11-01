@@ -545,6 +545,9 @@
 - `MP_CINEMA_BARS=0|1` (Video > Display "Cutscene black bars", persisted as `cinema_bars`,
   default off): the scripted 16:9 cutscene letterbox. Off, cutscenes narrower than 16:9
   show the cinematic camera's full shot (Vert+); elevator rides and credits keep theirs.
+- `MP_BALL_BARS=0|1` (Video > Display "Morph ball black bars", persisted as `ball_bars`,
+  default off): the morph ball view's narrowed viewport (tweak `BallViewportYReduction`).
+  Off, the world fills the screen in ball mode. Original Experience turns both bar options on.
 - `MP_SHARP_SCAN_WINDOW=0|1` (Video > Display "Sharp scan window", persisted as
   `sharp_scan_window`, default off; off under Original experience): the scan visor's
   magnifier renders the world a second time through a zoomed camera instead of

@@ -122,6 +122,7 @@ const SettingKey kSettingKeys[] = {
      false, "16:9", "window"},
     BoolKey< &sHudWide >("hud_wide"),
     BoolKey< &sCinemaBars >("cinema_bars"),
+    BoolKey< &sBallBars >("ball_bars"),
     BoolKey< &sPhazonShell >("phazon_shell"),
     BoolKey< &sSharpScanWindow >("sharp_scan_window"),
     BoolKey< &sGeneratedBallLooks >("power_spider_ball"),

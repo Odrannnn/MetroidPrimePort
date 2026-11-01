@@ -82,6 +82,7 @@ float sDynScale = 0.f;      // the scale in use; 0 = sRenderScale
 PortDebug::EAspectMode sAspectMode = PortDebug::kAspect_Window;
 bool sHudWide = true;
 bool sCinemaBars = false;
+bool sBallBars = false;
 bool sPhazonShell = true;
 bool sSharpScanWindow = false;
 bool sGeneratedBallLooks = true;
@@ -488,6 +489,7 @@ void EnsureInitialized() {
   }
   sHudWide = port::EnvFlag("MP_HUD_WIDE", sHudWide);
   sCinemaBars = port::EnvFlag("MP_CINEMA_BARS", sCinemaBars);
+  sBallBars = port::EnvFlag("MP_BALL_BARS", sBallBars);
   sSharpScanWindow = port::EnvFlag("MP_SHARP_SCAN_WINDOW", sSharpScanWindow);
   sGeneratedBallLooks = port::EnvFlag("MP_POWER_SPIDER_BALL", sGeneratedBallLooks);
   sAutoAim = port::EnvFlag("MP_AUTO_AIM", sAutoAim);
