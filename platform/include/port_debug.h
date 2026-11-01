@@ -268,6 +268,13 @@ float ScanSpeed();
 // the hint the game would show next; ConsumeShowHintRequest() takes the request.
 const int kHintDelayMin = 0;
 const int kHintDelayMax = 30;
+// Music and sound effects boost in percent (music_boost=, sfx_boost=, MP_MUSIC_BOOST, MP_SFX_BOOST;
+// 100 = none): the F1 Game > Audio rows' part above 100 percent. The port's mixer scales the music
+// (the sequenced MusyX voices and the streamed music) or the sound effects voices past the game's
+// own maximum.
+const int kVolumeBoostMin = 100;
+const int kVolumeBoostMax = 200;
+const int kVolumeBoostDefault = 100;
 float HintDelaySeconds();
 void RequestShowHint();
 bool ConsumeShowHintRequest();

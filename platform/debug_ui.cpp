@@ -89,6 +89,8 @@ bool sGeneratedBallLooks = true;
 bool sAutoAim = true;
 int sScanSpeed = 100;
 int sHintDelay = 0;
+int sMusicBoost = PortDebug::kVolumeBoostDefault;
+int sSfxBoost = PortDebug::kVolumeBoostDefault;
 bool sSecondaryCrosshairs = true;
 // A remapped pad drives menus and the map with its standard buttons (issue #57).
 bool sMenuStandardButtons = true;
@@ -497,6 +499,11 @@ void EnsureInitialized() {
                           PortDebug::kScanSpeedMax);
   sHintDelay = std::clamp(port::EnvInt("MP_HINT_DELAY", sHintDelay), PortDebug::kHintDelayMin,
                           PortDebug::kHintDelayMax);
+  sMusicBoost = std::clamp(port::EnvInt("MP_MUSIC_BOOST", sMusicBoost), PortDebug::kVolumeBoostMin,
+                           PortDebug::kVolumeBoostMax);
+  sSfxBoost = std::clamp(port::EnvInt("MP_SFX_BOOST", sSfxBoost), PortDebug::kVolumeBoostMin,
+                         PortDebug::kVolumeBoostMax);
+  ApplyVolumeBoosts();
   sSecondaryCrosshairs = port::EnvFlag("MP_SECONDARY_CROSSHAIRS", sSecondaryCrosshairs);
   if (const char* style = std::getenv("MP_CROSSHAIR_STYLE")) {
     if (std::strcmp(style, "classic") == 0) {

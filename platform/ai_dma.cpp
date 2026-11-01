@@ -35,6 +35,9 @@ SDL_AudioStream* sStream = nullptr;
 uint64_t sNextFrameNs = 0;
 bool sStarted = false;
 bool sOutputEnabled = true;
+// The port's music boost (`music_boost`, F1 > Game > Audio): this stream carries the streamed
+// music (and the movie audio), which the MusyX voices do not cover.
+float sMusicBoost = 1.f;
 bool sAudioInitialized = false;
 bool sPlaying = true;
 alignas(32) uint8_t sSilence[0x280] = {};
@@ -72,8 +75,12 @@ void EnsureStream() {
   if (sStream == nullptr) {
     PortLog::Write("AI audio device unavailable: %s\n", SDL_GetError());
     sOutputEnabled = false;
-  } else if (sPlaying) {
-    SDL_ResumeAudioStreamDevice(sStream);
+  } else {
+    // A boost set before the stream existed lands here.
+    SDL_SetAudioStreamGain(sStream, sMusicBoost);
+    if (sPlaying) {
+      SDL_ResumeAudioStreamDevice(sStream);
+    }
   }
 }
 
@@ -204,6 +211,15 @@ extern "C" void AIPortSetOutputEnabled(int enabled) {
 }
 
 extern "C" int AIPortOutputEnabled(void) { return sOutputEnabled && sStream != nullptr; }
+
+// The port's volume boost for what this stream plays; 1.0 is none. Applied at once when the
+// stream is open, kept for one that opens later.
+extern "C" void AIPortSetOutputGain(float gain) {
+  sMusicBoost = gain > 0.f ? gain : 1.f;
+  if (sStream != nullptr) {
+    SDL_SetAudioStreamGain(sStream, sMusicBoost);
+  }
+}
 
 extern "C" void AIPortShutdown(void) {
   sCallback = nullptr;

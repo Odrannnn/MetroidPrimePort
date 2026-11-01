@@ -161,16 +161,29 @@ void DrawSettingsSection() {
 void DrawGameAudio() {
   ImGui::SeparatorText("Audio");
   ImGui::BeginDisabled(gpGameState == nullptr);
-  int music = gpGameState != nullptr ? gpGameState->GameOptions().GetMusicVolume() : 0;
-  int musicPct = (music * 100 + 63) / 127;
-  if (ImGui::SliderInt("Music volume", &musicPct, 0, 100, "%d%%") && gpGameState != nullptr) {
-    gpGameState->GameOptions().SetMusicVolume((musicPct * 127 + 50) / 100, true);
-  }
-  int sfx = gpGameState != nullptr ? gpGameState->GameOptions().GetSfxVolume() : 0;
-  int sfxPct = (sfx * 100 + 63) / 127;
-  if (ImGui::SliderInt("Sound effects volume", &sfxPct, 0, 100, "%d%%") && gpGameState != nullptr) {
-    gpGameState->GameOptions().SetSfxVolume((sfxPct * 127 + 50) / 100, true);
-  }
+  // Up to 100% is the game's own volume (0..127); above it the game volume stays at full and
+  // the port's boost scales the mix.
+  const auto volumeRow = [](const char* label, int volume, int& boost, auto&& setVolume) {
+    int pct = volume >= 127 ? boost : (volume * 100 + 63) / 127;
+    if (ImGui::SliderInt(label, &pct, 0, PortDebug::kVolumeBoostMax, "%d%%",
+                         ImGuiSliderFlags_AlwaysClamp) &&
+        gpGameState != nullptr) {
+      if (pct > PortDebug::kVolumeBoostDefault) {
+        setVolume(127);
+        boost = pct;
+      } else {
+        setVolume((pct * 127 + 50) / 100);
+        boost = PortDebug::kVolumeBoostDefault;
+      }
+      ApplyVolumeBoosts();
+      MarkDirty();
+    }
+    ItemHelp("Above 100% the port amplifies the game's mix; loud passages can clip.");
+  };
+  volumeRow("Music volume", gpGameState != nullptr ? gpGameState->GameOptions().GetMusicVolume() : 0,
+            sMusicBoost, [](int v) { gpGameState->GameOptions().SetMusicVolume(v, true); });
+  volumeRow("Sound effects volume", gpGameState != nullptr ? gpGameState->GameOptions().GetSfxVolume() : 0,
+            sSfxBoost, [](int v) { gpGameState->GameOptions().SetSfxVolume(v, true); });
   // Sound mode: Mono / Stereo / Dolby Surround
   int soundMode = gpGameState != nullptr ? static_cast<int>(gpGameState->GameOptions().GetSurroundMode()) : CAudioSys::kSM_Stereo;
   constexpr const char* kSoundModeLabels[] = {"Mono", "Stereo", "Dolby Surround"};

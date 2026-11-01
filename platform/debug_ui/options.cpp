@@ -28,6 +28,7 @@
 #include "MetroidPrime/Player/CPlayerState.hpp"
 
 #include <aurora/gfx.h>
+#include <musyx/port_voices.h>
 #include <dolphin/gx/GXExtra.h>
 #include <dolphin/vi.h>
 #include <SDL3/SDL_dialog.h>
@@ -51,6 +52,17 @@
 namespace aurora {
 bool frame_buffer_size_for_scale(float scale, uint32_t* width, uint32_t* height) noexcept;
 } // namespace aurora
+
+// platform/ai_dma.cpp: the streamed-audio (music, movie) stream's own gain.
+extern "C" void AIPortSetOutputGain(float gain);
+
+void DebugUi::ApplyVolumeBoosts() {
+  const float music = static_cast< float >(sMusicBoost) / 100.f;
+  // The MusyX voices scale one by one in the mix; the AI DMA stream (streamed music, movie audio)
+  // takes the music boost as its stream's gain.
+  MusyxPortSetVolumeBoost(music, static_cast< float >(sSfxBoost) / 100.f);
+  AIPortSetOutputGain(music);
+}
 
 namespace PortDebug {
 

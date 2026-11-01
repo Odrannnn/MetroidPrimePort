@@ -798,6 +798,11 @@
   default 0 = Game default): caps the wait before a hint first shows, also for
   hints already waiting in a loaded save. Needs the in-game hint system on. Game
   default under Original experience.
+- Music / sound effects boost (Game > Audio, the volume sliders past 100%;
+  `music_boost`, `sfx_boost`, `MP_MUSIC_BOOST`, `MP_SFX_BOOST`, 100-200, default
+  100): amplifies the mix once the game's own volume is full. Music covers the
+  sequenced music voices, streamed music and movie audio; sound effects the
+  effect voices. High values can clip. Kept under Original experience.
 - Show current hint (Game > Cutscenes button; console `hint show`): shows the hint
   the game would show next. A hint already on screen comes back with its map
   marker; otherwise the waiting hint due soonest shows now. Needs the in-game
