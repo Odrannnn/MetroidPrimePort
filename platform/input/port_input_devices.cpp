@@ -374,6 +374,14 @@ void BindBeamChords(Profile& p) {
   for (const Input& shift : padShifts) BindIn(p, Action::SpringBall, shift, PortInput::kCtxMorphBall);
 }
 
+// Turbo: A on one poll and off the next, so the gun sees a press edge every other
+// tick. The rate is the nominal one: adaptive simulation changes the tick every
+// frame, and a profile that changes every frame is rebuilt every frame (issue #235).
+uint16_t TurboHz() {
+  const unsigned rate = PortDebug::SimRate();
+  return static_cast< uint16_t >(rate > 0 ? (rate + 1) / 2 : 30);
+}
+
 void BindPortControls(Profile& p) {
   for (int bit = 0; bit < PortDebug::kPadAltCount; ++bit) {
     Bind(p, PadBitAction(1u << bit), NativeInput(PortDebug::PadAltButton(bit)));
@@ -381,21 +389,14 @@ void BindPortControls(Profile& p) {
 
   BindBeamChords(p);
 
-  // Turbo: A on one poll and off the next, so the gun sees a press edge every
-  // other tick. Retail has no turbo; the touch button has its own setting. The
-  // rate is the nominal one: adaptive simulation changes the tick every frame,
-  // and a profile that changes every frame is rebuilt every frame (issue #235).
-  const unsigned rate = PortDebug::SimRate();
-  const auto turboHz = static_cast< uint16_t >(rate > 0 ? (rate + 1) / 2 : 30);
+  // Retail has no turbo; the touch button has its own setting (BindStockTouch).
+  const uint16_t turboHz = TurboHz();
   if (!PortDebug::OriginalExperience()) {
     for (int slot = 0; slot < PAD_KEY_SLOT_COUNT; ++slot) {
       Bind(p, Action::PadA, KeySlotInput(PortDebug::TurboBinding(slot), kMouseHeld), turboHz);
     }
     Bind(p, Action::PadA, NativeInput(PortDebug::TurboBinding(PAD_KEY_SLOT_COUNT)), turboHz);
   }
-  Bind(p, Action::PadA, Make(Device::Touch, kTouchTurbo), turboHz);
-  Bind(p, Action::PadZ, Make(Device::Touch, kTouchMapTap));
-  BindIn(p, Action::PadB, Make(Device::Touch, kTouchMenuBack), PortInput::kCtxMenu | PortInput::kCtxMap);
 
   // The port's own keys and the pad's overlay chord. Back + Start is ordered both
   // ways, so either can be held first; the chord also keeps Start from pausing.
@@ -801,6 +802,9 @@ static bool TouchControlCode(int control) {
 }
 static_assert(kTouchCustomBase == PortInput::kTouchButtonBase && kTouchCustomCount == PortInput::kTouchButtonSlots);
 static_assert(kTouchCustomBase + kTouchCustomCount <= PortInput::kTouchCount);
+static_assert(PortInput::kTouchTurboCode == kTouchTurbo);
+static_assert(std::end(PortInput::kTouchStockControls)[-2].control == kTouchMapTap &&
+              std::end(PortInput::kTouchStockControls)[-1].control == kTouchMenuBack);
 
 void SetTouchControl(int control, bool down) {
   if (!TouchControlCode(control)) return;
@@ -948,8 +952,9 @@ void KeepPortMenuReachable(Profile& p) {
 void BuildProfile(Profile& out) {
   BuildBaseProfile(out);
   const SActiveProfiles user = ActiveUserProfiles();
-  if (user.sel.base != nullptr) PortInput::Overlay(out, *user.sel.base);
-  if (user.sel.pad != nullptr) PortInput::Overlay(out, *user.sel.pad);
+  if (user.sel.base != nullptr) PortInput::Overlay(out, PortInput::WithoutStockTouch(*user.sel.base));
+  if (user.sel.pad != nullptr) PortInput::Overlay(out, PortInput::WithoutStockTouch(*user.sel.pad));
+  PortInput::BindStockTouch(out, TurboHz());
   PublishTouchBound(out);
   // After the overlay: a controls.toml touch binding of the same action must not
   // drop the layout's own buttons. Re-read every poll, so an added one works at once.

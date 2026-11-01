@@ -1,6 +1,7 @@
 #include "port_input_bindings.h"
 #include "port_test.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
@@ -458,6 +459,58 @@ void TestTouchButtons() {
   Input back;
   REQUIRE(InputFromText("touch:k9", back) && back == In(Device::Touch, 73));
 }
+
+// The stock touch buttons: fixed actions a user binding can't take or clear.
+void TestStockTouch() {
+  REQUIRE(StockTouchInput(In(Device::Touch, 4)) && StockTouchInput(In(Device::Touch, 22)));
+  REQUIRE(StockTouchInput(In(Device::Touch, 33)) && StockTouchInput(In(Device::Touch, 35)));
+  REQUIRE(!StockTouchInput(In(Device::Touch, 10)) && !StockTouchInput(In(Device::Touch, 32)));
+  REQUIRE(!StockTouchInput(In(Device::Touch, 40)) && !StockTouchInput(In(Device::Touch, 64)));
+  REQUIRE(!StockTouchInput(In(Device::PadButton, 4)));
+
+  // A binding with a stock code anywhere in it goes; Visor, beam shift, the Morph
+  // Ball rows and added buttons stay.
+  UserProfile user;
+  user.replace = true;
+  user.bindings.push_back(Bind(Action::PadA, {In(Device::Touch, 4)}));
+  user.bindings.push_back(Bind(Action::BeamIce, {In(Device::Touch, 32), In(Device::Touch, 5)}));
+  user.bindings.push_back(Bind(Action::VisorScan, {In(Device::Touch, 10)}));
+  user.bindings.push_back(Bind(Action::BeamIce, {In(Device::Touch, 32), In(Device::PadButton, 0)}));
+  user.bindings.push_back(Bind(Action::BallBomb, {In(Device::Touch, 40)}));
+  user.bindings.push_back(Bind(Action::PadY, {In(Device::Touch, 64)}));
+  const UserProfile kept = WithoutStockTouch(user);
+  REQUIRE(kept.replace && kept.bindings.size() == 4);
+  REQUIRE((kept.bindings[0] == user.bindings[2]) && (kept.bindings[3] == user.bindings[5]));
+
+  // After even a replacing overlay, touch B jumps and LB jumps in every context,
+  // the back arrow only backs out, and Turbo pulses A.
+  Profile p;
+  Overlay(p, kept);
+  BindStockTouch(p, 15);
+  Runtime runtime;
+  runtime.SetProfile(&p);
+  RawState raw;
+  raw.touch.set(4);
+  REQUIRE(runtime.Poll(raw, kCtxGameplay, 1000).Held(Action::PadB));
+  REQUIRE(!runtime.Last().Held(Action::PadA));
+  raw.touch.reset();
+  raw.touch.set(22);
+  REQUIRE(runtime.Poll(raw, kCtxMenu, 1016).Held(Action::PadB));
+  raw.touch.reset();
+  raw.touch.set(35);
+  REQUIRE(!runtime.Poll(raw, kCtxGameplay, 1032).Held(Action::PadB));
+  raw.touch.reset();
+  runtime.Poll(raw, kCtxMenu, 1040);
+  raw.touch.set(35);
+  REQUIRE(runtime.Poll(raw, kCtxMenu, 1048).Held(Action::PadB));
+  raw.touch.reset();
+  raw.touch.set(7);
+  REQUIRE(runtime.Poll(raw, kCtxGameplay, 1064).Held(Action::PadL));
+  REQUIRE(runtime.Last().Value(Action::LAnalog) == 1.f);
+  const auto turbo = std::find_if(p.bindings.begin(), p.bindings.end(),
+                                  [](const Binding& b) { return b.inputs[0] == In(Device::Touch, 33); });
+  REQUIRE(turbo != p.bindings.end() && turbo->action == Action::PadA && turbo->turboHz == 15);
+}
 // Custom actions: Action values past the fixed enum, named custom:<id> in the
 // file and defined by [[custom_action]] tables before the profiles.
 void TestCustomActions() {
@@ -744,6 +797,7 @@ int main() {
   TestCustomActions();
   TestBallButtons();
   TestTouchButtons();
+  TestStockTouch();
   TestDuplicateBindings();
   TestFamilyEditing();
   TestInputText();
