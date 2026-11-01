@@ -5,6 +5,7 @@
 // library. The format choice is checked last.
 
 #include "port_remastered_image.h"
+#include "port_remastered_txtr.h"
 
 #include <cmath>
 #include <cstdint>
@@ -171,6 +172,27 @@ int main() {
     zb = back[i * 4 + 2] <= 1 && back[i * 4 + 3] >= 254;
   }
   CHECK_MSG(zb, "normal map blue 0 and alpha 255");
+
+  // DecodeDds reads the top mip of what EncodeDds writes, BC7 and ASTC, unorm and sRGB.
+  {
+    const Image source = Make(64, 32, 0);
+    for (const DdsFormat format : {DdsFormat::BC7, DdsFormat::ASTC4x4}) {
+      for (const bool srgb : {false, true}) {
+        const std::vector<uint8_t> dds = EncodeDds(source, format, false, MapKind::Data, srgb);
+        PortRemastered::TxtrImage decoded;
+        std::string error;
+        const bool ok = PortRemastered::DecodeDds(dds.data(), dds.size(), decoded, error);
+        char what[128];
+        std::snprintf(what, sizeof(what), "DecodeDds %s%s: %s", format == DdsFormat::BC7 ? "BC7" : "ASTC",
+                      srgb ? " sRGB" : "", error.c_str());
+        CHECK_MSG(ok && decoded.width == 64 && decoded.height == 32 && decoded.srgb == srgb &&
+                      decoded.rgba.size() == 64 * 32 * 4 && Psnr(source, decoded.rgba, false) > 35.0,
+                  what);
+        PortRemastered::TxtrImage cut;
+        CHECK_MSG(!PortRemastered::DecodeDds(dds.data(), 148 + 16, cut, error), "DecodeDds: a short file fails");
+      }
+    }
+  }
 
   // Format choice: BC with no GPU, ASTC when only ASTC is there, the env wins.
   UnsetEnv("MP_REMASTERED_TEXTURE_FORMAT");

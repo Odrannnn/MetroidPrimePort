@@ -663,6 +663,7 @@ void Initialize() {
   std::map<std::string, std::pair<std::string, Replacement>> addedMovies; // by lower-case disc path
   std::map<std::pair<uint32_t, uint32_t>, LooseResource> loose;
   std::map<std::pair<uint32_t, uint32_t>, size_t> looseMod;
+  std::string dreadDir;  // the Dread Samus import's folder, when it is on
   for (const fs::path& modDir : modDirs) {
     ModInfo& info = sStatus.mods.emplace_back();
     info.name = PathString(modDir.filename());
@@ -691,6 +692,9 @@ void Initialize() {
     }
     if (!info.enabled) {
       continue;
+    }
+    if (info.name == PortDreadSamus::kModName) {
+      dreadDir = PathString(modDir);
     }
     const size_t modIndex = sStatus.mods.size() - 1;
     // An import's text tables are copies of the disc it was made from (kTextDiscName): on
@@ -952,6 +956,23 @@ void Initialize() {
         // when nothing could be made, so Apply does not stay pending.
         const PortSuitColours::Picks picks = PortSuitColours::SuitPicks(suit);
         served[suit] = PortSuitColours::PicksKey(suit, picks);
+        if (suit >= PortSuitColours::kDreadFirst) {
+          if (dreadDir.empty()) {
+            continue;
+          }
+          // Only the import's own images: a later mod's stays.
+          const auto source = [&](uint32_t id) {
+            const auto found = sNativeTextures.find(id);
+            return found != sNativeTextures.end() &&
+                           PathString(PathFromString(found->second).parent_path()) == dreadDir
+                       ? found->second
+                       : std::string();
+          };
+          for (auto& [id, path] : PortSuitColours::CollectDread(suit, picks, dreadDir, source)) {
+            sNativeTextures[id] = std::move(path);
+          }
+          continue;
+        }
         std::vector<LooseResource> made = PortSuitColours::Collect(suit, picks, loose, &HasNativeTexture);
         for (LooseResource& resource : made) {
           loose[{resource.type, resource.id}] = std::move(resource);

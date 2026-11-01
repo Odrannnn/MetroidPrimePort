@@ -33,6 +33,17 @@ const Suit kSuits[kSuitCount] = {
      {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false},
     {"fusion_phazon", "Fusion Phazon Suit", 3, {{{32.8, 0.869, 0.969}, {54.9, 0.746, 0.871}, {4.1, 0.851, 0.871}}},
      {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, true, false},
+    // The Dread Samus import's, measured the same way over its BCLR textures
+    // (cutscene, game and doll bodies, and the ball). Its Power Suit's green
+    // lights (90-105) and its Varia's olive under-suit stay out of the gates.
+    {"dread_power", "Power Suit (Dread)", 2, {{{200.2, 0.606, 0.741}, {8.9, 0.651, 0.776}, {}}},
+     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, false, false},
+    {"dread_gravity", "Gravity Suit (Dread)", 3, {{{267.4, 0.579, 0.71}, {303.9, 0.85, 0.773}, {8.8, 0.623, 0.902}}},
+     {"primary", "secondary", "accent"}, {"Primary", "Secondary", "Accent"}, false, false},
+    {"dread_varia", "Varia Suit (Dread)", 2, {{{38.9, 0.867, 0.937}, {6.6, 0.644, 0.843}, {}}},
+     {"primary", "secondary", nullptr}, {"Primary", "Secondary", nullptr}, true, false},
+    {"dread_phazon", "Metroid Suit (Dread)", 2, {{{90.6, 0.621, 0.592}, {10.8, 0.462, 0.388}, {}}},
+     {"primary", "accent", nullptr}, {"Primary", "Accent", nullptr}, false, false},
 };
 
 // Tuned by eye on contact sheets of every suit.

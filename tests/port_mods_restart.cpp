@@ -64,6 +64,8 @@ std::string PicksKey(int, const Picks&) { return {}; }
 void SetServed(const std::array<std::string, kSuitCount>&) {}
 std::vector<PortMods::LooseResource> Collect(int, const Picks&,
     const std::map<std::pair<uint32_t, uint32_t>, PortMods::LooseResource>&, bool (*)(uint32_t)) { return {}; }
+std::vector<std::pair<uint32_t, std::string>> CollectDread(int, const Picks&, const std::string&,
+    const std::function<std::string(uint32_t)>&) { return {}; }
 }
 namespace aurora::texture {
 ReplacementRegistration register_file_replacement(ReplacementKey, const std::filesystem::path&, ReplacementOptions) { return {}; }

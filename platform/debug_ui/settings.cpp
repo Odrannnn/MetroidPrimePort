@@ -133,6 +133,10 @@ const SettingKey kSettingKeys[] = {
     {"suit_colour_fusion_gravity", &ReadSuitColours< 5 >, &WriteSuitColours< 5 >, true, "FF4000,-,-", "-,-,2050FF"},
     {"suit_colour_fusion_varia", &ReadSuitColours< 6 >, &WriteSuitColours< 6 >, true, "FF4000,-,-", "-,-,2050FF"},
     {"suit_colour_fusion_phazon", &ReadSuitColours< 7 >, &WriteSuitColours< 7 >, true, "FF4000,-,-", "-,-,2050FF"},
+    {"suit_colour_dread_power", &ReadSuitColours< 8 >, &WriteSuitColours< 8 >, true, "FF4000,-", "-,2050FF"},
+    {"suit_colour_dread_gravity", &ReadSuitColours< 9 >, &WriteSuitColours< 9 >, true, "FF4000,-,-", "-,-,2050FF"},
+    {"suit_colour_dread_varia", &ReadSuitColours< 10 >, &WriteSuitColours< 10 >, true, "FF4000,-", "-,2050FF"},
+    {"suit_colour_dread_phazon", &ReadSuitColours< 11 >, &WriteSuitColours< 11 >, true, "FF4000,-", "-,2050FF"},
     BoolKey< &sAutoAim >("auto_aim"),
     {"scan_speed",
      [](const std::string& value) {

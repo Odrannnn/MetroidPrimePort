@@ -5,6 +5,7 @@
 
 #include "port_env.h"
 #include "port_debug.h"
+#include "port_dread_samus_mod.h"
 #include "port_third_person.h"
 #include "port_graphics_backend.h"
 #include "port_gyro_motion.h"
@@ -94,9 +95,18 @@ void DrawVideoDisplay() {
   ImGui::SeparatorText("Suit colours");
   {
     static int sSuitColoursSuit = 0;
+    // The Dread suits only while the Dread Samus import is on.
+    const auto& mods = PortMods::CurrentStatus().mods;
+    const bool dread = std::any_of(mods.begin(), mods.end(), [](const PortMods::ModInfo& mod) {
+      return mod.enabled && mod.name == PortDreadSamus::kModName;
+    });
+    const int suitCount = dread ? PortSuitColours::kSuitCount : PortSuitColours::kDreadFirst;
+    if (sSuitColoursSuit >= suitCount) {
+      sSuitColoursSuit = 0;
+    }
     const PortSuitColours::Suit& suit = PortSuitColours::SuitInfo(sSuitColoursSuit);
     if (ImGui::BeginCombo("Suit", suit.name)) {
-      for (int i = 0; i < PortSuitColours::kSuitCount; ++i) {
+      for (int i = 0; i < suitCount; ++i) {
         const bool custom = !PortSuitColours::PicksKey(i).empty();
         const std::string label = std::string(PortSuitColours::SuitInfo(i).name) + (custom ? " *" : "");
         if (ImGui::Selectable(label.c_str(), i == sSuitColoursSuit)) {
@@ -108,7 +118,8 @@ void DrawVideoDisplay() {
     ImGui::SetItemTooltip(
         "Each suit's colours, saved per suit (* = changed). Recoloured from your disc, so\n"
         "the change shows everywhere: cutscenes, pause screen, arm cannon, morph ball.\nA mod's "
-        "own suit textures (the Remastered import) are left alone.");
+        "own suit textures (the Remastered import) are left alone; the (Dread) suits recolour\n"
+        "the Dread Samus import's own.");
     for (int slot = 0; slot < suit.slots; ++slot) {
       ImGui::PushID(slot);
       const std::optional< uint32_t > picked = PortSuitColours::Colour(sSuitColoursSuit, slot);

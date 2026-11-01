@@ -45,6 +45,17 @@ std::string Hex8(uint32_t v) {
   return b;
 }
 
+// A Dread body's stem ("samusgravity") as CPlayerState::EPlayerSuit, -1 for none.
+int PrimeSuitOf(const char* stem) {
+  static constexpr const char* kStems[] = {"samuspower", "samusgravity", "samusvaria", "samushyper"};
+  for (int i = 0; i < 4; ++i) {
+    if (std::strcmp(stem, kStems[i]) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 bool Fail(std::string* error, std::string message) {
   if (error != nullptr) {
     *error = std::move(message);
@@ -884,6 +895,21 @@ bool Import(const Io& io, Result& result, std::string& error) {
       log("dread: " + line);
     }
   };
+  // Which suit each converted BCLR belongs to, for the suit colours (dread-suits.txt): the
+  // suit whose model converts it first. -1 while converting nothing of a suit's.
+  int convertingSuit = -1;
+  std::map<uint32_t, int> suitColours;
+  cio.textureId = [&](const PortRemastered::ModelUuid& src, uint32_t id) {
+    if (convertingSuit < 0) {
+      return;
+    }
+    for (const auto& [path, m] : materials) {
+      if (m && !m->images.empty() && m->images[0].id == src) {
+        suitColours.emplace(id, convertingSuit);
+        return;
+      }
+    }
+  };
   PortRemastered::Converter converter(cio);
 
   std::map<std::string, PortDread::Bcmdl> models;
@@ -1004,6 +1030,7 @@ bool Import(const Io& io, Result& result, std::string& error) {
     }
     opt.skip.clear();
     opt.texturePrefix = "dread:";
+    convertingSuit = PrimeSuitOf(t.suit);
     if (!converter.Convert(built, opt, why)) {
       failTarget("convert: " + why);
       continue;
@@ -1154,6 +1181,7 @@ bool Import(const Io& io, Result& result, std::string& error) {
     opt.source = "dread " + label;
     opt.skip.clear();
     for (int r = 0; r < 3; ++r) for (int c = 0; c < 3; ++c) opt.orient[r][c] = r == c ? 1.0 : 0.0;
+    convertingSuit = t.primeSuit;
     if (!converter.Convert(built, opt, error)) return Fail(&error, label + ": convert: " + error);
     ++result.converted;
     char line[256];
@@ -1224,6 +1252,7 @@ bool Import(const Io& io, Result& result, std::string& error) {
     opt.source = std::string("dread ") + t.source;
     opt.skip.clear();
     for (int r = 0; r < 3; ++r) for (int c = 0; c < 3; ++c) opt.orient[r][c] = r == c ? 1.0 : 0.0;
+    convertingSuit = t.suit;
     if (!converter.Convert(built, opt, error)) return false;
     auto put = [&](size_t offset, uint32_t value) {
       for (int i = 0; i < 4; ++i) ancs[offset + i] = uint8_t(value >> (24 - i * 8));
@@ -1243,6 +1272,13 @@ bool Import(const Io& io, Result& result, std::string& error) {
         ": measured fit " + std::to_string(fit.scale) + ", rigid joint " + std::to_string(rigid->first));
   }
   if (cancelled()) return Fail(&error, "cancelled");
+  {
+    std::string manifest = "# <suit> <BCLR texture id>: CPlayerState::EPlayerSuit, then the .dds the suit colours redo\n";
+    for (const auto& [id, suit] : suitColours) {
+      manifest += std::to_string(suit) + " " + Hex8(id) + "\n";
+    }
+    pending[PortDreadSamus::kSuitColoursName] = std::vector<uint8_t>(manifest.begin(), manifest.end());
+  }
   for (const auto& [name, bytes] : pending) {
     if (cancelled()) return Fail(&error, "cancelled; discard staging");
     if (!io.write(name, bytes)) return Fail(&error, "cannot write " + name + "; discard staging");

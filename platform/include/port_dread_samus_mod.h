@@ -25,7 +25,11 @@ inline constexpr const char* kStampName = ".dread-samus-version";
 // 10: the cannon's glowing core pushed out onto the inside of its shell.
 // 11: the shoulder pads in Dread's idle pose rather than its T-pose bind (#221).
 // 12: both pads from the hanging-arm idle; the aiming one turned the cannon-side disc forward (#226).
-inline constexpr int kVersion = 12;
+// 13: dread-suits.txt, each suit's BCLR textures, for the suit colours (#221).
+inline constexpr int kVersion = 13;
+// In the mod folder: lines "<suit> <texture id>", the BCLR .dds files PortSuitColours
+// recolours for that CPlayerState::EPlayerSuit ('#' starts a comment). The mod loader skips .txt.
+inline constexpr const char* kSuitColoursName = "dread-suits.txt";
 
 // The first-person suit arms (CGunWeapon::skSuitArmNames PowerArm, GravityArm, VariaArm,
 // PhazonArm) by CPlayerState::EPlayerSuit. The import writes a variant of each holding the suit's

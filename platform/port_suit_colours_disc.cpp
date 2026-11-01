@@ -7,15 +7,20 @@
 
 #include "port_ball_looks.h"
 #include "port_disc.h"
+#include "port_dread_samus_mod.h"
 #include "port_disc_reader.h"
 #include "port_log.h"
 #include "port_model_variant.h"
 #include "port_paths.h"
+#include "port_remastered_txtr.h"
 #include "port_strings.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -92,6 +97,32 @@ bool HasTransparency(const PortRemastered::Image& image) {
     }
   }
   return false;
+}
+
+// Each file goes in whole (written aside, then renamed), and the stamp last,
+// so an interrupted write leaves no stamp and is made again.
+bool Put(const fs::path& dir, const std::string& name, const char* data, size_t size) {
+  std::error_code ec;
+  const fs::path file = dir / name;
+  fs::path temporary = file;
+  temporary += ".tmp";
+  {
+    std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+    out.write(data, std::streamsize(size));
+    out.close();
+    if (!out) {
+      fs::remove(temporary, ec);
+      PortLog::Write("suit colours: cannot write %s\n", PortPaths::detail::ToUtf8(file).c_str());
+      return false;
+    }
+  }
+  fs::rename(temporary, file, ec);
+  if (ec) {
+    fs::remove(temporary, ec);
+    PortLog::Write("suit colours: cannot write %s\n", PortPaths::detail::ToUtf8(file).c_str());
+    return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -196,36 +227,139 @@ std::vector<PortMods::LooseResource> Collect(
     return {};
   }
   fs::create_directories(dir, ec);
-  // Each file goes in whole (written aside, then renamed), and the stamp last,
-  // so an interrupted write leaves no stamp and is made again.
-  const auto put = [&](const std::string& name, const char* data, size_t size) {
-    const fs::path file = dir / name;
-    fs::path temporary = file;
-    temporary += ".tmp";
-    {
-      std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-      out.write(data, std::streamsize(size));
-      out.close();
-      if (!out) {
-        fs::remove(temporary, ec);
-        PortLog::Write("suit colours: cannot write %s\n", PortPaths::detail::ToUtf8(file).c_str());
-        return false;
-      }
-    }
-    fs::rename(temporary, file, ec);
-    if (ec) {
-      fs::remove(temporary, ec);
-      PortLog::Write("suit colours: cannot write %s\n", PortPaths::detail::ToUtf8(file).c_str());
-      return false;
-    }
-    return true;
-  };
   for (const auto& [id, data] : outputs) {
-    if (!put(FileName(id), reinterpret_cast<const char*>(data.data()), data.size())) {
+    if (!Put(dir, FileName(id), reinterpret_cast<const char*>(data.data()), data.size())) {
       return {};
     }
   }
-  if (!put(kStampName, stamp.data(), stamp.size())) {
+  if (!Put(dir, kStampName, stamp.data(), stamp.size())) {
+    return {};
+  }
+  PortLog::Write("suit colours: %s made in %s\n", info.name, PortPaths::detail::ToUtf8(dir).c_str());
+  return cached();
+}
+
+std::vector<std::pair<uint32_t, std::string>> CollectDread(int suit, const Picks& picks, const std::string& modDir,
+                                                           const std::function<std::string(uint32_t)>& source) {
+  const std::string picksKey = PicksKey(suit, picks);
+  const std::string& user = PortPaths::UserFolder();
+  if (suit < kDreadFirst || suit >= kSuitCount || picksKey.empty() || user.empty() || modDir.empty()) {
+    return {};
+  }
+  const Suit& info = SuitInfo(suit);
+  const fs::path mod = PortPaths::detail::FromUtf8(modDir);
+
+  // "<suit> <texture id>" lines, the suit as CPlayerState::EPlayerSuit.
+  std::vector<std::pair<uint32_t, std::string>> jobs;  // (id, the .dds served now)
+  {
+    std::ifstream list(mod / PortDreadSamus::kSuitColoursName);
+    if (!list.is_open()) {
+      PortLog::Write("suit colours: %s: the Dread Samus import has no %s; import it again\n", info.name,
+                     PortDreadSamus::kSuitColoursName);
+      return {};
+    }
+    std::string line;
+    while (std::getline(list, line)) {
+      line = line.substr(0, line.find('#'));
+      std::istringstream fields(line);
+      int listed = -1;
+      std::string hex;
+      if (!(fields >> listed >> hex) || listed != suit - kDreadFirst) {
+        continue;
+      }
+      char* end = nullptr;
+      const unsigned long id = std::strtoul(hex.c_str(), &end, 16);
+      if (end == hex.c_str() || *end != '\0') {
+        continue;
+      }
+      std::string path = source(uint32_t(id));
+      if (path.empty()) {
+        PortLog::Write("suit colours: %s: another mod has its own %08X; left as it is\n", info.name, unsigned(id));
+        continue;
+      }
+      jobs.emplace_back(uint32_t(id), std::move(path));
+    }
+  }
+  if (jobs.empty()) {
+    return {};
+  }
+
+  const auto ddsName = [](uint32_t id) {
+    char name[16];
+    std::snprintf(name, sizeof(name), "%08X.dds", id);
+    return std::string(name);
+  };
+  std::string sources;  // the import's stamp and the sources' sizes: a new import makes them again
+  {
+    std::ifstream in(mod / PortDreadSamus::kStampName);
+    std::string text = in.is_open() ? port::ReadAllText(in) : std::string();
+    std::replace(text.begin(), text.end(), '\n', ' ');
+    sources = text;
+  }
+  std::error_code ec;
+  for (const auto& [id, path] : jobs) {
+    const uintmax_t size = fs::file_size(PortPaths::detail::FromUtf8(path), ec);
+    sources += " " + ddsName(id) + "@" + std::to_string(ec ? 0 : size);
+  }
+  const fs::path dir = PortPaths::detail::FromUtf8(user) / "generated" / "suit-colours" / info.key;
+  const PortRemastered::DdsFormat format = PortRemastered::ColourDdsFormat();
+  const std::string stamp = std::string("suit-colours ") + std::to_string(kVersion) + " " +
+                            PortRemastered::TextureFormatName() + " " + info.key + " " + picksKey + " " + sources +
+                            "\n";
+  const auto cached = [&]() {
+    std::vector<std::pair<uint32_t, std::string>> found;
+    for (const auto& job : jobs) {
+      const fs::path file = dir / ddsName(job.first);
+      const uintmax_t size = fs::file_size(file, ec);
+      if (ec || size == 0) {
+        continue;  // could not be made: logged when it was tried
+      }
+      found.emplace_back(job.first, PortPaths::detail::ToUtf8(file));
+    }
+    return found;
+  };
+  {
+    std::ifstream in(dir / kStampName);
+    if (in.is_open() && port::ReadAllText(in) == stamp) {
+      std::vector<std::pair<uint32_t, std::string>> found = cached();
+      if (!found.empty()) {
+        PortLog::Write("suit colours: %s from the cache in %s\n", info.name, PortPaths::detail::ToUtf8(dir).c_str());
+        return found;
+      }
+    }
+  }
+
+  fs::remove(dir / kStampName, ec);
+  for (const auto& job : jobs) {
+    fs::remove(dir / ddsName(job.first), ec);
+  }
+  fs::create_directories(dir, ec);
+  size_t made = 0;
+  for (const auto& [id, path] : jobs) {
+    std::vector<uint8_t> dds;
+    PortRemastered::TxtrImage decoded;
+    std::string error;
+    if (!ReadFile(path, dds) || !PortRemastered::DecodeDds(dds.data(), dds.size(), decoded, error)) {
+      PortLog::Write("suit colours: %s: cannot read %s (%s); left as it is\n", info.name, path.c_str(),
+                     error.empty() ? "missing" : error.c_str());
+      continue;
+    }
+    PortRemastered::Image image;
+    image.width = int(decoded.width);
+    image.height = int(decoded.height);
+    image.rgba = std::move(decoded.rgba);
+    image.srgb = decoded.srgb;
+    const size_t changed = Recolour(image, suit, picks);
+    PortLog::Write("suit colours: %s: %s: %zu of %d texels recoloured\n", info.name, ddsName(id).c_str(), changed,
+                   image.width * image.height);
+    const std::vector<uint8_t> out =
+        PortRemastered::EncodeDds(image, format, false, PortRemastered::MapKind::Colour, image.srgb);
+    if (out.empty() || !Put(dir, ddsName(id), reinterpret_cast<const char*>(out.data()), out.size())) {
+      return {};
+    }
+    ++made;
+  }
+  if (made == 0 || !Put(dir, kStampName, stamp.data(), stamp.size())) {
     return {};
   }
   PortLog::Write("suit colours: %s made in %s\n", info.name, PortPaths::detail::ToUtf8(dir).c_str());

@@ -1289,6 +1289,8 @@ if(MP_BUILD_TESTS)
         LIBRARIES mp_test_remastered_convert)
     mp_port_test(port_remastered_astc_tests
         SOURCES tests/port_remastered_astc.cpp platform/port_remastered_image.cpp
+            platform/port_remastered_txtr.cpp platform/port_remastered_tegra_swizzle.cpp
+            platform/port_remastered_bcdec.cpp platform/port_remastered_astc_decode.cpp
         INCLUDES platform/include
         LIBRARIES astcenc)
     mp_port_test(port_remastered_image_tests

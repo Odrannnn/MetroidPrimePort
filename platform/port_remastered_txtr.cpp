@@ -655,6 +655,49 @@ bool ReadTxtrInfo(const uint8_t* data, size_t size, TxtrImage& out, std::string&
   return true;
 }
 
+bool DecodeDds(const uint8_t* data, size_t size, TxtrImage& out, std::string& error) {
+  out = TxtrImage{};
+  // 'DDS ', the 124 byte header, then the 20 byte DX10 one.
+  constexpr size_t kDataOffset = 4 + 124 + 20;
+  if (data == nullptr || size < kDataOffset || std::memcmp(data, "DDS ", 4) != 0 ||
+      std::memcmp(data + 84, "DX10", 4) != 0) {
+    error = "dds: not a DX10 .dds";
+    return false;
+  }
+  const uint32_t height = port::ReadLE32(data + 12), width = port::ReadLE32(data + 16);
+  const uint32_t mips = port::ReadLE32(data + 28), dxgi = port::ReadLE32(data + 128);
+  uint32_t format = 0;
+  switch (dxgi) {
+    case 28: format = kTxtrFormatRgba8Unorm; break;
+    case 29: format = kTxtrFormatRgba8Srgb; break;
+    case 98: format = kTxtrFormatBc7Unorm; break;
+    case 99: format = kTxtrFormatBc7UnormSrgb; break;
+    case 134: format = kTxtrFormatAstc4x4; break;
+    case 135: format = kTxtrFormatAstc4x4Srgb; break;
+    default:
+      error = "dds: cannot decode DXGI format " + std::to_string(dxgi);
+      return false;
+  }
+  constexpr uint32_t kMaxSide = 16384;
+  if (width == 0 || height == 0 || width > kMaxSide || height > kMaxSide) {
+    error = "dds: bad size " + std::to_string(width) + "x" + std::to_string(height);
+    return false;
+  }
+  const bool blocks = format != kTxtrFormatRgba8Unorm && format != kTxtrFormatRgba8Srgb;
+  const size_t need = blocks ? DivRoundUp(width, 4) * DivRoundUp(height, 4) * 16 : size_t(width) * height * 4;
+  if (size - kDataOffset < need) {
+    error = "dds: the top mip is cut short";
+    return false;
+  }
+  out.width = width;
+  out.height = height;
+  out.format = format;
+  out.srgb = FormatIsSrgb(format);
+  out.mipCount = std::max<uint32_t>(mips, 1);
+  out.rgba.assign(size_t(width) * height * 4, 0);
+  return DecodeBlocks(format, width, height, data + kDataOffset, out.rgba.data(), error);
+}
+
 bool DecodeTxtr(const uint8_t* data, size_t size, TxtrImage& out, std::string& error) {
   out = TxtrImage{};
   if (data == nullptr || size == 0) {

@@ -90,6 +90,11 @@ bool ReadTxtrInfo(const uint8_t* data, size_t size, TxtrImage& out, std::string&
 // with a message naming the format, rather than producing garbage.
 bool DecodeTxtr(const uint8_t* data, size_t size, TxtrImage& out, std::string& error);
 
+// The top mip of a DX10 .dds as the converter writes them (EncodeDds): BC7, ASTC 4x4
+// or RGBA8, unorm or sRGB. `format` is the matching kTxtrFormat* code, so `srgb`
+// says what the bytes are; the pixels stay encoded.
+bool DecodeDds(const uint8_t* data, size_t size, TxtrImage& out, std::string& error);
+
 // A cube map kept in high dynamic range, which is what Remastered's reflection
 // probes are: BC6H, six faces, a mip chain already filtered by roughness.
 struct TxtrCubeBc6h {

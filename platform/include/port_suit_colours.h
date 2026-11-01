@@ -22,12 +22,17 @@
 // PortMods serves the textures under every mod, from a cache in the user
 // folder (generated/suit-colours/<suit>/), and leaves out a texture a mod
 // brings (the Remastered import). Changing a colour takes a mod reload.
+//
+// The Dread Samus import (port_dread_samus_mod.h, issue #221) brings its own
+// suits, with their own colours: four more entries, after the retail eight,
+// recolour its .dds textures (CollectDread), which its dread-suits.txt lists.
 
 #include "port_mods.h"
 #include "port_remastered_image.h"
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -39,8 +44,10 @@ namespace PortSuitColours {
 // Bump when the output changes: the cache is remade when its stamp differs.
 inline constexpr int kVersion = 1;
 
-// CPlayerState::EPlayerSuit order.
-inline constexpr int kSuitCount = 8;
+// CPlayerState::EPlayerSuit order, then the Dread Samus import's suits in the
+// same order from kDreadFirst (Power, Gravity, Varia, Phazon's Metroid Suit).
+inline constexpr int kDreadFirst = 8;
+inline constexpr int kSuitCount = 12;
 inline constexpr int kMaxSlots = 3;
 
 // A slot's colour on the disc: the median of its texels, hue in degrees,
@@ -111,5 +118,13 @@ size_t Recolour(PortRemastered::Image& image, int suit, const Picks& picks,
 std::vector<PortMods::LooseResource> Collect(
     int suit, const Picks& picks, const std::map<std::pair<uint32_t, uint32_t>, PortMods::LooseResource>& loose,
     bool (*native)(uint32_t id));
+
+// The Dread Samus import's textures of `suit` (kDreadFirst on) recoloured to
+// `picks`, made or taken from the cache: (texture id, host path of the .dds).
+// `modDir` is the import's folder (its dread-suits.txt lists each suit's
+// textures); `source` gives the .dds a texture is served from now, or empty to
+// leave it. Empty when nothing is picked or the import has no list (logged).
+std::vector<std::pair<uint32_t, std::string>> CollectDread(int suit, const Picks& picks, const std::string& modDir,
+                                                           const std::function<std::string(uint32_t)>& source);
 
 }  // namespace PortSuitColours

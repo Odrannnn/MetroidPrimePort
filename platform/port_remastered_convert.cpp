@@ -420,6 +420,9 @@ struct Converter::State {
     }
     owner[tid] = tag;
     ids[tag] = tid;
+    if (src && io.textureId) {
+      io.textureId(src->id, tid);
+    }
     const std::string name = Hex8(tid);
     if (!src) {
       const unsigned long rgb = std::strtoul(tag.substr(6, 6).c_str(), nullptr, 16);

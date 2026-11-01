@@ -157,6 +157,14 @@ Any failed target or ID collision aborts publication; the importer buffers the
 outputs and the installer publishes its staging directory only on success.
 Failed staging writes cannot replace the installed mod.
 
+The mod also lists, in `dread-suits.txt` (`<suit> <texture id>` lines, the suit
+as `CPlayerState::EPlayerSuit`), each suit's base-colour textures of its body,
+cannon and ball, for the suit colours (`suit_colour_dread_*`, `docs/SETTINGS.md`).
+A texture shared by two suits is listed once, under the first: Phazon's cannon
+is Gravity's, so it takes Gravity's colours. The game never loads the list as a
+resource. An import before version 13 has no list, and the Dread suit colours
+need it imported again.
+
 The mod carries `.dread-samus-version`: the importer's own number, then the
 build's commit. When that number is older than the build's, the game says
 `dread-samus was imported by an older version; import the Dread Samus models

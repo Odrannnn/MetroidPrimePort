@@ -168,6 +168,9 @@ struct ConvertIO {
   std::function<bool(const std::string& key)> relink;
   std::function<void(const std::string& key, const std::string& value, const std::vector<std::string>& files)>
       remember;
+  // Optional: called once for each texture id the converter gives a Remastered texture,
+  // with that texture's id (one source can get several, one per cap or alpha use).
+  std::function<void(const ModelUuid& src, uint32_t id)> textureId;
   // Optional: called once per output material, in output order (the materials report).
   std::function<void(const MaterialDecision& decision)> decision;
 };
