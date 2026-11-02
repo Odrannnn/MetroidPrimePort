@@ -346,6 +346,14 @@ private:
   TLockedToken< CGenDescription > x1c_genDesc;
   CGenDescription* x28_loadedGenDesc;
   EModelOrientationType x2c_orientType;
+  // x50_parentMatrices holds each particle's birth orientation: retail's kMOT_One, or PBOR.
+  bool PortParentMatrices() const {
+#ifdef TARGET_PC
+    return x2c_orientType == kMOT_One || x28_loadedGenDesc->xPortBirthOrientation;
+#else
+    return x2c_orientType == kMOT_One;
+#endif
+  }
   rstl::vector< CParticle > x30_particles;
   rstl::vector< CVector3f > x40;
   rstl::vector< CMatrix3f > x50_parentMatrices;

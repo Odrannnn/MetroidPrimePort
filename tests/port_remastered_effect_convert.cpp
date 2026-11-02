@@ -3135,6 +3135,25 @@ void TestShutdownAndPivot() {
   CHECK_MSG(parts.size() == 1 && parts[0].part == none.bytes && parts[0].dropped.empty(),
             "ISDT 1, the default, writes nothing");
 
+  const auto ortc = [&](uint8_t value) {
+    return convert([&](auto& o) {
+      PutProperty(o, "ORTC", 0);
+      o.push_back(value);
+    });
+  };
+  parts = ortc(1);
+  Retail pbor;
+  pbor.f("GPSM").f("PBOR").f("CNST").w(1).f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+  CHECK_MSG(parts.size() == 1 && parts[0].part == pbor.bytes && parts[0].dropped.empty(), "ORTC 1 is PBOR 1");
+  if (!parts.empty()) {
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "a PART with PBOR passes the retail element reader");
+  }
+  parts = ortc(0);
+  CHECK_MSG(parts.size() == 1 && parts[0].part == none.bytes && parts[0].dropped.empty(), "ORTC 0 writes nothing");
+
   const auto blit = [&](uint8_t value) {
     return convert([&](auto& o) {
       PutProperty(o, "BLIT", 0);

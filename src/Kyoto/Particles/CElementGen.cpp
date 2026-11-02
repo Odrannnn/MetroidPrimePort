@@ -409,7 +409,7 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
     x60_advValues.assign(count);
   }
 
-  if (x2c_orientType == kMOT_One) {
+  if (PortParentMatrices()) {
     x50_parentMatrices.assign(x90_MAXP, CMatrix3f::Identity());
   }
 
@@ -1154,7 +1154,7 @@ void CElementGen::UpdateExistingParticles() {
         break;
       }
       *p = x30_particles.back();
-      if (x2c_orientType == kMOT_One) {
+      if (PortParentMatrices()) {
         x50_parentMatrices[x25c_activeParticleCount] = x50_parentMatrices[x30_particles.size() - 1];
       }
       if (x26d_28_enableADV) {
@@ -1311,7 +1311,7 @@ void CElementGen::CreateNewParticles(int count) {
     ++x25c_activeParticleCount;
     ++x260_cumulativeParticles;
 
-    if (x2c_orientType == kMOT_One) {
+    if (PortParentMatrices()) {
       x50_parentMatrices[particleIndex] = x1d8_orientation.BuildMatrix3f();
     }
 
@@ -2381,7 +2381,7 @@ void CElementGen::PortCreateParticlesAtPositions(int n, const CVector3f* pos) {
     x30_particles.push_back(CParticle());
     const int particleIndex = x30_particles.size() - 1;
 
-    if (x2c_orientType == kMOT_One) {
+    if (PortParentMatrices()) {
       x50_parentMatrices[particleIndex] = x1d8_orientation.BuildMatrix3f();
     }
 
@@ -2460,7 +2460,7 @@ void CElementGen::EndLifetime() {
 void CElementGen::DestroyParticles() {
   mParticleAliveCount -= x30_particles.size();
   x30_particles.clear();
-  if (x2c_orientType == kMOT_One) {
+  if (PortParentMatrices()) {
     x50_parentMatrices.clear();
   }
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
@@ -4237,6 +4237,17 @@ void CElementGen::RenderModels() {
           particleOrient = &pmovOrient;
           particleModelOrient = &pmovOrient;
         }
+      }
+
+      // PBOR (Remastered ORTC): the system orientation this particle was born under replaces the
+      // current one (SolveParticleTransform 0x247150), unless PMOV or a PMRQ base applies. kMOT_One
+      // already applies the birth matrix below.
+      CTransform4f birthOrient(CTransform4f::Identity());
+      if (pmov == nullptr && pmrqFrame == 0 && x2c_orientType != kMOT_One &&
+          x28_loadedGenDesc->xPortBirthOrientation) {
+        birthOrient = CTransform4f(x50_parentMatrices[i], CVector3f::Zero()) * x22c_globalOrientation;
+        particleOrient = &birthOrient;
+        particleModelOrient = &birthOrient;
       }
 
       CTransform4f partTrans = CTransform4f::Translate(

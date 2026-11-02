@@ -286,6 +286,9 @@ public:
   // port-only PISD 0: Remastered's ISDT (desc+0x6c bit 1), on by default. On, a shutdown reaches the
   // children as DoShutdownBehavior(mode) (their own SHTM at once, no SHTT); off, as ShutdownEffect.
   bool xPortChildShutdownByMode = true;
+  // port-only PBOR: Remastered's ORTC; a model particle turns with the system orientation it was
+  // born under (CreateNewParticles 0x24a8d8), not the current one, unless PMOV or a PMRQ base applies.
+  bool xPortBirthOrientation = false;
   // port-only PBLT 1: Remastered's BLIT (static-state bit 0x4000). A lit sprite takes the room's baked
   // probe only with it (CParticleSceneNode::AppendBakedLightingIfRequested 0x2b12a8).
   bool xPortBakedLighting = false;
