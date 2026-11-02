@@ -255,9 +255,6 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
       std::snprintf(buf, sizeof(buf), " VSMT*%zu", vfx->vsmt.size());
       out.vfx += buf;
     }
-    if (vfx->ssze != nullptr) {
-      out.vfx += " SSZE";
-    }
     if (vfx->iten != nullptr) {
       out.vfx += " ITEN";
     }
@@ -279,6 +276,9 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
   }
   if (desc.xPortIrnd) {
     out.vfx += out.vfx.empty() ? "IRND" : " IRND";
+  }
+  if (desc.xPortSsze != nullptr) {
+    out.vfx += out.vfx.empty() ? "SSZE" : " SSZE";
   }
   if (!desc.xPortPMDV.empty()) {
     std::snprintf(buf, sizeof(buf), "%sPMDV*%zu", out.vfx.empty() ? "" : " ", desc.xPortPMDV.size());

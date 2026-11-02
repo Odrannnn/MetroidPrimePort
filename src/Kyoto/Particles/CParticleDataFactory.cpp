@@ -995,6 +995,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       delete desc->xPortModelIten;
       desc->xPortModelIten = GetRealElement(in);
       break;
+    // Port-only: Remastered's secondary size (xPortSsze).
+    case SBIG('SSZE'):
+      delete desc->xPortSsze;
+      desc->xPortSsze = GetRealElement(in);
+      break;
     // Port-only: Remastered's ITPE 1 (xPortSpread), with PEMV's mode word.
     case SBIG('PITP'): {
       GetClassID(in);
@@ -1115,7 +1120,6 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('VTRT'):
     case SBIG('VPMT'):
     case SBIG('VSMT'):
-    case SBIG('SSZE'):
     case SBIG('ITEN'):
     case SBIG('VORN'):
       if (!PortReadVfxProperty(clsId, desc->xPortVfx, in, pool)) {

@@ -102,7 +102,6 @@ struct CPortVfxData {
   CRealElement* vtrt[5] = {};
   std::vector< CPortVfxElem > vpmt;
   std::vector< CPortVfxElem > vsmt;
-  CRealElement* ssze = nullptr;
   CRealElement* iten = nullptr;
   u32 vorn = 0; // 0 sprite, 1 oriented to the launch direction, 2 to the velocity
   // VMSH: the PMDL's LOD0 as one mesh in the converted CMDL's model space, 8 floats per vertex
@@ -283,6 +282,10 @@ public:
   // evaluated into CParticle::xPortIten; part of that draw's DIFC (CElementGen::RenderModels).
   // Owned here; null = not such a generator (retail draws, no DIFC).
   CRealElement* xPortModelIten = nullptr;
+  // port-only SSZE: Remastered's secondary size (CreateGPSM 0x25728c), evaluated with SIZE into
+  // CParticle::xPortSsze (SIZE's value when null), which PSSZ reads and a VMAT sprite draws as its
+  // length. Kept for every primitive (STransformedPrim::Fixup 0x28ec98 moves it, as SIZE). Owned.
+  CRealElement* xPortSsze = nullptr;
   // port-only PITP: Remastered's ITPE 1: with several particles born in a tick and a moving system,
   // their positions are spread back along the change of translation (CreateNewParticles 0x24a630).
   bool xPortSpread = false;

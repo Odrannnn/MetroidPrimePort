@@ -117,6 +117,7 @@ CGenDescription::~CGenDescription() {
   delete xPortIntScale;
   delete xPortInheritVel;
   delete xPortModelIten;
+  delete xPortSsze;
   delete xPortIntRotation;
   delete xPortIntTranslation;
   delete xPortOvec;

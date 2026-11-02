@@ -351,14 +351,12 @@ CPortVfxData::~CPortVfxData() {
   delete atexCycleElem;
   delete txp2Index;
   delete atfbCycle;
-  delete ssze;
   delete iten;
 }
 
 void PortVfxEvalParticle(const CGenDescription& desc, CElementGen::CParticle& particle,
                          int frame) {
   const CPortVfxData& vfx = *desc.xPortVfx;
-  particle.xPortSsze = EvalReal(vfx.ssze, frame, particle.x2c_lineLengthOrSize);
   particle.xPortIten = EvalReal(vfx.iten, frame, 1.f);
   for (const CPortVfxElem& e : vfx.vpmt) {
     if (e.a >= 4) {

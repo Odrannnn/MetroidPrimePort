@@ -92,8 +92,13 @@ static bool PortModelDifc(const CGenDescription* desc) {
   return desc->xPortVfx == nullptr && desc->xPortModelIten != nullptr && desc->x48_PMDL;
 }
 
-// The per-particle values the VMAT or the DIFC reads, where SIZE/COLR are evaluated.
+// The per-particle values the VMAT, the DIFC or PSSZ reads, where SIZE/COLR are evaluated. SSZE
+// follows SIZE, which it defaults to (UpdateExistingParticles 0x24a26c).
 static void PortEvalParticleMaterial(const CGenDescription* desc, CElementGen::CParticle& particle, int frame) {
+  particle.xPortSsze = particle.x2c_lineLengthOrSize;
+  if (const CRealElement* ssze = desc->xPortSsze) {
+    ssze->GetValue(frame, particle.xPortSsze);
+  }
   if (desc->xPortVfx) {
     PortVfxEvalParticle(*desc, particle, frame);
   } else if (const CRealElement* iten = desc->xPortModelIten) {

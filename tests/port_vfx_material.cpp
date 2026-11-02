@@ -220,7 +220,6 @@ void TestHdrEvaluation() {
   system.a = 5; system.color = nullptr; vfx.vsmt.push_back(system);
   for (int frame : {0, 7, 119}) {
     CElementGen::CParticle particle;
-    particle.x2c_lineLengthOrSize = 2.75f;
     PortVfxEvalParticle(desc, particle, frame);
     float point[4][4] = {};
     float iten = -1.f;
@@ -231,7 +230,7 @@ void TestHdrEvaluation() {
       const float expected[] = {8.f + frame * 0.125f, high[1], high[2], 0.4321f + frame * 0.001f};
       Check(particle.xPortVpmt[2][c] == expected[c] && point[2][c] == expected[c], "particle/point reevaluate HDR RGB and fractional alpha each frame");
     }
-    Check(particle.xPortSsze == 2.75f && particle.xPortIten == 1.f && iten == 1.f, "null size/intensity defaults unchanged");
+    Check(particle.xPortIten == 1.f && iten == 1.f, "null intensity defaults unchanged");
     const float expected[] = {frame * 0.25f, float(frame), 2.5f, -3.75f};
     for (int c = 0; c < 4; ++c) {
       Check(particle.xPortVpmt[3][c] == expected[c] && point[3][c] == expected[c], "real/vector widths and evaluation unchanged");

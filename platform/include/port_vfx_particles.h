@@ -1,7 +1,7 @@
 #pragma once
 
 // Runtime half of the native Remastered particle material (VMAT). The draw itself is
-// aurora::gfx::vfx::draw_quads; this file evaluates the per-particle properties (SSZE, ITEN, VPMT)
+// aurora::gfx::vfx::draw_quads; this file evaluates the per-particle properties (ITEN, VPMT)
 // and the per-frame VSMT, and expands the quads. Contract: docs/REMASTERED_VFX.md.
 // A PART without VMAT never reaches any of it.
 
@@ -20,7 +20,7 @@ inline bool PortVfxActive(const CGenDescription& desc) {
   return desc.xPortVfx != nullptr && desc.xPortVfx->mat.Supported();
 }
 
-// Evaluates SSZE (default: the particle's SIZE), ITEN (default 1) and the VPMT rows into the
+// Evaluates ITEN (default 1) and the VPMT rows into the
 // particle. The caller has set CParticleGlobals' particle context for `frame`.
 void PortVfxEvalParticle(const CGenDescription& desc, CElementGen::CParticle& particle, int frame);
 

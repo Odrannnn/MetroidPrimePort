@@ -4660,20 +4660,15 @@ public:
       }
     }
 
-    // SSZE and ITEN are real elements as they are; VORN is ORNT's byte.
-    for (const uint32_t fourcc : {F("SSZE"), F("ITEN")}) {
-      const std::string name = EffectFourCCString(fourcc);
-      const EffectProperty* property = swoosh && fourcc == F("SSZE") ? nullptr : find(fourcc);
-      if (property == nullptr) {
-        continue;
-      }
+    // ITEN is a real element as it is (the generator writes SSZE); VORN is ORNT's byte.
+    if (const EffectProperty* property = find(F("ITEN"))) {
       std::vector<uint8_t> bytes;
       std::string why;
       if (property->value.size() == 1 && Element(property->value[0], Type::Real, bytes, why)) {
-        AppendBE32(result.part, fourcc);
+        AppendBE32(result.part, F("ITEN"));
         result.part.insert(result.part.end(), bytes.begin(), bytes.end());
       } else {
-        result.dropped.push_back(name + ": " + (why.empty() ? "not one element" : why));
+        result.dropped.push_back("ITEN: " + (why.empty() ? std::string("not one element") : why));
       }
     }
     if (swoosh) {
@@ -4858,6 +4853,7 @@ public:
     uint32_t sortBias = 0;   // SBIS as float bits (nonzero), port-only PSBS
     const EffectProperty* mover = nullptr;
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
+    bool drawsSsze = false;          // an SSZE that shapes the quad, which only a VMAT draws
     bool anth = false;               // an ANTH, drawn only by a header material
     const bool textured = retail.count(F("TEXR")) != 0;
     // SetupPrimitiveTypes 0x29069c and FixAndClean 0x2908a4 select geometry,
@@ -5608,7 +5604,27 @@ public:
       s.anth = true;
       return true;
     }
-    if (s.part && (fourcc == F("TMTR") || fourcc == F("PMTR") || fourcc == F("SMTR") || fourcc == F("SSZE") ||
+    // SSZE is a per-particle value whatever draws the generator: sprite Fixup keeps it, transformed
+    // Fixup (0x28ec98) moves it as it does SIZE, and only an inactive primitive's Clear (0x28e2d8)
+    // deletes it. PSSZ reads it (some model generators keep a random angle there for their PMRQ);
+    // only a sprite's VMAT draws it as the quad's length. Port-only SSZE (xPortSsze).
+    if (s.part && fourcc == F("SSZE")) {
+      if (s.inactivePrimitive) {
+        return true;
+      }
+      std::vector<uint8_t> bytes;
+      std::string why;
+      if (property.value.size() != 1 || !Element(property.value[0], Type::Real, bytes, why)) {
+        s.result.dropped.push_back("SSZE: " + (why.empty() ? std::string("not one element") : why));
+        return true;
+      }
+      AppendBE32(s.out, fourcc);
+      s.out.insert(s.out.end(), bytes.begin(), bytes.end());
+      // A model particle never draws it (SolveParticleTransform 0x246f14 reads the position alone).
+      s.drawsSsze = s.node.primitiveType != 3;
+      return true;
+    }
+    if (s.part && (fourcc == F("TMTR") || fourcc == F("PMTR") || fourcc == F("SMTR") ||
                  fourcc == F("ITEN") || fourcc == F("SCTR") || fourcc == F("SFTD") || fourcc == F("AERO"))) {
       s.portOnly.push_back(fourcc);
       return true;
@@ -6372,6 +6388,9 @@ public:
     if (!vmat && !s.drawsNothing) {
       if (s.part && s.inverseExposed && !ownModelMaterials) {
         s.result.dropped.push_back("IEXP: no VMAT");
+      }
+      if (s.drawsSsze) {
+        s.result.dropped.push_back("SSZE: drawn square (no VMAT)");
       }
       for (const uint32_t fourcc : s.portOnly) {
         if (!(ownModelMaterials && fourcc == F("ITEN"))) {

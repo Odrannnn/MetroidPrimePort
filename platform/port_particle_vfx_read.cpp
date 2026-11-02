@@ -1,5 +1,5 @@
 // CParticleDataFactory's reader of the port-only effect properties
-// (PortReadVfxProperty: VMAT, VMSH, VTMT, VPMT, VSMT, SSZE, ITEN, VORN) and its
+// (PortReadVfxProperty: VMAT, VMSH, VTMT, VPMT, VSMT, ITEN, VORN) and its
 // blob readers, moved out of src/Kyoto/Particles/CParticleDataFactory.cpp so the
 // decomp file keeps only its hooks (see docs/NATIVE_PORT.md, "Where port code
 // goes"). The count bounds both files use are in port_vfx_read.h.
@@ -174,7 +174,7 @@ static CPortVfxData& PortVfxData(std::unique_ptr< CPortVfxData >& vfx) {
 }
 
 // The port-only material properties a converted PART or SWSH carries (VMAT, VMSH, VPRM, VTMT, VPMT,
-// VSMT, SSZE, ITEN, VORN). False when the stream can't be resynchronised.
+// VSMT, ITEN, VORN). False when the stream can't be resynchronised.
 bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CPortVfxData >& vfxPtr,
                                                CInputStream& in, CSimplePool* pool) {
   switch (clsId) {
@@ -380,11 +380,6 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
       }
       list.push_back(elem);
     }
-  } break;
-  case SBIG('SSZE'): {
-    CPortVfxData& vfx = PortVfxData(vfxPtr);
-    delete vfx.ssze;
-    vfx.ssze = GetRealElement(in);
   } break;
   case SBIG('ITEN'): {
     CPortVfxData& vfx = PortVfxData(vfxPtr);
