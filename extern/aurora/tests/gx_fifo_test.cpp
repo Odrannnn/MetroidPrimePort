@@ -1676,11 +1676,11 @@ TEST_F(GXFifoTest, PBRLightScale_PropagatesAndResets) {
 }
 
 // An HDR light lands in its own light's three rows (colour with falloff + 1, position with r0,
-// r1); a repeat is dropped, and off clears the rows.
+// r1 with widen); a repeat is dropped, and off clears the rows.
 TEST_F(GXFifoTest, PBRLightHdr_PropagatesAndTurnsOff) {
   const f32 color[3] = {9.f, 3.5f, 0.1f};
   const f32 pos[3] = {1.f, -2.f, -5.f};
-  GXSetPBRLightHdr(GX_LIGHT2, color, pos, 0.f, 2.3f, 2);
+  GXSetPBRLightHdr(GX_LIGHT2, color, pos, 0.f, 2.3f, 2, 0.75f);
   auto bytes = capture_fifo();
   EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_SET_PBR_LIGHT_HDR));
   reset_gx_state();
@@ -1690,15 +1690,17 @@ TEST_F(GXFifoTest, PBRLightHdr_PropagatesAndTurnsOff) {
   EXPECT_EQ(g_gxState.pbrLightHdr[7].y(), -2.f);
   EXPECT_EQ(g_gxState.pbrLightHdr[7].w(), 0.f);
   EXPECT_EQ(g_gxState.pbrLightHdr[8].x(), 2.3f);
+  EXPECT_EQ(g_gxState.pbrLightHdr[8].y(), 0.75f);
   EXPECT_EQ(g_gxState.pbrLightHdr[0].w(), 0.f);
 
-  GXSetPBRLightHdr(GX_LIGHT2, color, pos, 0.f, 2.3f, 2);
+  GXSetPBRLightHdr(GX_LIGHT2, color, pos, 0.f, 2.3f, 2, 0.75f);
   EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_PBR_LIGHT_HDR));
 
-  GXSetPBRLightHdr(GX_LIGHT2, nullptr, nullptr, 0.f, 0.f, 0);
+  GXSetPBRLightHdr(GX_LIGHT2, nullptr, nullptr, 0.f, 0.f, 0, 0.f);
   decode_fifo(capture_fifo());
   EXPECT_EQ(g_gxState.pbrLightHdr[6].w(), 0.f);
   EXPECT_EQ(g_gxState.pbrLightHdr[8].x(), 0.f);
+  EXPECT_EQ(g_gxState.pbrLightHdr[8].y(), 0.f);
 }
 
 // The baked-light modulation propagates, a repeat is dropped, and null is white.

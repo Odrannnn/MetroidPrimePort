@@ -240,9 +240,11 @@ void GXSetPBRShield(const f32 rows[8][4]);
 // Aurora extension: the following PBR draws light with this in place of the GX light's colour,
 // position and attenuation: a linear colour (no gamma, not clamped), a view-space position,
 // and a falloff from full at r0 to none at r1 (0 none, 1 linear, 2 quadratic, 3 1 - smoothstep,
-// as Remastered's particle lights). Non-PBR draws keep the GX light. r1 <= 0 (or a null colour)
-// turns it off.
-void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3], f32 r0, f32 r1, u32 falloff);
+// as Remastered's particle lights). `widen` (the light's LSPS) raises the roughness of its
+// specular lobe to r + (1 - r) * widen. Non-PBR draws keep the GX light. r1 <= 0 (or a null
+// colour) turns it off.
+void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3], f32 r0, f32 r1, u32 falloff,
+                      f32 widen);
 // Aurora extension: the following PBR draws multiply the diffuse colour (before the lights and
 // the ambient) and F0 (before the direct Fresnel and the environment BRDF) by these; nothing
 // else is scaled. 1, 1 is neutral, and it is what a caller sets for every material that has no

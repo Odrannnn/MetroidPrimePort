@@ -82,6 +82,7 @@ struct PBRLightHdrWrite {
   f32 r0;
   f32 r1;
   u32 falloff;
+  f32 widen;
 };
 struct PBRMaterialWrite {
   f32 emissive[3];
@@ -931,7 +932,8 @@ void GXSetPBRShield(const f32 rows[8][4]) {
   }
 }
 
-void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3], f32 r0, f32 r1, u32 falloff) {
+void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3], f32 r0, f32 r1, u32 falloff,
+                      f32 widen) {
   const u32 bit = static_cast<u32>(light) & 0xFF;
   if (bit == 0) {
     return;
@@ -939,7 +941,7 @@ void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3],
   const u32 idx = static_cast<u32>(std::countr_zero(bit));
   PBRLightHdrWrite now{};
   if (color != nullptr && viewPos != nullptr && r1 > 0.f) {
-    now = {{color[0], color[1], color[2]}, {viewPos[0], viewPos[1], viewPos[2]}, r0, r1, falloff};
+    now = {{color[0], color[1], color[2]}, {viewPos[0], viewPos[1], viewPos[2]}, r0, r1, falloff, widen};
   }
   static LastPBRWrite<PBRLightHdrWrite> sLast[8];
   if (sLast[idx].repeats(now)) {
@@ -956,6 +958,7 @@ void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3],
   GX_WRITE_F32(now.r0);
   GX_WRITE_F32(now.r1);
   GX_WRITE_U32(now.falloff);
+  GX_WRITE_F32(now.widen);
 }
 
 void GXSetPBRLightScale(f32 diffuse, f32 f0, f32 alpha, GXBool alphaReplaces) {

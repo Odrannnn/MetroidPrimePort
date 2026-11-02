@@ -487,6 +487,10 @@ The light reaches the shader through `GXSetPBRLightHdr` (Aurora command
 `GX_AURORA_SET_PBR_LIGHT_HDR`). That call gives a GX light slot its own linear
 colour, view position and falloff (none, linear, quadratic, 1 - smoothstep;
 r1 0 = off) in PBR draws, in place of the GX light's colour and attenuation.
+It also carries a specular widen (Remastered's CLight+0x74, SCachedLight +0xc):
+that light's GGX lobe takes roughness `r + (1 - r) * widen`. Only particle
+lights set it, from their constant LSPS (port-only `PLSP`,
+`CLight::SetPortHdrWiden`); the ball light and room lights keep 0.
 `CLight::SetPortHdr` carries these values, and `CGraphics::LoadLight` sends
 them, or "off", for every light it loads. Retail-material draws keep the
 retail light.

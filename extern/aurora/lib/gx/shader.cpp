@@ -2939,9 +2939,14 @@ void PbrGen::buildSource() {
           let h = normalize(ldir + pbr_v);
           let nh = max(dot(pbr_n, h), 0.0);
           let vh = max(dot(pbr_v, h), 0.0);
-          let dd = nh * nh * (pbr_a2 - 1.0) + 1.0;
-          let d = pbr_a2 / max(pbr_pi * dd * dd, 1e-6 * pbr_a2);
-          let vis = 0.25 / (max(pbr_nv * (1.0 - pbr_k) + pbr_k, 1e-4) * max(nl * (1.0 - pbr_k) + pbr_k, 1e-4));
+          // Remastered widens an HDR light's lobe by its LSPS (SCachedLight +0xc).
+          let l_w = select(0.0, ubuf.pbr_light_hdr[i * 3u + 2u].y, hdr_on);
+          let l_r = pbr_rough + (1.0 - pbr_rough) * l_w;
+          let l_a2 = pow(l_r, 4.0);
+          let l_k = l_r * l_r * 0.5;
+          let dd = nh * nh * (l_a2 - 1.0) + 1.0;
+          let d = l_a2 / max(pbr_pi * dd * dd, 1e-6 * l_a2);
+          let vis = 0.25 / (max(pbr_nv * (1.0 - l_k) + l_k, 1e-4) * max(nl * (1.0 - l_k) + l_k, 1e-4));
           let f = pbr_f0 + (1.0 - pbr_f0) * pow(1.0 - vh, 5.0);
           let spec = d * vis * f;
           // GX lights are unnormalised (colour * N.L is full brightness), so Lambert has no

@@ -78,8 +78,13 @@ public:
     xPortHdrR0 = r0;
     xPortHdrR1 = r1;
     xPortHdrFalloff = falloff;
+    xPortHdrWiden = 0.f;
     xPortHdrHasBoundsRadius = false;
   }
+  // Remastered's CLight+0x74 (0 but for particle lights' LSPS): the light's specular lobe takes
+  // roughness r + (1 - r) * widen (SCachedLight +0xc). Set after SetPortHdr, which clears it.
+  void SetPortHdrWiden(float widen) { xPortHdrWiden = widen; }
+  float GetPortHdrWiden() const { return xPortHdrWiden; }
   void ClearPortHdr() { xPortHdrR1 = 0.f; }
   bool HasPortHdr() const { return xPortHdrR1 > 0.f; }
   const float* GetPortHdrColor() const { return xPortHdrColor; }
@@ -119,6 +124,7 @@ private:
   float xPortHdrR0 = 0.f;
   float xPortHdrR1 = 0.f;
   EPortHdrFalloff xPortHdrFalloff = kPHF_None;
+  float xPortHdrWiden = 0.f;
   float xPortHdrBoundsRadius = 0.f;
   bool xPortHdrHasBoundsRadius = false;
 #endif

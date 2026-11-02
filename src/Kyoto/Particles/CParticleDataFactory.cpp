@@ -805,6 +805,10 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortNestedLightInverseExposure = in.ReadLong() != 0;
       break;
+    case SBIG('PLSP'):
+      GetClassID(in);
+      desc->xPortNestedLightWiden = in.ReadFloat();
+      break;
     case SBIG('POR0'):
       delete desc->xPortNestedLightOuterRadius;
       desc->xPortNestedLightOuterRadius = GetRealElement(in);

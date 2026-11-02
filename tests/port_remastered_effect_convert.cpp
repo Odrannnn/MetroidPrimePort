@@ -297,7 +297,7 @@ void PutRealKey(std::vector<uint8_t>& out, float first, float second) {
 
 std::vector<uint8_t> NestedLightEffect(const EffectGuid& childId, uint8_t lightType = 2,
                                        uint8_t falloff = 3, bool includeRadii = true,
-                                       int inverseExposed = 1) {
+                                       int inverseExposed = 1, float specWiden = -1.f) {
   std::vector<uint8_t> out(0x3c, 0);
   std::memcpy(out.data(), "RFRM", 4);
   std::memcpy(out.data() + 0x14, "GENP", 4);
@@ -343,6 +343,10 @@ std::vector<uint8_t> NestedLightEffect(const EffectGuid& childId, uint8_t lightT
   if (inverseExposed >= 0) {  // the Plasma child authors LIXP 1
     PutProperty(out, "LIXP", 0);
     out.push_back(uint8_t(inverseExposed));
+  }
+  if (specWiden >= 0.f) {
+    PutProperty(out, "LSPS", 0);
+    PutConstant(out, Bits(specWiden));
   }
   PutProperty(out, "_END", 4);
   out.insert(out.end(), {'F', 'O', 'O', 'T'});
@@ -449,6 +453,25 @@ void TestPlasmaNestedHdrLight() {
     CHECK_MSG(plain.size() == 2 && findIn(plain[1], "PHDR", props) != nullptr &&
                   findIn(plain[1], "PLIX", props) == nullptr,
               "a light without LIXP writes no PLIX");
+  }
+  // A constant LSPS is written as PLSP (its float bits) and consumed; LSPS 0 or none writes none.
+  {
+    const auto widened = ConvertOne(NestedLightEffect(Fresh(7), 2, 2, true, 1, 0.75f), {});
+    std::vector<RetailPartProperty> props;
+    const RetailPartProperty* widen = widened.size() == 2 ? findIn(widened[1], "PLSP", props) : nullptr;
+    uint32_t bits = 0;
+    if (widen != nullptr && widen->value.size() == 8) {
+      bits = uint32_t(widen->value[4]) << 24 | uint32_t(widen->value[5]) << 16 | uint32_t(widen->value[6]) << 8 |
+             widen->value[7];
+    }
+    CHECK_MSG(widen != nullptr && std::memcmp(widen->value.data(), "CNST", 4) == 0 && bits == Bits(0.75f),
+              "LSPS 0.75 is written as PLSP 0.75");
+    CHECK_MSG(widened.size() == 2 && !droppedHas(widened[1], "LSPS"), "LSPS of a lit child is consumed");
+    for (float none : {0.f, -1.f}) {
+      const auto plain = ConvertOne(NestedLightEffect(Fresh(7), 2, 2, true, 1, none), {});
+      CHECK_MSG(plain.size() == 2 && findIn(plain[1], "PLSP", props) == nullptr,
+                "a light without LSPS writes no PLSP");
+    }
   }
   // A spot light (LTYP 3) stays on the retail path.
   const auto spot = ConvertOne(NestedLightEffect(Fresh(7), 3, 2), {});

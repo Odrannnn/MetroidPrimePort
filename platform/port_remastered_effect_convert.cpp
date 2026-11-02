@@ -4732,6 +4732,9 @@ public:
     uint32_t nestedLightFalloff = 3;
     // LIXP: CParticleLight::Create 0x2df010 multiplies LINT by the static inverse exposure.
     bool nestedLightInverseExposure = false;
+    // LSPS: the light block's +0x50, CLight+0x74, which widens the light's specular lobe
+    // (roughness r + (1 - r) * LSPS in the PBR shaders). A CNST real's bits; 0 = none.
+    uint32_t nestedLightWiden = 0;
     // Swooshes: SBDM is Remastered's blend mode, 0 or 1, which retail has as
     // AALP (additive). Taken only where there's no AALP of its own.
     bool additive = false;
@@ -4902,6 +4905,11 @@ public:
         const EffectProperty* lixp = unique(F("LIXP"));
         uint32_t inverseExposed = 0;
         s.nestedLightInverseExposure = lixp != nullptr && SmallInteger(*lixp, inverseExposed) && inverseExposed != 0;
+        // A non-constant LSPS isn't consumed and stays in the dropped report.
+        const EffectProperty* lsps = unique(F("LSPS"));
+        if (lsps == nullptr || lsps->value.size() != 1 || !ConstWord(lsps->value[0], s.nestedLightWiden)) {
+          s.nestedLightWiden = 0;
+        }
       } else if (ltyp != nullptr && SmallInteger(*ltyp, lightType) && lightType == 2) {
         s.result.dropped.push_back("PHDR: point light lacks constant LFOT or supported LCLR/LINT/LIRD/LORD");
       }
@@ -5825,6 +5833,10 @@ public:
     if (s.nestedHdrLight && (fourcc == F("LIRD") || fourcc == F("LORD") || fourcc == F("LIXP"))) {
       return true;  // consumed as PIR0/POR0/PLIX below
     }
+    uint32_t widen = 0;
+    if (s.nestedHdrLight && fourcc == F("LSPS") && property.value.size() == 1 && ConstWord(property.value[0], widen)) {
+      return true;  // consumed as PLSP below
+    }
     return false;
   }
 
@@ -6327,6 +6339,11 @@ public:
         AppendBE32(s.out, F("PLIX"));
         AppendBE32(s.out, F("CNST"));
         AppendBE32(s.out, 1);
+      }
+      if (s.nestedLightWiden != 0) {  // absent PLSP is CLight+0x74's 0
+        AppendBE32(s.out, F("PLSP"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, s.nestedLightWiden);
       }
     }
   }
@@ -6937,7 +6954,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && fourcc == F("PSHT")) {
       ok = reader.Element(Type::Int);
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
-                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PGID") || fourcc == F("PBDM") ||
+                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||

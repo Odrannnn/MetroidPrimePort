@@ -550,9 +550,9 @@ void CGraphics::LoadLight(ERglLight light, const CLight& info) {
     MTXMultVec(mCameraMtx, reinterpret_cast< VecPtr >(&hdrPos), reinterpret_cast< VecPtr >(&hdrPos));
     const f32 viewPos[3] = {hdrPos.GetX(), hdrPos.GetY(), hdrPos.GetZ()};
     GXSetPBRLightHdr(lightId, info.GetPortHdrColor(), viewPos, info.GetPortHdrR0(),
-                     info.GetPortHdrR1(), info.GetPortHdrFalloff());
+                     info.GetPortHdrR1(), info.GetPortHdrFalloff(), info.GetPortHdrWiden());
   } else {
-    GXSetPBRLightHdr(lightId, nullptr, nullptr, 0.f, 0.f, 0);
+    GXSetPBRLightHdr(lightId, nullptr, nullptr, 0.f, 0.f, 0, 0.f);
   }
 #endif
 }

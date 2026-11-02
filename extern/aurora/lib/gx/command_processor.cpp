@@ -1896,13 +1896,14 @@ void handle_aurora(ByteReader& reader) noexcept {
       f = reader.read<f32>();
     }
     const u32 falloff = std::min(reader.read<u32>(), 3u);
+    const f32 widen = reader.read<f32>();
     if (bit != 0) {
       const u32 idx = static_cast<u32>(std::countr_zero(bit));
       const bool on = v[7] > 0.f;
       const std::array<Vec4<float>, 3> rows{
           on ? Vec4<float>{v[0], v[1], v[2], static_cast<f32>(falloff + 1)} : Vec4<float>{},
           on ? Vec4<float>{v[3], v[4], v[5], v[6]} : Vec4<float>{},
-          on ? Vec4<float>{v[7], 0.f, 0.f, 0.f} : Vec4<float>{},
+          on ? Vec4<float>{v[7], widen, 0.f, 0.f} : Vec4<float>{},
       };
       for (u32 row = 0; row < 3; ++row) {
         if (g_gxState.pbrLightHdr[idx * 3 + row] != rows[row]) {

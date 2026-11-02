@@ -186,6 +186,7 @@ void CElementGen::PortCollectNestedLightSnapshots(
     PortSetNestedHdrCarrier(light, xPortNestedHdrColor, intensity, xPortNestedHdrInnerRadius,
                             xPortNestedHdrOuterRadius,
                             x28_loadedGenDesc->xPortNestedLightFalloff);
+    light.SetPortHdrWiden(x28_loadedGenDesc->xPortNestedLightWiden);
     out.push_back({this, PortSystemOrigin(), light});
   }
 

@@ -208,6 +208,8 @@ public:
   u8 xPortNestedLightFalloff = 3;
   // port-only PLIX: Remastered's LIXP, LINT at the static inverse exposure (PortRoomEnv::ParticleLightGain)
   bool xPortNestedLightInverseExposure = false;
+  // port-only PLSP: Remastered's LSPS, the light's specular roughness widen (CLight::SetPortHdrWiden)
+  float xPortNestedLightWiden = 0.f;
   // port-only PINS: Remastered's INTS, the system scale in place of the external one (EXTS still
   // reads the external scale; CElementGen::PortSystemScale). Owned here; null = the external scale.
   CVectorElement* xPortIntScale = nullptr;
