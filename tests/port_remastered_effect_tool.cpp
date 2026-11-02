@@ -1145,6 +1145,18 @@ int VmatSummary(const std::string& genpPath, const std::string& matiDir) {
     }
     return FlipbookAtlas{hash, 1, 1, 1};
   };
+  // The top mip's size from <dir>/<uuid>.TXTR, as the importer's.
+  io.textureSize = [&](const EffectGuid& texture, uint32_t& width, uint32_t& height) {
+    const std::vector<uint8_t> raw = ReadFile(std::filesystem::path(matiDir) / (IdToString(PakId(texture)) + ".TXTR"));
+    TxtrImage info;
+    std::string ignored;
+    if (raw.empty() || !ReadTxtrInfo(raw.data(), raw.size(), info, ignored)) {
+      return false;
+    }
+    width = info.width;
+    height = info.height;
+    return true;
+  };
   auto be32 = [](const uint8_t* p) { return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | p[3]; };
   auto real = [&](const uint8_t* p) {
     const uint32_t bits = be32(p);
