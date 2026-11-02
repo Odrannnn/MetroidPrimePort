@@ -51,7 +51,8 @@ std::vector<u8> Blob(u32 version) {
   for (int i = 0; i < 10; ++i) { Word(b, u32(-1)); } // slots, ramp rows, add row
   for (int i = 0; i < 11; ++i) { Word(b, u32(-1)); Word(b, 0); Float(b, float(i)); }
   Float(b, 1.f); Float(b, 0.f); Word(b, 4);
-  if (version == 3) { Float(b, 2.f); Float(b, 0.2f); }
+  if (version == 3 || version == 4) { Float(b, 2.f); Float(b, 0.2f); }
+  if (version == 4) { Float(b, 2.2f); }
   return b;
 }
 void Parse(CPortVfxData& vfx, std::vector<u8> blob) {
@@ -63,18 +64,23 @@ void Parse(CPortVfxData& vfx, std::vector<u8> blob) {
 }
 void TestParsing() {
   CPortVfxData vfx;
+  Parse(vfx, Blob(4));
+  Check(vfx.mat.version == 4 && vfx.mat.opacityGain == 2.f && vfx.mat.opacityBias == 0.2f &&
+            vfx.mat.alphaGamma == 2.2f,
+        "v4 reads gain/bias and the alpha gamma");
   Parse(vfx, Blob(3));
-  Check(vfx.mat.version == 3 && vfx.mat.opacityGain == 2.f && vfx.mat.opacityBias == 0.2f,
-        "v3 reads appended BE gain/bias");
+  Check(vfx.mat.version == 3 && vfx.mat.opacityGain == 2.f && vfx.mat.opacityBias == 0.2f &&
+            vfx.mat.alphaGamma == 0.f,
+        "v3 reads appended BE gain/bias and resets the alpha gamma");
   Parse(vfx, Blob(2));
   Check(vfx.mat.version == 2 && vfx.mat.opacityGain == 1.f && vfx.mat.opacityBias == 0.f,
         "v2 resets previous gain/bias to neutral");
   Check(vfx.mat.src[10].value == 10.f && vfx.mat.spriteCenter == 4, "original sources and tail unchanged");
-  for (u32 version : {0u, 1u, 4u, 0xffffffffu}) {
+  for (u32 version : {0u, 1u, 5u, 0xffffffffu}) {
     Parse(vfx, Blob(version));
     Check(vfx.mat.version == 0, "unknown version leaves retail fallback");
   }
-  for (u32 version : {2u, 3u}) {
+  for (u32 version : {2u, 3u, 4u}) {
     for (int delta : {-8, -4, 4, 8}) {
       auto b = Blob(version);
       b.resize(b.size() + delta);
@@ -89,7 +95,7 @@ void TestParsing() {
   }
   Parse(vfx, std::vector<u8>(12));
   Check(vfx.mat.version == 0, "short header leaves fallback");
-  for (u32 version : {2u, 3u, 0x12345678u}) {
+  for (u32 version : {2u, 3u, 4u, 0x12345678u}) {
     for (u32 length : {1u, 2u, 3u, 13u, 201u, 209u}) {
       auto b = Blob(version);
       b.resize(length);
@@ -99,7 +105,7 @@ void TestParsing() {
   }
 }
 void TestPhysicalTruncation() {
-  for (u32 version : {2u, 3u, 0x12345678u}) {
+  for (u32 version : {2u, 3u, 4u, 0x12345678u}) {
     for (u32 length : {1u, 2u, 3u, 13u, 200u, 201u, 208u, 209u, 0xffffffffu}) {
       auto b = Blob(version);
       // Include valid-layout truncation, malformed residual-byte truncation and a
@@ -279,6 +285,10 @@ void TestDynamic() {
   Check(desc.opacityGain == values[19] && desc.opacityBias == 0.2f, "gain-only override retains MATI bias");
   PortVfxBuildDesc(vfx, values, 1u << 20, desc);
   Check(desc.opacityGain == 2.f && desc.opacityBias == values[20], "bias-only override retains MATI gain");
+  Check(desc.alphaGamma == 0.f, "v3 draws without an alpha gamma");
+  CPortVfxData v4;
+  Parse(v4, Blob(4));
+  Check(PortVfxBuildDesc(v4, values, 0, desc) && desc.alphaGamma == 2.2f, "v4 passes its alpha gamma to the draw");
 }
 } // namespace
 
@@ -388,6 +398,11 @@ int main() {
   exposure.xPortInverseExposure = true;
   exposure.xPortExposurePolicy = false;
   Check(PortVfxExposureGain(exposure, true) == 1.f, "legacy PART keeps its separate compatibility policy");
+  // Every version the reader accepts must also draw (v4 once fell back to retail here).
+  for (u32 version : {2u, 3u, 4u}) {
+    Parse(*exposure.xPortVfx, Blob(version));
+    Check(PortVfxActive(exposure), "every parsed VMAT version is active");
+  }
   if (!failures) { std::puts("port_vfx_material: ok"); }
   return failures ? 1 : 0;
 }

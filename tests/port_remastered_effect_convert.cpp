@@ -5749,7 +5749,109 @@ void TestFacingRotation() {
             "a RAZY with a vector fallback is dropped");
 }
 
+// A sprite with no MTIN draws its header MTRL (perm 048): a VMAT v4 (alpha gamma 2.2)
+// for a textured shader, v2 with no features for an untextured one; a quad, UV
+// transform or rotation the shader does not draw is refused with the reason.
+void TestHeaderMaterial() {
+  const auto withShader = [](std::vector<uint8_t> data, uint32_t shader) {
+    for (int i = 0; i < 4; ++i) {
+      data[0x41 + i] = uint8_t(shader >> (24 - i * 8));  // the guid's first four bytes, as stored
+    }
+    return data;
+  };
+  EffectConvertIO io;
+  io.vfxTexture = [](const EffectGuid&) {
+    FlipbookAtlas a;
+    a.id = 0x5EED0009;
+    return a;
+  };
+  const auto vmatOf = [](const ConvertedPart& part) {
+    std::vector<RetailPartProperty> props;
+    std::string error;
+    if (SplitRetailPart(part.part.data(), part.part.size(), props, error)) {
+      for (const auto& prop : props) {
+        if (prop.fourcc == EffectFourCC("VMAT")) {
+          return prop.value;
+        }
+      }
+    }
+    return std::vector<uint8_t>{};
+  };
+
+  auto parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0xb42cacf5), io);
+  auto vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+  // The value is `CNST <size>` then the blob: version, features, blend, slot count, slots.
+  CHECK_MSG(VmatWord(vmat, 8) == 4 && VmatWord(vmat, 20) == 1 && VmatWord(vmat, 24) == 0x5EED0009 &&
+                VmatWord(vmat, vmat.size() - 4) == Bits(2.2f),
+            "a textured header sprite gets a VMAT v4 with its TEXR and alpha gamma 2.2");
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty(), "a textured header sprite is exact");
+
+  // A nil MTIN is no material instance (ctor 0x28bfc4): the header MTRL draws.
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) {
+                                  PutProperty(o, "MTIN", 0);
+                                  o.push_back(0);
+                                  PutGuid(o, EffectGuid{});
+                                  PutTexr(o, 0x1234ABCD);
+                                }),
+                                0xb42cacf5),
+                     io);
+  vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(VmatWord(vmat, 8) == 4, "a header sprite with a nil MTIN draws its header MTRL");
+
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x1e245375), io);
+  vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(VmatWord(vmat, 8) == 2 && VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,
+            "an untextured header sprite gets a VMAT v2 with no features or textures");
+
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x00000001), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.empty(),
+            "an undecoded header shader draws as retail, silently");
+
+  struct Refusal {
+    uint32_t shader;
+    void (*body)(std::vector<uint8_t>&);
+    const char* why;
+  };
+  const Refusal refusals[] = {
+      {0xb42cacf5,
+       [](std::vector<uint8_t>& o) {
+         PutProperty(o, "TMTR", 0);
+         o.insert(o.end(), {0, 6});  // version 0, one UV set of six reals
+         for (float each : {0.f, 0.f, 1.f, 1.f, 0.f, 0.f}) {
+           PutConstant(o, Bits(each));
+         }
+         PutTexr(o, 0x1234ABCD);
+       },
+       "VMAT: header shader b42cacf5 has a UV transform (TMTR)"},
+      {0x1e245375,
+       [](std::vector<uint8_t>& o) {
+         PutProperty(o, "ROTA", 3);
+         PutConstant(o, Bits(5.0f));
+         PutTexr(o, 0x1234ABCD);
+       },
+       "VMAT: header shader 1e245375 does not rotate, and the particle has a ROTA"},
+      {0xe27845ed, [](std::vector<uint8_t>& o) { PutTexr(o, 0x1234ABCD); },
+       "VMAT: header shader e27845ed draws a different quad from ORNT 0"},
+      {0x4d6746f4,
+       [](std::vector<uint8_t>& o) {
+         PutProperty(o, "ORNT", 0);
+         PutConstant(o, 1);
+         PutTexr(o, 0x1234ABCD);
+       },
+       "VMAT: header shader 4d6746f4 draws a different quad from ORNT 1"},
+  };
+  for (const Refusal& refusal : refusals) {
+    parts = ConvertOne(withShader(OneGenerator(refusal.body), refusal.shader), io);
+    bool listed = false;
+    for (const std::string& note : parts.empty() ? std::vector<std::string>{} : parts[0].approximated) {
+      listed = listed || note == refusal.why;
+    }
+    CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && listed, refusal.why);
+  }
+}
+
 int main() {
+  TestHeaderMaterial();
   TestVmat();
   TestVmsh();
   TestSftdReport();

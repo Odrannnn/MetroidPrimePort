@@ -83,7 +83,9 @@ struct Uniform {
   // 1 + 2 * sharpness) per colour channel, and BLCM. These are the 7 vec4f of padding the uniform
   // already had before the cluster block, so nothing above or below moves.
   float lit[7][4];
-  float pad[28];
+  // ColorTex: x = the map's alpha exponent (ParticleSprite-style header materials raise it to 2.2), 0 = none.
+  float misc3[4];
+  float pad[24];
   // IceChargeCollisionLit: Remastered's clustered light block, c5[0..2] then 32 records of 20 floats, at
   // ClusterBlockOffset (after every field above, so no earlier recipe's offsets move). Zero elsewhere.
   float cluster[ClusterBlockFloats];
@@ -95,7 +97,7 @@ static_assert(offsetof(Uniform, ice) == 416);
 // The block starts at ClusterBlockOffset, where the ShaderSource's 14 vec4f of padding put it, and fills
 // the rest of the uniform: 163 vec4f. The lit block takes the padding's first 7 vec4f.
 static_assert(offsetof(Uniform, lit) == 544 && offsetof(Uniform, cluster) == ClusterBlockOffset);
-static_assert(544 + 7 * 16 + sizeof(Uniform::pad) == ClusterBlockOffset && ClusterBlockFloats == 163 * 4 &&
+static_assert(544 + 7 * 16 + sizeof(Uniform::misc3) + sizeof(Uniform::pad) == ClusterBlockOffset && ClusterBlockFloats == 163 * 4 &&
               UniformSize == 3376);
 
 // ---- Array textures ----
@@ -221,7 +223,8 @@ struct U {
   lit4: vec4f,
   lit5: vec4f,
   lit6: vec4f,
-  padCluster: array<vec4f, 7>,
+  misc3: vec4f,
+  padCluster: array<vec4f, 6>,
   cluster: array<vec4f, 163>,
 }
 @group(0) @binding(0) var<uniform> u: U;
@@ -883,7 +886,7 @@ R"(  } else if ((FEAT & 524288u) != 0u) {
   } else if ((FEAT & 1u) != 0u) {
     let c = sample_slot(in, S_COLOR, w);
     rgb = c.rgb * vc.rgb * M;
-    if ((FEAT & 4096u) == 0u) { x = c.w; }
+    if ((FEAT & 4096u) == 0u) { x = select(c.w, pow(abs(c.w), u.misc3.x), u.misc3.x > 0.0); }
   }
   if ((FEAT & 1024u) != 0u) {
     let add = row_of(in, i32(u.misc2.x));
@@ -1834,6 +1837,7 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   u.misc2[1] = desc.opacityGain;
   u.misc2[2] = desc.opacityBias;
   u.misc2[3] = desc.depthSoften;
+  u.misc3[0] = desc.alphaGamma;
   // The scene copy this draw may read: this frame's, taken earlier in it, of the target it draws into.
   const size_t frameSlot = current_frame_slot();
   const auto& scene = g_state.scene[frameSlot];

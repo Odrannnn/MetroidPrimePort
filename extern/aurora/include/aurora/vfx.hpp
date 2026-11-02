@@ -279,6 +279,7 @@ struct DrawDesc {
   float modulate = 1.f;
   float depthSoften = 0.f; // DepthSoften's softness (SFTD): the view-space distance the fade spans; <= 0: none
   float opacityGain = 1.f, opacityBias = 0.f; // gain * clamp(smooth3(f) - bias, 0, 1)
+  float alphaGamma = 0.f; // ColorTex: the map's alpha is pow(|a|, alphaGamma); <= 0: as sampled
   int8_t rampRow[2] = {0, 1}; // extra[] rows read whole as the ramp colours c0, c1
   int8_t addRow = 0;          // AddColor: the extra[] row (add.rgb, scale)
   Src erosion;

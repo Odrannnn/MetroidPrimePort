@@ -60,6 +60,7 @@ struct CPortVfxMat {
   Src src[11];
   float modulate = 1.f, depthSoften = 0.f;
   float opacityGain = 1.f, opacityBias = 0.f; // v3 tail; v2 keeps the identity
+  float alphaGamma = 0.f; // v4 tail: the colour map's alpha is |a|^alphaGamma; 0 = as sampled
   u32 spriteCenter = 0; // 0..8, a row of the sprite pivot table
 };
 

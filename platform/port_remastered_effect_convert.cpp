@@ -703,6 +703,8 @@ struct Recipe {
   // row is a shader's non-refraction perm (000). A material carrying either flag is a different perm's
   // maths (and, for MFC1, another shader), so it is refused rather than drawn with perm 000's.
   bool noRefractionFlags = false;
+  // > 0: the colour map's alpha is read as pow(|a|, alphaGamma) (VMAT v4).
+  float alphaGamma = 0.0f;
 };
 
 // RECIPES.md "(b) Per shader" and RECIPES-all.md. Derived from each shader's
@@ -1124,6 +1126,39 @@ const Recipe* RecipeOf(uint32_t shader) {
   for (const Recipe& recipe : table) {
     if (recipe.shader == shader) {
       return &recipe;
+    }
+  }
+  return nullptr;
+}
+
+// A GPSM's header MTRL (node.baseMaterial, drawn where MTIN is nil), as its shader's perm 048: FS 048_0 is
+// rgb = vc.rgb x v1.x and a = sat(v1.y x vc.a), textured x TEXR.rgb and x pow(|TEXR.a|, 2.2) (one FS for
+// every untextured shader below: md5 77e87faf). VS 048_1 passes colour and v1 through; the quad differs.
+enum class HeaderQuad { RotatedSprite, Sprite, Axis };
+struct HeaderShader {
+  uint32_t shader;
+  bool textured;
+  HeaderQuad quad;
+};
+
+const HeaderShader* HeaderShaderOf(uint32_t shader) {
+  static const HeaderShader table[] = {
+      // Camera-facing quads rotated by the particle's angle (ROTA): the port's VORN 0 sprite.
+      {0xb42cacf5, true, HeaderQuad::RotatedSprite},
+      {0x29f35b3a, true, HeaderQuad::RotatedSprite},
+      {0x4d6746f4, false, HeaderQuad::RotatedSprite},
+      // Unrotated camera-facing quads: a VORN 0 sprite without ROTA.
+      {0xe2bfbf91, true, HeaderQuad::Sprite},
+      {0x1e245375, false, HeaderQuad::Sprite},
+      {0xd16ade09, false, HeaderQuad::Sprite},
+      // B = cross(toCam, axis), C = cross(toCam, B): the port's VORN 1/2 quad.
+      {0xe27845ed, true, HeaderQuad::Axis},
+      {0xe512fad9, false, HeaderQuad::Axis},
+      {0x471bb62f, false, HeaderQuad::Axis},
+  };
+  for (const HeaderShader& entry : table) {
+    if (entry.shader == shader) {
+      return &entry;
     }
   }
   return nullptr;
@@ -3489,13 +3524,95 @@ public:
       result.dropped.push_back("VMAT: no MATI for its material");
       return false;
     }
-    char shaderText[16];
-    std::snprintf(shaderText, sizeof(shaderText), "%08x", mati.shader);
     const Recipe* recipe = RecipeOf(mati.shader);
     if (recipe == nullptr) {
+      char shaderText[16];
+      std::snprintf(shaderText, sizeof(shaderText), "%08x", mati.shader);
       m_approximated.push_back(std::string("VMAT: shader ") + shaderText + " has no recipe");
       return false;
     }
+    return MaterialFrom(mati, *recipe, guid->guid, &material, node, result, swoosh, electric);
+  }
+
+  // The VMAT (and its VPRM, VTMT, VPMT, VSMT, SSZE, ITEN, VORN) for `mati` drawn with `recipe`.
+  // `matiGuid` and `material` are the MTIN's MATI and property; a header-material node has neither.
+  // A sprite GPSM with no MTIN draws its header MTRL (node.baseMaterial; see HeaderShaderOf). Its VMAT,
+  // where the shader's quad and maths are the port's: anything else is refused with the reason.
+  bool HeaderMaterial(const EffectNode& node, ConvertedPart& result) const {
+    if (!m_io.vfxTexture || node.baseMaterial == EffectGuid{} || node.primitiveType != 1) {
+      return false;
+    }
+    // The MTRL's shader id is its guid's first four bytes as stored (a MATI's +0x48 reads the same way).
+    const uint32_t shader = uint32_t(node.baseMaterial[0]) << 24 | uint32_t(node.baseMaterial[1]) << 16 |
+                            uint32_t(node.baseMaterial[2]) << 8 | uint32_t(node.baseMaterial[3]);
+    char shaderText[16];
+    std::snprintf(shaderText, sizeof(shaderText), "%08x", shader);
+    const auto refuse = [this, &shaderText](const std::string& why) {
+      m_approximated.push_back(std::string("VMAT: header shader ") + shaderText + " " + why);
+      return false;
+    };
+    // An undecoded shader draws as retail, as before; what that leaves out shows as "no VMAT" drops.
+    const HeaderShader* header = HeaderShaderOf(shader);
+    if (header == nullptr) {
+      return false;
+    }
+    const EffectProperty* texr = nullptr;
+    const EffectProperty* rota = nullptr;
+    uint32_t orient = 0;
+    for (const EffectProperty& property : node.properties) {
+      uint32_t word = 0;
+      if (property.fourcc == F("PMDL")) {
+        return refuse("on a model particle");
+      }
+      // A lit draw (LIT_ 1 or BLIT 1) is another perm.
+      if ((property.fourcc == F("LIT_") || property.fourcc == F("BLIT")) &&
+          (!SmallInteger(property, word) || word != 0)) {
+        return refuse("is lit (" + EffectFourCCString(property.fourcc) + ")");
+      }
+      // Perm 048's UV transform (0.5 + R(E) (diag(C, D) q + (A, B) - 0.5)) is not the port's VTMT.
+      if (header->textured && property.fourcc == F("TMTR")) {
+        return refuse("has a UV transform (TMTR)");
+      }
+      if (property.fourcc == F("ORNT") && (!SmallConst(property, orient) || orient > 2)) {
+        return refuse("has an ORNT that is not a constant 0..2");
+      }
+      if (property.fourcc == F("ROTA") && (!SmallConst(property, word) || word != 0)) {
+        rota = &property;
+      }
+      if (property.fourcc == F("TEXR")) {
+        texr = &property;
+      }
+    }
+    if (header->quad == HeaderQuad::Axis ? orient == 0 : orient != 0) {
+      return refuse("draws a different quad from ORNT " + std::to_string(orient));
+    }
+    if (header->quad == HeaderQuad::Sprite && rota != nullptr) {
+      return refuse("does not rotate, and the particle has a ROTA");
+    }
+    Mati mati;
+    mati.shader = shader;
+    Recipe recipe{shader, 0, {}, {}};
+    if (header->textured) {
+      // Remastered's TEXR `CNST(id), NONE`; an ATEX or atlas is not this perm's single map.
+      if (texr == nullptr || texr->value.size() != 2 || !IsElement(texr->value[0], F("CNST")) ||
+          texr->value[0].args.size() != 1 || texr->value[0].args[0].kind != EffectValue::Kind::Guid ||
+          !IsElement(texr->value[1], F("NONE"))) {
+        return refuse("has no constant TEXR");
+      }
+      mati.textures["TEXR"] = MatiTexture{texr->value[0].args[0].guid, 0, 1, -1, -1};
+      recipe.features = kColorTex;
+      recipe.textures = {{"TEXR", Role::Color, -1, -1}};
+      recipe.alphaGamma = 2.2f;
+    }
+    return MaterialFrom(mati, recipe, EffectGuid{}, nullptr, node, result, false, false);
+  }
+
+  bool MaterialFrom(const Mati& mati, const Recipe& recipeRef, const EffectGuid& matiGuid,
+                    const EffectProperty* material, const EffectNode& node, ConvertedPart& result, bool swoosh,
+                    bool electric) const {
+    const Recipe* recipe = &recipeRef;
+    char shaderText[16];
+    std::snprintf(shaderText, sizeof(shaderText), "%08x", mati.shader);
     m_vmatShader = mati.shader;
 
     // The node's properties by fourcc.
@@ -3621,7 +3738,7 @@ public:
     // model draw passes -1 and resolves it to the MATI resource's mode
     // (CParticleSceneNode::RenderModelEntries, GetMaterialInstanceBlendMode).
     // Pinned to that exact MATI; no other MATI or shader is generalised from it.
-    if (!swoosh && find(F("PMDL")) != nullptr && guid->guid == kWaveOrbMati && mati.shader == 0x642dd72b &&
+    if (!swoosh && find(F("PMDL")) != nullptr && matiGuid == kWaveOrbMati && mati.shader == 0x642dd72b &&
         mati.headerBlend == 1) {
       blend = kBlendAdditiveOne;
     }
@@ -3632,7 +3749,7 @@ public:
     uint32_t features = recipe->features | fogPin;
     // Exact shipped custom model: MATI cull=-1 resolves to back at 0x2bd7f4..0x2bd810;
     // the sorted model draw binds it at 0x2bda84. No inference for other materials/sprites.
-    if (model && guid->guid == kIceWedgeMati && mati.shader == 0x84e0fe6c && mati.headerBlend == 2) {
+    if (model && matiGuid == kIceWedgeMati && mati.shader == 0x84e0fe6c && mati.headerBlend == 2) {
       features |= kModelBackCull;
     }
     // The Queen barrier's shield (f197ec38) and glow (b1eb2b67) models: MATI cull byte 2 (0xff
@@ -3643,7 +3760,7 @@ public:
         (mati.cull == 0xff || mati.cull >= 2)) {
       features |= kModelBackCull;
     }
-    if (!swoosh && find(F("PMDL")) != nullptr && guid->guid == kWaveOrbMati && mati.shader == 0x642dd72b &&
+    if (!swoosh && find(F("PMDL")) != nullptr && matiGuid == kWaveOrbMati && mati.shader == 0x642dd72b &&
         mati.headerBlend == 1) {
       features |= kAlreadyExposed;
     }
@@ -3655,10 +3772,11 @@ public:
     const EffectProperty* powerDvvn = findUnique(F("DVVN"));
     const EffectProperty* powerPbdm = findUnique(F("PBDM"));
     const EffectProperty* powerMtin = findUnique(F("MTIN"));
-    const bool exactMatiProperty = powerMtin == &material && material.tag == 0 && material.value.size() == 2 &&
-                                   material.value[0].kind == EffectValue::Kind::Byte && material.value[0].word == 0 &&
-                                   material.value[1].kind == EffectValue::Kind::Guid &&
-                                   material.value[1].guid == kPowerBallMati;
+    const bool exactMatiProperty = material != nullptr && powerMtin == material && material->tag == 0 &&
+                                   material->value.size() == 2 &&
+                                   material->value[0].kind == EffectValue::Kind::Byte && material->value[0].word == 0 &&
+                                   material->value[1].kind == EffectValue::Kind::Guid &&
+                                   material->value[1].guid == kPowerBallMati;
     const bool hasIexp = std::any_of(node.properties.begin(), node.properties.end(),
                                      [](const EffectProperty& property) { return property.fourcc == F("IEXP"); });
     const auto constantIs = [](const EffectProperty* property, uint8_t expectedTag, uint32_t expected,
@@ -3698,10 +3816,11 @@ public:
     // resolves additive usage. Its raw MATI also has header blend -1 (LE32 at 0x61).
     // This fixes only HDR exposure cancellation; LDR appearance and full parity remain unproven.
     // Do not change blend, recipe or the still-unrepresented SMTR alpha gain/bias here.
-    const bool exactChargeMatiProperty = powerMtin == &material && material.tag == 0 && material.value.size() == 2 &&
-                                         material.value[0].kind == EffectValue::Kind::Byte && material.value[0].word == 0 &&
-                                         material.value[1].kind == EffectValue::Kind::Guid &&
-                                         material.value[1].guid == kPowerChargeMati;
+    const bool exactChargeMatiProperty = material != nullptr && powerMtin == material && material->tag == 0 &&
+                                         material->value.size() == 2 &&
+                                         material->value[0].kind == EffectValue::Kind::Byte && material->value[0].word == 0 &&
+                                         material->value[1].kind == EffectValue::Kind::Guid &&
+                                         material->value[1].guid == kPowerChargeMati;
     if (!swoosh && node.id == kPowerChargeChild && exactChargeMatiProperty && mati.shader == kPowerBallShader &&
         mati.headerBlend == kNoHeaderBlend && guidIs(powerPmdl, kPowerBallModel) &&
         constantIs(powerDvvn, 1, 4, false, true) && constantIs(powerPbdm, 1, 2, true, false) && !hasIexp) {
@@ -3772,7 +3891,8 @@ public:
     // The blob.
     std::vector<uint8_t> blob;
     const bool opacityGainBias = mati.shader == kPowerBallShader;
-    AppendBE32(blob, opacityGainBias ? 3 : 2);
+    const bool alphaGamma = recipe->alphaGamma > 0.0f;
+    AppendBE32(blob, alphaGamma ? 4 : opacityGainBias ? 3 : 2);
     AppendBE32(blob, features);
     AppendBE32(blob, blend);
     AppendBE32(blob, uint32_t(slots.size()));
@@ -3840,6 +3960,12 @@ public:
     if (opacityGainBias) {
       AppendBE32(blob, FloatBits(cch0[2]));
       AppendBE32(blob, FloatBits(cch0[3]));
+    } else if (alphaGamma) {
+      AppendBE32(blob, FloatBits(1.0f));  // v3's identity gain/bias
+      AppendBE32(blob, FloatBits(0.0f));
+    }
+    if (alphaGamma) {
+      AppendBE32(blob, FloatBits(recipe->alphaGamma));
     }
 
     AppendBE32(result.part, F("VMAT"));
@@ -5371,8 +5497,9 @@ public:
     } else if (s.material != nullptr && !s.electric) {
       s.result.dropped.push_back("MTIN: the effect has a TEXR");
     }
-    const bool vmat = (s.part || s.swoosh || s.electric) && s.material != nullptr &&
-                      Material(*s.material, s.node, s.result, s.swoosh || s.electric, s.electric);
+    const bool vmat = ((s.part || s.swoosh || s.electric) && s.material != nullptr &&
+                       Material(*s.material, s.node, s.result, s.swoosh || s.electric, s.electric)) ||
+                      (s.part && !s.customMaterial && !s.drawsNothing && HeaderMaterial(s.node, s.result));
     // A node that draws nothing (no primitive, or no material at all) loses no shading.
     if (!vmat && !s.drawsNothing) {
       if (s.part && s.inverseExposed) {

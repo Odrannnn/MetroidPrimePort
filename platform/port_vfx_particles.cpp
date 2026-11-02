@@ -402,6 +402,7 @@ bool PortVfxBuildDesc(const CPortVfxData& vfx, const float* vsmt, uint vsmtMask,
   desc.depthSoften = mat.depthSoften;
   desc.opacityGain = (vsmtMask & (1u << kPortVfxOpacityGainTarget)) ? vsmt[kPortVfxOpacityGainTarget] : mat.opacityGain;
   desc.opacityBias = (vsmtMask & (1u << kPortVfxOpacityBiasTarget)) ? vsmt[kPortVfxOpacityBiasTarget] : mat.opacityBias;
+  desc.alphaGamma = mat.alphaGamma;
   desc.rampRow[0] = static_cast< int8_t >(mat.rampRow[0]);
   desc.rampRow[1] = static_cast< int8_t >(mat.rampRow[1]);
   desc.addRow = static_cast< int8_t >(mat.addRow);

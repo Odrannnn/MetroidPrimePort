@@ -223,7 +223,9 @@ class Wiring(WiringCase):
 
     def test_v3_is_only_the_audited_shader(self):
         self.assertIn("const bool opacityGainBias = mati.shader == kPowerBallShader;", CONVERT_TEXT)
-        self.assertIn("AppendBE32(blob, opacityGainBias ? 3 : 2);", CONVERT_TEXT)
+        # v4 (a header material's alpha gamma) carries v3's gain/bias, the identity unless audited.
+        self.assertIn("AppendBE32(blob, alphaGamma ? 4 : opacityGainBias ? 3 : 2);", CONVERT_TEXT)
+        self.assertIn("AppendBE32(blob, FloatBits(1.0f));  // v3's identity gain/bias", CONVERT_TEXT)
         rows = [fields(row) for row in entries(CONVERT_TEXT)]
         pinned = next(row for row in rows if int(row[0], 16) == PINNED_SHADER)
         guarded = next(row for row in rows if int(row[0], 16) == 0x7D52BD6B)
