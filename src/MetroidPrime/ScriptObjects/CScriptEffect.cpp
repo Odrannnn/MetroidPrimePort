@@ -24,6 +24,8 @@
 #ifdef TARGET_PC
 #include <cmath>
 #include "MetroidPrime/ScriptObjects/CScriptSpecialFunction.hpp"
+#include "port_mods.h"
+#include "port_room_env.h"
 #endif
 uint CScriptEffect::mNumParticlesDrawing = 0;
 uint CScriptEffect::mNumParticlesUpdating = 0;
@@ -160,7 +162,14 @@ void CScriptEffect::Think(float dt, CStateManager& mgr) {
 #endif
     if (x111_25_dieWhenSystemsDone) {
       x140_destroyDelayTimer += dt;
-      if (x140_destroyDelayTimer > 15.f) {
+#ifdef TARGET_PC
+      // Remastered's CScriptEffectMP1::Think (0xd9a8b8) waits 30 s, retail 15 s.
+      const float destroyDelay =
+          PortRoomEnv::Enabled() && PortMods::RoomEnvLoaded() ? 30.f : 15.f;
+#else
+      const float destroyDelay = 15.f;
+#endif
+      if (x140_destroyDelayTimer > destroyDelay) {
         mgr.DeleteObjectRequest(GetUniqueId());
         return;
       }
