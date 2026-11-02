@@ -1,5 +1,6 @@
 #include "port_input_devices.h"
 
+#include "port_controls.h"
 #include "port_debug.h"
 #include "port_custom_actions.h"
 #include "port_input_map.h"
@@ -259,11 +260,13 @@ void BindController(Profile& p) {
   const PADButtonMapping* buttons = PADGetButtonMappings(kPort, &buttonCount);
   const PADAxisMapping* axes = PADGetAxisMappings(kPort, &axisCount);
   const PADDeadZones* dz = PADGetDeadZones(kPort);
-  // No controller on the port: bind the standard defaults anyway, so the Remap
-  // page shows what a pad would get (nothing reads them until one connects).
+  // No controller on the port: bind the standard defaults with the last pad
+  // preset anyway, so the Remap page shows what a pad would get (nothing reads
+  // them until one connects).
   PADDefaultMapping fallback;
   if (buttons == nullptr || axes == nullptr) {
     PADGetDefaultMapping(&fallback, PAD_TYPE_STANDARD);
+    PortControls::ApplySavedPadPreset(fallback.buttons, PAD_BUTTON_COUNT, fallback.axes, PAD_AXIS_COUNT);
     buttons = fallback.buttons;
     axes = fallback.axes;
     buttonCount = PAD_BUTTON_COUNT;
@@ -1217,6 +1220,7 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   static bool sInit = false;
   static double sClockMs = 0.0;
 
+  PortControls::ApplySavedPadPreset();
   Profile next;
   BuildProfile(next);
   ApplyMenuButtons(next);

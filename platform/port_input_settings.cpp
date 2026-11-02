@@ -5,11 +5,16 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <iterator>
 #include <mutex>
 #include <ostream>
+#include <string_view>
 
 namespace PortInput {
 namespace {
+
+// Settings::padPreset's values, as ApplyPadPresetNamed takes them.
+constexpr std::string_view kPadPresetNames[] = {"gamecube", "remastered", "modern", "southpaw"};
 
 std::mutex sLayoutMutex;
 std::string sLayout;
@@ -58,6 +63,9 @@ bool ApplySetting(std::string_view keyView, std::string_view valueView) {
     s.mouseAim = ParseBool(value);
   } else if (key == "twin_stick") {
     s.twinStick = ParseBool(value);
+  } else if (key == "pad_preset") {
+    const auto it = std::find(std::begin(kPadPresetNames), std::end(kPadPresetNames), value);
+    s.padPreset = it != std::end(kPadPresetNames) ? int(it - std::begin(kPadPresetNames)) : -1;
   } else if (key == "touch_colors") {
     s.touchColors = ParseBool(value);
   } else if (key == "touch_labels") {
@@ -323,6 +331,9 @@ void WriteControlSettings(std::ostream& out) {
   const Settings& s = Get();
   out << "mouse_aim=" << (s.mouseAim ? 1 : 0) << '\n';
   out << "twin_stick=" << (s.twinStick ? 1 : 0) << '\n';
+  if (s.padPreset >= 0 && s.padPreset < int(std::size(kPadPresetNames))) {
+    out << "pad_preset=" << kPadPresetNames[s.padPreset] << '\n';
+  }
   out << "touch_colors=" << (s.touchColors ? 1 : 0) << '\n';
   out << "touch_labels=" << (s.touchLabels ? 1 : 0) << '\n';
   out << "touch_turbo=" << (s.touchTurbo ? 1 : 0) << '\n';

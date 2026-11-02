@@ -1021,6 +1021,10 @@ int StoredPadAltButton(int bit) {
 
 void SetTwinStick(bool enabled) { StoreSetting(sInput.twinStick, enabled); }
 
+int PadPreset() { return Loaded(sInput.padPreset); }
+
+void SetPadPreset(int preset) { StoreSetting(sInput.padPreset, preset); }
+
 float TwinStickRightY() { return sTwinStickRightY; }
 
 void SetTwinStickRightY(float y) { sTwinStickRightY = y; }

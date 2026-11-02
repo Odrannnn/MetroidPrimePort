@@ -141,6 +141,8 @@ void Restore(const Layout& l) {
       PADSetButtonMapping(kPort, {u32(b.native), PADButton(b.pad)});
     for (const auto& a : l.padAxes)
       PADSetAxisMapping(kPort, {{a.axis, PADAxisSign(a.sign)}, a.button, PADAxis(a.pad)});
+    // Not a built-in preset: a controller connected later keeps its own mappings.
+    if (!l.padButtons.empty() || !l.padAxes.empty()) PortDebug::SetPadPreset(-1);
     PortDebug::SetSwapScanXray(l.swapScanXray);
     PortDebug::SetShiftBinding(2, l.shift[2]);
     for (int bit = 0; bit < PortDebug::kPadAltCount; ++bit)

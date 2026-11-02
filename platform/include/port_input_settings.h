@@ -54,6 +54,9 @@ constexpr int kScancodeLShift = 225;
 struct Settings {
   bool mouseAim = false;
   bool twinStick = false;
+  // The last controller preset picked (PortControls' EPadPreset: 0 GameCube,
+  // 1 Remastered, 2 Modern, 3 Southpaw), -1 for none or a saved layout of the user's.
+  int padPreset = -1;
   bool springBall = false;
   bool swapScanXray = false;
   bool radialMenus = false;  // Trilogy discs: the Wii's radial beam and visor menus

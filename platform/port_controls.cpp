@@ -96,8 +96,94 @@ s32 OtherStick(s32 axis) {
   }
 }
 
-void ApplyPadPreset(EPadPreset preset) {
+void SetButton(PADButtonMapping* buttons, u32 count, PADButtonMapping mapping) {
+  for (u32 i = 0; i < count; ++i) {
+    if (buttons[i].padButton == mapping.padButton) buttons[i] = mapping;
+  }
+}
+
+void SetAxis(PADAxisMapping* axes, u32 count, PADAxisMapping mapping) {
+  for (u32 i = 0; i < count; ++i) {
+    if (axes[i].padAxis == mapping.padAxis) axes[i] = mapping;
+  }
+}
+
+// A preset's button and axis mappings, written over a pad type's defaults (what
+// PADSetButtonMapping does, on any array: Aurora's port 0, or a stand-in for none).
+void ApplyPresetMapping(EPadPreset preset, PADButtonMapping* buttons, u32 buttonCount, PADAxisMapping* axes,
+                        u32 axisCount) {
+  switch (preset) {
+  case EPadPreset::kGameCube:
+    break;
+  case EPadPreset::kRemastered: {
+    // Remastered's Dual Sticks scheme: fire on RT and the right face button,
+    // lock on with LT (the default L), missile on RB, jump on the bottom face
+    // button and LB, morph on the left one, map on Start, pause on Back, and
+    // the top face button held with the D-pad picks beams. Free look (no
+    // Remastered equivalent) goes on the right stick click.
+    const PADButtonMapping mappings[] = {
+        {PAD_NATIVE_BUTTON_TRIGGER_RIGHT, PAD_BUTTON_A},
+        {SDL_GAMEPAD_BUTTON_SOUTH, PAD_BUTTON_B},
+        {SDL_GAMEPAD_BUTTON_WEST, PAD_BUTTON_X},
+        {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, PAD_BUTTON_Y},
+        {SDL_GAMEPAD_BUTTON_START, PAD_TRIGGER_Z},
+        {SDL_GAMEPAD_BUTTON_BACK, PAD_BUTTON_START},
+        {SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_TRIGGER_R},
+    };
+    for (const PADButtonMapping& mapping : mappings) {
+      SetButton(buttons, buttonCount, mapping);
+    }
+    SetAxis(axes, axisCount, {{-1, AXIS_SIGN_POSITIVE}, SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_AXIS_TRIGGER_R});
+    break;
+  }
+  case EPadPreset::kModern: {
+    // Fire on RT and lock on with LT (the default L), jump and morph on the
+    // face buttons, free look on the right stick click, which also drives the
+    // R analog so RT doesn't press R as well.
+    const PADButtonMapping mappings[] = {
+        {PAD_NATIVE_BUTTON_TRIGGER_RIGHT, PAD_BUTTON_A},
+        {SDL_GAMEPAD_BUTTON_SOUTH, PAD_BUTTON_B},
+        {SDL_GAMEPAD_BUTTON_EAST, PAD_BUTTON_X},
+        {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, PAD_BUTTON_Y},
+        {SDL_GAMEPAD_BUTTON_NORTH, PAD_TRIGGER_Z},
+        {SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_TRIGGER_R},
+    };
+    for (const PADButtonMapping& mapping : mappings) {
+      SetButton(buttons, buttonCount, mapping);
+    }
+    SetAxis(axes, axisCount, {{-1, AXIS_SIGN_POSITIVE}, SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_AXIS_TRIGGER_R});
+    break;
+  }
+  case EPadPreset::kSouthpaw:
+    for (u32 i = 0; i < axisCount; ++i) {
+      axes[i].nativeAxis.nativeAxis = OtherStick(axes[i].nativeAxis.nativeAxis);
+    }
+    break;
+  }
+}
+
+// Port 0's controller, unless there is none or it is the touch overlay's
+// virtual one (which keeps its defaults and ignores Aurora's setters).
+SDL_Gamepad* PhysicalPad() {
+  const s32 index = PADGetIndexForPort(kControlPort);
+  SDL_Gamepad* pad = index >= 0 ? PADGetSDLGamepadForIndex(static_cast< u32 >(index)) : nullptr;
+  return pad == nullptr || SDL_IsJoystickVirtual(SDL_GetGamepadID(pad)) ? nullptr : pad;
+}
+
+// Port 0's controller back to its type's defaults with the preset on top.
+bool WritePresetMapping(EPadPreset preset) {
+  if (PhysicalPad() == nullptr) return false;
   PADRestoreDefaultMapping(kControlPort);
+  u32 buttonCount = 0;
+  u32 axisCount = 0;
+  PADButtonMapping* buttons = PADGetButtonMappings(kControlPort, &buttonCount);
+  PADAxisMapping* axes = PADGetAxisMappings(kControlPort, &axisCount);
+  if (buttons == nullptr || axes == nullptr) return false;
+  ApplyPresetMapping(preset, buttons, buttonCount, axes, axisCount);
+  return true;
+}
+
+void ApplyPadPreset(EPadPreset preset) {
   // The GameCube layouts use the C-stick; the dual-stick ones turn twin-stick
   // back on. Only Remastered has a pad button for the beam shift.
   PortDebug::SetTwinStick(false);
@@ -108,63 +194,24 @@ void ApplyPadPreset(EPadPreset preset) {
   }
   switch (preset) {
   case EPadPreset::kGameCube:
+  case EPadPreset::kSouthpaw:
     break;
-  case EPadPreset::kRemastered: {
-    // Remastered's Dual Sticks scheme: fire on RT and the right face button,
-    // lock on with LT (the default L), missile on RB, jump on the bottom face
-    // button and LB, morph on the left one, map on Start, pause on Back, and
-    // the top face button held with the D-pad picks beams. Free look (no
-    // Remastered equivalent) goes on the right stick click.
-    const PADButtonMapping buttons[] = {
-        {PAD_NATIVE_BUTTON_TRIGGER_RIGHT, PAD_BUTTON_A},
-        {SDL_GAMEPAD_BUTTON_SOUTH, PAD_BUTTON_B},
-        {SDL_GAMEPAD_BUTTON_WEST, PAD_BUTTON_X},
-        {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, PAD_BUTTON_Y},
-        {SDL_GAMEPAD_BUTTON_START, PAD_TRIGGER_Z},
-        {SDL_GAMEPAD_BUTTON_BACK, PAD_BUTTON_START},
-        {SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_TRIGGER_R},
-    };
-    for (const PADButtonMapping& mapping : buttons) {
-      PADSetButtonMapping(kControlPort, mapping);
-    }
-    PADSetAxisMapping(kControlPort, {{-1, AXIS_SIGN_POSITIVE}, SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_AXIS_TRIGGER_R});
+  case EPadPreset::kRemastered:
     PortDebug::SetPadAltButton(PadBit(PAD_BUTTON_A), SDL_GAMEPAD_BUTTON_EAST);
     PortDebug::SetPadAltButton(PadBit(PAD_BUTTON_B), SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
     PortDebug::SetShiftBinding(2, SDL_GAMEPAD_BUTTON_NORTH);
     PortDebug::SetSwapScanXray(true);
     PortDebug::SetTwinStick(true);
     break;
-  }
-  case EPadPreset::kModern: {
-    // Fire on RT and lock on with LT (the default L), jump and morph on the
-    // face buttons, free look on the right stick click, which also drives the
-    // R analog so RT doesn't press R as well.
-    const PADButtonMapping buttons[] = {
-        {PAD_NATIVE_BUTTON_TRIGGER_RIGHT, PAD_BUTTON_A},
-        {SDL_GAMEPAD_BUTTON_SOUTH, PAD_BUTTON_B},
-        {SDL_GAMEPAD_BUTTON_EAST, PAD_BUTTON_X},
-        {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, PAD_BUTTON_Y},
-        {SDL_GAMEPAD_BUTTON_NORTH, PAD_TRIGGER_Z},
-        {SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_TRIGGER_R},
-    };
-    for (const PADButtonMapping& mapping : buttons) {
-      PADSetButtonMapping(kControlPort, mapping);
-    }
-    PADSetAxisMapping(kControlPort, {{-1, AXIS_SIGN_POSITIVE}, SDL_GAMEPAD_BUTTON_RIGHT_STICK, PAD_AXIS_TRIGGER_R});
+  case EPadPreset::kModern:
     // The right stick aims; without twin-stick it would be the C-stick.
     PortDebug::SetTwinStick(true);
     break;
   }
-  case EPadPreset::kSouthpaw: {
-    u32 count = 0;
-    PADAxisMapping* axes = PADGetAxisMappings(kControlPort, &count);
-    for (u32 i = 0; axes != nullptr && i < count; ++i) {
-      axes[i].nativeAxis.nativeAxis = OtherStick(axes[i].nativeAxis.nativeAxis);
-    }
-    break;
-  }
-  }
-  PADSerializeMappings();
+  // Remembered, so a controller connected later (or none at all, on the Remap
+  // page) gets the same mappings: Aurora keeps them per controller model.
+  PortDebug::SetPadPreset(static_cast< int >(preset));
+  if (WritePresetMapping(preset)) PADSerializeMappings();
 }
 
 // A deadzone as a percentage of full travel; Aurora keeps raw SDL axis units.
@@ -378,6 +425,32 @@ bool ApplyKeyPresetNamed(std::string_view name) {
   // The presets turn mouse aim and Twin Stick Aim on or off; the settings file keeps them.
   PortDebug::MarkSettingsDirty();
   return true;
+}
+
+void ApplySavedPadPreset() {
+  // SDL joystick ids are never reused, so a reconnect counts as a new controller.
+  static SDL_JoystickID sSeen = 0;
+  SDL_Gamepad* pad = PhysicalPad();
+  const SDL_JoystickID id = pad != nullptr ? SDL_GetGamepadID(pad) : 0;
+  if (id == sSeen) return;
+  sSeen = id;
+  const int preset = PortDebug::PadPreset();
+  if (id == 0 || preset <= static_cast< int >(EPadPreset::kGameCube) ||
+      preset > static_cast< int >(EPadPreset::kSouthpaw) || PADIsDefaultMapping(kControlPort) == FALSE) {
+    return;
+  }
+  // A GameCube controller has no right stick click for the dual-stick layouts.
+  const bool dualStick = preset == static_cast< int >(EPadPreset::kRemastered) ||
+                         preset == static_cast< int >(EPadPreset::kModern);
+  if (dualStick && PADIsGCAdapter(kControlPort) != 0) return;
+  if (WritePresetMapping(static_cast< EPadPreset >(preset))) PADSerializeMappings();
+}
+
+void ApplySavedPadPreset(PADButtonMapping* buttons, unsigned buttonCount, PADAxisMapping* axes, unsigned axisCount) {
+  const int preset = PortDebug::PadPreset();
+  if (preset > static_cast< int >(EPadPreset::kGameCube) && preset <= static_cast< int >(EPadPreset::kSouthpaw)) {
+    ApplyPresetMapping(static_cast< EPadPreset >(preset), buttons, buttonCount, axes, axisCount);
+  }
 }
 
 bool ApplyPadPresetNamed(std::string_view name) {

@@ -537,6 +537,9 @@ void SetTouchClassic(bool on);
 bool TouchTwinStick();
 void SetTouchTwinStick(bool on);
 void SetTwinStick(bool enabled);
+// The last controller preset (Settings::padPreset), which a controller connected later gets.
+int PadPreset();
+void SetPadPreset(int preset);
 // Right stick Y (-1..1) before twin-stick consumed it, for the Spring Ball;
 // 0 when twin-stick is off (the game input still carries it then).
 float TwinStickRightY();
