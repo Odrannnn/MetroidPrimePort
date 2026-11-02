@@ -1746,6 +1746,10 @@ CVectorElement* CParticleDataFactory::GetVectorElement(CInputStream& in) {
   case SBIG('VARV'):
     ret = rs_new CVEPortVar(in.ReadLong());
     break;
+  // Port-only PSYV: a PSYS vector slot of the system being evaluated.
+  case SBIG('PSYV'):
+    ret = rs_new CVEPortSysVar(in.ReadLong());
+    break;
   // ABS_ (CVEAbsoluteValue 0x29e254): one vector child.
   case SBIG('ABS_'): {
     CVectorElement* value = GetVectorElement(in);

@@ -3000,6 +3000,29 @@ void TestSystemVars() {
   CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped");
 }
 
+// A vector PSAn reads the system's SVVn (GetVectorElement 0x251a44): the port-only PSYV.
+void TestSystemVectorVar() {
+  auto parts = ConvertOne(OneGenerator([](auto& o) {
+                  PutProperty(o, "SVV2", 3);
+                  PutFourCC(o, "CNST");
+                  PutConstant(o, Bits(1.f));
+                  PutConstant(o, Bits(2.f));
+                  PutConstant(o, Bits(3.f));
+                  PutProperty(o, "SIZE", 3);
+                  PutFourCC(o, "VXTR");
+                  PutFourCC(o, "PSA2");
+                  PutTexr(o, 0x1234ABCD);
+                }),
+                {});
+  Retail size;
+  size.f("SIZE").f("VXTR").f("PSYV").w(2);
+  Retail sys;
+  sys.f("PSYS").f("CNST").w(1).w(3).w(2).w(0);
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, size.bytes), "VXTR(PSA2) reads PSYV slot 2");
+  CHECK_MSG(!parts.empty() && Contains(parts[0].part, sys.bytes), "SVV2 is PSYS vector slot 2");
+  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped");
+}
+
 // An order-0 PMRQ REUL is one PMRT Euler vector. Preserve its angle expressions,
 // including IRND, which PIRN evaluates once per particle and expression.
 void TestModelRotation() {
@@ -6756,6 +6779,7 @@ int main() {
   TestCurlNoise();
   TestParentRead();
   TestSystemVars();
+  TestSystemVectorVar();
   TestSystemVarGradLifetime();
   TestModelRotation();
   TestComposedModelRotation();

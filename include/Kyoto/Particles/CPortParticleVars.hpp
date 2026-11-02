@@ -180,6 +180,10 @@ public:
   int SysInt(u32 slot) const {
     return slot < x_sys[1].size() ? static_cast< int >(x_sys[1][slot][0]) : 0;
   }
+  CVector3f SysVector(u32 slot) const {
+    return slot < x_sys[3].size() ? CVector3f(x_sys[3][slot][0], x_sys[3][slot][1], x_sys[3][slot][2])
+                                  : CVector3f::Zero();
+  }
   // The system that built this one (CVarContext 0x24f06c: ctx+0x48 = the parent's), or null.
   void SetParent(const CPortVarMemory* parent) { x_parent = parent != this ? parent : nullptr; }
   const CPortVarMemory* Parent() const { return x_parent; }
@@ -371,6 +375,20 @@ public:
   ~CREPortSysVar() override {}
   bool GetValue(int, float& out) const override {
     out = CPortVarGlobals::sCurrent != nullptr ? CPortVarGlobals::sCurrent->SysReal(x4_slot) : 0.f;
+    return false;
+  }
+};
+
+// PSYV (port-only; a vector PSAn, GetVectorElement 0x251a44): the current system's vector slot.
+class CVEPortSysVar : public CVectorElement {
+  u32 x4_slot;
+
+public:
+  explicit CVEPortSysVar(u32 slot) : x4_slot(slot) {}
+  ~CVEPortSysVar() override {}
+  bool GetValue(int, CVector3f& out) const override {
+    out = CPortVarGlobals::sCurrent != nullptr ? CPortVarGlobals::sCurrent->SysVector(x4_slot)
+                                               : CVector3f::Zero();
     return false;
   }
 };

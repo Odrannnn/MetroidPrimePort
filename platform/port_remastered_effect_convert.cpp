@@ -280,8 +280,10 @@ const Signatures& PortElementsOf(Type type) {
   static const Signatures vectorElements = {
       // VARV: a PVRT index. PCRC: centre, axis, start degrees, count, variance, radius, then the
       // shuffle byte. RNDV: the magnitude. PCRO: P, the frequency, the octave count, the gain,
-      // then the amplitude A. PNCV: the normalised compensated velocity, no payload.
+      // then the amplitude A. PNCV: the normalised compensated velocity, no payload. PSYV: a PSYS
+      // slot.
       {F("VARV"), "w"}, {F("PCRC"), "vvrirrd"}, {F("RNDV"), "r"}, {F("PCRO"), "vrirv"}, {F("PNCV"), ""},
+      {F("PSYV"), "w"},
   };
   static const Signatures modVectorElements = {
       // PCRM: the raw mode, the V vector, then t.
@@ -1545,6 +1547,13 @@ public:
     // AddRefVar(ctx 0, real, n)), which its SVRn sets. The port-only PSYR and n.
     if (type == Type::Real && value.args.empty() && SystemRealRead(value.fourcc) >= 0) {
       AppendBE32(out, F("PSYR"));
+      AppendBE32(out, uint32_t(SystemRealRead(value.fourcc)));
+      return true;
+    }
+    // A vector PSAn is the system's own additional vector n (GetVectorElement 0x251a44:
+    // AddRefVar(ctx 0, vector, n)), which its SVVn sets. The port-only PSYV and n.
+    if (type == Type::Vector && value.args.empty() && SystemRealRead(value.fourcc) >= 0) {
+      AppendBE32(out, F("PSYV"));
       AppendBE32(out, uint32_t(SystemRealRead(value.fourcc)));
       return true;
     }

@@ -235,7 +235,8 @@ inline constexpr int kModels = 30;
 // 153: ambients into matched retail effects. 157: recipes 90ce7873, 03ac7d53, d47ffcc3; a swoosh VMAT's PMTR life.
 // 163: header planar squares (shaders 4ba0aadc, c38294d2). 164: VMAT slots bind Remastered's sRGB textures.
 // 182: a vector SMTR (DOML, CNST) sets a CCH row's xyz; DOML reads the LightHints' direction (PDML).
-inline constexpr int kEffects = 182;   // DOML material overrides
+// 183: a vector PSAn reads the system's SVVn (PSYV).
+inline constexpr int kEffects = 183;   // vector PSAn
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
