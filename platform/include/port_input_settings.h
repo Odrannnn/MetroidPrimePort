@@ -125,7 +125,7 @@ struct Settings {
   bool touchAimSplit = false;
   float touchAimSpeedY = 2.25f;
   bool touchMapTap = true;
-  bool touchWheels = true;
+  bool touchWheels = false; // retired touch_wheels, until the overlay migrates it (port_debug.h)
   bool touchClassic = false;       // classic GameCube layout
   bool touchTwinStick = false;     // exclusive with touchClassic; classic wins on load
   bool touchFlickStick = false;    // the twin-stick layout's right stick as Flick Stick

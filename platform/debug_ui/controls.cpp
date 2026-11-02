@@ -455,7 +455,8 @@ void DrawControlsTouchGyro() {
   ItemHelp("Default: GameCube buttons, drag the screen to aim, Visor and Beam wheels.\n"
            "Classic GameCube: adds the C-stick and D-pad.\n"
            "Twin stick (Remastered): a right stick aims; Jump, Fire, Morph, Missile, LT Lock; "
-           "D-pad for visors, Y + D-pad for beams.");
+           "D-pad for visors, Y + D-pad for beams.\n"
+           "Any layout takes Visor and Beam wheels as buttons: Edit layout, Add a button.");
   ImGui::BeginDisabled(!sInput.touchTwinStick);
   bool touchFlickStick = sInput.touchFlickStick;
   if (ImGui::Checkbox("Flick stick##touch", &touchFlickStick)) {
@@ -482,21 +483,11 @@ void DrawControlsTouchGyro() {
     SetTouchMapTap(touchMapTap);
   }
   ItemHelp("Tap the minimap to open the map. Replaces the Z button.");
-  ImGui::BeginDisabled(!sInput.touchClassic && !sInput.touchTwinStick);
-  bool touchWheels = sInput.touchWheels;
-  if (ImGui::Checkbox("Beam and visor wheels", &touchWheels)) {
-    SetTouchWheels(touchWheels);
-  }
-  ItemHelp("Replaces the D-pad with Visor and Beam buttons: hold, slide to one, let go. "
-           "Let go in the middle to cancel.");
-  ImGui::EndDisabled();
-  ImGui::BeginDisabled(!((!sInput.touchClassic && !sInput.touchTwinStick) || sInput.touchWheels));
   bool touchVisorTapScan = sInput.touchVisorTapScan;
   if (ImGui::Checkbox("Tap Visor for Scan Visor", &touchVisorTapScan)) {
     SetTouchVisorTapScan(touchVisorTapScan);
   }
-  ItemHelp("A quick tap on Visor switches to the Scan Visor.");
-  ImGui::EndDisabled();
+  ItemHelp("A quick tap on the Visor wheel button switches to the Scan Visor.");
   ImGui::BeginDisabled(!(!sInput.touchClassic || sInput.touchAim));
   float touchAimSpeed = sInput.touchAimSpeed;
   if (ImGui::SliderFloat("Touch aim speed", &touchAimSpeed, 0.5f, 10.f, "%.2f px/dp")) {

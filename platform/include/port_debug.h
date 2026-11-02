@@ -863,6 +863,13 @@ bool TakeTouchLook(float& dyaw, float& dpitch);
 // Plasma, 8-9 current visor, 10-11 current beam, 12 valid, 13 morphed or
 // morphing; 0 when stale). A
 // request is read by ControlMapper for ~120 ms as a press of that command.
+// The wheels are stock in the default layout; elsewhere they are added buttons
+// with these overlay-only keys (input skips them), key then label, listed after
+// Previous visor. TouchWheels is the retired setting that put the stock pair in
+// the classic and twin layouts: true until the overlay has turned it into those
+// buttons.
+inline constexpr const char* kTouchWheelActions[4] = {"visor_wheel", "Visor wheel", "beam_wheel",
+                                                      "Beam wheel"};
 bool TouchWheels();
 void SetTouchWheels(bool on);
 bool TouchVisorTapScan();

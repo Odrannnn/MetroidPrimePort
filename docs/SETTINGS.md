@@ -296,8 +296,13 @@
   `CInGameGuiManager`) presses Z for one poll, which opens the map; the GameCube
   layout's Z pill is hidden while it is on. Console: `minimap` prints the rect,
   `maptap` sends the tap.
-  **Beam and visor wheels** (Android, `touch_wheels`, on by default; F1 > Controls > Touch & gyro): in both layouts the D-pad is replaced by two round buttons,
-  Visor and Beam. Holding one opens a 4-sector wheel centred on the press
+  **Beam and visor wheels** (touch overlays): two round buttons, Visor and Beam,
+  stock in the Default layout; any layout takes them as added buttons (Edit
+  layout > Add a button > Visor wheel / Beam wheel, keys `visor_wheel` and
+  `beam_wheel`, which only the overlay reads). The retired `touch_wheels` setting
+  put the stock pair in the classic and twin layouts in place of the D-pad; a
+  layout saved with it on becomes added wheel buttons where they were, without
+  the D-pad, on its first draw, and the setting is dropped. Holding one opens a 4-sector wheel centred on the press
   (clamped on screen) in the stock directions (visors up Combat, right X-Ray,
   down Thermal, left Scan; beams up Power, right Wave, down Ice, left Plasma);
   sliding lights the sector, release picks it, release in the centre cancels.

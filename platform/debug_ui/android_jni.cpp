@@ -129,6 +129,10 @@ Java_org_metroidprime_port_TouchControlsView_nativeTouchButtonActions(JNIEnv* en
     const PortInput::ActionInfo& info = PortInput::Info(a);
     items.emplace_back(info.key);
     items.emplace_back(info.label);
+    if (a == PortInput::Action::VisorPrev) {
+      items.insert(items.end(), std::begin(PortDebug::kTouchWheelActions),
+                   std::end(PortDebug::kTouchWheelActions));
+    }
   }
   // The player's own actions (controls.toml [[custom_action]]), named as the Remap page does.
   for (const PortInput::CustomActionDef& def : PortInputDevices::UserBindings()->customActions) {
@@ -195,6 +199,12 @@ Java_org_metroidprime_port_TouchControlsView_nativeTouchTwinStick(JNIEnv*, jclas
 extern "C" JNIEXPORT jboolean JNICALL
 Java_org_metroidprime_port_TouchControlsView_nativeTouchWheelsEnabled(JNIEnv*, jclass) {
   return PortDebug::TouchWheels() ? JNI_TRUE : JNI_FALSE;
+}
+
+// The view has moved the retired setting's wheels into the layout as added buttons.
+extern "C" JNIEXPORT void JNICALL
+Java_org_metroidprime_port_TouchControlsView_nativeRetireTouchWheels(JNIEnv*, jclass) {
+  PortDebug::SetTouchWheels(false);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

@@ -412,7 +412,9 @@ void WriteAimSettings(std::ostream& out) {
   out << "touch_classic_gc=" << (s.touchClassic ? 1 : 0) << '\n';
   out << "touch_twin_stick=" << (s.touchTwinStick ? 1 : 0) << '\n';
   out << "touch_flick_stick=" << (s.touchFlickStick ? 1 : 0) << '\n';
-  out << "touch_wheels=" << (s.touchWheels ? 1 : 0) << '\n';
+  if (s.touchWheels) {
+    out << "touch_wheels=1\n"; // not migrated yet
+  }
   out << "touch_visor_tap_scan=" << (s.touchVisorTapScan ? 1 : 0) << '\n';
   out << "mouse_invert_x=" << (s.mouseInvertX ? 1 : 0) << '\n';
   out << "mouse_invert_y=" << (s.mouseInvertY ? 1 : 0) << '\n';

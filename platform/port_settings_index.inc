@@ -89,7 +89,6 @@
 {"Controls", "Touch & gyro", "Touch controls", "Flick stick", "flick stick touch twin right stick snap turn gyro"},
 {"Controls", "Touch & gyro", "Touch controls", "Touch aim", "touch look camera finger drag"},
 {"Controls", "Touch & gyro", "Touch controls", "Tap minimap for map", "minimap map touch tap"},
-{"Controls", "Touch & gyro", "Touch controls", "Beam and visor wheels", "beam visor wheel touch d-pad"},
 {"Controls", "Touch & gyro", "Touch controls", "Tap Visor for Scan Visor", "scan visor tap touch"},
 {"Controls", "Touch & gyro", "Touch controls", "Touch aim speed", "touch look speed sensitivity"},
 {"Controls", "Touch & gyro", "Touch controls", "Separate vertical speed", "horizontal vertical split touch aim speed sensitivity"},
