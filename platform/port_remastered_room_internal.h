@@ -25,6 +25,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 
 #include "port_maya_spline.h"
@@ -657,7 +658,20 @@ constexpr uint32_t kPropIceDarkenEveryFrame = 0x35a2afcb;
 constexpr uint32_t kTimerMP1 = 0x25c6d2a3;
 constexpr uint32_t kPropTimerAutostart = 0xd0ecc8ea;
 constexpr uint32_t kActionTimerStart[2] = {0xd63b8f04, 0x55193b90};  // ResetAndStart, Start
-constexpr uint32_t kPropTimerFlag10 = 0x79f25d24;                     // boolean +0x10
+// CScriptTimerMP1 (Create 0xf373c8, ApplyTime 0xf37654): +0x10 is retail CScriptTimer's loop,
+// +0x11 its autostart; +0x12 (Remastered's own) resets and keeps timing on expiry, whatever the
+// other two say.
+constexpr uint32_t kPropTimerLoop = 0x79f25d24;                       // boolean +0x10
+constexpr uint32_t kPropTimerRestart = 0x75ce4b13;                    // boolean +0x12
+constexpr uint32_t kPropTimerDelay = 0xfb2a2cf0;
+constexpr uint32_t kPropTimerRandom = 0x35c8fdd3;  // f32 random add
+// A TimerMP1's actions (TranslateScriptActionToMessage 0xf36b10), as retail messages.
+constexpr uint32_t kActionTimerActivate = 0xbbdb3ee1;
+constexpr uint32_t kActionTimerDeactivate = 0xa4beef34;
+constexpr uint32_t kActionTimerToggle = 0x3c6fe8b5;
+constexpr uint32_t kActionTimerReset = 0x43d48cf5;
+constexpr uint32_t kActionTimerStop = 0xef52cf9d;
+constexpr uint32_t kActionTimerStopAndReset = 0x79259fe8;
 constexpr uint32_t kScriptRelayMP1 = 0x1b78f9a4;
 constexpr uint32_t kActionScriptRelayFire = 0x379d362e;
 // A trigger's own Activate / Deactivate (CTriggerMP1GOC::TranslateScriptActionToMessage 0xf3e434:
@@ -808,8 +822,27 @@ struct IceDarkenerAtLoad {
 std::vector<IceDarkenerAtLoad> IceDarkeners(const Room& room, std::vector<std::string>& notes);
 double MaxAbs(const Vec3& a, const Vec3& b);
 
+// A link into a Remastered timer (SceneryScripts::Timer): its action is kLinkMessage | the
+// retail message (Activate, ResetAndStart, ...), not a PortRoomGeo::LinkAction.
+constexpr uint8_t kLinkMessage = 0x80;
+// A link's sender that is a Remastered TimerMP1 no retail object stands for: kSenderTimer | its
+// entity. Only the effects import reads these (as its timer add-ons); nothing else sends them.
+constexpr uint32_t kSenderTimer = 0xFC000000;
+constexpr bool IsTimerSender(uint32_t sender) { return (sender & 0xFF000000) == kSenderTimer; }
+
 // What drives the scenery actors of a room.
 struct SceneryScripts {
+  // A TimerMP1 no retail object matched whose Zero drives an effect, a generator or another such
+  // timer (as kSenderTimer | entity), as a retail CScriptTimer: exact where Remastered's restart
+  // flag (kPropTimerRestart) is clear, or set with autostart (then it is retail's loop and
+  // autostart). Its links are what drives it, traced like an effect's (`unresolved` counts the
+  // others, under its entity).
+  struct Timer {
+    float delay = 0.f, random = 0.f;
+    bool loop = false, autoStart = false, active = true, baseLayer = false;
+    std::vector<PortRoomGeo::Link> links;
+  };
+  std::map<int, Timer> timers;  // by entity
   std::map<int, uint8_t> layer;  // by entity: the retail layer it is drawn on
   std::map<int, std::vector<PortRoomGeo::Link>> links;  // by entity
   std::map<int, size_t> unresolved;                      // by entity: connections not traced

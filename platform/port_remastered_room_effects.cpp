@@ -1005,6 +1005,33 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   size_t drivenCount = 0;  // connected ones added, with drives
   std::vector<PortRoomEffects::Drive> allDrives;
   const std::set<int> drivable = DrivableEntities(room);
+  // The Remastered timers that can be retail CScriptTimer add-ons (PortRoomEffects::Timer): every
+  // connection into them traced to retail messages, on a known layer, and every timer they hear
+  // from one too (until nothing more drops out).
+  std::set<int> timersOk;
+  for (const auto& [t, timer] : scripts.timers) {
+    if (scripts.unresolved.count(t) == 0 && (timer.baseLayer || scripts.layer.count(t) != 0) &&
+        std::all_of(timer.links.begin(), timer.links.end(), [](const PortRoomGeo::Link& l) {
+          return (l.action & kLinkMessage) != 0 && l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
+        })) {
+      timersOk.insert(t);
+    }
+  }
+  const auto timerSenderOk = [&](const PortRoomGeo::Link& l) {
+    return !IsTimerSender(l.sender) || timersOk.count(int(l.sender & ~kSenderTimer)) != 0;
+  };
+  for (bool dropped = true; dropped;) {
+    dropped = false;
+    for (auto it = timersOk.begin(); it != timersOk.end();) {
+      const std::vector<PortRoomGeo::Link>& links = scripts.timers.at(*it).links;
+      if (std::all_of(links.begin(), links.end(), timerSenderOk)) {
+        ++it;
+      } else {
+        it = timersOk.erase(it);
+        dropped = true;
+      }
+    }
+  }
   // The GeneratorMP1s that copy effects, kept where they are exact (PortRoomEffects::Generator):
   // every connection into them traced, one template, no Follow targets, a spawn count in range.
   struct GeneratorPlan {
@@ -1032,10 +1059,10 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       }
       const auto links = scripts.links.find(g);
       if (comp == nullptr || drivable.count(g) == 0 || links == scripts.links.end() || scripts.unresolved.count(g) != 0 ||
-          !std::all_of(links->second.begin(), links->second.end(), [](const PortRoomGeo::Link& l) {
+          !std::all_of(links->second.begin(), links->second.end(), [&](const PortRoomGeo::Link& l) {
             return (l.action == PortRoomGeo::kGenerate || l.action == PortRoomGeo::kShow ||
                     l.action == PortRoomGeo::kHide || l.action == PortRoomGeo::kToggle) &&
-                   l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
+                   l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && timerSenderOk(l);
           })) {
         continue;
       }
@@ -1170,10 +1197,10 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
           drivable.count(c->entity) != 0 && (links != scripts.links.end() || generated) &&
           scripts.unresolved.count(c->entity) == 0 &&
           (links == scripts.links.end() ||
-           std::all_of(links->second.begin(), links->second.end(), [](const PortRoomGeo::Link& l) {
+           std::all_of(links->second.begin(), links->second.end(), [&](const PortRoomGeo::Link& l) {
              return (l.action == PortRoomGeo::kShow || l.action == PortRoomGeo::kHide ||
                      l.action == PortRoomGeo::kToggle) &&
-                    l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
+                    l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && timerSenderOk(l);
            })) &&
           (!generated || std::all_of(generatedBy->second.begin(), generatedBy->second.end(),
                                      [&](int g) { return generatorPlans.at(g).ok; }));
@@ -1268,6 +1295,53 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   // A barrier that was not written leaves its ten actors out, as connected ones are: say so.
   if (!group) {
     connectedCount += reserved;
+  }
+  // The timers the drives written hear from, and the timers those hear from: their ids follow
+  // the barrier's.
+  std::vector<PortRoomEffects::Timer> timers;
+  {
+    std::map<int, uint32_t> timerIds;  // by entity
+    std::vector<int> queue;
+    const auto need = [&](uint32_t sender) {
+      if (IsTimerSender(sender) && timerIds.emplace(int(sender & ~kSenderTimer), 0).second) {
+        queue.push_back(int(sender & ~kSenderTimer));
+      }
+    };
+    for (const PortRoomEffects::Drive& d : allDrives) {
+      need(d.sender);
+    }
+    for (size_t q = 0; q < queue.size(); ++q) {
+      for (const PortRoomGeo::Link& l : scripts.timers.at(queue[q]).links) {
+        need(l.sender);
+      }
+    }
+    const size_t first = added.size() + (group ? barrier.effects.size() : 0);
+    if (first + timerIds.size() > PortRoomEffects::kMaxAddOns) {
+      // Never reached by retail's rooms; the drives they would send are dropped, so say so.
+      ++full;
+      std::erase_if(allDrives, [](const PortRoomEffects::Drive& d) { return IsTimerSender(d.sender); });
+      timerIds.clear();
+    }
+    for (auto& [t, id] : timerIds) {
+      const SceneryScripts::Timer& timer = scripts.timers.at(t);
+      const uint32_t retailLayer = timer.baseLayer ? 0 : scripts.layer.at(t);
+      id = PortRoomEffects::AddOnId(retailLayer, areaBits, uint32_t(first + timers.size()));
+      timers.push_back({id, timer.delay, timer.random,
+                        (timer.loop ? PortRoomEffects::kTimerLoop : 0u) |
+                            (timer.autoStart ? PortRoomEffects::kTimerAutoStart : 0u) |
+                            (timer.active ? PortRoomEffects::kTimerActive : 0u)});
+    }
+    for (const auto& [t, id] : timerIds) {
+      for (const PortRoomGeo::Link& l : scripts.timers.at(t).links) {
+        allDrives.push_back({id, l.sender, l.state, uint32_t(l.action & ~kLinkMessage), l.delay,
+                             l.relayed ? PortRoomEffects::kDriveRelayed : 0u});
+      }
+    }
+    for (PortRoomEffects::Drive& d : allDrives) {
+      if (IsTimerSender(d.sender)) {
+        d.sender = timerIds.at(int(d.sender & ~kSenderTimer));
+      }
+    }
   }
   // A retail effect no Remastered entity matched, that nothing sends a message to, next to an
   // added one: Remastered replaced it.
@@ -1529,10 +1603,14 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                   "PART), %zu Remastered-only effect slot(s) (%zu without an asset)",
                   patterned.size(), patternedNoPart, patches.size(), patchNoPart, actorSlots.size(), actorSlotNoPart);
   }
-  char generatorNote[96] = "";
+  char generatorNote[128] = "";
   if (!generators.empty()) {
     std::snprintf(generatorNote, sizeof generatorNote, ", %zu of them copied by %zu generator(s)", generatedCount,
                   generators.size());
+  }
+  if (!timers.empty()) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu timer(s)", timers.size());
   }
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
@@ -1558,6 +1636,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   file.actorSlots = std::move(actorSlots);
   file.drives = std::move(allDrives);
   file.generators = std::move(generators);
+  file.timers = std::move(timers);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;

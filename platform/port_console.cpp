@@ -1210,8 +1210,13 @@ void CmdFxQuery() {
       uid.value = s.uid;
       const CEntity* const ent = mgr->GetObjectById(uid);
       const bool alive = ent != nullptr && ent->GetEditorId().Value() == (s.eid & 0x3FFFFFF);
-      Out("  %08X u%u PART %08X %s %s, %zu variable(s) set", s.eid, unsigned(s.uid), s.part,
-          !alive ? "gone" : ent->GetActive() ? "active" : "inactive", s.name.c_str(), s.vars);
+      const char* const state = !alive ? "gone" : ent->GetActive() ? "active" : "inactive";
+      if (s.part == 0xFFFFFFFF) {
+        Out("  %08X u%u %s %s", s.eid, unsigned(s.uid), state, s.name.c_str());  // a timer
+      } else {
+        Out("  %08X u%u PART %08X %s %s, %zu variable(s) set", s.eid, unsigned(s.uid), s.part, state, s.name.c_str(),
+            s.vars);
+      }
       for (const auto& [d, pending] : PortRoomEffects::DrivesOf(mrea)) {
         if ((d.flags & PortRoomEffects::kDriveToGenerator) == 0 && (d.target & 0x3FFFFFF) == (s.eid & 0x3FFFFFF)) {
           Out("    driven by %08X state %u: msg %u after %.2fs%s", d.sender, unsigned(d.state), unsigned(d.message),

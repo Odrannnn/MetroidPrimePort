@@ -69,10 +69,13 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 11 appends u32 flags to each drive record (see Drive), then has u32 generators,
 //   then per generator: u32 flags (see Generator), f32 offset[3], u32 templates and that many
 //   add-on editor ids. Files without generators are still written as version 10 or older.
+//   version 12 then has u32 timers, then per timer: u32 add-on editor id, f32 start time, f32
+//   max random delay, u32 flags (see Timer). Files without timers are still written as version
+//   11 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 11;
+constexpr uint32_t kFileVersion = 12;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -285,6 +288,22 @@ struct Generator {
   std::vector<uint32_t> templates;  // the copies, by add-on id (one may repeat)
 };
 
+// A Remastered TimerMP1 retail has no object for, created as a retail Timer (ScriptLoader::LoadTimer,
+// CScriptTimer) where it is exact: the flags are its loop, autostart and active. Drives send it
+// its messages (Activate, ResetAndStart, ...), and its Zero sends the drives it is the sender of.
+// Remastered's restart flag (CScriptTimerMP1 +0x12) comes as loop with autostart.
+constexpr uint8_t kTimerType = 5;
+constexpr uint32_t kTimerLoop = 1;
+constexpr uint32_t kTimerAutoStart = 2;
+constexpr uint32_t kTimerActive = 4;
+constexpr float kMaxTimerTime = 600.f;  // seconds
+struct Timer {
+  uint32_t id = 0;
+  float startTime = 0.f;
+  float maxRandDelay = 0.f;
+  uint32_t flags = kTimerActive;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -297,6 +316,7 @@ struct File {
   std::vector<ActorSlotEffect> actorSlots;
   std::vector<Drive> drives;
   std::vector<Generator> generators;
+  std::vector<Timer> timers;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -365,7 +385,8 @@ void OnScriptState(CStateManager& mgr, uint16_t senderUid, uint32_t editorId, in
 // Delivers the delayed messages that are due; drops those of areas no longer loaded.
 void Think(CStateManager& mgr, float dt);
 
-// The add-ons created for an area, as loaded (the console checks they still live).
+// The add-ons created for an area, as loaded (the console checks they still live); a timer
+// has part 0xFFFFFFFF.
 std::vector<Spawned> List(uint32_t mrea);
 // The retail objects left out when the area last loaded.
 size_t SkippedCount(uint32_t mrea);

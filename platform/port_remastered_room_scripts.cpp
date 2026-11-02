@@ -83,10 +83,6 @@ struct Pass {
   uint8_t retailType;
   uint32_t actions[2];
 };
-// A TimerMP1's wait, in seconds.
-constexpr uint32_t kPropTimerDelay = 0xfb2a2cf0;
-constexpr uint32_t kPropTimerRandom = 0x35c8fdd3;  // f32 random add
-constexpr uint32_t kPropTimerLoop = 0x75ce4b13;    // boolean +0x12
 constexpr Pass kPasses[] = {
     {0x15, {0x379d362e, 0x379d362e}},  // Relay
     {kRetailTimer, {0xd63b8f04, 0x55193b90}},  // Timer
@@ -147,6 +143,21 @@ uint8_t LinkAct(uint32_t action) {
              ? PortRoomGeo::kHide
          : action == kActionToggleActive ? PortRoomGeo::kToggle
                                          : 0;
+}
+
+// The retail message a TimerMP1's action is (CScriptTimerMP1's 0xf36b10, and IMP1EntityBaseGOC's
+// 'ACTV' and 'ICTV'), as kLinkMessage | message; 0 for one with no retail message.
+uint8_t TimerAct(uint32_t action) {
+  const uint32_t message = action == kActionTimerActivate || action == kActionEntityActivate       ? 1u    // Activate
+                           : action == kActionTimerDeactivate || action == kActionEntityDeactivate ? 4u    // Deactivate
+                           : action == kActionTimerReset                                         ? 10u   // Reset
+                           : action == kActionTimerStart[0]                                      ? 11u   // ResetAndStart
+                           : action == kActionTimerStart[1]                                      ? 14u   // Start
+                           : action == kActionTimerStop                                          ? 15u   // Stop
+                           : action == kActionTimerStopAndReset                                  ? 16u   // StopAndReset
+                           : action == kActionTimerToggle                                        ? 17u   // ToggleActive
+                                                                                                 : 0u;
+  return message != 0 ? uint8_t(kLinkMessage | message) : 0;
 }
 
 bool IsPass(int retailType) {
@@ -883,6 +894,38 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       generatorEntities.insert(c->entity);
     }
   }
+  std::map<int, const Component*> timerComps;  // the TimerMP1s, by entity
+  for (const Component* c : room.Of(kTimerMP1)) {
+    if (c->entity >= 0) {
+      timerComps.emplace(c->entity, c);
+    }
+  }
+  // A TimerMP1 as a retail CScriptTimer (CScriptTimerMP1::Create 0xf373c8, ApplyTime 0xf37654):
+  // none where its restart flag is set without autostart, which retail cannot do.
+  const auto timerOf = [&](const Component& c) -> std::optional<SceneryScripts::Timer> {
+    const auto f = room.Flat(c);
+    const auto flag = [&](uint32_t id) {
+      const auto it = f.find(id);
+      return it != f.end() && it->second.size >= 1 && room.Bytes(it->second)[0] != 0;
+    };
+    const auto time = [&](uint32_t id) {
+      const auto it = f.find(id);
+      const float v = it != f.end() && it->second.size == 4 ? ReadLEFloat(room.Bytes(it->second)) : 0.f;
+      return std::isfinite(v) ? std::clamp(v, 0.f, 600.f) : 0.f;
+    };
+    SceneryScripts::Timer t;
+    t.delay = time(kPropTimerDelay);
+    t.random = time(kPropTimerRandom);
+    t.autoStart = flag(kPropTimerAutostart);
+    const bool restart = flag(kPropTimerRestart);
+    if (restart && !t.autoStart) {
+      return std::nullopt;
+    }
+    t.loop = restart || flag(kPropTimerLoop);
+    t.active = room.Active(c);
+    t.baseLayer = c.baseLayer;
+    return t;
+  };
   auto valid = [](const ScriptObject& o) {
     return o.hasPos && std::isfinite(o.pos[0]) && std::isfinite(o.pos[1]) && std::isfinite(o.pos[2]) &&
            std::fabs(o.pos[0]) < 1e5 && std::fabs(o.pos[1]) < 1e5 && std::fabs(o.pos[2]) < 1e5;
@@ -1531,8 +1574,14 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     const bool isEffect = effectEntities.count(e.entity) != 0;
     // A generator that copies effects is traced as strictly, with its own actions only.
     const bool generator = generatorEntities.count(e.entity) != 0;
-    const bool effect = isEffect || generator;
+    // So is a TimerMP1 no retail object matched, which may become a timer add-on: its actions are
+    // retail messages.
+    const bool isTimer = timerComps.count(e.entity) != 0 && match[size_t(&e - ents.data())] < 0;
+    const bool effect = isEffect || generator || isTimer;
     const auto act = [&](uint32_t action) -> uint8_t {
+      if (isTimer) {
+        return TimerAct(action);
+      }
       if (generator) {
         return action == kActionGeneratorSetToZero                                       ? PortRoomGeo::kGenerate
                : action == kActionGeneratorActivate || action == kActionEntityActivate     ? PortRoomGeo::kShow
@@ -1635,6 +1684,22 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         const int state = RetailState(sender.type, c->event);
         const uint32_t first = depth > 0 ? action : c->action;
         const int type = RetailType(sender.type);
+        // An unmatched TimerMP1 the walk cannot fold into a delay becomes a timer add-on, the
+        // drive's sender, where it is exact.
+        const auto viaTimer = [&]() {
+          if (!effect || sender.type != kTimerMP1 || sender.entity < 0 || (s >= 0 && match[size_t(s)] >= 0) ||
+              state < 0 || state >= 256) {
+            return false;
+          }
+          const uint8_t timerAct = act(first);
+          std::optional<SceneryScripts::Timer> t = timerOf(sender);
+          if (timerAct == 0 || !t) {
+            return false;
+          }
+          result.timers.try_emplace(sender.entity, std::move(*t));
+          links.push_back({kSenderTimer | uint32_t(sender.entity), uint8_t(state), timerAct, delay, depth > 0});
+          return true;
+        };
         if (s >= 0 && match[size_t(s)] >= 0 && state >= 0) {
           // A DamageableTrigger reads its own MaxReached -> Activate connections and never
           // sends them, so only a direct one counts.
@@ -1674,9 +1739,11 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
               const bool onlyResetAndStart =
                   feeds != incoming.end() && feeds->second.size() == 1 &&
                   feeds->second[0]->action == kActionTimerStart[0];
-              if (!room.Active(sender) || flag(kPropTimerAutostart) || flag(kPropTimerLoop) || randomAdd ||
+              if (!room.Active(sender) || flag(kPropTimerAutostart) || flag(kPropTimerRestart) || randomAdd ||
                   !onlyResetAndStart) {
-                miss(sender, *c, first, depth);
+                if (!viaTimer()) {
+                  miss(sender, *c, first, depth);
+                }
                 continue;
               }
             }
@@ -1694,12 +1761,20 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           } else {
             miss(sender, *c, first, depth);
           }
-        } else {
+        } else if (!viaTimer()) {
           miss(sender, *c, first, depth);
         }
       }
     };
     walk(e.entity, 0, 0, -1, 0.f);
+    if (isTimer) {
+      // Kept apart: only the effects import reads a timer's links, and only for the timers it needs.
+      if (std::optional<SceneryScripts::Timer> t = timerOf(*timerComps.at(e.entity))) {
+        t->links = std::move(links);
+        result.timers[e.entity] = std::move(*t);
+      }
+      links.clear();
+    }
     if (!links.empty()) {
       result.links[e.entity] = std::move(links);
     }

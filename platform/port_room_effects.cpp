@@ -15,6 +15,7 @@
 #include "MetroidPrime/TCastTo.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -284,6 +285,37 @@ void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_
       }
       sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, info.part, info.name,
                                  i < l.vars.size() ? l.vars[i].size() : 0});
+    }
+  }
+  // The Remastered timers, as the SCLY Timer object ScriptLoader::LoadTimer reads: no
+  // connections (drives deliver them), name, start time, max random delay, loop, autostart, active.
+  for (const Timer& t : sFile.timers) {
+    if ((t.id >> 26) != layer) continue;
+    std::vector<uint8_t> object;
+    auto be32 = [&](uint32_t v) {
+      for (int s = 24; s >= 0; s -= 8) object.push_back(uint8_t(v >> s));
+    };
+    auto beFloat = [&](float f) {
+      uint32_t v;
+      std::memcpy(&v, &f, 4);
+      be32(v);
+    };
+    be32(t.id);
+    be32(0);
+    be32(6);
+    for (char c : std::string("timer")) object.push_back(uint8_t(c));
+    object.push_back(0);
+    beFloat(t.startTime);
+    beFloat(t.maxRandDelay);
+    object.push_back((t.flags & kTimerLoop) != 0);
+    object.push_back((t.flags & kTimerAutoStart) != 0);
+    object.push_back((t.flags & kTimerActive) != 0);
+    CMemoryInStream in(object.data(), int(object.size()));
+    const rstl::pair<TEditorId, TUniqueId> made = mgr.LoadScriptObject(
+        TAreaId(area), static_cast<EScriptObjectType>(kTimerType), uint(object.size()), in);
+    if (made.first != kInvalidEditorId) {
+      ids.push_back(made.first.value);
+      sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, 0xFFFFFFFF, "Remastered timer", 0});
     }
   }
   for (const BarrierGroup& group : sFile.barriers) {

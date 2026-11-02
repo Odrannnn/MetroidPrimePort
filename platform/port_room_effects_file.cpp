@@ -341,14 +341,15 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool generators = !file.generators.empty() ||
+  const bool timers = !file.timers.empty();
+  const bool generators = timers || !file.generators.empty() ||
                           std::any_of(file.drives.begin(), file.drives.end(), [](const Drive& d) { return d.flags != 0; });
   const bool drives = generators || !file.drives.empty();
   const bool actorSlots = drives || !file.actorSlots.empty();
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -476,6 +477,15 @@ std::vector<uint8_t> Write(const File& file) {
       for (float f : g.offset) PutLEFloat(out, f);
       PutLE32(out, uint32_t(g.templates.size()));
       for (uint32_t id : g.templates) PutLE32(out, id);
+    }
+  }
+  if (timers) {
+    PutLE32(out, uint32_t(file.timers.size()));
+    for (const Timer& t : file.timers) {
+      PutLE32(out, t.id);
+      PutLEFloat(out, t.startTime);
+      PutLEFloat(out, t.maxRandDelay);
+      PutLE32(out, t.flags);
     }
   }
   return out;
@@ -835,16 +845,57 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
       file.generators.push_back(std::move(g));
     }
   }
-  // Only the add-ons and generators this file has, and only what CScriptEffect (or the
-  // generator) takes from a connection.
+  auto isObject = [&](uint32_t id) {
+    return std::any_of(objects.begin(), objects.end(), [&](const LayerObject& o) { return o.id == id; });
+  };
+  auto isTimer = [&](uint32_t id) {
+    return std::any_of(file.timers.begin(), file.timers.end(), [&](const Timer& t) { return t.id == id; });
+  };
+  if (version >= 12) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 16) {
+      error = "truncated timer list";
+      return false;
+    }
+    if (total + count > kMaxAddOns) {
+      error = "too many objects";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      Timer t;
+      uint32_t bits = 0;
+      ReadLE32(data, at, t.id);
+      ReadLE32(data, at, bits);
+      std::memcpy(&t.startTime, &bits, 4);
+      ReadLE32(data, at, bits);
+      std::memcpy(&t.maxRandDelay, &bits, 4);
+      ReadLE32(data, at, t.flags);
+      // A drive names a timer by its whole id, so no add-on may share it, layer bits or not.
+      const auto same = [&](uint32_t id) { return NormalizedId(id) == NormalizedId(t.id); };
+      if (!IsAddOnId(t.id) ||
+          std::any_of(objects.begin(), objects.end(), [&](const LayerObject& o) { return same(o.id); }) ||
+          std::any_of(file.timers.begin(), file.timers.end(), [&](const Timer& o) { return same(o.id); }) ||
+          !(t.startTime >= 0.f && t.startTime <= kMaxTimerTime) ||
+          !(t.maxRandDelay >= 0.f && t.maxRandDelay <= kMaxTimerTime) ||
+          (t.flags & ~(kTimerLoop | kTimerAutoStart | kTimerActive)) != 0) {
+        error = "invalid timer " + std::to_string(i);
+        return false;
+      }
+      file.timers.push_back(t);
+    }
+  }
+  // Only the add-ons, timers and generators this file has, and only what CScriptEffect, the
+  // generator or CScriptTimer takes from a connection.
   for (size_t i = 0; i < file.drives.size(); ++i) {
     const Drive& d = file.drives[i];
     const bool toGenerator = (d.flags & kDriveToGenerator) != 0;
-    const bool known = toGenerator ? d.target < file.generators.size()
-                                   : std::any_of(objects.begin(), objects.end(),
-                                                 [&](const LayerObject& o) { return o.id == d.target; });
+    const bool toTimer = !toGenerator && isTimer(d.target);
+    const bool known = toGenerator ? d.target < file.generators.size() : toTimer || isObject(d.target);
+    const bool timerMessage = d.message == 10 || d.message == 11 || d.message == 14 || d.message == 15 ||
+                              d.message == 16;
     if (!known || d.state > 0xff || (d.flags & ~(kDriveToGenerator | kDriveRelayed)) != 0 ||
-        (d.message != 1 && d.message != 4 && d.message != 17 && !(toGenerator && d.message == 13)) ||
+        (d.message != 1 && d.message != 4 && d.message != 17 && !(toGenerator && d.message == 13) &&
+         !(toTimer && timerMessage)) ||
         !(d.delay >= 0.f && d.delay <= kMaxDriveDelay)) {
       error = "invalid drive " + std::to_string(i);
       return false;

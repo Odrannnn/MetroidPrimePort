@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 11);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 12);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -510,6 +510,51 @@ void TestFileGenerators() {
   CHECK(PortRoomEffects::Write(in)[4] == 10);
 }
 
+// Version 12 adds retail Timers: drives may start, stop or reset one, and one may be a sender.
+void TestFileTimers() {
+  File in;
+  PortRoomEffects::Layer layer;
+  layer.layer = 1;
+  PortRoomEffects::AppendEffect(MakeEffect(1, 0), layer.objects);
+  layer.count = 1;
+  in.layers.push_back(layer);
+  const uint32_t a = MakeEffect(1, 0).id, t = PortRoomEffects::AddOnId(0, 0x1A, 1);
+  in.timers.push_back({t, 2.5f, 0.5f, PortRoomEffects::kTimerAutoStart | PortRoomEffects::kTimerActive});
+  in.drives.push_back({t, 0x041A0010, 9, 11, 0.f});
+  in.drives.push_back({a, t, 0, 1, 0.f});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 12);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.timers.size() == 1 && out.drives.size() == 2);
+  CHECK(out.timers[0].id == t && out.timers[0].startTime == 2.5f && out.timers[0].maxRandDelay == 0.5f &&
+        out.timers[0].flags == in.timers[0].flags && out.drives[0].message == 11);
+  for (size_t cut = 1; cut <= 16; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  const auto refused = [&](PortRoomEffects::Timer bad, const char* what) {
+    File f = in;
+    f.timers = {bad};
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  refused({0x00000005, 1.f, 0.f}, "a retail id");
+  refused({a, 1.f, 0.f}, "an effect's id");
+  refused({PortRoomEffects::AddOnId(0, 0x1A, 0), 1.f, 0.f}, "an effect's id on another layer");
+  refused({t, -1.f, 0.f}, "a negative time");
+  refused({t, 1.f, NAN}, "a NaN delay");
+  refused({t, 601.f, 0.f}, "too long");
+  refused({t, 1.f, 0.f, 8}, "an unknown flag");
+  File f = in;
+  f.timers.push_back(in.timers[0]);
+  CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "two timers, one id");
+  f = in;
+  f.drives = {{a, 0x041A0010, 0, 11, 0.f}};
+  CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "ResetAndStart to an effect");
+}
+
 // Version 4 carries a room's barrier: a controller retail Effect object, its duration, and five
 // rings, each a platform (another retail object) and the two effects this file adds, with the
 // three particle guids that drive the breakup. The codec checks what the file itself must hold
@@ -845,6 +890,7 @@ int main() {
   TestFileActorSlots();
   TestFileDrives();
   TestFileGenerators();
+  TestFileTimers();
   TestFileBarriers();
   TestExternalVariables();
   uint32_t id = 0;
