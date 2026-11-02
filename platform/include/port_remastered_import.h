@@ -227,7 +227,8 @@ inline constexpr int kModels = 30;
 // 138: Drone laser and scanner particles (room GENPs).
 // 139: Queen barrier shield/glow models back-cull (MATI cull byte).
 // 141: effect generators, strict timers (roomfx v11). 142: strict timers start active.
-inline constexpr int kEffects = 143;   // event states from the GOCs' TranslateScriptEventToState
+// 143: event states from the GOCs' TranslateScriptEventToState.
+inline constexpr int kEffects = 144;   // an effect moved > 2 units matches by its senders and states
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -278,7 +279,8 @@ inline constexpr int kEffects = 143;   // event states from the GOCs' TranslateS
 // 74: a platform's model is drawn only riding its retail Platform; unbound or animated, retail draws it.
 // 75: the grid is the LTPB the ROOM's BLIT names, found in the master pak too (25 rooms had none).
 // 76: script event -> state rows of MP1 types from their GOCs' TranslateScriptEventToState.
-inline constexpr int kRooms = 76;
+// 77: an effect Remastered moved over 2 units matches its retail one by senders and states.
+inline constexpr int kRooms = 77;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

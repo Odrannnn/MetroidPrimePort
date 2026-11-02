@@ -1076,6 +1076,67 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       break;
     }
   }
+  // An effect no other way matched, by what reaches it: the one unused retail Effect whose
+  // senders and states are its matched senders' and states, every connection into it traced.
+  // Remastered moved some 2 to 37 units (past kMatchNear) and they send nothing, so without
+  // this both the retail object and Remastered's copy of it drew (38 effects).
+  {
+    constexpr uint8_t kRetailEffectType = 7;
+    using Sig = std::vector<std::pair<uint32_t, uint32_t>>;  // (sender editor id, state)
+    std::map<uint32_t, Sig> retailIn;                         // by target editor id, layer bits off
+    for (const ScriptObject& o : objects) {
+      for (const ScriptObject::Link& l : o.links) {
+        retailIn[l.target & 0x03FFFFFF].push_back({o.id, l.state});
+      }
+    }
+    std::map<int, Sig> remasteredIn;  // by entity index
+    std::set<int> untraced;
+    for (const Connection& c : conns) {
+      const int ti = room.ByGuid(c.target);
+      if (ti < 0) {
+        continue;
+      }
+      // To an Entity is to that entity, to another component to the entity holding it.
+      const int ec = comps[size_t(ti)].type == kEntity ? ti : comps[size_t(ti)].entity;
+      const auto ei = entIndex.find(ec);
+      const int t = ei == entIndex.end() ? -1 : int(ei->second);
+      if (t < 0 || match[size_t(t)] >= 0 || effectEntities.count(ents[size_t(t)].entity) == 0) {
+        continue;
+      }
+      const int s = entityOf(int(c.sender));
+      const int state = RetailState(comps[c.sender].type, c.event);
+      if (s < 0 || match[size_t(s)] < 0 || state < 0) {
+        untraced.insert(t);
+        continue;
+      }
+      remasteredIn[t].push_back({objects[size_t(match[size_t(s)])].id, uint32_t(state)});
+    }
+    std::map<Sig, std::vector<size_t>> bySig;  // unused retail Effects by their incoming set
+    for (size_t j = 0; j < objects.size(); ++j) {
+      const auto it = retailIn.find(objects[j].id & 0x03FFFFFF);
+      if (used[j] || objects[j].type != kRetailEffectType || it == retailIn.end()) {
+        continue;
+      }
+      Sig s = it->second;
+      std::sort(s.begin(), s.end());
+      s.erase(std::unique(s.begin(), s.end()), s.end());
+      bySig[s].push_back(j);
+    }
+    std::map<size_t, std::vector<int>> claims;
+    for (auto& [t, s] : remasteredIn) {
+      std::sort(s.begin(), s.end());
+      s.erase(std::unique(s.begin(), s.end()), s.end());
+      const auto it = bySig.find(s);
+      if (untraced.count(t) == 0 && it != bySig.end() && it->second.size() == 1) {
+        claims[it->second[0]].push_back(t);
+      }
+    }
+    for (const auto& [j, ks] : claims) {
+      if (ks.size() == 1) {
+        take(size_t(ks[0]), j);
+      }
+    }
+  }
   // A Remastered layer is drawn on the retail layer most of its matched entities are on.
   // Remastered's base layer is always loaded, whatever its entities' retail layers (in
   // Phendrana Shorelines its vote picked a 15-object layer), so it is on no layer.
