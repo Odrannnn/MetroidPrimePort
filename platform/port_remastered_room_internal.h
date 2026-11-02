@@ -813,6 +813,8 @@ struct SceneryScripts {
   std::map<int, uint8_t> layer;  // by entity: the retail layer it is drawn on
   std::map<int, std::vector<PortRoomGeo::Link>> links;  // by entity
   std::map<int, size_t> unresolved;                      // by entity: connections not traced
+  // By EffectMP1 entity: the GeneratorMP1 entities whose Zero -> Generate copies it (each once).
+  std::map<int, std::vector<int>> generatedBy;
   std::map<int, std::string> unresolvedHow;              // a grade hint's: sender type/event/action
   std::map<std::string, std::pair<size_t, std::set<int>>> missStats;  // MP_REMASTERED_MISS: class -> connections, entities
   std::map<int, const ScriptObject*> platform;           // by entity: the platform carrying it
@@ -852,6 +854,20 @@ constexpr uint32_t kEffectMP1 = 0xb421cdcb;
 constexpr uint32_t kActionEffectActivate = 0xdbe5cb30;
 constexpr uint32_t kActionEffectDeactivate = 0x7dcfa087;
 constexpr uint32_t kActionEffectToggle = 0xda662fc8;
+// CScriptGeneratorMP1 (0xf44128): retail CScriptGenerator. Its Zero -> Generate connections name
+// the templates, Zero -> Follow the follows; SetToZero (99ea1c2c) generates, Activate (799391e0),
+// Deactivate (15494612) and Toggle (ab440330) switch it.
+constexpr uint32_t kGeneratorMP1 = 0x8ee5d87e;
+constexpr uint32_t kEventGeneratorZero = 0xd276253a;
+constexpr uint32_t kActionGenerate = 0x47524e4c;
+constexpr uint32_t kActionGeneratorFollow = 0x5d191757;
+constexpr uint32_t kActionGeneratorSetToZero = 0x99ea1c2c;
+constexpr uint32_t kActionGeneratorActivate = 0x799391e0;
+constexpr uint32_t kActionGeneratorDeactivate = 0x15494612;
+constexpr uint32_t kActionGeneratorToggle = 0xab440330;
+constexpr uint32_t kPropGeneratorCount = 0x47119176;
+constexpr uint32_t kPropGeneratorNoInheritXf = 0xf142120d;
+constexpr uint32_t kPropGeneratorOffset = 0x93a36614;
 // The room's EffectMP1 actors the disc has no object for, as "<MREA id>.roomfx"
 // (port_room_effects.h); a line for the log, empty when there is nothing to say.
 std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t mrea, const Area& area,

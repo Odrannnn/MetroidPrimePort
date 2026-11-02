@@ -1005,6 +1005,77 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   size_t drivenCount = 0;  // connected ones added, with drives
   std::vector<PortRoomEffects::Drive> allDrives;
   const std::set<int> drivable = DrivableEntities(room);
+  // The GeneratorMP1s that copy effects, kept where they are exact (PortRoomEffects::Generator):
+  // every connection into them traced, one template, no Follow targets, a spawn count in range.
+  struct GeneratorPlan {
+    bool ok = false;
+    PortRoomEffects::Generator record;  // templates filled as the effect is added
+    uint32_t count = 1;
+    int index = -1;  // in generators, once written
+  };
+  std::map<int, GeneratorPlan> generatorPlans;  // by generator entity
+  for (const auto& [effect, by] : scripts.generatedBy) {
+    for (int g : by) {
+      generatorPlans[g];
+    }
+  }
+  if (!generatorPlans.empty()) {
+    const std::vector<Component>& comps = room.Components();
+    const std::vector<Connection> conns = ReadConnections(room);
+    for (auto& [g, plan] : generatorPlans) {
+      const Component* comp = nullptr;
+      for (const Component* c : room.Of(kGeneratorMP1)) {
+        if (c->entity == g) {
+          comp = c;
+          break;
+        }
+      }
+      const auto links = scripts.links.find(g);
+      if (comp == nullptr || drivable.count(g) == 0 || links == scripts.links.end() || scripts.unresolved.count(g) != 0 ||
+          !std::all_of(links->second.begin(), links->second.end(), [](const PortRoomGeo::Link& l) {
+            return (l.action == PortRoomGeo::kGenerate || l.action == PortRoomGeo::kShow ||
+                    l.action == PortRoomGeo::kHide || l.action == PortRoomGeo::kToggle) &&
+                   l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
+          })) {
+        continue;
+      }
+      size_t generates = 0;
+      bool follows = false;
+      for (const Connection& c : conns) {
+        if (comps[c.sender].type != kGeneratorMP1 || comps[c.sender].entity != g || c.event != kEventGeneratorZero) {
+          continue;
+        }
+        generates += c.action == kActionGenerate ? 1 : 0;
+        follows = follows || c.action == kActionGeneratorFollow;
+      }
+      const auto f = room.Flat(*comp);
+      const auto count = f.find(kPropGeneratorCount);
+      if (count != f.end()) {
+        plan.count = count->second.size == 4 ? ReadLE32(room.Bytes(count->second)) : 0;
+      }
+      Vec3 offset{0, 0, 0};
+      const auto off = f.find(kPropGeneratorOffset);
+      if (off != f.end() && off->second.size == 12) {
+        const uint8_t* b = room.Bytes(off->second);
+        const Vec3 w = Apply(area.xf, MulR2G({ReadLEFloat(b), ReadLEFloat(b + 4), ReadLEFloat(b + 8)}));
+        const Vec3 o = Apply(area.xf, Vec3{0, 0, 0});
+        offset = {w[0] - o[0], w[1] - o[1], w[2] - o[2]};
+      }
+      const auto noInherit = f.find(kPropGeneratorNoInheritXf);
+      plan.record.flags = (room.Active(*comp) ? PortRoomEffects::kGeneratorActive : 0u) |
+                          (noInherit != f.end() && noInherit->second.size >= 1 && room.Bytes(noInherit->second)[0] != 0
+                               ? PortRoomEffects::kGeneratorNoInheritXf
+                               : 0u);
+      for (int i = 0; i < 3; ++i) {
+        plan.record.offset[i] = float(offset[size_t(i)]);
+      }
+      plan.ok = generates == 1 && !follows && plan.count >= 1 && plan.count <= PortRoomEffects::kMaxGeneratorTemplates &&
+                std::isfinite(plan.record.offset[0]) && std::isfinite(plan.record.offset[1]) &&
+                std::isfinite(plan.record.offset[2]);
+    }
+  }
+  std::vector<PortRoomEffects::Generator> generators;
+  size_t generatedCount = 0;  // effects added that a generator copies
   size_t reserved = 0;  // the barrier's actors, left to it
   for (const Component* c : effects) {
     if (c->entity < 0 || !seen.insert(c->entity).second) {
@@ -1089,21 +1160,28 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     }
     // A connected one is added only where every connection into it traced to retail states
     // that show, hide or toggle it: those become its drives.
+    // One a generator copies takes that generator too, if it is exact.
     std::vector<PortRoomEffects::Drive> drives;
+    const auto generatedBy = scripts.generatedBy.find(c->entity);
+    const bool generated = generatedBy != scripts.generatedBy.end();
     if (connected.count(c->entity) != 0) {
       const auto links = scripts.links.find(c->entity);
-      const bool traced = drivable.count(c->entity) != 0 && links != scripts.links.end() &&
-                          scripts.unresolved.count(c->entity) == 0 &&
-                          std::all_of(links->second.begin(), links->second.end(), [](const PortRoomGeo::Link& l) {
-                            return (l.action == PortRoomGeo::kShow || l.action == PortRoomGeo::kHide ||
-                                    l.action == PortRoomGeo::kToggle) &&
-                                   l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
-                          });
+      const bool traced =
+          drivable.count(c->entity) != 0 && (links != scripts.links.end() || generated) &&
+          scripts.unresolved.count(c->entity) == 0 &&
+          (links == scripts.links.end() ||
+           std::all_of(links->second.begin(), links->second.end(), [](const PortRoomGeo::Link& l) {
+             return (l.action == PortRoomGeo::kShow || l.action == PortRoomGeo::kHide ||
+                     l.action == PortRoomGeo::kToggle) &&
+                    l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
+           })) &&
+          (!generated || std::all_of(generatedBy->second.begin(), generatedBy->second.end(),
+                                     [&](int g) { return generatorPlans.at(g).ok; }));
       if (!traced) {
         ++connectedCount;
         continue;
       }
-      for (const PortRoomGeo::Link& l : links->second) {
+      for (const PortRoomGeo::Link& l : links != scripts.links.end() ? links->second : std::vector<PortRoomGeo::Link>()) {
         drives.push_back({0, l.sender, l.state,
                           l.action == PortRoomGeo::kShow   ? 1u    // kSM_Activate
                           : l.action == PortRoomGeo::kHide ? 4u    // kSM_Deactivate
@@ -1140,7 +1218,27 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       d.target = e.id;
       allDrives.push_back(d);
     }
-    drivenCount += drives.empty() ? 0 : 1;
+    drivenCount += drives.empty() && !generated ? 0 : 1;
+    // Its generators, each written once with its drives; their one template is this effect.
+    for (int g : generated ? generatedBy->second : std::vector<int>()) {
+      GeneratorPlan& plan = generatorPlans.at(g);
+      if (plan.index >= 0) {
+        continue;  // one template: a second effect never names it
+      }
+      plan.index = int(generators.size());
+      plan.record.templates.assign(plan.count, e.id);
+      generators.push_back(plan.record);
+      for (const PortRoomGeo::Link& l : scripts.links.at(g)) {
+        allDrives.push_back({uint32_t(plan.index), l.sender, l.state,
+                             l.action == PortRoomGeo::kGenerate ? 13u    // kSM_SetToZero
+                             : l.action == PortRoomGeo::kShow   ? 1u     // kSM_Activate
+                             : l.action == PortRoomGeo::kHide   ? 4u     // kSM_Deactivate
+                                                                : 17u,   // kSM_ToggleActive
+                             l.delay,
+                             PortRoomEffects::kDriveToGenerator | (l.relayed ? PortRoomEffects::kDriveRelayed : 0u)});
+      }
+    }
+    generatedCount += generated ? 1 : 0;
     PortRoomEffects::Layer& layer = layers[retailLayer];
     layer.layer = retailLayer;
     PortRoomEffects::AppendEffect(e, layer.objects);
@@ -1431,11 +1529,16 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                   "PART), %zu Remastered-only effect slot(s) (%zu without an asset)",
                   patterned.size(), patternedNoPart, patches.size(), patchNoPart, actorSlots.size(), actorSlotNoPart);
   }
+  char generatorNote[96] = "";
+  if (!generators.empty()) {
+    std::snprintf(generatorNote, sizeof generatorNote, ", %zu of them copied by %zu generator(s)", generatedCount,
+                  generators.size());
+  }
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
-                "Remastered's effect, %zu connected and left out (%zu more added with drives), %zu matched a retail object (%zu of them still on "
+                "Remastered's effect, %zu connected and left out (%zu more added with drives%s), %zu matched a retail object (%zu of them still on "
                 "the retail PART), %zu without a PART, %zu on an unknown layer%s%s%s%s%s",
-                name.c_str(), added.size(), replacedNear, overridden, connectedCount, drivenCount, kept + keptOwn + overridden,
+                name.c_str(), added.size(), replacedNear, overridden, connectedCount, drivenCount, generatorNote, kept + keptOwn + overridden,
                 keptOwn, noPart, noLayer, full != 0 ? ", the id range is full" : "",
                 badVars != 0 ? ", unreadable particle variables" : "", barrierNote, patternedNote, steamNote);
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
@@ -1454,6 +1557,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   file.steams = std::move(steams);
   file.actorSlots = std::move(actorSlots);
   file.drives = std::move(allDrives);
+  file.generators = std::move(generators);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;

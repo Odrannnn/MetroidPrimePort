@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 10);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 11);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -445,6 +445,71 @@ void TestFileDrives() {
   CHECK(PortRoomEffects::Write(in)[4] == 4);
 }
 
+// Version 11 adds generators, each naming its templates among the file's own objects, and a
+// flags word per drive: a drive may target a generator by index, with SetToZero too.
+void TestFileGenerators() {
+  File in;
+  PortRoomEffects::Layer layer;
+  layer.layer = 1;
+  PortRoomEffects::AppendEffect(MakeEffect(1, 0), layer.objects);
+  PortRoomEffects::AppendEffect(MakeEffect(1, 1), layer.objects);
+  layer.count = 2;
+  in.layers.push_back(layer);
+  const uint32_t a = MakeEffect(1, 0).id, b = MakeEffect(1, 1).id;
+  PortRoomEffects::Generator g;
+  g.flags = PortRoomEffects::kGeneratorActive | PortRoomEffects::kGeneratorNoInheritXf;
+  g.offset[1] = 2.5f;
+  g.templates = {a, b};
+  in.generators.push_back(g);
+  in.drives.push_back({a, 0x041A0010, 0, 1, 0.f});
+  in.drives.push_back({0, 0x041A0011, 9, 13, 0.f, PortRoomEffects::kDriveToGenerator});
+  in.drives.push_back({0, 0x041A0012, 5, 4, 1.5f, PortRoomEffects::kDriveToGenerator | PortRoomEffects::kDriveRelayed});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 11);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.generators.size() == 1 && out.drives.size() == 3);
+  CHECK(out.generators[0].flags == g.flags && out.generators[0].offset[1] == 2.5f &&
+        out.generators[0].templates == g.templates);
+  CHECK(out.drives[0].flags == 0 && out.drives[1].flags == PortRoomEffects::kDriveToGenerator &&
+        out.drives[1].message == 13 && out.drives[2].delay == 1.5f &&
+        out.drives[2].flags == (PortRoomEffects::kDriveToGenerator | PortRoomEffects::kDriveRelayed));
+  for (size_t cut = 1; cut <= 24; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  const auto refusedDrive = [&](PortRoomEffects::Drive d, const char* what) {
+    File f = in;
+    f.drives = {d};
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  refusedDrive({1, 0x041A0010, 0, 13, 0.f, PortRoomEffects::kDriveToGenerator}, "a generator not in the file");
+  refusedDrive({a, 0x041A0010, 0, 13, 0.f}, "SetToZero to an effect");
+  refusedDrive({0, 0x041A0010, 0, 13, 0.f, 4}, "an unknown flag");
+  const auto refusedGenerator = [&](PortRoomEffects::Generator bad, const char* what) {
+    File f = in;
+    f.generators = {bad};
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  PortRoomEffects::Generator bad = g;
+  bad.templates = {a + 7};
+  refusedGenerator(bad, "a template not in the file");
+  bad.templates.clear();
+  refusedGenerator(bad, "no templates");
+  bad = g;
+  bad.flags |= 8;
+  refusedGenerator(bad, "an unknown flag");
+  bad = g;
+  bad.offset[0] = NAN;
+  refusedGenerator(bad, "a NaN offset");
+  // Without generators or drive flags it stays version 10.
+  in.generators.clear();
+  in.drives = {{a, 0x041A0010, 0, 1, 0.f}};
+  CHECK(PortRoomEffects::Write(in)[4] == 10);
+}
+
 // Version 4 carries a room's barrier: a controller retail Effect object, its duration, and five
 // rings, each a platform (another retail object) and the two effects this file adds, with the
 // three particle guids that drive the breakup. The codec checks what the file itself must hold
@@ -779,6 +844,7 @@ int main() {
   TestFileSteams();
   TestFileActorSlots();
   TestFileDrives();
+  TestFileGenerators();
   TestFileBarriers();
   TestExternalVariables();
   uint32_t id = 0;

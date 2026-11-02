@@ -1213,9 +1213,28 @@ void CmdFxQuery() {
       Out("  %08X u%u PART %08X %s %s, %zu variable(s) set", s.eid, unsigned(s.uid), s.part,
           !alive ? "gone" : ent->GetActive() ? "active" : "inactive", s.name.c_str(), s.vars);
       for (const auto& [d, pending] : PortRoomEffects::DrivesOf(mrea)) {
-        if ((d.target & 0x3FFFFFF) == (s.eid & 0x3FFFFFF)) {
+        if ((d.flags & PortRoomEffects::kDriveToGenerator) == 0 && (d.target & 0x3FFFFFF) == (s.eid & 0x3FFFFFF)) {
           Out("    driven by %08X state %u: msg %u after %.2fs%s", d.sender, unsigned(d.state), unsigned(d.message),
               d.delay, pending != 0 ? ", pending" : "");
+        }
+      }
+    }
+    const std::vector< PortRoomEffects::GeneratorState > generators = PortRoomEffects::GeneratorsOf(mrea);
+    for (size_t i = 0; i < generators.size(); ++i) {
+      const PortRoomEffects::GeneratorState& g = generators[i];
+      std::string templates;
+      for (uint32_t id : g.generator.templates) {
+        char text[16];
+        std::snprintf(text, sizeof text, " %08X", id);
+        templates += text;
+      }
+      Out("  generator %zu %s, %zu cop%s made, templates%s", i, g.active ? "active" : "inactive", g.made,
+          g.made == 1 ? "y" : "ies", templates.c_str());
+      for (const auto& [d, pending] : PortRoomEffects::DrivesOf(mrea)) {
+        if ((d.flags & PortRoomEffects::kDriveToGenerator) != 0 && d.target == i) {
+          Out("    driven by %08X state %u: msg %u after %.2fs%s%s", d.sender, unsigned(d.state), unsigned(d.message),
+              d.delay, (d.flags & PortRoomEffects::kDriveRelayed) != 0 ? ", relayed" : "",
+              pending != 0 ? ", pending" : "");
         }
       }
     }

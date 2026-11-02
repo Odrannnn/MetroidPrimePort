@@ -66,10 +66,13 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 10 then has u32 drives, then per record: u32 add-on editor id, u32 sender editor id
 //   (both layer bits included), u32 state, u32 message, f32 delay (see Drive). Files without
 //   them are still written as version 9 or older.
+//   version 11 appends u32 flags to each drive record (see Drive), then has u32 generators,
+//   then per generator: u32 flags (see Generator), f32 offset[3], u32 templates and that many
+//   add-on editor ids. Files without generators are still written as version 10 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 10;
+constexpr uint32_t kFileVersion = 11;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -250,12 +253,36 @@ struct ActorSlotEffect {
 // ToggleActive), `delay` seconds later when Remastered passed it through timers retail has no
 // object for (sent again before then, the wait starts over).
 constexpr float kMaxDriveDelay = 600.f;  // seconds
+// With kDriveToGenerator, `target` is the index of one of the file's generators and the
+// message is SetToZero (13) too. kDriveRelayed: Remastered passed it through relays or timers,
+// so the object its target hears it from is not `sender` (a generator's copies then keep their
+// template's placement).
+constexpr uint32_t kDriveToGenerator = 1;
+constexpr uint32_t kDriveRelayed = 2;
 struct Drive {
   uint32_t target = 0;
   uint32_t sender = 0;
   uint32_t state = 0;
   uint32_t message = 0;
   float delay = 0.f;
+  uint32_t flags = 0;
+};
+
+// A Remastered GeneratorMP1 whose Generate (47524e4c) connection reaches an add-on: on SetToZero,
+// while active, it makes the copies `templates` lists, in order (CScriptGeneratorMP1::AcceptScriptMsg
+// 0xf44128, retail CScriptGenerator's). It picks each at random among its templates and follows;
+// the import keeps only generators with one template and no Follow targets, so `templates` is
+// that one, spawn count times. Sent directly by an actor, a copy takes the actor's transform
+// (unless kGeneratorNoInheritXf) and its translation plus `offset` (a wall crawler swarm's last
+// kill instead of its translation); else it keeps the template's. Then it is sent Activate.
+// Activate, Deactivate and ToggleActive switch the generator.
+constexpr uint32_t kGeneratorActive = 1;
+constexpr uint32_t kGeneratorNoInheritXf = 2;
+constexpr uint32_t kMaxGeneratorTemplates = 64;
+struct Generator {
+  uint32_t flags = 0;
+  float offset[3] = {0, 0, 0};  // GameCube world space
+  std::vector<uint32_t> templates;  // the copies, by add-on id (one may repeat)
 };
 
 struct File {
@@ -269,6 +296,7 @@ struct File {
   std::vector<Steam> steams;
   std::vector<ActorSlotEffect> actorSlots;
   std::vector<Drive> drives;
+  std::vector<Generator> generators;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -343,5 +371,12 @@ std::vector<Spawned> List(uint32_t mrea);
 size_t SkippedCount(uint32_t mrea);
 // A loaded area's drives, with how many messages each still holds back.
 std::vector<std::pair<Drive, size_t>> DrivesOf(uint32_t mrea);
+// A loaded area's generators: whether each is active, and how many copies it made.
+struct GeneratorState {
+  Generator generator;
+  bool active;
+  size_t made;
+};
+std::vector<GeneratorState> GeneratorsOf(uint32_t mrea);
 
 }  // namespace PortRoomEffects

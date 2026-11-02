@@ -9,6 +9,7 @@
 #include "MetroidPrime/CGameArea.hpp"
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/CWorld.hpp"
+#include "MetroidPrime/Enemies/CWallCrawlerSwarm.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptEffect.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptSpecialFunction.hpp"
 #include "MetroidPrime/TCastTo.hpp"
@@ -37,14 +38,74 @@ struct Pending {
   float due;
   size_t drive;
 };
+// A generator's template as LoadLayer read it: its SCLY object, to load again for each copy.
+struct Template {
+  int area = 0;  // TAreaId
+  std::vector<uint8_t> object;
+  std::vector<Variable> vars;
+};
 struct Driven {
   std::vector<Drive> drives;
   std::vector<Pending> pending;
   float clock = 0.f;
+  std::vector<Generator> generators;
+  std::vector<bool> active;               // by generator
+  std::vector<size_t> made;               // by generator: copies made
+  std::map<uint32_t, Template> templates;  // by add-on editor id
 };
 std::map<uint32_t, Driven> sDriven;  // by MREA
 
-void Deliver(CStateManager& mgr, TUniqueId sender, const Drive& d) {
+// CScriptGeneratorMP1::AcceptScriptMsg 0xf44128 for one of the file's generators (see Generator).
+void Generate(CStateManager& mgr, Driven& area, size_t index, TUniqueId sender, const Drive& d) {
+  const Generator& g = area.generators[index];
+  if (d.message != kSM_SetToZero) {
+    area.active[index] = d.message == kSM_Activate ? true : d.message == kSM_Deactivate ? false : !area.active[index];
+    return;
+  }
+  if (!area.active[index]) {
+    return;
+  }
+  // A relay or timer in between is no actor: the copies keep their template's placement.
+  const CEntity* const sent = (d.flags & kDriveRelayed) != 0 ? nullptr : mgr.GetObjectById(sender);
+  const CActor* const follow = TCastToConstPtr< CActor >(sent);
+  const CWallCrawlerSwarm* const swarm = TCastToConstPtr< CWallCrawlerSwarm >(sent);
+  for (uint32_t id : g.templates) {
+    // Only a template that still lives (BuildGenerationList 0xf44c68).
+    const auto t = area.templates.find(id);
+    if (t == area.templates.end() || mgr.GetObjectById(mgr.GetIdForScript(TEditorId(id))) == nullptr) {
+      continue;
+    }
+    CMemoryInStream in(t->second.object.data(), int(t->second.object.size()));
+    const char type = in.ReadChar();
+    const uint length = in.ReadLong();
+    const rstl::pair<TEditorId, TUniqueId> made = mgr.LoadScriptObject(
+        TAreaId(t->second.area), static_cast<EScriptObjectType>(static_cast<uchar>(type)), length, in);
+    CEntity* const copy = mgr.ObjectById(made.second);
+    if (copy == nullptr) {
+      continue;
+    }
+    ++area.made[index];
+    if (CScriptEffect* const effect = TCastToPtr< CScriptEffect >(copy)) {
+      if (!t->second.vars.empty()) {
+        effect->PortSetExternalVars(ExternalVars(t->second.vars));
+      }
+      if (follow != nullptr) {
+        if ((g.flags & kGeneratorNoInheritXf) == 0) {
+          effect->SetTransform(follow->GetTransform());
+        }
+        effect->SetTranslation((swarm != nullptr ? swarm->GetLastKilledOffset() : follow->GetTranslation()) +
+                               CVector3f(g.offset[0], g.offset[1], g.offset[2]));
+      }
+    }
+    mgr.DeliverScriptMsg(copy, kInvalidUniqueId, kSM_Activate);
+  }
+}
+
+void Deliver(CStateManager& mgr, Driven& area, TUniqueId sender, const Drive& d) {
+  if ((d.flags & kDriveToGenerator) != 0) {
+    Generate(mgr, area, d.target, sender, d);
+    return;
+  }
   mgr.SendScriptMsg(sender, TEditorId(d.target), static_cast<EScriptObjectMessage>(d.message),
                     static_cast<EScriptObjectState>(d.state));
 }
@@ -80,8 +141,14 @@ void BeginArea(uint32_t mrea) {
   for (uint32_t id : sFile.skips) {
     sSkips.insert(id & 0x3FFFFFF);
   }
-  if (!sFile.drives.empty()) {
-    sDriven[mrea].drives = sFile.drives;
+  if (!sFile.drives.empty() || !sFile.generators.empty()) {
+    Driven& driven = sDriven[mrea];
+    driven.drives = sFile.drives;
+    driven.generators = sFile.generators;
+    driven.made.assign(sFile.generators.size(), 0);
+    for (const Generator& g : sFile.generators) {
+      driven.active.push_back((g.flags & kGeneratorActive) != 0);
+    }
   }
 }
 
@@ -187,10 +254,20 @@ void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_
     // Parse() checked the framing; each object is read as the area's own are.
     CMemoryInStream in(l.objects.data(), int(l.objects.size()));
     size_t at = 0;
+    const auto driven = sDriven.find(sMrea);
     for (uint32_t i = 0; i < l.count; ++i) {
       Effect info;
       size_t used = 0;
       ReadEffect(l.objects.data() + at, l.objects.size() - at, info, used);
+      if (driven != sDriven.end() &&
+          std::any_of(driven->second.generators.begin(), driven->second.generators.end(), [&](const Generator& g) {
+            return std::find(g.templates.begin(), g.templates.end(), info.id) != g.templates.end();
+          })) {
+        Template& t = driven->second.templates[info.id];
+        t.area = area;
+        t.object.assign(l.objects.begin() + std::ptrdiff_t(at), l.objects.begin() + std::ptrdiff_t(at + used));
+        t.vars = i < l.vars.size() ? l.vars[i] : std::vector<Variable>();
+      }
       at += used;
       const char type = in.ReadChar();
       const uint length = in.ReadLong();
@@ -254,7 +331,7 @@ void OnScriptState(CStateManager& mgr, uint16_t senderUid, uint32_t editorId, in
     }
     TUniqueId uid;
     uid.value = senderUid;
-    Deliver(mgr, uid, d);
+    Deliver(mgr, area, uid, d);
   }
 }
 
@@ -286,7 +363,7 @@ void Think(CStateManager& mgr, float dt) {
       }
       const size_t drive = next->drive;
       area.pending.erase(next);
-      Deliver(mgr, kInvalidUniqueId, area.drives[drive]);
+      Deliver(mgr, area, kInvalidUniqueId, area.drives[drive]);
     }
     ++it;
   }
@@ -302,6 +379,15 @@ std::vector<std::pair<Drive, size_t>> DrivesOf(uint32_t mrea) {
     const size_t pending = size_t(std::count_if(found->second.pending.begin(), found->second.pending.end(),
                                                 [i](const Pending& p) { return p.drive == i; }));
     out.emplace_back(found->second.drives[i], pending);
+  }
+  return out;
+}
+
+std::vector<GeneratorState> GeneratorsOf(uint32_t mrea) {
+  std::vector<GeneratorState> out;
+  const auto found = sDriven.find(mrea);
+  for (size_t i = 0; found != sDriven.end() && i < found->second.generators.size(); ++i) {
+    out.push_back({found->second.generators[i], found->second.active[i], found->second.made[i]});
   }
   return out;
 }

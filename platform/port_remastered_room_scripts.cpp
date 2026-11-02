@@ -85,6 +85,8 @@ struct Pass {
 };
 // A TimerMP1's wait, in seconds.
 constexpr uint32_t kPropTimerDelay = 0xfb2a2cf0;
+constexpr uint32_t kPropTimerRandom = 0x35c8fdd3;  // f32 random add
+constexpr uint32_t kPropTimerLoop = 0x75ce4b13;    // boolean +0x12
 constexpr Pass kPasses[] = {
     {0x15, {0x379d362e, 0x379d362e}},  // Relay
     {kRetailTimer, {0xd63b8f04, 0x55193b90}},  // Timer
@@ -125,6 +127,13 @@ uint8_t EffectAct(uint32_t action) {
          : action == kActionEffectDeactivate ? PortRoomGeo::kHide
          : action == kActionEffectToggle     ? PortRoomGeo::kToggle
                                              : 0;
+}
+
+// The actions every MP1 entity takes (IMP1EntityBaseGOC::TranslateScriptActionToMessage
+// 0xc51ea4): 'ACMP', 'ACTV', 'ICMP', 'ICTV' and 'XDEL'.
+bool IsEntityBaseAction(uint32_t action) {
+  return action == 0x41434d50 || action == kActionEntityActivate || action == 0x49434d50 ||
+         action == kActionEntityDeactivate || action == kActionHintDelete;
 }
 
 // What a connection's action does to the geometry or hint it reaches.
@@ -868,6 +877,12 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       effectEntities.insert(c->entity);
     }
   }
+  std::set<int> generatorEntities;  // the GeneratorMP1s
+  for (const Component* c : room.Of(kGeneratorMP1)) {
+    if (c->entity >= 0) {
+      generatorEntities.insert(c->entity);
+    }
+  }
   auto valid = [](const ScriptObject& o) {
     return o.hasPos && std::isfinite(o.pos[0]) && std::isfinite(o.pos[1]) && std::isfinite(o.pos[2]) &&
            std::fabs(o.pos[0]) < 1e5 && std::fabs(o.pos[1]) < 1e5 && std::fabs(o.pos[2]) < 1e5;
@@ -1418,8 +1433,8 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         const bool unmatched = ms < 0 || match[size_t(ms)] < 0;
         const bool nostate = RetailState(sender.type, c.event) < 0;
         char key[160];
-        std::snprintf(key, sizeof key, "%s%s%s (target %08X, sender %08X event %08X action %08X, depth %d)",
-                      unmatched ? "unmatched " : "", nostate ? "nostate " : "",
+        std::snprintf(key, sizeof key, "%s%s%s%s (target %08X, sender %08X event %08X action %08X, depth %d)",
+                      effectEntities.count(e.entity) != 0 ? "effect " : "", unmatched ? "unmatched " : "", nostate ? "nostate " : "",
                       !unmatched && !nostate ? (depth >= 6 ? "depth " : "other ") : "", e.type, sender.type, c.event, first,
                       depth);
         auto& stat = result.missStats[key];
@@ -1452,9 +1467,19 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     const int maxDepth = driverStart || result.drivers.count(e.entity) != 0 ? 8 : 6;
     // An EffectMP1 is driven only where every connection into it is traced: its own actions
     // too (CEffectMP1GOC::TranslateScriptActionToMessage 0xd9c9e4), and none left out.
-    const bool effect = effectEntities.count(e.entity) != 0;
+    const bool isEffect = effectEntities.count(e.entity) != 0;
+    // A generator that copies effects is traced as strictly, with its own actions only.
+    const bool generator = generatorEntities.count(e.entity) != 0;
+    const bool effect = isEffect || generator;
     const auto act = [&](uint32_t action) -> uint8_t {
-      if (effect) {
+      if (generator) {
+        return action == kActionGeneratorSetToZero                                       ? PortRoomGeo::kGenerate
+               : action == kActionGeneratorActivate || action == kActionEntityActivate     ? PortRoomGeo::kShow
+               : action == kActionGeneratorDeactivate || action == kActionEntityDeactivate ? PortRoomGeo::kHide
+               : action == kActionGeneratorToggle                                         ? PortRoomGeo::kToggle
+                                                                                          : 0;
+      }
+      if (isEffect) {
         const uint8_t effectAct = EffectAct(action);
         if (effectAct != 0) {
           return effectAct;
@@ -1478,6 +1503,26 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       }
       for (const Connection* c : in->second) {
         const Component& sender = comps[c->sender];
+        // A generator's Zero -> Generate names the effect as a template: the generator's own
+        // links drive it (CScriptGeneratorMP1 0xf44128), never this connection.
+        if (isEffect && depth == 0 && sender.type == kGeneratorMP1 && c->event == kEventGeneratorZero &&
+            c->action == kActionGenerate && sender.entity >= 0) {
+          auto& by = result.generatedBy[e.entity];
+          if (std::find(by.begin(), by.end(), sender.entity) == by.end()) {
+            by.push_back(sender.entity);
+          }
+          continue;
+        }
+        // One addressed to another component of an effect's entity (a Boolean's c53a2e78 to its
+        // AmbientParticleEffect) with an action neither CEffectMP1GOC nor IMP1EntityBaseGOC
+        // translates (0xd9c9e4, 0xc51ea4: 0xffff, no message) never reaches the effect.
+        if (isEffect && depth == 0) {
+          const int t = room.ByGuid(c->target);
+          if (t >= 0 && comps[size_t(t)].type != kEntity && comps[size_t(t)].type != kEffectMP1 &&
+              EffectAct(c->action) == 0 && !IsEntityBaseAction(c->action)) {
+            continue;
+          }
+        }
         int fluidState = 0;
         const uint32_t fluid =
             depth == 0 && hintEntities.count(entity) != 0 ? fluidSender(*c, fluidState) : 0;
@@ -1536,7 +1581,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
                                first == kActionActivate;
           const uint8_t linkAct = follows ? static_cast<uint8_t>(PortRoomGeo::kFollow) : act(first);
           if (linkAct != 0 && state < 256) {
-            links.push_back({objects[size_t(match[size_t(s)])].id, uint8_t(state), linkAct, delay});
+            links.push_back({objects[size_t(match[size_t(s)])].id, uint8_t(state), linkAct, delay, depth > 0});
           } else if (effect) {
             miss(sender, *c, first, depth);
           }
@@ -1551,21 +1596,22 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
               wait = std::isfinite(wait) ? std::clamp(wait, 0.f, 600.f) : 0.f;
             }
             // An effect's drive waits as one restarting delay per link: exact only for a timer
-            // that a single ResetAndStart starts, with neither of its flags (SLdrTimerMP1::Load
-            // 0xf36d14: autostart +0x11, +0x10) set; Start (14) does not restart a running timer.
+            // that ResetAndStart alone drives (SLdrTimerMP1::Load 0xf36d14), once, with no random
+            // add (35c8fdd3), no loop (+0x12) and no autostart (+0x11). Its reset-on-expiry
+            // (+0x10) changes nothing then, as each start resets it anyway.
             if (effect) {
               const auto flag = [&](uint32_t id) {
                 const auto it = f.find(id);
                 return it != f.end() && it->second.size >= 1 && room.Bytes(it->second)[0] != 0;
               };
+              const auto random = f.find(kPropTimerRandom);
+              const bool randomAdd = random != f.end() && random->second.size == 4 &&
+                                     ReadLEFloat(room.Bytes(random->second)) != 0.f;
               const auto feeds = incoming.find(sender.entity);
-              size_t starts = 0;
-              for (size_t k = 0; feeds != incoming.end() && k < feeds->second.size(); ++k) {
-                starts += PassFires(kRetailTimer, feeds->second[k]->action) ? 1 : 0;
-              }
-              if (flag(kPropTimerAutostart) || flag(kPropTimerFlag10) || starts != 1 ||
-                  std::any_of(feeds->second.begin(), feeds->second.end(),
-                              [](const Connection* fc) { return fc->action == kActionTimerStart[1]; })) {
+              const bool onlyResetAndStart =
+                  feeds != incoming.end() && feeds->second.size() == 1 &&
+                  feeds->second[0]->action == kActionTimerStart[0];
+              if (flag(kPropTimerAutostart) || flag(kPropTimerLoop) || randomAdd || !onlyResetAndStart) {
                 miss(sender, *c, first, depth);
                 continue;
               }

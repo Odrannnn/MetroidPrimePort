@@ -341,12 +341,14 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool drives = !file.drives.empty();
+  const bool generators = !file.generators.empty() ||
+                          std::any_of(file.drives.begin(), file.drives.end(), [](const Drive& d) { return d.flags != 0; });
+  const bool drives = generators || !file.drives.empty();
   const bool actorSlots = drives || !file.actorSlots.empty();
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -462,6 +464,18 @@ std::vector<uint8_t> Write(const File& file) {
       PutLE32(out, d.state);
       PutLE32(out, d.message);
       PutLEFloat(out, d.delay);
+      if (generators) {
+        PutLE32(out, d.flags);
+      }
+    }
+  }
+  if (generators) {
+    PutLE32(out, uint32_t(file.generators.size()));
+    for (const Generator& g : file.generators) {
+      PutLE32(out, g.flags);
+      for (float f : g.offset) PutLEFloat(out, f);
+      PutLE32(out, uint32_t(g.templates.size()));
+      for (uint32_t id : g.templates) PutLE32(out, id);
     }
   }
   return out;
@@ -767,8 +781,9 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
     }
   }
   if (version >= 10) {
+    const size_t record = version >= 11 ? 24 : 20;
     uint32_t count = 0;
-    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 20) {
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / record) {
       error = "truncated drive list";
       return false;
     }
@@ -781,15 +796,58 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
       ReadLE32(data, at, d.message);
       ReadLE32(data, at, bits);
       std::memcpy(&d.delay, &bits, 4);
-      // Only the add-ons this file has, and only what CScriptEffect takes from a connection.
-      const bool known = std::any_of(objects.begin(), objects.end(),
-                                     [&](const LayerObject& o) { return o.id == d.target; });
-      if (!known || d.state > 0xff || (d.message != 1 && d.message != 4 && d.message != 17) ||
-          !(d.delay >= 0.f && d.delay <= kMaxDriveDelay)) {
-        error = "invalid drive " + std::to_string(i);
-        return false;
+      if (version >= 11) {
+        ReadLE32(data, at, d.flags);
       }
       file.drives.push_back(d);
+    }
+  }
+  if (version >= 11) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 24) {
+      error = "truncated generator list";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      Generator g;
+      uint32_t n = 0;
+      ReadLE32(data, at, g.flags);
+      for (float& f : g.offset) {
+        uint32_t bits = 0;
+        ReadLE32(data, at, bits);
+        std::memcpy(&f, &bits, 4);
+      }
+      ReadLE32(data, at, n);
+      if (n == 0 || n > kMaxGeneratorTemplates || n > (data.size() - at) / 4 ||
+          (g.flags & ~(kGeneratorActive | kGeneratorNoInheritXf)) != 0 ||
+          !std::all_of(std::begin(g.offset), std::end(g.offset), [](float f) { return std::isfinite(f); })) {
+        error = "invalid generator " + std::to_string(i);
+        return false;
+      }
+      g.templates.resize(n);
+      for (uint32_t& id : g.templates) {
+        ReadLE32(data, at, id);
+        if (std::none_of(objects.begin(), objects.end(), [&](const LayerObject& o) { return o.id == id; })) {
+          error = "generator " + std::to_string(i) + " names an unknown template";
+          return false;
+        }
+      }
+      file.generators.push_back(std::move(g));
+    }
+  }
+  // Only the add-ons and generators this file has, and only what CScriptEffect (or the
+  // generator) takes from a connection.
+  for (size_t i = 0; i < file.drives.size(); ++i) {
+    const Drive& d = file.drives[i];
+    const bool toGenerator = (d.flags & kDriveToGenerator) != 0;
+    const bool known = toGenerator ? d.target < file.generators.size()
+                                   : std::any_of(objects.begin(), objects.end(),
+                                                 [&](const LayerObject& o) { return o.id == d.target; });
+    if (!known || d.state > 0xff || (d.flags & ~(kDriveToGenerator | kDriveRelayed)) != 0 ||
+        (d.message != 1 && d.message != 4 && d.message != 17 && !(toGenerator && d.message == 13)) ||
+        !(d.delay >= 0.f && d.delay <= kMaxDriveDelay)) {
+      error = "invalid drive " + std::to_string(i);
+      return false;
     }
   }
   if (at != data.size()) {
