@@ -418,7 +418,7 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
 #ifdef TARGET_PC
   // Remastered's ctor sizes the per-particle child list from PSMX at frame 0, else
   // ceil(MAXP * 1.1).
-  if (x28_loadedGenDesc->xPortPsps) {
+  if (x28_loadedGenDesc->PortHasPsps()) {
     if (CIntElement* psmx = x28_loadedGenDesc->xPortPsmx) {
       psmx->GetValue(0, xPortPspsCap);
     } else {
@@ -1535,7 +1535,7 @@ void CElementGen::CreateNewParticles(int count) {
       }
     }
     // CreateNewParticles 0x24a4cc: each surviving newborn gets its PSPS child.
-    if (x28_loadedGenDesc->xPortPsps) {
+    if (x28_loadedGenDesc->PortHasPsps()) {
       PortPspsSpawn(int(x30_particles.size()) - 1, particle.x4_pos);
     }
 #endif
@@ -1584,14 +1584,25 @@ void CElementGen::PortPspsSpawn(int index, const CVector3f& pos) {
   if (int(xPortPsps.size()) >= xPortPspsCap) {
     return;
   }
-  TToken< CGenDescription > desc = *x28_loadedGenDesc->xPortPsps;
-  if (x28_loadedGenDesc->xPortIrnd && desc->xPortIrnd) {
-    sPortChildSeed = PortChildSeed((*desc)->xPortGuidWord, xPortPsps.size());
-    sPortChildSeedSet = true;
+  CParticleGen* child;
+  if (x28_loadedGenDesc->xPortPspsSwoosh) {
+    TToken< CSwooshDescription > desc = *x28_loadedGenDesc->xPortPspsSwoosh;
+    if (x28_loadedGenDesc->xPortIrnd && desc->xPortIrnd) {
+      CParticleSwoosh::sPortChildSeed = PortChildSeed((*desc)->xPortGuidWord, xPortPsps.size());
+      CParticleSwoosh::sPortChildSeedSet = true;
+    }
+    child = rs_new CParticleSwoosh(desc, 0);
+  } else {
+    TToken< CGenDescription > desc = *x28_loadedGenDesc->xPortPsps;
+    if (x28_loadedGenDesc->xPortIrnd && desc->xPortIrnd) {
+      sPortChildSeed = PortChildSeed((*desc)->xPortGuidWord, xPortPsps.size());
+      sPortChildSeedSet = true;
+    }
+    CElementGen* gen =
+        rs_new CElementGen(desc, kMOT_Normal, x26d_27_enableOPTS ? kOSF_Two : kOSF_One);
+    gen->x26d_26_modelsUseLights = x26d_26_modelsUseLights;
+    child = gen;
   }
-  CElementGen* child =
-      rs_new CElementGen(desc, kMOT_Normal, x26d_27_enableOPTS ? kOSF_Two : kOSF_One);
-  child->x26d_26_modelsUseLights = x26d_26_modelsUseLights;
   child->SetTranslation(PortWorldFromLocal(pos));
   child->SetParticleEmission(x88_particleEmission);
   child->SetModulationColor(x338_moduColor);
@@ -1647,7 +1658,7 @@ void CElementGen::PortPspsTrim() {
 // RemoveParticle 0x24b130: the dead particle's child is let go (index -1) and keeps living;
 // the last particle, moved into its slot, takes its child along.
 void CElementGen::PortPspsRemoved(int removed, int countBefore) {
-  if (!x28_loadedGenDesc->xPortPsps) {
+  if (!x28_loadedGenDesc->PortHasPsps()) {
     return;
   }
   for (size_t i = 0; i < xPortPsps.size(); ++i) {

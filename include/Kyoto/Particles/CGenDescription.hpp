@@ -324,6 +324,9 @@ public:
   // port-only PSPS/PSMX: Remastered's per-particle child system (desc+0x200) and the most of
   // them alive at once (desc+0x208; absent = ceil(MAXP * 1.1)), run by CElementGen::PortPsps*.
   rstl::optional_object< TCachedToken< CGenDescription > > xPortPsps;
+  // ... or a swoosh per particle (PSPS SWHC id; the Switch builds any system type there).
+  rstl::optional_object< TCachedToken< CSwooshDescription > > xPortPspsSwoosh;
+  bool PortHasPsps() const { return xPortPsps || xPortPspsSwoosh; }
   CIntElement* xPortPsmx = nullptr;
   // port-only PKSM: Remastered's spawn tables as its CSpawnSystemKeyframeData keeps them
   // (ctor 0x293350; run by CElementGen::PortSpawnTables). Replaces KSSM when present.

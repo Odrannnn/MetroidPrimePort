@@ -6149,19 +6149,28 @@ public:
       }
       return;
     }
-    // A generator's per-particle child system: PSPS names an embedded GENP (type word GENP), read
+    // A generator's per-particle child system: PSPS names an embedded child and its type word, read
     // into desc+0x200; PSMX is an int element (desc+0x208) capping how many live at once
-    // (CreateGPSM; ConstructParticleSpawnedChildSystem 0x24bc00). Port-only, same FourCCs.
+    // (CreateGPSM; ConstructParticleSpawnedChildSystem 0x24bc00). The child is built through
+    // CParticleGen::ConstructNewParticleSystem, so it is any system: a GENP (CNST id, a PART) or
+    // a SWSH (written SWHC id, a swoosh per particle). Port-only, same FourCCs.
     if (s.part && (fourcc == F("PSPS") || fourcc == F("PSMX"))) {
       std::vector<uint8_t> bytes;
       std::string why;
       bool ok = false;
       if (fourcc == F("PSMX")) {
         ok = Property(fourcc, PropertyType{Type::Int}, property.value, bytes, why);
-      } else if (property.value.size() == 2 && property.value[0].kind == EffectValue::Kind::Guid) {
-        ok = Property(fourcc, PropertyType{Type::Asset, F("PART")}, {property.value[0]}, bytes, why);
+      } else if (property.value.size() == 2 && property.value[0].kind == EffectValue::Kind::Guid &&
+                 property.value[1].kind == EffectValue::Kind::Word &&
+                 (property.value[1].word == F("GENP") || property.value[1].word == F("SWSH"))) {
+        const bool swoosh = property.value[1].word == F("SWSH");
+        ok = Property(fourcc, PropertyType{Type::Asset, swoosh ? F("SWHC") : F("PART")}, {property.value[0]},
+                      bytes, why);
+        if (ok && swoosh && bytes.size() == 8) {
+          bytes[0] = 'S', bytes[1] = 'W', bytes[2] = 'H', bytes[3] = 'C';
+        }
       } else {
-        why = "not a GENP id";
+        why = "not a GENP or SWSH id";
       }
       if (!ok) {
         s.result.dropped.push_back(EffectFourCCString(fourcc) + ": " + why);

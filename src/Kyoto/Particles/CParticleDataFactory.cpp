@@ -464,6 +464,9 @@ void CParticleDataFactory::LoadGPSMTokens(CGenDescription* desc) {
   if (desc->xPortPsps) {
     desc->xPortPsps->ForceCache();
   }
+  if (desc->xPortPspsSwoosh) {
+    desc->xPortPspsSwoosh->ForceCache();
+  }
   if (desc->xPortKssm) {
     for (auto& table : desc->xPortKssm->tables) {
       for (auto& entry : table.entries) {
@@ -1044,12 +1047,25 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       desc->xPortShutdownTime = GetIntElement(in);
       break;
     case SBIG('PSPS'): {
-      rstl::optional_object< TToken< CGenDescription > > child(
-          GetChildGeneratorDesc(in, pool, resources));
-      if (child) {
-        desc->xPortPsps = TCachedToken< CGenDescription >(*child);
-      } else {
-        desc->xPortPsps = rstl::optional_object_null();
+      // CNST id: a child GENP; SWHC id: a child swoosh.
+      desc->xPortPsps = rstl::optional_object_null();
+      desc->xPortPspsSwoosh = rstl::optional_object_null();
+      const FourCC clsId = GetClassID(in);
+      if (clsId == SBIG('NONE')) {
+        break;
+      }
+      const CAssetId id = in.Get< CAssetId >();
+      if (clsId == SBIG('SWHC')) {
+        if (id != 0) {
+          desc->xPortPspsSwoosh =
+              TCachedToken< CSwooshDescription >(pool->GetObj(SObjectTag(SBIG('SWHC'), id)));
+        }
+      } else if (id != 0) {
+        rstl::optional_object< TToken< CGenDescription > > child(
+            GetChildGeneratorDesc(id, pool, resources));
+        if (child) {
+          desc->xPortPsps = TCachedToken< CGenDescription >(*child);
+        }
       }
       break;
     }
