@@ -1218,8 +1218,13 @@ Id16 SlotGenp(const Room& room, const Component& c, const uint32_t (&path)[4], s
 
 }  // namespace
 
-std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t mrea, const Area& area,
-                             const SceneryScripts& scripts, const RoomIO& io) {
+namespace {
+// One pass of WriteRoomEffects. An effect sender (kSenderEffect) in notSenders is taken as one
+// that is not added; one a drive names that is not added after all goes in missing, and then
+// nothing is written.
+std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint32_t mrea, const Area& area,
+                                 const SceneryScripts& scripts, const RoomIO& io, const std::set<int>& notSenders,
+                                 std::set<int>& missing) {
   const std::vector<const Component*> effects = room.Of(kEffectMP1);
   if (!io.effect || !io.write) {
     return {};
@@ -1283,6 +1288,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   std::set<uint32_t> skips;
   std::vector<PortRoomEffects::Override> overrides;
   std::vector<Vec3> added;
+  std::map<int, uint32_t> addedIds;  // the effects added, by entity
   std::set<int> seen;
   std::map<std::string, size_t> connectedWhy;  // connected ones left out, by cause
   std::map<std::string, std::string> connectedWho;  // their entities' guids, by cause (MP_REMASTERED_MISS)
@@ -1321,6 +1327,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     return IsTimerSender(l.sender)     ? timersOk.count(int(l.sender & ~kSenderTimer)) != 0
            : IsTriggerSender(l.sender) ? triggersOk.count(int(l.sender & ~kSenderTrigger)) != 0
            : IsRelaySender(l.sender)   ? relaysOk.count(int(l.sender & ~kSenderRelay)) != 0
+           : IsEffectSender(l.sender)  ? notSenders.count(int(l.sender & ~kSenderEffect)) == 0
                                        : true;
   };
   for (bool dropped = true; dropped;) {
@@ -1690,6 +1697,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     e.id = PortRoomEffects::AddOnId(retailLayer, areaBits, uint32_t(added.size()));
     followerIs(c->entity, e.id);
     effectOf[c->entity] = e.id;
+    addedIds[c->entity] = e.id;
     for (PortRoomEffects::Drive& d : drives) {
       d.target = e.id;
       allDrives.push_back(d);
@@ -1833,8 +1841,18 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
         d.sender = triggerIds.at(int(d.sender & ~kSenderTrigger));
       } else if (IsRelaySender(d.sender)) {
         d.sender = relayIds.at(int(d.sender & ~kSenderRelay));
+      } else if (IsEffectSender(d.sender)) {
+        const auto sender = addedIds.find(int(d.sender & ~kSenderEffect));
+        if (sender == addedIds.end()) {
+          missing.insert(int(d.sender & ~kSenderEffect));
+        } else {
+          d.sender = sender->second;
+        }
       }
     }
+  }
+  if (!missing.empty()) {
+    return {};
   }
   // The follow locators whose effect was written (or is a retail object): their ids follow the
   // relays'.
@@ -2242,6 +2260,22 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     return "  " + name + ": could not write " + fileName;
   }
   return summary;
+}
+}  // namespace
+
+std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t mrea, const Area& area,
+                             const SceneryScripts& scripts, const RoomIO& io) {
+  // An effect whose Active or Inactive drives an added one is added too, or the one it drives is
+  // left out: over again without the senders that were not, until every one named is.
+  std::set<int> notSenders;
+  for (;;) {
+    std::set<int> missing;
+    std::string summary = WriteRoomEffectsOnce(name, room, mrea, area, scripts, io, notSenders, missing);
+    if (missing.empty()) {
+      return summary;
+    }
+    notSenders.insert(missing.begin(), missing.end());
+  }
 }
 
 std::vector<std::array<uint8_t, 16>> RoomEffectGenpsOf(const Room& room) {

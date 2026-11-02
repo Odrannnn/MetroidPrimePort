@@ -233,7 +233,7 @@ inline constexpr int kModels = 30;
 // 148: retail positions after a type's leading field (GunTurret, flavors, Dock).
 // 152: ambient particle spawners (roomfx v16).
 // 153: ambients into matched retail effects.
-inline constexpr int kEffects = 155;   // links on Default (never sent) neither connect nor drive effects
+inline constexpr int kEffects = 156;   // an unmatched effect's Active/Inactive drives others as an add-on sender
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

@@ -596,6 +596,8 @@ constexpr uint32_t kTemplateManager = 0xd645278a;
 constexpr uint8_t kRetailPlatform = 0x08;
 constexpr int kStatePlay = 18;  // EScriptObjectState kSS_Play
 constexpr int kRetailDamageableTrigger = 0x1a;
+constexpr int kStateActive = 0;
+constexpr int kStateInactive = 5;
 constexpr int kStateMaxReached = 7;
 constexpr int kStateZero = 9;
 constexpr uint8_t kRetailCounter = 0x06;
@@ -888,6 +890,10 @@ constexpr bool IsTriggerSender(uint32_t sender) { return (sender & 0xFF000000) =
 // And for a Remastered ScriptRelayMP1 no retail object stands for: kSenderRelay | its entity.
 constexpr uint32_t kSenderRelay = 0xFA000000;
 constexpr bool IsRelaySender(uint32_t sender) { return (sender & 0xFF000000) == kSenderRelay; }
+// And for a Remastered EffectMP1 no retail object stands for, whose Active or Inactive drives
+// another effect: kSenderEffect | its entity. It sends them only as the effect it is added as.
+constexpr uint32_t kSenderEffect = 0xF9000000;
+constexpr bool IsEffectSender(uint32_t sender) { return (sender & 0xFF000000) == kSenderEffect; }
 // A ScriptRelayMP1's actions (CScriptRelayMP1GOC::TranslateScriptActionToMessage 0xf5e094), besides
 // kActionScriptRelayFire (SetToZero): Activate, Deactivate, ToggleActive.
 constexpr uint32_t kActionScriptRelayActivate = 0x4cb37153;

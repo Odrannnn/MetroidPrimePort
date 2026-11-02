@@ -2024,6 +2024,20 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           links.push_back({kSenderRelay | uint32_t(sender.entity), uint8_t(state), relayAct, delay, depth > 0});
           return true;
         };
+        // And an unmatched EffectMP1's Active or Inactive (CEntityMP1::AcceptScriptMsg 0xc43a94
+        // sends them as CEntity does), from the effect it is added as.
+        const auto viaEffect = [&]() {
+          if (!effect || sender.type != kEffectMP1 || sender.entity < 0 || (s >= 0 && match[size_t(s)] >= 0) ||
+              (state != kStateActive && state != kStateInactive)) {
+            return false;
+          }
+          const uint8_t effectAct = act(first);
+          if (effectAct == 0) {
+            return false;
+          }
+          links.push_back({kSenderEffect | uint32_t(sender.entity), uint8_t(state), effectAct, delay, depth > 0});
+          return true;
+        };
         if (s >= 0 && match[size_t(s)] >= 0 && state >= 0) {
           // A DamageableTrigger reads its own MaxReached -> Activate connections and never
           // sends them, so only a direct one counts.
@@ -2099,7 +2113,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           } else {
             miss(sender, *c, first, depth);
           }
-        } else if (!viaTimer() && !viaTrigger() && !viaRelay()) {
+        } else if (!viaTimer() && !viaTrigger() && !viaRelay() && !viaEffect()) {
           miss(sender, *c, first, depth);
         }
       }
