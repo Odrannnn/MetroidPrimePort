@@ -73,6 +73,8 @@ struct CPortVfxData {
   CPortVfxMat mat;
   std::vector< CRealElement* > vtmt; // n x 6 (A B C D E F)
   u32 vtmtCount = 0;
+  // VTRS: a header sprite's TEXR TRST (x, y, sx, sy, rot in degrees), or all null.
+  CRealElement* vtrs[5] = {};
   std::vector< CPortVfxElem > vpmt;
   std::vector< CPortVfxElem > vsmt;
   CRealElement* ssze = nullptr;

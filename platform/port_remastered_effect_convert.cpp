@@ -3592,11 +3592,30 @@ public:
     Mati mati;
     mati.shader = shader;
     Recipe recipe{shader, 0, {}, {}};
+    std::vector<uint8_t> vtrs;
     if (header->textured) {
-      // Remastered's TEXR `CNST(id), NONE`; an ATEX or atlas is not this perm's single map.
+      // Remastered's TEXR `CNST(id), NONE` or `CNST(id), TRST`; an ATEX or atlas is not this perm's
+      // single map.
       if (texr == nullptr || texr->value.size() != 2 || !IsElement(texr->value[0], F("CNST")) ||
-          texr->value[0].args.size() != 1 || texr->value[0].args[0].kind != EffectValue::Kind::Guid ||
-          !IsElement(texr->value[1], F("NONE"))) {
+          texr->value[0].args.size() != 1 || texr->value[0].args[0].kind != EffectValue::Kind::Guid) {
+        return refuse("has no constant TEXR");
+      }
+      // TRST(x, y, sx, sy, rot, wrap): CopyPerSpriteDataToSpriteRenderData 0x2477cc evaluates it per sprite
+      // and SetupInstancingComponents_SpriteCustom passes rot in radians (x pi/180, 0x2b4a04). The wrap
+      // (GetDiffuseTextureWrapMode 0x291434) is the sampler's when -1.
+      const EffectValue& transform = texr->value[1];
+      if (IsElement(transform, F("TRST"))) {
+        if (transform.args.size() != 6 || transform.args[5].kind != EffectValue::Kind::Word ||
+            transform.args[5].word != 0xffffffffu) {
+          return refuse("has a TEXR TRST with a wrap mode");
+        }
+        std::string why;
+        for (size_t i = 0; i < 5; ++i) {
+          if (!Element(transform.args[i], Type::Real, vtrs, why)) {
+            return refuse("has a TEXR TRST the port can't evaluate: " + why);
+          }
+        }
+      } else if (!IsElement(transform, F("NONE"))) {
         return refuse("has no constant TEXR");
       }
       mati.textures["TEXR"] = MatiTexture{texr->value[0].args[0].guid, 0, 1, -1, -1};
@@ -3604,7 +3623,14 @@ public:
       recipe.textures = {{"TEXR", Role::Color, -1, -1}};
       recipe.alphaGamma = 2.2f;
     }
-    return MaterialFrom(mati, recipe, EffectGuid{}, nullptr, node, result, false, false);
+    if (!MaterialFrom(mati, recipe, EffectGuid{}, nullptr, node, result, false, false)) {
+      return false;
+    }
+    if (!vtrs.empty()) {
+      AppendBE32(result.part, F("VTRS"));
+      result.part.insert(result.part.end(), vtrs.begin(), vtrs.end());
+    }
+    return true;
   }
 
   bool MaterialFrom(const Mati& mati, const Recipe& recipeRef, const EffectGuid& matiGuid,
@@ -6370,6 +6396,11 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.TextureTransforms();
     } else if (vfx && (fourcc == F("VPMT") || fourcc == F("VSMT"))) {
       ok = reader.PerParticle(fourcc == F("VSMT"));
+    } else if (part && fourcc == F("VTRS")) {
+      ok = true;
+      for (int i = 0; i < 5 && ok; ++i) {
+        ok = reader.Element(Type::Real);
+      }
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||

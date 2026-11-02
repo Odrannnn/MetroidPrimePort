@@ -220,6 +220,9 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
       std::snprintf(buf, sizeof(buf), " VTMT*%u", vfx->vtmtCount);
       out.vfx += buf;
     }
+    if (vfx->vtrs[0] != nullptr) {
+      out.vfx += " VTRS";
+    }
     if (!vfx->vpmt.empty()) {
       std::snprintf(buf, sizeof(buf), " VPMT*%zu", vfx->vpmt.size());
       out.vfx += buf;

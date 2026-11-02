@@ -34,7 +34,8 @@
 //   (RECIPES.md) also writes VMAT (the shader's features, textures and uniform
 //   sources), VTMT (TMTR's UV transforms), VPMT (PMTR) and VSMT (SMTR's CCH0
 //   uniforms), SSZE, VORN (ORNT), ITEN and SCTR (as VMAT's sprite centre). A
-//   shader with no recipe writes none and is listed in `approximated`.
+//   shader with no recipe writes none and is listed in `approximated`. A sprite
+//   drawing its header MTRL also writes VTRS (its TEXR's TRST).
 // - Port-only (build/mpr/vfx/RESOLVED-xfmd.md): XFMD 3 and 4 (particles that
 //   follow the emitter) are written as they are; SMVR is read only as XFMD 4's
 //   mover.

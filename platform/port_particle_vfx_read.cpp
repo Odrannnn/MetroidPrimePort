@@ -216,6 +216,14 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
       vfx.vtmt.push_back(GetRealElement(in));
     }
   } break;
+  case SBIG('VTRS'): {
+    // The header sprite's TEXR TRST: x, y, sx, sy, rot (degrees), each a real element.
+    CPortVfxData& vfx = PortVfxData(vfxPtr);
+    for (CRealElement*& e : vfx.vtrs) {
+      delete e;
+      e = GetRealElement(in);
+    }
+  } break;
   case SBIG('VPMT'):
   case SBIG('VSMT'): {
     // VPMT: {kind row comp element}; VSMT: {target kind element}

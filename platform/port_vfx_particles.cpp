@@ -232,6 +232,9 @@ CPortVfxData::~CPortVfxData() {
     delete e.integer;
     delete e.color;
   }
+  for (CRealElement* e : vtrs) {
+    delete e;
+  }
   delete ssze;
   delete iten;
 }
@@ -649,6 +652,19 @@ void CElementGen::PortRenderParticlesVfx() {
       CRealElement* const* r = &vfx.vtmt[s * 6];
       tm[s] = EvalTrss(r, partFrame);
     }
+    // VTRS, the header sprite's TEXR TRST, as Remastered's sprite VS (header MTRL perm 048): rot goes
+    // to radians when the instance is written (0x2b4a04), then uv = 0.5 + R(rot) (diag(sx, sy) q + (x, y) - 0.5).
+    const bool hasVtrs = vfx.vtrs[0] != nullptr;
+    float trsX = 0.f, trsY = 0.f, trsSx = 1.f, trsSy = 1.f, trsCos = 1.f, trsSin = 0.f;
+    if (hasVtrs) {
+      trsX = EvalReal(vfx.vtrs[0], partFrame, 0.f);
+      trsY = EvalReal(vfx.vtrs[1], partFrame, 0.f);
+      trsSx = EvalReal(vfx.vtrs[2], partFrame, 1.f);
+      trsSy = EvalReal(vfx.vtrs[3], partFrame, 1.f);
+      const float rot = EvalReal(vfx.vtrs[4], partFrame, 0.f) * 0.017453292f;
+      trsCos = std::cos(rot);
+      trsSin = std::sin(rot);
+    }
 
     // A lit perm (ParticleLit) reads no ITEN: Remastered's 080_1 passes the colour through without it.
     const float iten = lit ? 1.f : p.xPortIten * inverseExposure;
@@ -769,10 +785,17 @@ void CElementGen::PortRenderParticlesVfx() {
       v.pos[0] = pos.GetX();
       v.pos[1] = pos.GetY();
       v.pos[2] = pos.GetZ();
+      float tu = qx, tv = qy;
+      if (hasVtrs) {
+        const float du = trsSx * qx + trsX - 0.5f;
+        const float dv = trsSy * qy + trsY - 0.5f;
+        tu = 0.5f + trsCos * du - trsSin * dv;
+        tv = 0.5f + trsSin * du + trsCos * dv;
+      }
       for (int s = 0; s < 3; ++s) {
         const Tm& t = tm[s];
-        const float dx = (qx - 0.5f) * t.c;
-        const float dy = (qy - 0.5f) * t.d;
+        const float dx = (tu - 0.5f) * t.c;
+        const float dy = (tv - 0.5f) * t.d;
         v.uv[s][0] = t.a + 0.5f + t.cosE * dx + t.sinE * dy;
         v.uv[s][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
         v.uv[s][2] = t.f;

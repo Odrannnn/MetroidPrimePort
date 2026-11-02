@@ -5798,6 +5798,43 @@ void TestHeaderMaterial() {
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
   CHECK_MSG(VmatWord(vmat, 8) == 4, "a header sprite with a nil MTIN draws its header MTRL");
 
+  // A TEXR TRST with the sampler's wrap (-1) is the sprite VS's UV rotation: VTRS carries its
+  // five reals; any other wrap mode is refused.
+  const auto withTrst = [](uint32_t wrap) {
+    return [wrap](std::vector<uint8_t>& o) {
+      PutProperty(o, "TEXR", 0);
+      PutFourCC(o, "CNST");
+      PutGuid(o, Legacy(0x1234ABCD));
+      PutFourCC(o, "TRST");
+      for (float each : {0.f, 0.f, 1.f, 1.f, 180.f}) {
+        PutConstant(o, Bits(each));
+      }
+      Put32(o, wrap);
+    };
+  };
+  const auto vtrsOf = [](const ConvertedPart& part) {
+    std::vector<RetailPartProperty> props;
+    std::string error;
+    if (SplitRetailPart(part.part.data(), part.part.size(), props, error)) {
+      for (const auto& prop : props) {
+        if (prop.fourcc == EffectFourCC("VTRS")) {
+          return prop.value;
+        }
+      }
+    }
+    return std::vector<uint8_t>{};
+  };
+  parts = ConvertOne(withShader(OneGenerator(withTrst(0xFFFFFFFFu)), 0xb42cacf5), io);
+  const std::vector<uint8_t> vtrs = parts.size() == 1 ? vtrsOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && !vmatOf(parts[0]).empty() &&
+                vtrs.size() == 5 * 8 && VmatWord(vtrs, 4 * 8 + 4) == Bits(180.f),
+            "a header sprite's TEXR TRST is written as VTRS");
+  parts = ConvertOne(withShader(OneGenerator(withTrst(0)), 0xb42cacf5), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && vtrsOf(parts[0]).empty() &&
+                parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 has a TEXR TRST with a wrap mode",
+            "a header TRST with its own wrap mode is refused");
+
   parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x1e245375), io);
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
   CHECK_MSG(VmatWord(vmat, 8) == 2 && VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,
