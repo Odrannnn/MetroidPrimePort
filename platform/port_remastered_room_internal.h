@@ -749,6 +749,19 @@ constexpr uint32_t kSpecialFunctionFollowLocator = 3;
 constexpr uint32_t kEventSpecialFunctionPlay = 0x6b565a4c;
 constexpr uint32_t kPropSpecialFunctionLocator = 0x1f300597;  // a string: STRP offset, size
 bool IsFollowLocator(const Room& room, const Component& c);
+// Function 15 (CinematicSkip, 0xd98530): it sends Zero only when the player skips its cutscene,
+// as retail's does (CScriptSpecialFunction.cpp:446), so a matched one's Zero is retail's Zero. One
+// retail lacks (09_Intro_Ridley_Chamber) is skippable only after beating the game, which the port
+// does not do (CinematicSkipSF Increment 0xd968c8): its Zero never fires.
+constexpr uint32_t kSpecialFunctionCinematicSkip = 15;
+// Function 7 (SaveStation): ThinkSaveStation (0xd95834) sends Zero or MaxReached as retail's
+// does; Closed, retail's no-card answer, is never sent (AcceptScriptMsg 0xd96458 sends only Zero).
+constexpr uint32_t kSpecialFunctionSaveStation = 7;
+constexpr uint32_t kEventSpecialFunctionClosed = 0x290f7c1f;
+// What a SpecialFunctionMP1's event does to the effects it reaches: kRetail when the matched retail
+// object sends the same state, kNever when it never fires in the port, kUnknown otherwise.
+enum class SpecialFunctionSend { kUnknown, kRetail, kNever };
+SpecialFunctionSend SpecialFunctionSends(const Room& room, const Component& c, uint32_t event, bool matched);
 // The retail message (1 Activate, 4 Deactivate) a follow locator's Play action is to a target
 // of this GOC type; 0 for one it does not translate or that is not known.
 uint32_t FollowMessage(uint32_t target, uint32_t action);

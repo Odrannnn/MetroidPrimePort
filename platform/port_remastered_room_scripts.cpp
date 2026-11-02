@@ -129,13 +129,34 @@ uint8_t LinkAct(uint32_t action) {
                                          : 0;
 }
 
-bool IsFollowLocator(const Room& room, const Component& c) {
+namespace {
+bool IsSpecialFunction(const Room& room, const Component& c, uint32_t function) {
   if (c.type != kSpecialFunction) {
     return false;
   }
   const auto f = room.Flat(c);
   const auto type = f.find(kPropSpecialFunctionType);
-  return type != f.end() && type->second.size == 4 && ReadLE32(room.Bytes(type->second)) == kSpecialFunctionFollowLocator;
+  return type != f.end() && type->second.size == 4 && ReadLE32(room.Bytes(type->second)) == function;
+}
+}  // namespace
+
+bool IsFollowLocator(const Room& room, const Component& c) {
+  return IsSpecialFunction(room, c, kSpecialFunctionFollowLocator);
+}
+
+SpecialFunctionSend SpecialFunctionSends(const Room& room, const Component& c, uint32_t event, bool matched) {
+  if (event == kEventSpecialFunctionZero && IsSpecialFunction(room, c, kSpecialFunctionCinematicSkip)) {
+    return matched ? SpecialFunctionSend::kRetail : SpecialFunctionSend::kNever;
+  }
+  if (IsSpecialFunction(room, c, kSpecialFunctionSaveStation)) {
+    if (event == kEventSpecialFunctionClosed) {
+      return SpecialFunctionSend::kNever;
+    }
+    if (matched && (event == kEventSpecialFunctionZero || event == kEventSpecialFunctionMaxReached)) {
+      return SpecialFunctionSend::kRetail;
+    }
+  }
+  return SpecialFunctionSend::kUnknown;
 }
 
 uint32_t FollowMessage(uint32_t target, uint32_t action) {
@@ -1307,6 +1328,12 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         remasteredIn[t];
         continue;
       }
+      // Nor does a SpecialFunction's event that never fires.
+      if (SpecialFunctionSends(room, comps[c.sender], c.event, s >= 0 && match[size_t(s)] >= 0) ==
+          SpecialFunctionSend::kNever) {
+        remasteredIn[t];
+        continue;
+      }
       const int state = RetailState(comps[c.sender].type, c.event);
       if (s < 0 || match[size_t(s)] < 0 || state < 0) {
         untraced.insert(t);
@@ -1921,6 +1948,14 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
                                uint8_t(c->event == kEventEntered ? 0 : 1), volumeAct, delay});
               continue;
             }
+          }
+        }
+        // A SpecialFunction's event that never fires in the port (a skip it never offers, say).
+        if (sender.type == kSpecialFunction) {
+          const int ss = entityOf(int(c->sender));
+          if (SpecialFunctionSends(room, sender, c->event, ss >= 0 && match[size_t(ss)] >= 0) ==
+              SpecialFunctionSend::kNever) {
+            continue;
           }
         }
         // Remastered's own objects, and keyframes, are followed by the script (below).

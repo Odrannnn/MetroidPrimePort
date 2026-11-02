@@ -232,7 +232,8 @@ inline constexpr int kModels = 30;
 // 147: ObjectFollowLocators retail lacks become follows (roomfx v13).
 // 148: retail positions after a type's leading field (GunTurret, flavors, Dock).
 // 152: ambient particle spawners (roomfx v16).
-inline constexpr int kEffects = 153;   // ambients into matched retail effects
+// 153: ambients into matched retail effects.
+inline constexpr int kEffects = 154;   // CinematicSkip and SaveStation SF links drive effects
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

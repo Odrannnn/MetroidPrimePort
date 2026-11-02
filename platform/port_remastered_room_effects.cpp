@@ -573,9 +573,12 @@ std::set<int> DrivableEntities(const Room& room) {
     }
     const int entity = comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity;
     connected.insert(entity);
-    // An ObjectFollowLocator's Play names what it follows and moves (a follow), never sent.
+    // An ObjectFollowLocator's Play names what it follows and moves (a follow), never sent. The
+    // events SpecialFunctionSends knows are retail's or never fire; the walk sorts out which.
     if (comps[c.sender].type == kSpecialFunction &&
-        !(c.event == kEventSpecialFunctionPlay && IsFollowLocator(room, comps[c.sender]))) {
+        !(c.event == kEventSpecialFunctionPlay && IsFollowLocator(room, comps[c.sender])) &&
+        SpecialFunctionSends(room, comps[c.sender], c.event, true) == SpecialFunctionSend::kUnknown &&
+        SpecialFunctionSends(room, comps[c.sender], c.event, false) == SpecialFunctionSend::kUnknown) {
       refused.insert(entity);
     }
   }
