@@ -366,8 +366,12 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
   const int tspn = IntOr(mDesc->xPortTSPN, frame, 0);
   const V3 cameraForward = ToV3(view.GetForward());
   const int nfom = IntOr(mDesc->xPortNFOM, frame, 0);
-  float tone[3][4];
-  const float exposure = PortRoomEnv::Tone(tone) ? PortRoomEnv::FrameExposure() : 1.f;
+  // resolve_inverse_exposure (0x20eba0, called by the vertex writer 0x2b9904): 1 unless IEXP is
+  // set, else the blended (auto) or opaque (static) inverse exposure.
+  const float inverseExposure =
+      mDesc->xPortInverseExposure
+          ? PortRoomEnv::ParticleInverseExposure(vfx.mat.blend != uint32_t(aurora::gfx::vfx::Blend::Opaque))
+          : 1.f;
   // The AddVar's inverse exposure is undone by the tonemap's frame exposure, not by the GX tone's
   // inherited w (the last model's 1 or GlowScale).
   desc.exposureOverride = PortVfxFrameExposureOverride();
@@ -392,8 +396,7 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
   for (const Bolt& bolt : mBolts) {
     std::vector< std::array< float, 4 > > color(bolt.color.size());
     for (size_t i = 0; i < color.size(); ++i) {
-      const float iten = PortElectric2::ExposureCompensatedIntensity(
-          i < bolt.iten.size() ? bolt.iten[i] : 1.f, exposure);
+      const float iten = (i < bolt.iten.size() ? bolt.iten[i] : 1.f) * inverseExposure;
       for (int c = 0; c < 4; ++c) {
         color[i][size_t(c)] = bolt.color[i][size_t(c)] * (c < 3 ? iten : 1.f) * modu[c];
       }

@@ -100,12 +100,6 @@ inline BoltRadii ComputeBoltRadii(float rads, const float* lrad, const float* rr
   return BoltRadii{rads * left, rads * right};
 }
 
-// ELC2's vertex AddVar is multiplied by inverse exposure before the VFX shader applies
-// the room exposure. A missing/nonpositive exposure means no exposed-room factor is active.
-inline float ExposureCompensatedIntensity(float intensity, float exposure) {
-  return std::isfinite(exposure) && exposure > 0.f ? intensity / exposure : intensity;
-}
-
 // CRandom16 as the ELC2 object uses it: seed = seed * 0x41c64e6d + 0x3039, Float() reads the
 // low 28 bits (* 2^-28), integers the high half. (Advance-then-read order and the initial seed
 // are not confirmed in the decompile.)

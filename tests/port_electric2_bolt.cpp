@@ -3,7 +3,6 @@
 
 #include <cmath>
 #include <cstdio>
-#include <limits>
 
 using namespace PortElectric2;
 
@@ -129,16 +128,6 @@ int main() {
   const BoltRadii zero = ComputeBoltRadii(0.f, &l, &r, true);
   CHECK_MSG(Near(zero.left, 0.f) && Near(zero.right, 0.f), "a RADS taper's 0 key gives a zero-width node");
 
-  constexpr float rawIntensity = 0.37f;
-  bool cancels = true;
-  for (float exposure : {0.25f, 0.5f, 1.f, 2.f, 4.f}) {
-    const float compensated = ExposureCompensatedIntensity(rawIntensity, exposure);
-    cancels = cancels && Near(compensated * exposure, rawIntensity);
-  }
-  CHECK_MSG(cancels, "ELC2 inverse exposure cancels the VFX exposure at varied frame exposures");
-  CHECK_MSG(ExposureCompensatedIntensity(rawIntensity, 0.f) == rawIntensity &&
-                ExposureCompensatedIntensity(rawIntensity, std::numeric_limits<float>::infinity()) == rawIntensity,
-            "missing or invalid exposure leaves ELC2 intensity unchanged");
 
   if (port_test::Failures() == 0) {
     std::puts("port_electric2_bolt: ok");

@@ -6086,6 +6086,20 @@ void TestElc2NclrAndXfmd() {
     follow.f("XFMD");
     CHECK_MSG(!Contains(parts[0].part, follow.bytes), "ELC2 XFMD 2 is not written");
   }
+  // IEXP gates the ELC2 inverse exposure (default on); it is kept as a port word.
+  parts = ConvertElc2([](auto& o) {
+    PutProperty(o, "IEXP", 1);
+    PutConstant(o, 0);
+  });
+  CHECK_MSG(parts.size() == 1, "ELC2 with IEXP converts");
+  if (parts.size() == 1) {
+    Retail iexp;
+    iexp.f("IEXP").f("CNST").w(0);
+    CHECK_MSG(Contains(parts[0].part, iexp.bytes), "ELC2 IEXP 0 is written");
+    CHECK_MSG(std::none_of(parts[0].dropped.begin(), parts[0].dropped.end(),
+                           [](const std::string& d) { return d.rfind("IEXP", 0) == 0; }),
+              "ELC2 IEXP is not dropped");
+  }
 }
 
 // Transformed/model primitives consume SIZE, irrespective of TEXR/MTIN.

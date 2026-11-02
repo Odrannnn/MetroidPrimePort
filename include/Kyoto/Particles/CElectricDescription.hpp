@@ -68,6 +68,9 @@ public:
   bool xPortLLRD = true;
   bool xPortFPLB = false;
   bool xPortXfmdFollow = false; // XFMD 3: bolts stay emitter-local and follow its live transform
+  // IEXP (CreateELC2 0xb716f4 -> desc+0x26a, ctor 0xb71bb8 defaults it to 1): the vertex writer
+  // 0x2b9868 scales the AddVar by resolve_inverse_exposure only while this is set.
+  bool xPortInverseExposure = true;
   // port-only Remastered material (VMAT etc.; see CGenDescription::xPortVfx)
   std::unique_ptr< CPortVfxData > xPortVfx;
 #endif
