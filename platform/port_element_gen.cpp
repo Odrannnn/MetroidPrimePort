@@ -213,6 +213,11 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
     out.children.push_back(*it);
   }
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (xPortPsps[i].sys != nullptr) {
+      out.children.push_back(xPortPsps[i].sys);
+    }
+  }
   const CGenDescription& desc = *x28_loadedGenDesc;
   char buf[64];
   if (const CPortVfxData* vfx = desc.xPortVfx.get()) {

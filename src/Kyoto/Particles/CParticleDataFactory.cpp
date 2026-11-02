@@ -461,6 +461,9 @@ void CParticleDataFactory::LoadGPSMTokens(CGenDescription* desc) {
   for (auto& extra : desc->xPortExtraSwooshes) {
     extra.swoosh.ForceCache();
   }
+  if (desc->xPortPsps) {
+    desc->xPortPsps->ForceCache();
+  }
   if (desc->xPortKssm) {
     for (auto& table : desc->xPortKssm->tables) {
       for (auto& entry : table.entries) {
@@ -1039,6 +1042,20 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('PSHT'):
       delete desc->xPortShutdownTime;
       desc->xPortShutdownTime = GetIntElement(in);
+      break;
+    case SBIG('PSPS'): {
+      rstl::optional_object< TToken< CGenDescription > > child(
+          GetChildGeneratorDesc(in, pool, resources));
+      if (child) {
+        desc->xPortPsps = TCachedToken< CGenDescription >(*child);
+      } else {
+        desc->xPortPsps = rstl::optional_object_null();
+      }
+      break;
+    }
+    case SBIG('PSMX'):
+      delete desc->xPortPsmx;
+      desc->xPortPsmx = GetIntElement(in);
       break;
     case SBIG('PMOV'):
       delete desc->xPortPmov;

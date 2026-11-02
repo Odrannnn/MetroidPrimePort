@@ -498,7 +498,24 @@ private:
   // The seed a Remastered parent gives the child it constructs next; consumed by that ctor.
   static uint sPortChildSeed;
   static bool sPortChildSeedSet;
-  uint PortChildSeed(u32 childGuidWord) const;
+  uint PortChildSeed(u32 childGuidWord) const {
+    return PortChildSeed(childGuidWord, x290_activePartChildren.size());
+  }
+  uint PortChildSeed(u32 childGuidWord, uint siblings) const;
+  // Remastered's per-particle child systems (PSPS; gen+0x1a8, capacity gen+0x1a4): each follows
+  // its particle until the particle dies (index -1), then lives on where it is. Kept apart from
+  // x290 because the transform setters (MPT_Set*) never reach them.
+  struct PortPspsChild {
+    int particle;
+    CParticleGen* sys;
+  };
+  std::vector< PortPspsChild > xPortPsps;
+  int xPortPspsCap = 0;
+  bool xPortPspsTrim = false;
+  void PortPspsSpawn(int index, const CVector3f& pos);
+  void PortPspsUpdate(double dt);
+  void PortPspsTrim();
+  void PortPspsRemoved(int removed, int countBefore);
   // Hands a converted swoosh child its seed (CParticleSwoosh::sPortChildSeed).
   void PortSeedSwooshChild(TToken< CSwooshDescription > child) const;
   // Remastered's CElementGen::SpawnChildSystems (0x249bd8) for a converted effect, and its

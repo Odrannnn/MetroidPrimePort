@@ -415,6 +415,21 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
     x50_parentMatrices.assign(x90_MAXP, CMatrix3f::Identity());
   }
 
+#ifdef TARGET_PC
+  // Remastered's ctor sizes the per-particle child list from PSMX at frame 0, else
+  // ceil(MAXP * 1.1).
+  if (x28_loadedGenDesc->xPortPsps) {
+    if (CIntElement* psmx = x28_loadedGenDesc->xPortPsmx) {
+      psmx->GetValue(0, xPortPspsCap);
+    } else {
+      xPortPspsCap = int(ceilf(float(x90_MAXP) * 1.1f));
+    }
+    if (xPortPspsCap > 0) {
+      xPortPsps.reserve(xPortPspsCap);
+    }
+  }
+#endif
+
   x26c_31_LINE = x28_loadedGenDesc->x30_24_LINE;
   x26d_24_FXLL = x28_loadedGenDesc->x30_25_FXLL;
 
@@ -470,6 +485,11 @@ CElementGen::~CElementGen() {
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
     delete *it;
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    delete xPortPsps[i].sys;
+  }
+#endif
 }
 
 void CElementGen::Initialize() {
@@ -613,6 +633,13 @@ void CElementGen::SetModulationColor(const CColor& col) {
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
     (*it)->SetModulationColor(col);
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      child->SetModulationColor(col);
+    }
+  }
+#endif
 }
 
 const CColor& CElementGen::GetModulationColor() const { return x338_moduColor; }
@@ -921,6 +948,12 @@ bool CElementGen::InternalUpdate(double dt) {
       if (x28_loadedGenDesc->x20_GRTE->GetValue(x74_curFrame, grte)) {
 #endif
         x30_particles.clear();
+#ifdef TARGET_PC
+        // No particle is left for a per-particle child to follow.
+        for (size_t i = 0; i < xPortPsps.size(); ++i) {
+          xPortPsps[i].particle = -1;
+        }
+#endif
         return true;
       }
 
@@ -985,6 +1018,9 @@ bool CElementGen::InternalUpdate(double dt) {
   }
 #endif
 
+#ifdef TARGET_PC
+  PortPspsTrim();
+#endif
   BuildParticleSystemBounds();
 
   x2cc = sw.GetElapsedTime();
@@ -1157,6 +1193,9 @@ void CElementGen::UpdateExistingParticles() {
   while (p != x30_particles.end()) {
     if (p->x0_endFrame < x74_curFrame) {
       --mParticleAliveCount;
+#ifdef TARGET_PC
+      PortPspsRemoved(int(p - x30_particles.begin()), int(x30_particles.size()));
+#endif
       if (p + 1 == x30_particles.end()) {
         x30_particles.x4_count = x30_particles.size() - 1;
         break;
@@ -1495,6 +1534,10 @@ void CElementGen::CreateNewParticles(int count) {
         continue;
       }
     }
+    // CreateNewParticles 0x24a4cc: each surviving newborn gets its PSPS child.
+    if (x28_loadedGenDesc->xPortPsps) {
+      PortPspsSpawn(int(x30_particles.size()) - 1, particle.x4_pos);
+    }
 #endif
     AccumulateBounds(particle.x4_pos, particle.x2c_lineLengthOrSize);
   }
@@ -1523,12 +1566,105 @@ void CElementGen::UpdatePSTranslationAndOrientation() {
 // Remastered's child seed (0x2c59e0, called from 0x27b014 for every child a generator constructs):
 // FNV-1a over 32-bit words of the parent's seed, the child description's GUID word 0, the parent's
 // frame and the parent's live child count before the push.
-uint CElementGen::PortChildSeed(u32 childGuidWord) const {
+// A per-particle child (0x24be18) hashes its own list's size instead.
+uint CElementGen::PortChildSeed(u32 childGuidWord, uint siblings) const {
   const uint kPrime = 0x01000193;
   uint hash = (xPortSeed ^ 0x811c9dc5u) * kPrime;
   hash = (hash ^ childGuidWord) * kPrime;
   hash = (hash ^ uint(x74_curFrame)) * kPrime;
-  return (hash ^ uint(x290_activePartChildren.size())) * kPrime;
+  return (hash ^ siblings) * kPrime;
+}
+
+// ConstructParticleSpawnedChildSystem 0x24bc00, for a particle CreateNewParticles has just made
+// and kept (0x24ac4c): nothing once the list is at capacity. The child starts at the particle's
+// world position (Remastered maps it through the CRefCoords 0x24a734 builds from desc
+// +0xa8/+0xac/+0xb0; the port keeps particles system-local, so PortWorldFromLocal, where they
+// draw) and inherits the parent's generator rate (vcalls +0xd0/+0xc8).
+void CElementGen::PortPspsSpawn(int index, const CVector3f& pos) {
+  if (int(xPortPsps.size()) >= xPortPspsCap) {
+    return;
+  }
+  TToken< CGenDescription > desc = *x28_loadedGenDesc->xPortPsps;
+  if (x28_loadedGenDesc->xPortIrnd && desc->xPortIrnd) {
+    sPortChildSeed = PortChildSeed((*desc)->xPortGuidWord, xPortPsps.size());
+    sPortChildSeedSet = true;
+  }
+  CElementGen* child =
+      rs_new CElementGen(desc, kMOT_Normal, x26d_27_enableOPTS ? kOSF_Two : kOSF_One);
+  child->x26d_26_modelsUseLights = x26d_26_modelsUseLights;
+  child->SetTranslation(PortWorldFromLocal(pos));
+  child->SetParticleEmission(x88_particleEmission);
+  child->SetModulationColor(x338_moduColor);
+  child->SetGeneratorRate(x98_generatorRate);
+  PortInheritShutdownMode(child);
+  PortPspsChild entry = {index, child};
+  xPortPsps.push_back(entry);
+}
+
+// UpdateParticleSpawnedSystems 0x2491fc, after the regular children with the same dt: an
+// attached child moves to its particle's world position, then every child updates; a deletable
+// one is deleted and its slot emptied for the trim.
+void CElementGen::PortPspsUpdate(double dt) {
+  if (xPortPsps.empty()) {
+    return;
+  }
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    PortPspsChild& c = xPortPsps[i];
+    if (c.particle == -1 || c.sys == nullptr) {
+      continue;
+    }
+    c.sys->SetTranslation(PortWorldFromLocal(x30_particles[c.particle].x4_pos));
+  }
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    PortPspsChild& c = xPortPsps[i];
+    if (c.sys == nullptr) {
+      continue;
+    }
+    c.sys->Update(dt);
+    if (c.sys->IsSystemDeletable()) {
+      delete c.sys;
+      c.sys = nullptr;
+      xPortPspsTrim = true;
+    }
+  }
+}
+
+// TrimParticleChildSystems 0x24951c: the emptied slots go, the rest keep their order.
+void CElementGen::PortPspsTrim() {
+  if (!xPortPspsTrim) {
+    return;
+  }
+  xPortPspsTrim = false;
+  size_t out = 0;
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (xPortPsps[i].sys != nullptr) {
+      xPortPsps[out++] = xPortPsps[i];
+    }
+  }
+  xPortPsps.resize(out);
+}
+
+// RemoveParticle 0x24b130: the dead particle's child is let go (index -1) and keeps living;
+// the last particle, moved into its slot, takes its child along.
+void CElementGen::PortPspsRemoved(int removed, int countBefore) {
+  if (!x28_loadedGenDesc->xPortPsps) {
+    return;
+  }
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (xPortPsps[i].particle == removed) {
+      xPortPsps[i].particle = -1;
+      break;
+    }
+  }
+  if (removed == countBefore - 1) {
+    return;
+  }
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (xPortPsps[i].particle == countBefore - 1) {
+      xPortPsps[i].particle = removed;
+      break;
+    }
+  }
 }
 
 // Every child type gets the seed (0x27b220, before ConstructNewParticleSystem 0x27ab20).
@@ -2301,6 +2437,9 @@ update_children:
       ++it;
     }
   }
+#ifdef TARGET_PC
+  PortPspsUpdate(dt);
+#endif
 
   x84_prevFrame = x74_curFrame;
 }
@@ -2310,6 +2449,13 @@ void CElementGen::SetParticleEmission(bool emission) {
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
     (*it)->SetParticleEmission(emission);
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      child->SetParticleEmission(emission);
+    }
+  }
+#endif
 }
 
 #ifdef TARGET_PC
@@ -2348,6 +2494,15 @@ void CElementGen::PortDoShutdownBehavior(u32 mode) {
       (*it)->PortDoShutdownBehavior(mode);
     } else {
       (*it)->ShutdownEffect();
+    }
+  }
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      if (byMode) {
+        child->PortDoShutdownBehavior(mode);
+      } else {
+        child->ShutdownEffect();
+      }
     }
   }
 }
@@ -2522,6 +2677,13 @@ void CElementGen::EndLifetime() {
       child->SetParticleEmission(false);
     }
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      static_cast< CElementGen* >(child)->EndLifetime();
+    }
+  }
+#endif
 }
 
 void CElementGen::DestroyParticles() {
@@ -2533,6 +2695,15 @@ void CElementGen::DestroyParticles() {
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
     (*it)->DestroyParticles();
   }
+#ifdef TARGET_PC
+  // DestroyParticles 0x24ca74: every per-particle child is let go.
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      child->DestroyParticles();
+    }
+    xPortPsps[i].particle = -1;
+  }
+#endif
 }
 
 bool CElementGen::IsSystemDeletable() const {
@@ -2541,6 +2712,16 @@ bool CElementGen::IsSystemDeletable() const {
       return false;
     }
   }
+#ifdef TARGET_PC
+  // AllParticleChildSystemsAreDeletable 0x24976c.
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      if (!child->IsSystemDeletable()) {
+        return false;
+      }
+    }
+  }
+#endif
   if (x268_PSLT < x74_curFrame && static_cast< int >(x25c_activeParticleCount) == 0) {
     return true;
   }
@@ -2560,6 +2741,13 @@ void CElementGen::Render() {
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
     (*it)->Render();
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      child->Render();
+    }
+  }
+#endif
 
 #ifdef TARGET_PC
   if (PortFx::gMuteActive && PortFx::IsMuted(*this)) {
@@ -4507,6 +4695,13 @@ int CElementGen::GetParticleCountAllInternal() const {
       ret += static_cast< CElementGen* >(child)->GetParticleCountAll();
     }
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      ret += static_cast< CElementGen* >(child)->GetParticleCountAll();
+    }
+  }
+#endif
   return ret;
 }
 
@@ -4520,6 +4715,13 @@ int CElementGen::GetSystemCount() {
       ret += 1;
     }
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      ret += static_cast< CElementGen* >(child)->GetSystemCount();
+    }
+  }
+#endif
   return ret;
 }
 
@@ -4556,6 +4758,19 @@ void CElementGen::BuildParticleSystemBounds() {
       childBounds.AccumulateBounds(bounds.GetMaxPoint());
     }
   }
+#ifdef TARGET_PC
+  // AddParticleChildSystemBounds 0x24b05c.
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      rstl::optional_object< CAABox > chBounds = child->GetBounds();
+      if (chBounds) {
+        accumulated = true;
+        childBounds.AccumulateBounds(chBounds->GetMinPoint());
+        childBounds.AccumulateBounds(chBounds->GetMaxPoint());
+      }
+    }
+  }
+#endif
 
   x264_recursiveParticleCount = GetParticleCountAllInternal();
 
@@ -4655,6 +4870,13 @@ void CElementGen::SetGeneratorRate(float rate) {
       child->SetGeneratorRate(x98_generatorRate);
     }
   }
+#ifdef TARGET_PC
+  for (size_t i = 0; i < xPortPsps.size(); ++i) {
+    if (CParticleGen* child = xPortPsps[i].sys) {
+      child->SetGeneratorRate(x98_generatorRate);
+    }
+  }
+#endif
 }
 float CElementGen::GetGeneratorRate() const { return x98_generatorRate; }
 

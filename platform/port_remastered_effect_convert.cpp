@@ -6149,6 +6149,29 @@ public:
       }
       return;
     }
+    // A generator's per-particle child system: PSPS names an embedded GENP (type word GENP), read
+    // into desc+0x200; PSMX is an int element (desc+0x208) capping how many live at once
+    // (CreateGPSM; ConstructParticleSpawnedChildSystem 0x24bc00). Port-only, same FourCCs.
+    if (s.part && (fourcc == F("PSPS") || fourcc == F("PSMX"))) {
+      std::vector<uint8_t> bytes;
+      std::string why;
+      bool ok = false;
+      if (fourcc == F("PSMX")) {
+        ok = Property(fourcc, PropertyType{Type::Int}, property.value, bytes, why);
+      } else if (property.value.size() == 2 && property.value[0].kind == EffectValue::Kind::Guid) {
+        ok = Property(fourcc, PropertyType{Type::Asset, F("PART")}, {property.value[0]}, bytes, why);
+      } else {
+        why = "not a GENP id";
+      }
+      if (!ok) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + ": " + why);
+        return;
+      }
+      s.written.insert(fourcc);
+      AppendBE32(s.out, fourcc);
+      s.out.insert(s.out.end(), bytes.begin(), bytes.end());
+      return;
+    }
     if (found == s.retail.end()) {
       s.result.dropped.push_back(EffectFourCCString(property.fourcc) + ": Remastered only");
       return;
@@ -7248,8 +7271,10 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && (fourcc == F("PINS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||
                         fourcc == F("PMPV") || fourcc == F("POVC"))) {
       ok = reader.Element(Type::Vector);
-    } else if (part && fourcc == F("PSHT")) {
+    } else if (part && (fourcc == F("PSHT") || fourcc == F("PSMX"))) {
       ok = reader.Element(Type::Int);
+    } else if (part && fourcc == F("PSPS")) {
+      ok = reader.Asset();
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
                          fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PLON") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||

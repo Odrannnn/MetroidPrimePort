@@ -321,6 +321,10 @@ public:
     int frame;
   };
   std::vector< PortExtraSwoosh > xPortExtraSwooshes;
+  // port-only PSPS/PSMX: Remastered's per-particle child system (desc+0x200) and the most of
+  // them alive at once (desc+0x208; absent = ceil(MAXP * 1.1)), run by CElementGen::PortPsps*.
+  rstl::optional_object< TCachedToken< CGenDescription > > xPortPsps;
+  CIntElement* xPortPsmx = nullptr;
   // port-only PKSM: Remastered's spawn tables as its CSpawnSystemKeyframeData keeps them
   // (ctor 0x293350; run by CElementGen::PortSpawnTables). Replaces KSSM when present.
   struct PortKssmSpawn {
