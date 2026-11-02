@@ -378,6 +378,23 @@ void PortVfxSetLaunchDir(CElementGen::CParticle& particle) {
       m > kEps ? particle.x1c_vel * (1.f / std::sqrt(m)) : CVector3f::Zero();
 }
 
+void PortVfxInitOvec(const CGenDescription& desc, CElementGen::CParticle& particle,
+                     const CQuaternion& systemRotation) {
+  if (desc.xPortOvec == nullptr) {
+    return;
+  }
+  desc.xPortOvec->GetValue(0, particle.xPortOvec);
+  // CreateNewParticles 0x24aad4, after _Init_Particle (0x24a4cc): ORNT 1 overwrites the OVEC var with
+  // the unit launch velocity, or the system rotation's forward (CQuaternion::GetForwardVector 0xd31a8,
+  // Remastered's +Z, the port's +Y) when it launched at rest; _Update_Particle evaluates OVEC again
+  // from the next tick.
+  if (desc.xPortVfx != nullptr && desc.xPortVfx->vorn == 1) {
+    particle.xPortOvec = particle.xPortLaunchDir.MagSquared() > kEps
+                             ? particle.xPortLaunchDir
+                             : systemRotation.Transform(CVector3f(0.f, 1.f, 0.f));
+  }
+}
+
 uint PortVfxEvalVsmt(const CPortVfxData& vfx, int frame, float vsmt[kPortVfxVsmtCount]) {
   uint mask = 0;
   for (const CPortVfxElem& e : vfx.vsmt) {
@@ -797,8 +814,16 @@ void CElementGen::PortRenderParticlesVfx() {
     const float sy = p.xPortSsze;
     // Oriented quads keep their direction: a spin would turn velocity streaks into random lines
     // (Plasma2nd_1's sparks have ROTA -360..360), and retail's ORNT path never rotates either.
+    // An OVEC makes a sprite vector-oriented whatever its ORNT (CParticleStaticRenderState 0x28c4f0
+    // sets word0 bit0 when desc+0x395 or the OVEC var bit is set), with the OVEC value as the axis.
+    const bool ovec = x28_loadedGenDesc->xPortOvec != nullptr;
+    if (ovec && p.xPortOvec.MagSquared() == 0.f) {
+      // Shader 7498e54a (064_1) normalises the axis unguarded: a zero OVEC is NaN, nothing drawn.
+      continue;
+    }
+    const bool oriented = vfx.vorn != 0 || ovec;
     const float theta =
-        hasRota && vfx.vorn == 0 ? p.x30_lineWidthOrRota * (3.14159265358979f / 180.f) : 0.f;
+        hasRota && !oriented ? p.x30_lineWidthOrRota * (3.14159265358979f / 180.f) : 0.f;
     const float cosT = std::cos(theta);
     const float sinT = std::sin(theta);
 
@@ -809,9 +834,11 @@ void CElementGen::PortRenderParticlesVfx() {
     // [I] view-space quad normal, depth component in z: toward the eye (camera-local -y), as the
     // vector-oriented normal below is; the fresnel reads only |z|, ParticleLit the direction.
     float vec[3] = {0.f, 0.f, -1.f};
-    if (vfx.vorn != 0) {
+    if (oriented) {
       CVector3f dir;
-      if (vfx.vorn == 1) {
+      if (ovec) {
+        dir = Normalised(p.xPortOvec, CVector3f::Zero());
+      } else if (vfx.vorn == 1) {
         dir = p.xPortLaunchDir;
       } else {
         dir = Normalised(p.x1c_vel, CVector3f::Zero());

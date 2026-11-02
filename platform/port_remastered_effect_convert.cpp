@@ -1554,6 +1554,16 @@ public:
       AppendBE32(out, value.fourcc);
       return true;
     }
+    // PLCD is CVEParticleLocationDelta 0x2a1f0c, the position less the previous one: SUB_ of the
+    // two reads.
+    if (type == Type::Vector && value.args.empty() && value.fourcc == F("PLCD")) {
+      AppendBE32(out, F("SUB_"));
+      for (const uint32_t read : {F("PLOC"), F("PLCO")}) {
+        AppendBE32(out, F("BSIS"));
+        AppendBE32(out, read);
+      }
+      return true;
+    }
     // MPCB(v) is MPT_CVEConvertToXLeftYUpZForward 0x2a3020, (-x, z, y) of a vector in
     // retail's space: BSIS(v). MCBS(v) is its scale form (0x2a30f8, (x, z, y)): BSSC(v).
     // MPAC inside is the port-only PMAC (exact, below).
@@ -1690,8 +1700,18 @@ public:
             AppendBE32(prtv, rot.fourcc);
           }
         }
-      } else if (IsElement(rot, F("INTR")) || IsElement(rot, F("RLCL"))) {
-        why = "ROTV by " + EffectFourCCString(rot.fourcc) + " (its PRTV rotation is not decoded)";
+      } else if ((IsElement(rot, F("INTR")) || IsElement(rot, F("RLCL"))) && rot.args.empty()) {
+        // GetRotationElement 0x25d59c: both are AddRefVar(ctx 0, rotation, 0xb), the system
+        // rotation (INTR's when authored, else the external one): PRTV kind INTR.
+        if (m_swoosh) {
+          why = "ROTV by " + EffectFourCCString(rot.fourcc) + " in a swoosh";
+        } else {
+          AppendBE32(prtv, F("PRTV"));
+          ok = Element(value.args[0], Type::Vector, prtv, why);
+          if (ok) {
+            AppendBE32(prtv, F("INTR"));
+          }
+        }
       } else {
         why = "ROTV by a rotation that is not REUL/EXTR/CMRT";
       }
@@ -5147,6 +5167,23 @@ public:
       }
       return true;
     }
+    // OVEC (CreateGPSM 0x25a1c4, var 0x32 at desc+0x388) is a sprite's vector orientation axis:
+    // CParticleStaticRenderState 0x28c4f0 makes a sprite vector-oriented when it is authored, ORNT 0
+    // too, and the instance writer 0x2b4948 puts its value where the velocity would go. The port-only
+    // POVC, in the port's space. A planar square or model has no vector orientation.
+    if (s.part && fourcc == F("OVEC")) {
+      std::vector<uint8_t> inner;
+      std::string why = "not one element";
+      if (s.node.primitiveType != 1) {
+        s.result.dropped.push_back("OVEC: on primitive " + std::to_string(s.node.primitiveType));
+      } else if (property.value.size() != 1 || !Element(property.value[0], Type::Vector, inner, why)) {
+        s.result.dropped.push_back("OVEC: " + why);
+      } else {
+        AppendBE32(s.out, F("POVC"));
+        Basis(F("BSIS"), inner, s.out);
+      }
+      return true;
+    }
     // SBIS is the particle sort bias (desc+0xd8 of CreateGPSM, constant only):
     // CParticleSceneNode::PreRenderForContextConcurrent 0x2b22b8 puts GetSortBias 0x288248 in the
     // translucent sort entry (+0x24), which SortFarToNear 0x1f3000 adds to the bounds' view depth.
@@ -6390,7 +6427,7 @@ public:
       return Skip(1) && Word(count) && count >= 1 && count <= 0x100000 && Skip(12) &&
              Skip(size_t(count) * 4) && Element(Type::Real);
     }
-    // Port-only PRTV: the vector, then EXTR, CMRT or REUL and its three angles.
+    // Port-only PRTV: the vector, then EXTR, CMRT, INTR or REUL and its three angles.
     if (fourcc == F("PRTV") && type == Type::Vector) {
       uint32_t rotation;
       if (!Element(Type::Vector) || !Word(rotation)) {
@@ -6399,7 +6436,7 @@ public:
       if (rotation == F("REUL")) {
         return Element(Type::Real) && Element(Type::Real) && Element(Type::Real);
       }
-      return rotation == F("EXTR") || rotation == F("CMRT");
+      return rotation == F("EXTR") || rotation == F("CMRT") || rotation == F("INTR");
     }
     // Port-only PGRD (a swoosh's gradient): stop count, five floats per stop, the period as an
     // int element, then the repeat byte.
@@ -6873,7 +6910,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                (vfx && (fourcc == F("ITEN") || fourcc == F("PDBS")))) {
       ok = reader.Element(Type::Real);
     } else if (part && (fourcc == F("PINS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||
-                        fourcc == F("PMPV"))) {
+                        fourcc == F("PMPV") || fourcc == F("POVC"))) {
       ok = reader.Element(Type::Vector);
     } else if (part && fourcc == F("PSHT")) {
       ok = reader.Element(Type::Int);

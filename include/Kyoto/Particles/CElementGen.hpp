@@ -80,6 +80,7 @@ public:
     float xPortVpmt[4][4]; // VPMT rows
     CVector3f xPortLaunchDir; // unit launch velocity (zero if it launched at rest), for VORN 1
     SPortKeep xPortKeep;      // KPIN values latched at birth (CREPortKeep)
+    CVector3f xPortOvec;      // POVC's value (the quad's vector orientation axis), port space
 #endif
 
     CParticle()
@@ -95,6 +96,7 @@ public:
     , xPortVpmt{}
     , xPortLaunchDir(CVector3f::Zero())
     , xPortKeep{}
+    , xPortOvec(CVector3f::Zero())
 #endif
     {}
   };

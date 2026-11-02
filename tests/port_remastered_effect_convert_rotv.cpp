@@ -191,11 +191,12 @@ void TestSpaceInMpcb() {
   }
 }
 
-// INTR and RLCL rotations are not decoded: dropped with a reason.
-void TestRotvUnknownKind() {
+// INTR and RLCL rotations are both the system rotation (0x25d59c, var 0xb): PRTV kind INTR.
+void TestRotvSystemRotation() {
   for (const char* kind : {"INTR", "RLCL"}) {
     const ConvertedPart part = ConvertPofs([&](auto& o) { PutRotv(o, kind); });
-    CHECK_MSG(!Contains(part.part, Be("PRTV")) && !part.dropped.empty(), "ROTV by INTR/RLCL is dropped");
+    CHECK_MSG(Contains(part.part, Be("PRTV")) && Contains(part.part, Be("INTR")) && part.dropped.empty(),
+              "ROTV by INTR/RLCL is PRTV kind INTR");
   }
 }
 
@@ -207,6 +208,6 @@ int main() {
   TestRotvDropped();
   TestPncv();
   TestSpaceInMpcb();
-  TestRotvUnknownKind();
+  TestRotvSystemRotation();
   return PORT_TEST_RESULT();
 }

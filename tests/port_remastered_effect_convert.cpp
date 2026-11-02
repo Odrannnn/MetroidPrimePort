@@ -3154,6 +3154,63 @@ void TestShutdownAndPivot() {
   parts = ortc(0);
   CHECK_MSG(parts.size() == 1 && parts[0].part == none.bytes && parts[0].dropped.empty(), "ORTC 0 writes nothing");
 
+  // OVEC (desc+0x388) orients a sprite along a vector: the port-only POVC, in the port's space.
+  const auto ovec = [](auto&& value, int primitive) {
+    return ConvertOne(OneGenerator([&](auto& o) {
+                        PutProperty(o, "OVEC", 3);
+                        value(o);
+                        PutTexr(o, 0x1234ABCD);
+                      }, primitive),
+                      {});
+  };
+  const auto cnst = [](auto& o) {
+    PutFourCC(o, "CNST");
+    PutConstant(o, Bits(1.f));
+    PutConstant(o, Bits(0.f));
+    PutConstant(o, Bits(0.f));
+  };
+  parts = ovec(cnst, 1);
+  Retail povc;
+  povc.f("GPSM").f("POVC").f("CNST").f("CNST").w(Bits(-1.f)).f("CNST").w(Bits(0.f)).f("CNST").w(Bits(0.f));
+  povc.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+  CHECK_MSG(parts.size() == 1 && parts[0].part == povc.bytes && parts[0].dropped.empty(),
+            "OVEC CNST(1, 0, 0) is POVC in the port's space");
+  if (!parts.empty()) {
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "a PART with POVC passes the retail element reader");
+  }
+  for (const char* kind : {"INTR", "RLCL"}) {
+    parts = ovec([&](auto& o) {
+      PutFourCC(o, "ROTV");
+      cnst(o);
+      PutFourCC(o, kind);
+    }, 1);
+    CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), std::string("OVEC ROTV by ") + kind + " converts");
+    if (!parts.empty()) {
+      const std::vector<uint8_t>& part = parts[0].part;
+      const uint8_t intr[] = {'I', 'N', 'T', 'R'};
+      CHECK_MSG(std::search(part.begin(), part.end(), std::begin(intr), std::end(intr)) != part.end(),
+                std::string("ROTV by ") + kind + " is PRTV kind INTR");
+      std::vector<RetailPartProperty> properties;
+      std::string error;
+      CHECK_MSG(SplitRetailPart(part.data(), part.size(), properties, error),
+                std::string("a POVC with PRTV ") + kind + " passes the retail element reader");
+    }
+  }
+  parts = ovec([](auto& o) { PutFourCC(o, "PLCD"); }, 1);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), "OVEC PLCD converts");
+  if (!parts.empty()) {
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "a POVC with PLCD passes the retail element reader");
+  }
+  parts = ovec(cnst, 2);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.size() == 1 && parts[0].dropped[0] == "OVEC: on primitive 2",
+            "OVEC off a sprite is dropped");
+
   const auto blit = [&](uint8_t value) {
     return convert([&](auto& o) {
       PutProperty(o, "BLIT", 0);

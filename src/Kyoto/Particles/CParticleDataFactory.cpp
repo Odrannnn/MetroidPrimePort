@@ -687,6 +687,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       delete desc->xPortIntTranslation;
       desc->xPortIntTranslation = GetVectorElement(in);
       break;
+    // Port-only Remastered OVEC (CGenDescription::xPortOvec).
+    case SBIG('POVC'):
+      delete desc->xPortOvec;
+      desc->xPortOvec = GetVectorElement(in);
+      break;
     // Port-only Remastered PMRB/PMCF model rotation frame (CGenDescription::xPortPmrqFrame).
     case SBIG('PMRF'): {
       GetClassID(in);

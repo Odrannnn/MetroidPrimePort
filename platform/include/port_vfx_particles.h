@@ -26,6 +26,11 @@ void PortVfxEvalParticle(const CGenDescription& desc, CElementGen::CParticle& pa
 
 // Stores the unit launch direction (zero when the particle launched at rest); for VORN 1.
 void PortVfxSetLaunchDir(CElementGen::CParticle& particle);
+// Evaluates POVC (Remastered's OVEC) at birth, after the launch direction; ORNT 1 replaces it with
+// that direction (the system rotation's forward at rest). The caller has set CParticleGlobals'
+// particle context for frame 0.
+void PortVfxInitOvec(const CGenDescription& desc, CElementGen::CParticle& particle,
+                     const CQuaternion& systemRotation);
 float PortVfxExposureGain(const CGenDescription& desc, bool model = false);
 // Explicit inverse-exposed transparent models snapshot the matching forward frame exposure.
 std::optional<float> PortVfxModelExposureOverride(const CGenDescription& desc);

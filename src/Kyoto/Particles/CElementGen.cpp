@@ -519,6 +519,7 @@ void CElementGen::PortFollowEmitter(const CTransform4f& before) {
     particle.x10_prevPos = move * particle.x10_prevPos;
     particle.x1c_vel = move.Rotate(particle.x1c_vel);
     particle.xPortLaunchDir = move.Rotate(particle.xPortLaunchDir);
+    particle.xPortOvec = move.Rotate(particle.xPortOvec);
   }
 }
 #endif
@@ -1167,6 +1168,19 @@ void CElementGen::UpdateExistingParticles() {
         }
       }
     }
+#ifdef TARGET_PC
+    // UpdateExistingParticles 0x24a26c runs _Update_Particle (0x24a34c) before the move (0x24a374),
+    // so OVEC sees the position and previous position from before it (PLCD the last tick's step).
+    if (CVectorElement* ovec = x28_loadedGenDesc->xPortOvec) {
+      const int ovecFrame = x74_curFrame - p->x28_startFrame;
+      CParticleGlobals::mCurrentParticle = &*p;
+      CParticleGlobals::xPortIrndParticle = x28_loadedGenDesc->xPortIrnd ? &*p : nullptr;
+      CPortKeepGlobals::sCurrent = x28_loadedGenDesc->xPortIrnd ? &p->xPortKeep : nullptr;
+      CParticleGlobals::SetParticleLifetime(p->x0_endFrame - p->x28_startFrame);
+      CParticleGlobals::UpdateParticleLifetimeTweenValues(ovecFrame);
+      ovec->GetValue(ovecFrame, p->xPortOvec);
+    }
+#endif
     p->x10_prevPos = p->x4_pos;
 #ifdef TARGET_PC
     // Remastered omits `pos += vel` when a VEL source finalizes the position (0x291b90).
@@ -1420,6 +1434,7 @@ void CElementGen::CreateNewParticles(int count) {
     particle.x10_prevPos = particle.x4_pos;
 #ifdef TARGET_PC
     PortVfxSetLaunchDir(particle);
+    PortVfxInitOvec(*x28_loadedGenDesc, particle, PortSystemRotation());
 #endif
 
     if (x26c_31_LINE) {
@@ -2420,6 +2435,7 @@ void CElementGen::PortCreateParticlesAtPositions(int n, const CVector3f* pos) {
       }
     }
     PortVfxSetLaunchDir(particle);
+    PortVfxInitOvec(*x28_loadedGenDesc, particle, PortSystemRotation());
 
     if (CRealElement* size = x28_loadedGenDesc->x38_SIZE) {
       size->GetValue(0, particle.x2c_lineLengthOrSize);

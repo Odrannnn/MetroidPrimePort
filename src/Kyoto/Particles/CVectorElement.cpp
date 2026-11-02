@@ -909,6 +909,15 @@ bool CVEPortRotateVector::GetValue(int frame, CVector3f& valOut) const {
       q = {r.GetScalar(), -r.AxisX(), r.AxisZ(), r.AxisY()};
     }
   } break;
+  case 'INTR': {
+    // INTR and RLCL: the system rotation var (GetRotationElement 0x25d59c, AddRefVar(ctx 0,
+    // rotation, 0xb)), INTR's when authored, else the external one.
+    CParticleGlobals::SParticleSystem* sys = CParticleGlobals::GetCurrentParticleSystem();
+    if (CParticleGlobals::xPortSwooshEval == nullptr && sys != nullptr && sys->x4_system != nullptr) {
+      const CQuaternion r = sys->x4_system->PortSystemRotation();
+      q = {r.GetScalar(), -r.AxisX(), r.AxisZ(), r.AxisY()};
+    }
+  } break;
   case 'CMRT': {
     // CMRT: CERotationFromCamera 0x29d180, CQuaternion::FromMatrix of the camera transform
     // (CVECameraPositionInWorldSpace's matrix, the view matrix), in Remastered's space.

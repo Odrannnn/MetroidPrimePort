@@ -216,6 +216,9 @@ public:
   // the external ones; CElementGen::PortApplyIntFrame). Owned here; null = the external one.
   CVectorElement* xPortIntRotation = nullptr;
   CVectorElement* xPortIntTranslation = nullptr;
+  // port-only POVC: Remastered's OVEC (desc+0x388), a sprite's vector orientation axis in the
+  // port's space, evaluated per particle at birth and before each move. Owned here.
+  CVectorElement* xPortOvec = nullptr;
   // port-only PVRT: Remastered particle variables (names, types, defaults)
   std::unique_ptr< CPortVarTable > xPortVars;
   // port-only: the PKPR elements (per-particle KPIN latches), latched at birth in this order;

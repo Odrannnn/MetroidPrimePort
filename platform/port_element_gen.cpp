@@ -259,6 +259,9 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
       std::snprintf(buf, sizeof(buf), " VORN%u", vfx->vorn);
       out.vfx += buf;
     }
+    if (desc.xPortOvec != nullptr) {
+      out.vfx += " OVEC";
+    }
     if (vfx->meshTris != 0) {
       std::snprintf(buf, sizeof(buf), " VMSH(%u tris)", vfx->meshTris);
       out.vfx += buf;
