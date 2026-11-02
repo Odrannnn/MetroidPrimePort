@@ -105,8 +105,16 @@ void Shutdown() {
   sPlaneObjectBucket = nullptr;
 }
 
+#ifdef TARGET_PC
+static u8 sPortNextWaterSort = 0;
+#endif
+
 void Insert(const CVector3f& pos, const CAABox& aabb, EDrawableType dtype, const void* data,
             const CPlane& plane, const ushort extraSort) {
+#ifdef TARGET_PC
+  const u8 waterSort = sPortNextWaterSort;
+  sPortNextWaterSort = 0;
+#endif
   AUTO_REF(tmpData, *sData);
   if (tmpData.size() == tmpData.capacity()) {
     return;
@@ -114,6 +122,9 @@ void Insert(const CVector3f& pos, const CAABox& aabb, EDrawableType dtype, const
   float dist = CVector3f::Dot(pos, plane.GetNormal()) - plane.GetConstant();
   const CDrawable& drawable = CDrawable(dtype, extraSort, dist, aabb, data);
   tmpData.push_back(drawable);
+#ifdef TARGET_PC
+  tmpData.back().PortSetWaterSort(waterSort);
+#endif
   sMinMaxDistance.first = rstl::min_val(dist, sMinMaxDistance.first);
   sMinMaxDistance.second = rstl::max_val(dist, sMinMaxDistance.second);
 #ifdef __MWERKS__
@@ -209,6 +220,13 @@ void Sort() {
                      ? true
                      : false;
         }
+#ifdef TARGET_PC
+        // Remastered's WSTP 1/2 fix the sort type (5 above the water, 1 below) instead of
+        // taking it from the bounds (BinEntriesWithSortPlane 0x1f3140): entirely above or below.
+        if (it->PortWaterSort() == 1 || it->PortWaterSort() == 2) {
+          partial = full = it->PortWaterSort() == 1;
+        }
+#endif
 
         bool cont;
         if (it->GetType() == kDT_Particle) {
@@ -324,6 +342,8 @@ void CCubeRenderer::PortRestoreBuckets(int slot) {
     Buckets::Restore(Buckets::sStash[slot]);
   }
 }
+
+void CCubeRenderer::PortSetNextWaterSort(u8 mode) { Buckets::sPortNextWaterSort = mode; }
 
 void CCubeRenderer::PortDrawSortedDrawables(int areaIdx) {
   sPortDrawablesOnly = true;

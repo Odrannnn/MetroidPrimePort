@@ -939,6 +939,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortNoIvse = in.ReadLong() == 0;
       break;
+    // Port-only: Remastered's WSTP 1/2 (xPortWaterSort).
+    case SBIG('PWST'):
+      GetClassID(in);
+      desc->xPortWaterSort = u8(in.ReadLong());
+      break;
     // Port-only: Remastered's ISVF (xPortInheritVel), after PEMV's mode word.
     case SBIG('PISV'): {
       GetClassID(in);

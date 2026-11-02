@@ -37,10 +37,18 @@ public:
   void* GetData() { return x4_data; }
   const void* GetData() const { return x4_data; }
   u16 GetExtraSort() const { return x2_extraSort; }
+#ifdef TARGET_PC
+  // Port: Remastered's water sort mode (CCubeRenderer::PortSetNextWaterSort).
+  u8 PortWaterSort() const { return xPortWaterSort; }
+  void PortSetWaterSort(u8 mode) { xPortWaterSort = mode; }
+#endif
 
 private:
   ushort x0_type;
   ushort x2_extraSort;
+#ifdef TARGET_PC
+  u8 xPortWaterSort = 0;
+#endif
   void* x4_data;
   CAABox x8_aabb;
   float x20_viewDist;

@@ -17,6 +17,7 @@
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptTrigger.hpp"
+#include "MetaRender/CCubeRenderer.hpp"
 #include "MetroidPrime/TCastTo.hpp"
 
 #include "rstl/math.hpp"
@@ -332,7 +333,16 @@ void CScriptEffect::AddToRenderer(const CFrustumPlanes& frustum, const CStateMan
                                            CAABox(center, center));
       x138_actorLights->BuildDynamicLightList(mgr, bounds);
     }
+#ifdef TARGET_PC
+    // Remastered sorts the whole effect against water by its root generator's WSTP (0xd9bc88).
+    if (x104_particleSystem.get() != nullptr) {
+      gpRender->PortSetNextWaterSort(x104_particleSystem->PortWaterSort());
+    }
     EnsureRendered(mgr);
+    gpRender->PortSetNextWaterSort(0);
+#else
+    EnsureRendered(mgr);
+#endif
   }
 }
 

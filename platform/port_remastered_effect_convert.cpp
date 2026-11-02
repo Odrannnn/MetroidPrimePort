@@ -4193,6 +4193,7 @@ public:
     bool unfogged = false;  // DFOG 1, port-only PDFG
     bool noZTest = false;   // ZTES 0, port-only PZTS
     bool noIvse = false;    // IVSE 0, port-only PIVS
+    uint32_t waterSort = 0;  // WSTP 1/2, port-only PWST
     int spreadMode = -1;    // ITPE 1, port-only PITP with EMRV's mode word (-1 none)
     bool itpe = false;      // the node has an ITPE of its own
     uint32_t depthBias = 0;  // DBIS as float bits (nonzero), port-only PDBS
@@ -4508,6 +4509,20 @@ public:
         s.result.dropped.push_back("ZTES: not a constant");
       } else {
         s.noZTest = on == 0;
+      }
+      return true;
+    }
+    // WSTP (GetWaterSortMode, desc+0x69): ConvertWaterSortMode 0x256764 maps 1 to sort type 5
+    // (always above the water plane) and 2 to type 1 (always below); anything else is 0, which
+    // BinEntriesWithSortPlane 0x1f3140 resolves from the bounds. CScriptEffect's AddToRenderer
+    // (0xd9bc88) takes the root generator's mode for the whole effect. Retail has no such
+    // property: the port-only PWST.
+    if (s.part && fourcc == F("WSTP")) {
+      uint32_t mode = 0;
+      if (!SmallInteger(property, mode)) {
+        s.result.dropped.push_back("WSTP: not a constant");
+      } else {
+        s.waterSort = mode == 1 || mode == 2 ? mode : 0;
       }
       return true;
     }
@@ -5439,6 +5454,11 @@ public:
       AppendBE32(s.out, F("CNST"));
       AppendBE32(s.out, 0);
     }
+    if (s.waterSort != 0) {
+      AppendBE32(s.out, F("PWST"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, s.waterSort);
+    }
     if (s.noIvse) {
       AppendBE32(s.out, F("PIVS"));
       AppendBE32(s.out, F("CNST"));
@@ -6220,7 +6240,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.Element(Type::Int);
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
                          fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PGID") || fourcc == F("PBDM") ||
-                         fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") ||
+                         fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||
                          (fourcc >= F("VGD1") && fourcc <= F("VGD4")) ||

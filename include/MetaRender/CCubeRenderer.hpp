@@ -102,6 +102,9 @@ public:
   void PortRestoreBuckets(int slot);
   // DrawSortedGeometry for the queued drawables only, without the area's world surfaces.
   void PortDrawSortedDrawables(int areaIdx);
+  // Remastered's water sort mode (CGenDescription::xPortWaterSort) for the next sorted
+  // AddDrawable only: 1 sorts it above every water plane, 2 below, 0 from its bounds.
+  void PortSetNextWaterSort(u8 mode);
 #endif
   void DrawStaticGeometry(int areaIdx, uint mask, uint targetMask) override;
   void DrawAreaGeometry(int areaIdx, uint mask, uint targetMask) override;

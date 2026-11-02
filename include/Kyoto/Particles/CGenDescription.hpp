@@ -221,6 +221,10 @@ public:
   // port-only PIVS: Remastered's IVSE 0 (desc+0x2fa bit 2 clear, CreateNewParticles 0x24a9fc): the
   // emitter's velocity is not turned by the system orientation (retail always turns it).
   bool xPortNoIvse = false;
+  // port-only PWST: Remastered's WSTP (GetWaterSortMode, desc+0x69). ConvertWaterSortMode 0x256764
+  // maps 1 to sort type 5 (above the water plane) and 2 to type 1 (below); 0 = from the bounds
+  // (BinEntriesWithSortPlane 0x1f3140). CScriptEffect uses its root generator's (0xd9bc88).
+  u8 xPortWaterSort = 0;
   // VMPC: run the complete velocity program once at birth (CreateNewParticles 0x24abd0).
   bool xPortVelocityAtCreation = false;
   // VGD1..4 select world-space modifiers; VMD true switches the same slot back to emitter space.

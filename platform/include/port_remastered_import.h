@@ -228,7 +228,8 @@ inline constexpr int kModels = 30;
 // 139: Queen barrier shield/glow models back-cull (MATI cull byte).
 // 141: effect generators, strict timers (roomfx v11). 142: strict timers start active.
 // 143: event states from the GOCs' TranslateScriptEventToState. 144: moved effects match by senders.
-inline constexpr int kEffects = 145;   // TimerMP1s retail lacks become retail Timers (roomfx v12)
+// 145: TimerMP1s retail lacks become retail Timers (roomfx v12).
+inline constexpr int kEffects = 146;   // WSTP becomes the port-only PWST
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
