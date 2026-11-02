@@ -355,6 +355,28 @@ void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_
       sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, 0xFFFFFFFF, "Remastered trigger", 0});
     }
   }
+  // The Remastered relays, as the SCLY Relay object ScriptLoader::LoadFaultyRelay reads: no
+  // connections, name, active.
+  for (const Relay& r : sFile.relays) {
+    if ((r.id >> 26) != layer) continue;
+    std::vector<uint8_t> object;
+    auto be32 = [&](uint32_t v) {
+      for (int s = 24; s >= 0; s -= 8) object.push_back(uint8_t(v >> s));
+    };
+    be32(r.id);
+    be32(0);
+    be32(2);
+    for (char c : std::string("relay")) object.push_back(uint8_t(c));
+    object.push_back(0);
+    object.push_back((r.flags & kRelayActive) != 0);
+    CMemoryInStream in(object.data(), int(object.size()));
+    const rstl::pair<TEditorId, TUniqueId> made = mgr.LoadScriptObject(
+        TAreaId(area), static_cast<EScriptObjectType>(kRelayType), uint(object.size()), in);
+    if (made.first != kInvalidEditorId) {
+      ids.push_back(made.first.value);
+      sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, 0xFFFFFFFF, "Remastered relay", 0});
+    }
+  }
   // The follows, as the SCLY SpecialFunction ScriptLoader::LoadSpecialFunction reads: Play ->
   // Activate to the followed actor and Play -> Deactivate to the follower (never sent: the
   // function reads them), then its 15 properties, the unused ones as retail's FogVolume has them.

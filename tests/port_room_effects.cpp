@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 14);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 15);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -615,6 +615,45 @@ void TestFileTriggers() {
   CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "ResetAndStart to a trigger");
 }
 
+// Version 15 adds retail Relays: drives may set one to zero (it relays), activate, deactivate or
+// toggle it, and its Zero may send drives.
+void TestFileRelays() {
+  File in;
+  PortRoomEffects::Layer layer;
+  layer.layer = 1;
+  PortRoomEffects::AppendEffect(MakeEffect(1, 0), layer.objects);
+  layer.count = 1;
+  in.layers.push_back(layer);
+  const uint32_t a = MakeEffect(1, 0).id, r = PortRoomEffects::AddOnId(0, 0x1A, 1);
+  in.relays.push_back({r, 0});
+  in.drives.push_back({r, 0x041A0010, 9, 13, 0.f});
+  in.drives.push_back({r, 0x041A0011, 9, 1, 0.f});
+  in.drives.push_back({a, r, 9, 4, 0.5f});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 15);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.relays.size() == 1 && out.drives.size() == 3);
+  CHECK(out.relays[0].id == r && out.relays[0].flags == 0);
+  for (size_t cut = 1; cut <= 8; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  const auto refused = [&](const auto& change, const char* what) {
+    File f = in;
+    change(f);
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  refused([](File& f) { f.relays[0].id = 5; }, "a retail id");
+  refused([&](File& f) { f.relays[0].id = a; }, "an effect's id");
+  refused([](File& f) { f.relays[0].flags |= 2; }, "an unknown flag");
+  refused([&](File& f) { f.relays.push_back(f.relays[0]); }, "two relays, one id");
+  refused([&](File& f) { f.triggers.push_back({}); f.triggers.back().id = r; }, "a relay and a trigger, one id");
+  refused([&](File& f) { f.drives = {{r, 0x041A0010, 9, 11, 0.f}}; }, "ResetAndStart to a relay");
+}
+
 // Version 13 adds ObjectFollowLocators: a retail SpecialFunction that moves one of this file's
 // effects (or a retail object) to a retail actor's locator.
 void TestFileFollows() {
@@ -1004,6 +1043,7 @@ int main() {
   TestFileGenerators();
   TestFileTimers();
   TestFileTriggers();
+  TestFileRelays();
   TestFileFollows();
   TestFileBarriers();
   TestExternalVariables();

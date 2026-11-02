@@ -341,7 +341,8 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool triggers = !file.triggers.empty();
+  const bool relays = !file.relays.empty();
+  const bool triggers = relays || !file.triggers.empty();
   const bool follows = triggers || !file.follows.empty();
   const bool timers = follows || !file.timers.empty();
   const bool generators = timers || !file.generators.empty() ||
@@ -351,7 +352,7 @@ std::vector<uint8_t> Write(const File& file) {
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, relays ? 15 : triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -509,6 +510,13 @@ std::vector<uint8_t> Write(const File& file) {
       for (float v : t.extent) PutLEFloat(out, v);
       PutLE32(out, t.triggerFlags);
       PutLE32(out, t.flags);
+    }
+  }
+  if (relays) {
+    PutLE32(out, uint32_t(file.relays.size()));
+    for (const Relay& r : file.relays) {
+      PutLE32(out, r.id);
+      PutLE32(out, r.flags);
     }
   }
   return out;
@@ -984,21 +992,53 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
       file.triggers.push_back(t);
     }
   }
+  if (version >= 15) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 8) {
+      error = "truncated relay list";
+      return false;
+    }
+    if (total + file.timers.size() + file.follows.size() + file.triggers.size() + count > kMaxAddOns) {
+      error = "too many objects";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      Relay r;
+      ReadLE32(data, at, r.id);
+      ReadLE32(data, at, r.flags);
+      const auto same = [&](uint32_t id) { return NormalizedId(id) == NormalizedId(r.id); };
+      if (!IsAddOnId(r.id) ||
+          std::any_of(objects.begin(), objects.end(), [&](const LayerObject& o) { return same(o.id); }) ||
+          std::any_of(file.timers.begin(), file.timers.end(), [&](const Timer& o) { return same(o.id); }) ||
+          std::any_of(file.follows.begin(), file.follows.end(), [&](const Follow& o) { return same(o.id); }) ||
+          std::any_of(file.triggers.begin(), file.triggers.end(), [&](const Trigger& o) { return same(o.id); }) ||
+          std::any_of(file.relays.begin(), file.relays.end(), [&](const Relay& o) { return same(o.id); }) ||
+          (r.flags & ~kRelayActive) != 0) {
+        error = "invalid relay " + std::to_string(i);
+        return false;
+      }
+      file.relays.push_back(r);
+    }
+  }
   auto isTrigger = [&](uint32_t id) {
     return std::any_of(file.triggers.begin(), file.triggers.end(), [&](const Trigger& t) { return t.id == id; });
   };
-  // Only the add-ons, timers, triggers and generators this file has, and only what CScriptEffect,
-  // the generator, CScriptTimer or CScriptTrigger takes from a connection.
+  auto isRelay = [&](uint32_t id) {
+    return std::any_of(file.relays.begin(), file.relays.end(), [&](const Relay& r) { return r.id == id; });
+  };
+  // Only the add-ons, timers, triggers, relays and generators this file has, and only what
+  // CScriptEffect, the generator, CScriptTimer, CScriptTrigger or CScriptRelay takes from a connection.
   for (size_t i = 0; i < file.drives.size(); ++i) {
     const Drive& d = file.drives[i];
     const bool toGenerator = (d.flags & kDriveToGenerator) != 0;
     const bool toTimer = !toGenerator && isTimer(d.target);
-    const bool known =
-        toGenerator ? d.target < file.generators.size() : toTimer || isTrigger(d.target) || isObject(d.target);
+    const bool toRelay = !toGenerator && isRelay(d.target);
+    const bool known = toGenerator ? d.target < file.generators.size()
+                                   : toTimer || toRelay || isTrigger(d.target) || isObject(d.target);
     const bool timerMessage = d.message == 10 || d.message == 11 || d.message == 14 || d.message == 15 ||
                               d.message == 16;
     if (!known || d.state > 0xff || (d.flags & ~(kDriveToGenerator | kDriveRelayed)) != 0 ||
-        (d.message != 1 && d.message != 4 && d.message != 17 && !(toGenerator && d.message == 13) &&
+        (d.message != 1 && d.message != 4 && d.message != 17 && !((toGenerator || toRelay) && d.message == 13) &&
          !(toTimer && timerMessage)) ||
         !(d.delay >= 0.f && d.delay <= kMaxDriveDelay)) {
       error = "invalid drive " + std::to_string(i);

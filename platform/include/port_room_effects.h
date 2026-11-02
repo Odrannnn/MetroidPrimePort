@@ -78,10 +78,12 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 14 then has u32 triggers, then per trigger: u32 add-on editor id, f32 position[3],
 //   f32 extent[3], u32 trigger flags, u32 flags (see Trigger). Files without triggers are still
 //   written as version 13 or older.
+//   version 15 then has u32 relays, then per relay: u32 add-on editor id, u32 flags (see Relay).
+//   Files without relays are still written as version 14 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 14;
+constexpr uint32_t kFileVersion = 15;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -348,6 +350,17 @@ struct Trigger {
   uint32_t flags = kTriggerActive;
 };
 
+// A Remastered ScriptRelayMP1 retail has no object for, created as a retail Relay
+// (ScriptLoader::LoadFaultyRelay, CScriptRelay), which Remastered's is (CScriptRelayMP1::
+// AcceptScriptMsg 0xf5e728, Think 0xf5e864). Drives send it SetToZero, Activate, Deactivate and
+// ToggleActive; its Zero sends the drives it is the sender of.
+constexpr uint8_t kRelayType = 0x15;
+constexpr uint32_t kRelayActive = 1;
+struct Relay {
+  uint32_t id = 0;
+  uint32_t flags = kRelayActive;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -363,6 +376,7 @@ struct File {
   std::vector<Timer> timers;
   std::vector<Follow> follows;
   std::vector<Trigger> triggers;
+  std::vector<Relay> relays;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common

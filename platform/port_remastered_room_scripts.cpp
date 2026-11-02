@@ -205,6 +205,18 @@ uint8_t TriggerAct(uint32_t action) {
   return message != 0 ? uint8_t(kLinkMessage | message) : 0;
 }
 
+// The retail message a ScriptRelayMP1's action is (CScriptRelayMP1GOC's 0xf5e094), as
+// kLinkMessage | message; 0 for the others, which go to IMP1EntityBaseGOC (0xc51ea4) and are not
+// followed.
+uint8_t RelayAct(uint32_t action) {
+  const uint32_t message = action == kActionScriptRelayFire         ? 13u   // SetToZero
+                           : action == kActionScriptRelayActivate   ? 1u    // Activate
+                           : action == kActionScriptRelayDeactivate ? 4u    // Deactivate
+                           : action == kActionScriptRelayToggle     ? 17u   // ToggleActive
+                                                                    : 0u;
+  return message != 0 ? uint8_t(kLinkMessage | message) : 0;
+}
+
 bool IsPass(int retailType) {
   for (const Pass& p : kPasses) {
     if (p.retailType == retailType) {
@@ -706,7 +718,7 @@ std::vector<IceDarkenerAtLoad> IceDarkeners(const Room& room, std::vector<std::s
             const uint32_t type = comps[s].type;
             float wait = 0.f;
             if (type == kTimerMP1) {
-              wait = floatOf(s, kPropTimerDelay, 0.f);
+              wait = floatOf(s, kPropTimerDelay, kTimerDefaultDelay);
               if (!std::isfinite(wait) || wait < 0.f) {
                 wait = 0.f;
               }
@@ -953,14 +965,14 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       const auto it = f.find(id);
       return it != f.end() && it->second.size >= 1 && room.Bytes(it->second)[0] != 0;
     };
-    const auto time = [&](uint32_t id) {
+    const auto time = [&](uint32_t id, float absent) {
       const auto it = f.find(id);
-      const float v = it != f.end() && it->second.size == 4 ? ReadLEFloat(room.Bytes(it->second)) : 0.f;
+      const float v = it != f.end() && it->second.size == 4 ? ReadLEFloat(room.Bytes(it->second)) : absent;
       return std::isfinite(v) ? std::clamp(v, 0.f, 600.f) : 0.f;
     };
     SceneryScripts::Timer t;
-    t.delay = time(kPropTimerDelay);
-    t.random = time(kPropTimerRandom);
+    t.delay = time(kPropTimerDelay, kTimerDefaultDelay);
+    t.random = time(kPropTimerRandom, 0.f);
     t.autoStart = flag(kPropTimerAutostart);
     const bool restart = flag(kPropTimerRestart);
     if (restart && !t.autoStart) {
@@ -970,6 +982,18 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     t.active = room.Active(c);
     t.baseLayer = c.baseLayer;
     return t;
+  };
+  std::map<int, const Component*> relayComps;  // the ScriptRelayMP1s, by entity
+  for (const Component* c : room.Of(kScriptRelayMP1)) {
+    if (c->entity >= 0) {
+      relayComps.emplace(c->entity, c);
+    }
+  }
+  const auto relayOf = [&](const Component& c) {
+    SceneryScripts::Relay r;
+    r.active = room.Active(c);
+    r.baseLayer = c.baseLayer;
+    return r;
   };
   std::map<int, const Component*> triggerComps;  // the TriggerMP1s, by entity
   for (const Component* c : room.Of(kTriggerMP1)) {
@@ -1380,6 +1404,17 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       incoming[t].push_back(&c);
     }
   }
+  // The walk folds a ScriptRelayMP1 into the drive where that is exact: active from the start, and
+  // nothing but SetToZero reaching it (then each SetToZero is one Zero).
+  const auto relayFolds = [&](const Component& c) {
+    if (!room.Active(c)) {
+      return false;
+    }
+    const auto in = incoming.find(c.entity);
+    return in == incoming.end() || std::all_of(in->second.begin(), in->second.end(), [](const Connection* f) {
+             return f->action == kActionScriptRelayFire;
+           });
+  };
   // The entities that are Remastered's own script objects, and the component of each that
   // says what it is.
   std::map<int, std::pair<uint8_t, size_t>> scriptObject;  // by entity: node kind, component
@@ -1747,13 +1782,18 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     // And a TriggerMP1 no retail object matched, which may become a trigger add-on.
     const bool isTrigger = triggerComps.count(e.entity) != 0 && match[size_t(&e - ents.data())] < 0 &&
                            triggerOf(*triggerComps.at(e.entity)).has_value();
-    const bool effect = isEffect || generator || isTimer || isTrigger;
+    // And a ScriptRelayMP1 no retail object matched, which may become a relay add-on.
+    const bool isRelay = relayComps.count(e.entity) != 0 && match[size_t(&e - ents.data())] < 0;
+    const bool effect = isEffect || generator || isTimer || isTrigger || isRelay;
     const auto act = [&](uint32_t action) -> uint8_t {
       if (isTimer) {
         return TimerAct(action);
       }
       if (isTrigger) {
         return TriggerAct(action);
+      }
+      if (isRelay) {
+        return RelayAct(action);
       }
       if (generator) {
         return action == kActionGeneratorSetToZero                                       ? PortRoomGeo::kGenerate
@@ -1904,6 +1944,20 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           links.push_back({kSenderTrigger | uint32_t(sender.entity), uint8_t(state), triggerAct, delay, depth > 0});
           return true;
         };
+        // And an unmatched ScriptRelayMP1's Zero the walk cannot fold (relayFolds), as a relay add-on.
+        const auto viaRelay = [&]() {
+          if (!effect || sender.type != kScriptRelayMP1 || sender.entity < 0 || (s >= 0 && match[size_t(s)] >= 0) ||
+              state != kStateZero) {
+            return false;
+          }
+          const uint8_t relayAct = act(first);
+          if (relayAct == 0) {
+            return false;
+          }
+          result.relays.try_emplace(sender.entity, relayOf(sender));
+          links.push_back({kSenderRelay | uint32_t(sender.entity), uint8_t(state), relayAct, delay, depth > 0});
+          return true;
+        };
         if (s >= 0 && match[size_t(s)] >= 0 && state >= 0) {
           // A DamageableTrigger reads its own MaxReached -> Activate connections and never
           // sends them, so only a direct one counts.
@@ -1918,9 +1972,23 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         } else if (IsPass(type) && sender.entity >= 0 && depth < maxDepth &&
                    std::find(seen.begin(), seen.end(), sender.entity) == seen.end()) {
           float wait = 0.f;
+          if (effect && sender.type == kScriptRelayMP1 && !relayFolds(sender)) {
+            if (!viaRelay()) {
+              miss(sender, *c, first, depth);
+            }
+            continue;
+          }
+          // A Timer (SLdrTimer::Load 0x86401c) keeps its fields under other ids (duration
+          // 651d6dfd, random 800e060e, +0x11 3459bf46, +0x12 77d0eae3 set by default, +0x10
+          // 72c7f9f4), and what its actions do is unread: only a TimerMP1 passes a message on.
+          if (effect && type == kRetailTimer && sender.type != kTimerMP1) {
+            miss(sender, *c, first, depth);
+            continue;
+          }
           if (type == kRetailTimer) {
             const auto f = room.Flat(sender);
             const auto prop = f.find(kPropTimerDelay);
+            wait = kTimerDefaultDelay;
             if (prop != f.end() && prop->second.size == 4) {
               wait = ReadLEFloat(room.Bytes(prop->second));
               wait = std::isfinite(wait) ? std::clamp(wait, 0.f, 600.f) : 0.f;
@@ -1965,7 +2033,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           } else {
             miss(sender, *c, first, depth);
           }
-        } else if (!viaTimer() && !viaTrigger()) {
+        } else if (!viaTimer() && !viaTrigger() && !viaRelay()) {
           miss(sender, *c, first, depth);
         }
       }
@@ -1984,6 +2052,12 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         t->links = std::move(links);
         result.triggers[e.entity] = std::move(*t);
       }
+      links.clear();
+    } else if (isRelay) {
+      // And a relay's.
+      SceneryScripts::Relay r = relayOf(*relayComps.at(e.entity));
+      r.links = std::move(links);
+      result.relays[e.entity] = std::move(r);
       links.clear();
     }
     if (!links.empty()) {

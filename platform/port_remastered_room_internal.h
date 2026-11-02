@@ -597,6 +597,7 @@ constexpr uint8_t kRetailPlatform = 0x08;
 constexpr int kStatePlay = 18;  // EScriptObjectState kSS_Play
 constexpr int kRetailDamageableTrigger = 0x1a;
 constexpr int kStateMaxReached = 7;
+constexpr int kStateZero = 9;
 constexpr uint8_t kRetailCounter = 0x06;
 constexpr uint8_t kRetailTimer = 0x05;
 // A retail Counter as Remastered remade it; the ones it added match no retail object.
@@ -673,6 +674,9 @@ constexpr uint32_t kActionTimerStart[2] = {0xd63b8f04, 0x55193b90};  // ResetAnd
 constexpr uint32_t kPropTimerLoop = 0x79f25d24;                       // boolean +0x10
 constexpr uint32_t kPropTimerRestart = 0x75ce4b13;                    // boolean +0x12
 constexpr uint32_t kPropTimerDelay = 0xfb2a2cf0;
+// A timer without kPropTimerDelay keeps its ctor's duration: 5 s for TimerMP1 (0xf36ccc) and
+// Timer (0x863fcc) alike.
+constexpr float kTimerDefaultDelay = 5.f;
 constexpr uint32_t kPropTimerRandom = 0x35c8fdd3;  // f32 random add
 // A TimerMP1's actions (TranslateScriptActionToMessage 0xf36b10), as retail messages.
 constexpr uint32_t kActionTimerActivate = 0xbbdb3ee1;
@@ -852,6 +856,14 @@ constexpr bool IsTimerSender(uint32_t sender) { return (sender & 0xFF000000) == 
 // The same for a Remastered TriggerMP1 no retail object stands for: kSenderTrigger | its entity.
 constexpr uint32_t kSenderTrigger = 0xFB000000;
 constexpr bool IsTriggerSender(uint32_t sender) { return (sender & 0xFF000000) == kSenderTrigger; }
+// And for a Remastered ScriptRelayMP1 no retail object stands for: kSenderRelay | its entity.
+constexpr uint32_t kSenderRelay = 0xFA000000;
+constexpr bool IsRelaySender(uint32_t sender) { return (sender & 0xFF000000) == kSenderRelay; }
+// A ScriptRelayMP1's actions (CScriptRelayMP1GOC::TranslateScriptActionToMessage 0xf5e094), besides
+// kActionScriptRelayFire (SetToZero): Activate, Deactivate, ToggleActive.
+constexpr uint32_t kActionScriptRelayActivate = 0x4cb37153;
+constexpr uint32_t kActionScriptRelayDeactivate = 0xe10034c6;
+constexpr uint32_t kActionScriptRelayToggle = 0x01c4c127;
 
 // What drives the scenery actors of a room.
 struct SceneryScripts {
@@ -880,6 +892,16 @@ struct SceneryScripts {
     std::vector<PortRoomGeo::Link> links;
   };
   std::map<int, Trigger> triggers;  // by entity
+  // A ScriptRelayMP1 no retail object matched whose Zero drives an effect, a generator or another
+  // add-on (as kSenderRelay | entity), where the walk cannot fold it (it starts inactive, or more
+  // than SetToZero reaches it), as a retail CScriptRelay: CScriptRelayMP1::AcceptScriptMsg 0xf5e728
+  // and Think 0xf5e864 are retail's (SetToZero only while active, one Zero per queued count). Its
+  // links are what drives it, traced like a timer's.
+  struct Relay {
+    bool active = true, baseLayer = false;
+    std::vector<PortRoomGeo::Link> links;
+  };
+  std::map<int, Relay> relays;  // by entity
   std::map<int, uint8_t> layer;  // by entity: the retail layer it is drawn on
   std::map<int, std::vector<PortRoomGeo::Link>> links;  // by entity
   std::map<int, size_t> unresolved;                      // by entity: connections not traced
