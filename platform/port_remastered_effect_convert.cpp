@@ -4622,9 +4622,10 @@ public:
   // One generator, swoosh or electric description, as the retail asset `type`.
   // PVAR (value.offset = the u16 id count, then 5 u16 per-kind counts, the u16 data size, the
   // 16-byte ids, then the defaults: real f32, int i32, colour 4 half, vector 3 f32, rotation 4 f32).
-  void ReadVariables(const EffectValue& raw) const {
+  // False when the block is malformed (m_vars is then empty).
+  bool ReadVariables(const EffectValue& raw) const {
     if (raw.size < 14) {
-      return;
+      return false;
     }
     const uint8_t* p = m_data + raw.offset;
     const size_t total = ReadLE16(p);
@@ -4635,7 +4636,7 @@ public:
     const size_t dataSize = ReadLE16(p + 12);
     if (14 + 16 * total + dataSize > raw.size ||
         counts[0] + counts[1] + counts[2] + counts[3] + counts[4] != total) {
-      return;
+      return false;
     }
     const uint8_t* id = p + 14;
     const uint8_t* data = id + 16 * total;
@@ -4646,7 +4647,7 @@ public:
       for (size_t i = 0; i < counts[kind]; ++i) {
         if (data + kSizes[kind] > end) {
           m_vars.clear();
-          return;
+          return false;
         }
         PvarEntry var{};
         std::memcpy(var.guid.data(), id, 16);
@@ -4674,6 +4675,7 @@ public:
         m_vars.push_back(var);
       }
     }
+    return true;
   }
 
   struct PartVar {
@@ -4937,11 +4939,14 @@ public:
         m_pofs = std::max(m_pofs, IsConstantValue(property.value[0]) ? 1u : 2u);
       }
     }
+    // Only a generator or swoosh carries the PVRT table its VARF/VARI/VARV/VARC read; an ELC2's
+    // own variable reads are refused ("not in the effect's PVAR").
     m_vars.clear();
+    m_varsRead = false;
     for (const EffectProperty& property : s.node.properties) {
-      if (property.fourcc == F("PVAR") && property.value.size() == 1 &&
+      if ((s.part || s.swoosh) && property.fourcc == F("PVAR") && property.value.size() == 1 &&
           property.value[0].kind == EffectValue::Kind::Raw) {
-        ReadVariables(property.value[0]);
+        m_varsRead = ReadVariables(property.value[0]);
       }
     }
   }
@@ -5230,6 +5235,13 @@ public:
                          uint32_t fourcc) const {
     if (fourcc == F("MTIN") && (s.textured || s.electric)) {
       s.material = &property;
+      return true;
+    }
+    // A generator's or swoosh's PVAR goes out as the port-only PVRT (NodeModes reads it). An
+    // ELC2's has nothing to carry: no shipped ELC2 reads its own variables, nor does any child
+    // of one (DPV/TPV), and Remastered's only bind of one (CPlasmaProjectileMP1::UpdateBeamState
+    // 0x1020a38, the beam's expansion, guid 793f4892..) writes a variable nothing reads.
+    if (fourcc == F("PVAR") && (((s.part || s.swoosh) && m_varsRead) || s.electric)) {
       return true;
     }
     // Retail reads KSSM, but Remastered's spawn table is laid out differently.
@@ -6326,6 +6338,7 @@ private:
   const uint8_t* m_data;
   const EffectConvertIO& m_io;
   mutable std::vector<PvarEntry> m_vars;            // the PVAR of the generator being written
+  mutable bool m_varsRead = false;                  // m_vars came from a well-formed PVAR
   mutable std::vector<SystemItem>* m_sysItems = nullptr;  // set while an SVR/SVI/SVC/SVV is written
   mutable uint32_t m_sysNextHidden = 10;            // the next hidden init-only real
   mutable std::vector<SystemItem>* m_spawnSysItems = nullptr;  // set while a KSSM is written
