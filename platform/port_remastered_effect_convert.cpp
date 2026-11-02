@@ -1153,15 +1153,18 @@ struct HeaderShader {
   // 52d26efe: perm 048's FS with an AERO erosion (o2.x), its TEXR a TXP2, drawn under LIT_ 1 by the
   // uber perm 040, which lights the vertices (kb topic/header-mtrl-perm048.md).
   bool litPalette = false;
+  // LIT_ 1 draws uber perm 040: its FS is 048_0 and its VS 040_1 lights the colour per vertex as
+  // 52d26efe's does (b42cacf5 = 29f35b3a perm for perm; their 040_1 lighting is 52d26efe's, reordered).
+  bool vertexLit = false;
 };
 
 const HeaderShader* HeaderShaderOf(uint32_t shader) {
   static const HeaderShader table[] = {
       // Camera-facing quads rotated by the particle's angle (ROTA): the port's VORN 0 sprite.
-      {0xb42cacf5, true, HeaderQuad::RotatedSprite},
-      {0x29f35b3a, true, HeaderQuad::RotatedSprite},
+      {0xb42cacf5, true, HeaderQuad::RotatedSprite, false, false, true},
+      {0x29f35b3a, true, HeaderQuad::RotatedSprite, false, false, true},
       {0x4d6746f4, false, HeaderQuad::RotatedSprite},
-      {0x52d26efe, true, HeaderQuad::RotatedSprite, false, true},
+      {0x52d26efe, true, HeaderQuad::RotatedSprite, false, true, true},
       // Unrotated camera-facing quads: a VORN 0 sprite without ROTA.
       {0xe2bfbf91, true, HeaderQuad::Sprite},
       {0x9d1a1432, true, HeaderQuad::Sprite, true},
@@ -3625,14 +3628,14 @@ public:
       if (property.fourcc == F("PMDL")) {
         return refuse("on a model particle");
       }
-      // A lit draw (LIT_ 1 or BLIT 1) is another perm: 52d26efe's is ported, its uber perm 040 (BLIT
-      // gives it the probe, PBLT), and only under LIT_ 1.
+      // A lit draw (LIT_ 1 or BLIT 1) is another perm: the vertexLit shaders' uber perm 040 is ported
+      // (BLIT gives it the probe, PBLT), and only under LIT_ 1.
       if (property.fourcc == F("LIT_") || property.fourcc == F("BLIT")) {
         if (!SmallInteger(property, word)) {
           return refuse("has a " + EffectFourCCString(property.fourcc) + " that is not a constant");
         }
         (property.fourcc == F("LIT_") ? lit : blit) = word;
-        if (word != 0 && !header->litPalette) {
+        if (word != 0 && !header->vertexLit) {
           return refuse("is lit (" + EffectFourCCString(property.fourcc) + ")");
         }
       }
@@ -3843,12 +3846,6 @@ public:
       recipe.features = kColorTex;
       recipe.textures = {{"TEXR", Role::Color, -1, -1}};
       recipe.alphaGamma = 2.2f;
-      // VS 040_1 (the uber perm every interior room selects) lights the colour per vertex: (the probe +
-      // AMBS) x BLCM + the group-0 cluster sum, x 1/pi. BLIT without LIT_ is an unread perm.
-      if (blit != 0 && lit == 0) {
-        return refuse("is BLIT without LIT_");
-      }
-      recipe.litPerVertex = lit != 0;
       // AERO (CGenDescription+0x4e0, var 0x12; VS v6.z -> o2.x): a = max(0, pow(|t.a|, 2.2) - AERO),
       // the port's erosion on per-particle row 0.
       if (aero != nullptr) {
@@ -3891,6 +3888,13 @@ public:
       recipe.textures = {{"TEXR", Role::Color, -1, -1}};
       recipe.alphaGamma = 2.2f;
     }
+    // VS 040_1 (the uber perm every room without a directional light selects) lights the colour per
+    // vertex: (the probe + AMBS) x BLCM + the group-0 cluster sum, x 1/pi. BLIT without LIT_ is an
+    // unread perm.
+    if (blit != 0 && lit == 0) {
+      return refuse("is BLIT without LIT_");
+    }
+    recipe.litPerVertex = lit != 0;
     if (!MaterialFrom(mati, recipe, EffectGuid{}, nullptr, node, result, false, false)) {
       return false;
     }

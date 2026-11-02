@@ -6124,9 +6124,38 @@ void TestHeaderMaterial() {
   CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
                 parts[0].approximated[0] == "VMAT: header shader 52d26efe has no TXP2 TEXR",
             "52d26efe without a TXP2 is refused");
-  parts = ConvertOne(withShader(OneGenerator(txp2(1, false)), 0xb42cacf5), io);
+  // 29f35b3a (F38BC37A) and b42cacf5 share 52d26efe's lit uber perm: LIT_ 1 is the same v5, no erosion.
+  const auto litTexr = [](int lit, int blit) {
+    return [lit, blit](std::vector<uint8_t>& o) {
+      PutTexr(o, 0x1234ABCD);
+      PutProperty(o, "LIT_", 0);
+      o.push_back(uint8_t(lit));
+      if (blit >= 0) {
+        PutProperty(o, "BLIT", 0);
+        o.push_back(uint8_t(blit));
+      }
+    };
+  };
+  for (const uint32_t shader : {0x29f35b3au, 0xb42cacf5u}) {
+    parts = ConvertOne(withShader(OneGenerator(litTexr(1, -1)), shader), io);
+    vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+    CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmat, 8) == 5 &&
+                  (VmatWord(vmat, 12) & kParticleLitFeature) != 0 && (VmatWord(vmat, 12) & kErosionFeature) == 0 &&
+                  VmatWord(vmat, vmat.size() - 4) == 1,
+              "a constant-TEXR header sprite under LIT_ 1 gets a lit VMAT v5");
+    parts = ConvertOne(withShader(OneGenerator(litTexr(0, -1)), shader), io);
+    vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+    CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmat, 8) == 4 &&
+                  (VmatWord(vmat, 12) & kParticleLitFeature) == 0,
+              "LIT_ 0 is the unlit v4");
+  }
+  parts = ConvertOne(withShader(OneGenerator(litTexr(0, 1)), 0x29f35b3a), io);
   CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
-                parts[0].approximated[0] == "VMAT: header shader b42cacf5 is lit (LIT_)",
+                parts[0].approximated[0] == "VMAT: header shader 29f35b3a is BLIT without LIT_",
+            "BLIT without LIT_ is refused");
+  parts = ConvertOne(withShader(OneGenerator(litTexr(1, -1)), 0xe2bfbf91), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader e2bfbf91 is lit (LIT_)",
             "an unported lit header shader is refused");
   parts = ConvertOne(withShader(OneGenerator(txp2(-1, true)), 0xb42cacf5), io);
   CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
