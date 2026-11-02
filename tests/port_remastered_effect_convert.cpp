@@ -1199,6 +1199,10 @@ void TestSwooshElectric() {
   PutConstant(out, 8);
   PutProperty(out, "SBDM", 1);
   PutConstant(out, 1);
+  PutProperty(out, "IEXP", 1);
+  PutConstant(out, 0);
+  PutProperty(out, "DVVN", 1);
+  PutConstant(out, 1);
   PutProperty(out, "MTIN", 0);
   out.push_back(1);
   PutGuid(out, Fresh(2));
@@ -1250,6 +1254,8 @@ void TestSwooshElectric() {
 
   Retail swoosh;
   swoosh.f("SWSH").f("LENG").f("CNST").w(8).f("AALP").f("CNST").b(1);
+  // DVVN after IEXP resets it, so both stay in stream order (CreateSWSH 0x2dceac).
+  swoosh.f("IEXP").f("CNST").w(0).f("DVVN").f("CNST").w(1);
   swoosh.f("TEXR").f("CNST").f("CNST").w(0x5EED0002).f("PIRN").f("CNST").w(1).f("_END");
   CHECK_MSG(parts[1].type == EffectFourCC("SWHC") && parts[1].id == Legacy(0x0000AAAA), "swoosh child is an SWHC");
   CHECK_MSG(parts[1].part == swoosh.bytes, "SBDM becomes AALP and MTIN the swoosh's TEXR");

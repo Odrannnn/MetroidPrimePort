@@ -6033,11 +6033,15 @@ public:
         return;
       }
     }
-    // CreateGPSM 0x25acc4 resets IEXP whenever DVVN is read. Preserve stream order.
-    if (s.part && (fourcc == F("DVVN") || fourcc == F("IEXP"))) {
+    // CreateGPSM 0x25acc4 and CreateSWSH 0x2dceac reset IEXP whenever DVVN is read. Preserve
+    // stream order. The swoosh's default differs (GetDefaultInverseExposure 0x29c118: DVVN == 1)
+    // and is applied by its factory.
+    if ((s.part || s.swoosh) && (fourcc == F("DVVN") || fourcc == F("IEXP"))) {
       uint32_t value = 0;
       if (SmallInteger(property, value) && value <= (fourcc == F("DVVN") ? 255u : 1u)) {
-        s.inverseExposed = fourcc == F("DVVN") ? (value == 3 || value == 4) : value != 0;
+        if (s.part) {
+          s.inverseExposed = fourcc == F("DVVN") ? (value == 3 || value == 4) : value != 0;
+        }
         AppendBE32(s.out, fourcc);
         AppendBE32(s.out, F("CNST"));
         AppendBE32(s.out, value);
@@ -7168,6 +7172,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PortMover();
     } else if (!part && vfx && (fourcc == F("PSRO") || fourcc == F("PRAF") || fourcc == F("XFMD") || fourcc == F("PDFG") ||
                           fourcc == F("PZTS") || fourcc == F("PSHM"))) {
+      ok = reader.PortWord();
+    } else if (type == F("SWHC") && (fourcc == F("DVVN") || fourcc == F("IEXP"))) {
       ok = reader.PortWord();
     } else if (part && fourcc == F("PISV")) {
       ok = reader.PortWord() && reader.Element(Type::Real);

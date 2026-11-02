@@ -23,6 +23,7 @@
 #include "port_debug.h"
 #include <climits>
 #include "port_fx_debug.h"
+#include "port_room_env.h"
 #include "port_swoosh_ring.h"
 #include "port_vfx_particles.h"
 #endif
@@ -808,6 +809,18 @@ void CParticleSwoosh::PortRenderVfx() {
   if (xPortVfxPts.size() != size_t(x15c_swooshes.capacity())) {
     return; // not updated yet
   }
+  // DVVN/IEXP: UpdateRenderData_Swoosh 0x2b6820 scales ITEN by the context's inverse exposure
+  // (ctx+0x18, resolve_inverse_exposure 0x20eba0: auto when blended, static when opaque); the
+  // tonemap's frame exposure undoes it, not the GX tone's inherited w.
+  float exposureGain = 1.f;
+  if (x1c_desc->xPortExposurePolicy) {
+    desc.alreadyExposed = false;
+    desc.exposureOverride = PortVfxFrameExposureOverride();
+    if (x1c_desc->xPortInverseExposure) {
+      exposureGain =
+          PortRoomEnv::ParticleInverseExposure(vfx.mat.blend != uint32_t(aurora::gfx::vfx::Blend::Opaque));
+    }
+  }
   if (x1c_desc->x40_TSPN) {
     x1c_desc->x40_TSPN->GetValue(x28_curFrame, x1ec_TSPN);
   }
@@ -904,7 +917,7 @@ void CParticleSwoosh::PortRenderVfx() {
     const SPortVfxPoint& pa = xPortVfxPts[curIdx];
     const SPortVfxPoint& pb = xPortVfxPts[prevIdx];
     auto pointAt = [&](float t, float color[4], float extra[4][4]) {
-      const float iten = pa.iten + (pb.iten - pa.iten) * t;
+      const float iten = (pa.iten + (pb.iten - pa.iten) * t) * exposureGain;
       const float* ca = pa.color;
       const float* cb = pb.color;
       for (int c = 0; c < 4; ++c) {

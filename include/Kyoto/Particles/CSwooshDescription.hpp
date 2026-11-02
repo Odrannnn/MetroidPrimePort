@@ -76,6 +76,11 @@ public:
   // port-only PSHM: Remastered's SHTM (CParticleGen::DoShutdownBehavior 0x27b88c); 1 = a shutdown
   // also destroys the live segments (CParticleSwoosh::DestroyParticles 0x27f744)
   u8 xPortShutdownMode = 0;
+  // port-only DVVN/IEXP: Remastered's exposure policy (desc+0x22c bit 0x2000, CreateSWSH 0x2dceac
+  // and 0x2dd1b4); DVVN defaults it to DVVN == 1, a later IEXP sets it. UpdateRenderData_Swoosh
+  // 0x2b6820 then scales ITEN by the inverse exposure.
+  bool xPortExposurePolicy = false;
+  bool xPortInverseExposure = false;
   // port-only PVRT: Remastered particle variables (names, types, defaults)
   std::unique_ptr< CPortVarTable > xPortVars;
   // port-only: the PKPR elements (per-point KPIN latches), latched at a point's birth in this
