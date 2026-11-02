@@ -5996,6 +5996,18 @@ public:
     if (s.part && fourcc == F("EMTU")) {
       return true;
     }
+    // PVRS (GPSM +0x534 / SWSH +0x201) only picks the shading mode CParticleSceneNode::Render
+    // 0x2b247c passes to NVariableRateShading::CScopedShadingMode 0x19a35c, which does nothing
+    // while sEnabled is clear. Only init_for_frame 0x19a7f0 sets it, called from
+    // init_frame_for_content_option 0xf9bcb0 when NRenderDebugDefaults::skVariableShadingRateContent
+    // is 1 or 2; that is bss nothing writes (its one GOT slot 0x2126610 has one reader, 0xf9ceb0).
+    // STRY (0x6b bit 6) has no reader. Neither changes a pixel.
+    if ((s.part || s.swoosh) && fourcc == F("PVRS")) {
+      return true;
+    }
+    if (s.part && fourcc == F("STRY")) {
+      return true;
+    }
     // A POFS goes out with an INTT written as POFS above, added to it.
     if (s.part && fourcc == F("POFS") &&
         std::any_of(s.node.properties.begin(), s.node.properties.end(),

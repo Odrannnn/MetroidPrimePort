@@ -3510,6 +3510,15 @@ void TestShutdownAndPivot() {
     o.push_back(1);
   });
   CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), "EMTU without PMOV is consumed");
+  for (const char* flag : {"PVRS", "STRY"}) {
+    parts = convert([&](auto& o) {
+      PutProperty(o, flag, 0);
+      PutFourCC(o, "CNST");
+      o.push_back(1);
+    });
+    CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
+              std::string(flag) + " is consumed and writes nothing");
+  }
 }
 
 // INTS is the system scale in place of the external one (Compile 0x289af0): the port-only PINS,
