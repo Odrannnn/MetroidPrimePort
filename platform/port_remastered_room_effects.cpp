@@ -5,6 +5,8 @@
 #include "port_room_effects.h"
 #include "port_maya_spline.h"
 
+#include <iterator>
+
 namespace PortRemastered {
 namespace RoomDetail {
 namespace {
