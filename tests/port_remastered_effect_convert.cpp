@@ -5804,8 +5804,9 @@ void TestHeaderMaterial() {
             "an untextured header sprite gets a VMAT v2 with no features or textures");
 
   parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x00000001), io);
-  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.empty(),
-            "an undecoded header shader draws as retail, silently");
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader 00000001 is not ported (primitive 1)",
+            "an undecoded header shader draws as retail and is named");
 
   struct Refusal {
     uint32_t shader;

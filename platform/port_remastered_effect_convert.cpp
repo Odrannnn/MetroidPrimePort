@@ -3539,7 +3539,7 @@ public:
   // A sprite GPSM with no MTIN draws its header MTRL (node.baseMaterial; see HeaderShaderOf). Its VMAT,
   // where the shader's quad and maths are the port's: anything else is refused with the reason.
   bool HeaderMaterial(const EffectNode& node, ConvertedPart& result) const {
-    if (!m_io.vfxTexture || node.baseMaterial == EffectGuid{} || node.primitiveType != 1) {
+    if (!m_io.vfxTexture || node.baseMaterial == EffectGuid{}) {
       return false;
     }
     // The MTRL's shader id is its guid's first four bytes as stored (a MATI's +0x48 reads the same way).
@@ -3551,10 +3551,10 @@ public:
       m_approximated.push_back(std::string("VMAT: header shader ") + shaderText + " " + why);
       return false;
     };
-    // An undecoded shader draws as retail, as before; what that leaves out shows as "no VMAT" drops.
-    const HeaderShader* header = HeaderShaderOf(shader);
+    // Anything else draws as retail, as before, named here so the report says which shader it lacks.
+    const HeaderShader* header = node.primitiveType == 1 ? HeaderShaderOf(shader) : nullptr;
     if (header == nullptr) {
-      return false;
+      return refuse("is not ported (primitive " + std::to_string(node.primitiveType) + ")");
     }
     const EffectProperty* texr = nullptr;
     const EffectProperty* rota = nullptr;
