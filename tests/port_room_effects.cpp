@@ -654,7 +654,8 @@ void TestFileRelays() {
   refused([&](File& f) { f.drives = {{r, 0x041A0010, 9, 11, 0.f}}; }, "ResetAndStart to a relay");
 }
 
-// Version 16 adds AmbientParticleEffects: points spawned near the camera into this file's effects.
+// Version 16 adds AmbientParticleEffects: points spawned near the camera into this file's
+// effects or retail ones it matched.
 void TestFileAmbients() {
   File in;
   PortRoomEffects::Layer layer;
@@ -699,8 +700,15 @@ void TestFileAmbients() {
   };
   refused([](PortRoomEffects::Ambient& x) { x.rate = -1.f; }, "a negative rate");
   refused([](PortRoomEffects::Ambient& x) { x.radius = 0.f; }, "no radius");
-  refused([](PortRoomEffects::Ambient& x) { x.owner = 0x041A0020; }, "a retail owner");
-  refused([](PortRoomEffects::Ambient& x) { x.emitters[0].id = 0x041A0020; }, "a retail emitter");
+  refused([](PortRoomEffects::Ambient& x) { x.owner = MakeEffect(1, 5).id; }, "an owner add-on not in the file");
+  refused([](PortRoomEffects::Ambient& x) { x.emitters[0].id = MakeEffect(1, 5).id; }, "an emitter add-on not in the file");
+  {
+    // Retail effects it matched stand in for add-ons.
+    File f = in;
+    f.ambients[0].owner = f.ambients[0].emitters[0].id = 0x041A0020;
+    REQUIRE_MSG(PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), error.c_str());
+    CHECK(out.ambients[0].owner == 0x041A0020 && out.ambients[0].emitters[0].id == 0x041A0020);
+  }
   refused([](PortRoomEffects::Ambient& x) { x.emitters[1].index = 2; }, "an index without a weight");
   refused([](PortRoomEffects::Ambient& x) { x.emitters.clear(); }, "no emitter");
   refused([](PortRoomEffects::Ambient& x) { x.shapes[0].type = 3; }, "an unknown shape");

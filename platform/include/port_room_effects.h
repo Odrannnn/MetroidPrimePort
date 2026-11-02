@@ -391,11 +391,11 @@ struct AmbientShape {
 };
 struct AmbientEmitter {
   uint32_t index = 0;
-  uint32_t id = 0;  // an add-on effect
+  uint32_t id = 0;  // the effect: an add-on, or a retail one drawing the GENP
 };
 struct Ambient {
   float rate = 0.f;
-  uint32_t owner = 0;            // an add-on effect
+  uint32_t owner = 0;            // its own effect, as AmbientEmitter::id
   float offset[3] = {0, 10, 0};  // camera space, GameCube axes
   float radius = 15.f;
   std::vector<int32_t> weights;

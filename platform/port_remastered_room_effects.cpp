@@ -343,9 +343,9 @@ bool ShapeReal(const ShapeProps& s, uint32_t id, double fallback, double& out) {
   return true;
 }
 
-// The ambient record of an AmbientParticleEffect, its emitters the add-on effects (`addOnOf`, by
+// The ambient record of an AmbientParticleEffect, its emitters the effects (`effectOf`, by
 // entity) of the EffectProxyMP1s it links; false with `why` when it cannot be exact.
-bool AmbientRecord(const Room& room, const Component& c, const Mat34& xf, const std::map<int, uint32_t>& addOnOf,
+bool AmbientRecord(const Room& room, const Component& c, const Mat34& xf, const std::map<int, uint32_t>& effectOf,
                    PortRoomEffects::Ambient& out, const char*& why) {
   const std::vector<Component>& comps = room.Components();
   out = PortRoomEffects::Ambient{};
@@ -361,8 +361,8 @@ bool AmbientRecord(const Room& room, const Component& c, const Mat34& xf, const 
       return false;
     }
   }
-  const auto own = addOnOf.find(c.entity);
-  if (own == addOnOf.end()) {
+  const auto own = effectOf.find(c.entity);
+  if (own == effectOf.end()) {
     why = "its effect not added";
     return false;
   }
@@ -437,8 +437,8 @@ bool AmbientRecord(const Room& room, const Component& c, const Mat34& xf, const 
       }
     }
     for (int p : proxies) {
-      const auto effect = addOnOf.find(comps[size_t(p)].entity);
-      if (effect == addOnOf.end()) {
+      const auto effect = effectOf.find(comps[size_t(p)].entity);
+      if (effect == effectOf.end()) {
         why = "a linked effect not added";
         return false;
       }
@@ -1502,7 +1502,9 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   std::vector<PortRoomEffects::Generator> generators;
   size_t generatedCount = 0;  // effects added that a generator copies
   size_t reserved = 0;  // the barrier's actors, left to it
-  std::map<int, uint32_t> addOnOf;  // entity -> the add-on its EffectMP1 became
+  // entity -> the object drawing its EffectMP1: the add-on it became, or the retail effect it
+  // matched where that draws its GENP
+  std::map<int, uint32_t> effectOf;
   for (const Component* c : effects) {
     if (c->entity < 0 || !seen.insert(c->entity).second) {
       continue;
@@ -1565,6 +1567,10 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       // or a paired replacement whose presence io.matched verified. A carried
       // retail-id fallback from io.effect is not proof of converted source data.
       const bool sourcePlacement = replacedPart || pairedPart || ownPart;
+      // Where the object draws this GENP, an ambient spawning into it spawns into the object.
+      if (sourcePlacement || (part != 0 && part == own)) {
+        effectOf[c->entity] = o.id;
+      }
       if (!sourcePlacement && (part == 0 || part != own || vars.empty())) {
         ++keptOwn;
         continue;
@@ -1644,7 +1650,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     }
     e.id = PortRoomEffects::AddOnId(retailLayer, areaBits, uint32_t(added.size()));
     followerIs(c->entity, e.id);
-    addOnOf[c->entity] = e.id;
+    effectOf[c->entity] = e.id;
     for (PortRoomEffects::Drive& d : drives) {
       d.target = e.id;
       allDrives.push_back(d);
@@ -2080,7 +2086,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     }
     PortRoomEffects::Ambient a;
     const char* why = "";
-    if (!AmbientRecord(room, c, area.xf, addOnOf, a, why)) {
+    if (!AmbientRecord(room, c, area.xf, effectOf, a, why)) {
       ++ambientsLeftOut[why];
     } else if (a.rate > 0.f) {
       ambients.push_back(std::move(a));

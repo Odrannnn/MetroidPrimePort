@@ -905,6 +905,8 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
   auto isObject = [&](uint32_t id) {
     return std::any_of(objects.begin(), objects.end(), [&](const LayerObject& o) { return o.id == id; });
   };
+  // An ambient's effect: one of this file's add-ons, or a retail effect it matched.
+  auto isEffect = [&](uint32_t id) { return !IsAddOnId(id) || isObject(id); };
   auto isTimer = [&](uint32_t id) {
     return std::any_of(file.timers.begin(), file.timers.end(), [&](const Timer& t) { return t.id == id; });
   };
@@ -1061,7 +1063,7 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
     for (uint32_t i = 0; i < count; ++i) {
       Ambient a;
       bool ok = readFloat(a.rate) && a.rate >= 0.f && a.rate <= kMaxAmbientRate && ReadLE32(data, at, a.owner) &&
-                isObject(a.owner);
+                isEffect(a.owner);
       for (float& v : a.offset) ok = ok && readFloat(v);
       ok = ok && readFloat(a.radius) && a.radius > 0.f;
       uint32_t n = 0;
@@ -1075,7 +1077,7 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
       for (uint32_t k = 0; ok && k < n; ++k) {
         AmbientEmitter e;
         ok = ReadLE32(data, at, e.index) && ReadLE32(data, at, e.id) && e.index < a.weights.size() &&
-             isObject(e.id);
+             isEffect(e.id);
         a.emitters.push_back(e);
       }
       ok = ok && ReadLE32(data, at, n) && n <= kMaxAmbientShapes && n <= (data.size() - at) / 64;
