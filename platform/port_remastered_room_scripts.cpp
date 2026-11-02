@@ -116,22 +116,6 @@ int RetailState(uint32_t type, uint32_t event) {
   return it == table.end() ? -1 : it->second;
 }
 
-// EffectMP1's own actions (CEffectMP1GOC::TranslateScriptActionToMessage 0xd9c9e4): retail
-// Activate, Deactivate and ToggleActive.
-uint8_t EffectAct(uint32_t action) {
-  return action == kActionEffectActivate     ? PortRoomGeo::kShow
-         : action == kActionEffectDeactivate ? PortRoomGeo::kHide
-         : action == kActionEffectToggle     ? PortRoomGeo::kToggle
-                                             : 0;
-}
-
-// The actions every MP1 entity takes (IMP1EntityBaseGOC::TranslateScriptActionToMessage
-// 0xc51ea4): 'ACMP', 'ACTV', 'ICMP', 'ICTV' and 'XDEL'.
-bool IsEntityBaseAction(uint32_t action) {
-  return action == 0x41434d50 || action == kActionEntityActivate || action == 0x49434d50 ||
-         action == kActionEntityDeactivate || action == kActionHintDelete;
-}
-
 // What a connection's action does to the geometry or hint it reaches.
 uint8_t LinkAct(uint32_t action) {
   return action == kActionActivate || action == kActionIncrement || action == kActionEntityActivate ||
@@ -504,11 +488,12 @@ std::vector<PortRoomEnv::EnvVar> ReadEnvVars(const Room& room) {
   return out;
 }
 
-// A component's typed links, after its connections in its id data: u16 count, then per link
-// u32 link id, the target entity's guid, u32, u8, u8, and a guid (42 bytes). The linked
-// components (-1 for a guid the room lacks), in order.
-std::vector<std::pair<uint32_t, int>> ReadEntityLinkIds(const Room& room, size_t i) {
-  std::vector<std::pair<uint32_t, int>> out;
+// A component's links, after its connections in its id data: u16 count, then per link u32 link
+// id, the target entity's guid, u32 data type, and for a nonzero type u16 size, that many bytes
+// of data and u32 size and that many more, then u8, u8 and a guid (42 bytes when untyped). The
+// linked components (-1 for a guid the room lacks), in order; none when they do not read.
+std::vector<EntityLink> ReadEntityLinkData(const Room& room, size_t i) {
+  std::vector<EntityLink> out;
   std::vector<Connection> conns;
   size_t o = 0;
   if (!ReadComponentConnections(room, i, conns, o)) {
@@ -522,13 +507,42 @@ std::vector<std::pair<uint32_t, int>> ReadEntityLinkIds(const Room& room, size_t
   }
   const size_t count = ReadLE16(b + o);
   o += 2;
-  if ((n - o) / 42 < count) {
-    return out;
-  }
-  for (size_t k = 0; k < count; ++k, o += 42) {
+  for (size_t k = 0; k < count; ++k) {
+    if (n - o < 24) {
+      return {};
+    }
+    EntityLink l;
+    l.id = ReadLE32(b + o);
     Id16 target;
     std::memcpy(target.data(), b + o + 4, 16);
-    out.emplace_back(ReadLE32(b + o), room.ByGuid(target));
+    l.target = room.ByGuid(target);
+    l.type = ReadLE32(b + o + 20);
+    o += 24;
+    if (l.type != 0) {
+      if (n - o < 2 || n - o - 2 < ReadLE16(b + o)) {
+        return {};
+      }
+      const size_t size = ReadLE16(b + o);
+      l.payload = {idta.start + o + 2, size};
+      o += 2 + size;
+      if (n - o < 4 || n - o - 4 < ReadLE32(b + o)) {
+        return {};
+      }
+      o += 4 + size_t(ReadLE32(b + o));
+    }
+    if (n - o < 18) {
+      return {};
+    }
+    o += 18;
+    out.push_back(l);
+  }
+  return out;
+}
+
+std::vector<std::pair<uint32_t, int>> ReadEntityLinkIds(const Room& room, size_t i) {
+  std::vector<std::pair<uint32_t, int>> out;
+  for (const EntityLink& l : ReadEntityLinkData(room, i)) {
+    out.emplace_back(l.id, l.target);
   }
   return out;
 }
@@ -1838,12 +1852,21 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         }
         // An unmatched ObjectFollowLocator's Play names the effect as the actor it moves; the
         // function reads it and never sends it (0xd951a8). The effects import writes it as a follow.
-        // A matched one is retail's, which moves the retail object only: the effect is left out.
+        // A matched one is retail's, which moves the retail object only: the effect is left out,
+        // unless the effect is that retail object (its Play -> Deactivate names it), which then
+        // carries Remastered's effect where retail's function moves it.
         if (isEffect && depth == 0 && c->event == kEventSpecialFunctionPlay && sender.entity >= 0 &&
             IsFollowLocator(room, sender)) {
           const int fs = entityOf(int(c->sender));
           if (fs >= 0 && match[size_t(fs)] >= 0) {
-            miss(sender, *c, c->action, depth);
+            const int self = match[size_t(&e - ents.data())];
+            const auto& retailLinks = objects[size_t(match[size_t(fs)])].links;
+            if (self < 0 || std::none_of(retailLinks.begin(), retailLinks.end(), [&](const ScriptObject::Link& l) {
+                  return l.state == uint32_t(kStatePlay) && l.message == 4 /* kSM_Deactivate */ &&
+                         l.target == objects[size_t(self)].id;
+                })) {
+              miss(sender, *c, c->action, depth);
+            }
             continue;
           }
           auto& by = result.followedBy[e.entity];

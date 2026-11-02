@@ -34,12 +34,14 @@ constexpr uint8_t kRetailEffect = 7;
 // A retail effect no object matched, with an added one this near, is the one it replaces.
 constexpr double kReplaceDistance = 5.0;
 
+constexpr double kDeg = 3.14159265358979323846 / 180.0;
+// Remastered's local axis that GameCube local axis j is (column j of RetailFrame's matrix).
+constexpr int kAxis[3] = {0, 2, 1};
+
 // Rz * Ry * Rx of Remastered's angles in GameCube axes (the room geometry's `place`), then
-// the area's rotation, as retail's editor angles in degrees.
-void RetailAngles(const Vec3& rot, const Mat34& xf, float out[3]) {
-  constexpr int kAxis[3] = {0, 2, 1};
+// the area's rotation: column j is where Remastered's local axis kAxis[j] points in the world.
+void RetailFrame(const Vec3& rot, const Mat34& xf, double w[3][3]) {
   constexpr double kSign[3] = {-1, 1, 1};
-  constexpr double kDeg = 3.14159265358979323846 / 180.0;
   double s[3], k[3];
   for (int i = 0; i < 3; ++i) {
     s[i] = std::sin(rot[size_t(i)] * kDeg);
@@ -50,7 +52,7 @@ void RetailAngles(const Vec3& rot, const Mat34& xf, float out[3]) {
       {s[2] * k[1], s[2] * s[1] * s[0] + k[2] * k[0], s[2] * s[1] * k[0] - k[2] * s[0]},
       {-s[1], k[1] * s[0], k[1] * k[0]},
   };
-  double g[3][3], w[3][3];
+  double g[3][3];
   for (int row = 0; row < 3; ++row) {
     for (int col = 0; col < 3; ++col) {
       g[row][col] = kSign[row] * kSign[col] * m[kAxis[row]][kAxis[col]];
@@ -61,6 +63,12 @@ void RetailAngles(const Vec3& rot, const Mat34& xf, float out[3]) {
       w[row][col] = xf[size_t(row)][0] * g[0][col] + xf[size_t(row)][1] * g[1][col] + xf[size_t(row)][2] * g[2][col];
     }
   }
+}
+
+// RetailFrame as retail's editor angles in degrees.
+void RetailAngles(const Vec3& rot, const Mat34& xf, float out[3]) {
+  double w[3][3];
+  RetailFrame(rot, xf, w);
   const double sy = std::clamp(-w[2][0], -1.0, 1.0);
   double x, z;
   if (std::fabs(sy) > 0.99999) {
@@ -233,7 +241,6 @@ bool ActorEffect(const Room& room, const Component& c, const Area& area, uint32_
   e.name += genp != f.end() && genp->second.size == 16 ? UuidText(room.Bytes(genp->second)) : std::string("without a GENP");
   const Vec3 w = Apply(area.xf, MulR2G(pos));
   world = w;
-  constexpr int kAxis[3] = {0, 2, 1};
   for (size_t i = 0; i < 3; ++i) {
     e.pos[i] = float(w[i]);
     e.scale[i] = float(scale[size_t(kAxis[i])]);
@@ -274,14 +281,281 @@ bool ActorEffect(const Room& room, const Component& c, const Area& area, uint32_
   return true;
 }
 
+// AmbientParticleEffect (kb topic/ambient-particle-effect.md): SLdrAmbientParticleEffect::Load
+// 0x4b8624 and its constructor's defaults 0x4b8448.
+constexpr uint32_t kAmbientParticleEffect = 0xcbe2042d;
+constexpr uint32_t kEffectProxyMP1 = 0xe12aae70;
+constexpr uint32_t kPropAmbientShapes = 0xa411bbc7;   // the shapes the points must fall in
+constexpr uint32_t kPropAmbientDensity = 0x7fbe0d2c;  // +0xd8
+constexpr uint32_t kPropAmbientLife = 0x89d67bfb;     // +0xdc
+constexpr uint32_t kPropAmbientSpawn = 0x01ed34eb;    // the camera-space sphere the points come from
+constexpr uint32_t kPropAmbientWeights = 0xab7ac437;  // per link index
+constexpr uint32_t kLinkAmbientEmitter = 0x2c283df0;
+constexpr uint32_t kShapeBox = 0xcef3fcf1;       // COBBoxShapeData
+constexpr uint32_t kShapeCylinder = 0x06c7e0ae;  // CCappedCylinderShapeData
+constexpr uint32_t kShapeSphere = 0x6ede23e6;    // CSphereShapeData
+
+// One typed shape (u32 type, u16 size, property list) at `b`; `used` its size.
+struct ShapeProps {
+  uint32_t type = 0;
+  std::map<uint32_t, std::pair<const uint8_t*, size_t>> props;
+};
+bool ReadShape(const uint8_t* b, size_t n, ShapeProps& out, size_t& used) {
+  if (n < 6 || n - 6 < ReadLE16(b + 4)) {
+    return false;
+  }
+  out.type = ReadLE32(b);
+  const size_t size = ReadLE16(b + 4);
+  std::vector<Prop> props;
+  if (!PropList(b + 6, size, &props)) {
+    return false;
+  }
+  for (const Prop& p : props) {
+    out.props[p.id] = {b + 6 + p.data.start, p.data.size};
+  }
+  used = 6 + size;
+  return true;
+}
+bool ShapeVec(const ShapeProps& s, uint32_t id, const Vec3& fallback, Vec3& out) {
+  const auto it = s.props.find(id);
+  if (it == s.props.end()) {
+    out = fallback;
+    return true;
+  }
+  if (it->second.second != 12) {
+    return false;
+  }
+  for (size_t k = 0; k < 3; ++k) {
+    out[k] = ReadLEFloat(it->second.first + 4 * k);
+  }
+  return true;
+}
+bool ShapeReal(const ShapeProps& s, uint32_t id, double fallback, double& out) {
+  const auto it = s.props.find(id);
+  if (it == s.props.end()) {
+    out = fallback;
+    return true;
+  }
+  if (it->second.second != 4) {
+    return false;
+  }
+  out = ReadLEFloat(it->second.first);
+  return true;
+}
+
+// The ambient record of an AmbientParticleEffect, its emitters the add-on effects (`addOnOf`, by
+// entity) of the EffectProxyMP1s it links; false with `why` when it cannot be exact.
+bool AmbientRecord(const Room& room, const Component& c, const Mat34& xf, const std::map<int, uint32_t>& addOnOf,
+                   PortRoomEffects::Ambient& out, const char*& why) {
+  const std::vector<Component>& comps = room.Components();
+  out = PortRoomEffects::Ambient{};
+  why = "unreadable";
+  Vec3 pos, rot, scale;
+  if (!room.Xform(c, pos, rot, scale)) {
+    return false;
+  }
+  // The shapes are in the entity's space, which is the room's in every one shipped.
+  for (size_t k = 0; k < 3; ++k) {
+    if (pos[k] != 0.0 || rot[k] != 0.0 || scale[k] != 1.0) {
+      why = "a placed entity";
+      return false;
+    }
+  }
+  const auto own = addOnOf.find(c.entity);
+  if (own == addOnOf.end()) {
+    why = "its effect not added";
+    return false;
+  }
+  out.owner = own->second;
+  const auto f = room.Flat(c);
+  const auto real = [&](uint32_t id, float fallback, float& v) {
+    const auto it = f.find(id);
+    if (it == f.end()) {
+      v = fallback;
+      return true;
+    }
+    v = it->second.size == 4 ? ReadLEFloat(room.Bytes(it->second)) : 0.f;
+    return it->second.size == 4;
+  };
+  float density = 0.f, life = 0.f;
+  if (!real(kPropAmbientDensity, 1e-5f, density) || !real(kPropAmbientLife, 4.f, life)) {
+    return false;
+  }
+  // The spawn sphere (CAmbientParticleEffectGOC::Init): its volume, in float as the game has it.
+  const auto spawn = f.find(kPropAmbientSpawn);
+  ShapeProps sphere;
+  size_t used = 0;
+  Vec3 center{};
+  double radius = 0;
+  if (spawn == f.end() || !ReadShape(room.Bytes(spawn->second), spawn->second.size, sphere, used) ||
+      used != spawn->second.size || sphere.type != kShapeSphere || !ShapeVec(sphere, 0x1d62d49d, {}, center) ||
+      !ShapeReal(sphere, 0x9988156a, 0.5, radius)) {
+    why = "no spawn sphere";
+    return false;
+  }
+  const float r = float(radius);
+  const float volume = ((r * 1.3333334f) * r) * r * 3.1415927f;
+  out.rate = std::fabs(life) < 1e-5f ? 0.f : volume * density / life;
+  const Vec3 offset = MulR2G(center);
+  for (size_t k = 0; k < 3; ++k) {
+    out.offset[k] = float(offset[k]);
+  }
+  out.radius = r;
+  const auto weights = f.find(kPropAmbientWeights);
+  if (weights == f.end() || weights->second.size < 4) {
+    why = "no weights";
+    return false;
+  }
+  const uint8_t* wb = room.Bytes(weights->second);
+  const uint32_t count = ReadLE32(wb);
+  if (count > PortRoomEffects::kMaxAmbientWeights || weights->second.size != 4 + 4 * size_t(count)) {
+    why = "bad weights";
+    return false;
+  }
+  for (uint32_t k = 0; k < count; ++k) {
+    out.weights.push_back(int32_t(ReadLE32(wb + 4 + 4 * k)));
+  }
+  // SpawnParticlesAtPositions 0x4bb0a0: every proxy linked with the index, a link to an entity
+  // meaning its proxies (CLinkedComponentRange::next_item 0x47bb2c). The link data is an empty
+  // property list in every one shipped: index 0.
+  for (const EntityLink& l : ReadEntityLinkData(room, size_t(&c - comps.data()))) {
+    if (l.id != kLinkAmbientEmitter) {
+      continue;
+    }
+    if (l.payload.size != 2 || ReadLE16(room.Bytes(l.payload)) != 0 || l.target < 0) {
+      why = "an unknown link";
+      return false;
+    }
+    std::vector<int> proxies;
+    if (comps[size_t(l.target)].type == kEffectProxyMP1) {
+      proxies.push_back(l.target);
+    } else if (comps[size_t(l.target)].type == kEntity) {
+      for (size_t k = 0; k < comps.size(); ++k) {
+        if (comps[k].type == kEffectProxyMP1 && comps[k].entity == l.target) {
+          proxies.push_back(int(k));
+        }
+      }
+    }
+    for (int p : proxies) {
+      const auto effect = addOnOf.find(comps[size_t(p)].entity);
+      if (effect == addOnOf.end()) {
+        why = "a linked effect not added";
+        return false;
+      }
+      if (out.emitters.size() >= PortRoomEffects::kMaxAmbientEmitters) {
+        why = "too many links";
+        return false;
+      }
+      out.emitters.push_back({0, effect->second});
+    }
+  }
+  // With no weights nothing is ever spawned (0x4bb0a0).
+  if (out.emitters.empty() || out.weights.empty()) {
+    why = "no emitter";
+    return false;
+  }
+  const auto shapes = f.find(kPropAmbientShapes);
+  if (shapes == f.end() || shapes->second.size < 4) {
+    why = "no shapes";
+    return false;
+  }
+  const uint8_t* sb = room.Bytes(shapes->second);
+  const size_t sn = shapes->second.size;
+  const uint32_t shapeCount = ReadLE32(sb);
+  if (shapeCount > PortRoomEffects::kMaxAmbientShapes) {
+    why = "too many shapes";
+    return false;
+  }
+  size_t at = 4;
+  for (uint32_t k = 0; k < shapeCount; ++k) {
+    ShapeProps s;
+    if (!ReadShape(sb + at, sn - at, s, used)) {
+      return false;
+    }
+    at += used;
+    PortRoomEffects::AmbientShape shape;
+    Vec3 sc{}, sr{}, ext{};
+    double sradius = 0, height = 0;
+    bool ok;
+    if (s.type == kShapeBox) {
+      shape.type = PortRoomEffects::kAmbientBox;
+      ok = ShapeVec(s, 0x7199772e, {}, sc) && ShapeVec(s, 0x2a65c84b, {}, sr) &&
+           ShapeVec(s, 0xd4fe58a9, {1, 1, 1}, ext);
+    } else if (s.type == kShapeCylinder) {
+      shape.type = PortRoomEffects::kAmbientCylinder;
+      ok = ShapeVec(s, 0x4a515a01, {}, sc) && ShapeVec(s, 0x25d57772, {}, sr) &&
+           ShapeReal(s, 0x042a3629, 0.5, sradius) && ShapeReal(s, 0x5abbfd19, 1.0, height);
+    } else if (s.type == kShapeSphere) {
+      shape.type = PortRoomEffects::kAmbientSphere;
+      ok = ShapeVec(s, 0x1d62d49d, {}, sc) && ShapeReal(s, 0x9988156a, 0.5, sradius);
+    } else {
+      why = "an unknown shape";
+      return false;
+    }
+    if (!ok) {
+      return false;
+    }
+    const Vec3 wc = Apply(xf, MulR2G(sc));
+    double w[3][3];
+    RetailFrame(sr, xf, w);
+    for (size_t i = 0; i < 3; ++i) {
+      shape.center[i] = float(wc[i]);
+      for (size_t j = 0; j < 3; ++j) {
+        shape.axes[j][i] = float(w[i][j]);
+      }
+    }
+    if (shape.type == PortRoomEffects::kAmbientBox) {
+      for (size_t j = 0; j < 3; ++j) {
+        shape.half[j] = float(std::fabs(ext[size_t(kAxis[j])]) * 0.5);
+      }
+    } else if (shape.type == PortRoomEffects::kAmbientCylinder) {
+      // Its axis is Remastered's local Y, GameCube's local Z.
+      for (size_t i = 0; i < 3; ++i) {
+        shape.axes[0][i] = float(w[i][2]);
+      }
+      shape.half[0] = float(std::fabs(height) * 0.5);
+      shape.half[1] = float(std::fabs(sradius));
+    } else {
+      shape.half[0] = float(std::fabs(sradius));
+    }
+    out.shapes.push_back(shape);
+  }
+  if (at != sn) {
+    return false;
+  }
+  return true;
+}
+
+// The entities with an EffectMP1 component.
+std::set<int> EffectEntities(const Room& room) {
+  std::set<int> out;
+  for (const Component* c : room.Of(kEffectMP1)) {
+    if (c->entity >= 0) {
+      out.insert(c->entity);
+    }
+  }
+  return out;
+}
+
+// A connection addressed to another component of an effect's entity (a Boolean's c53a2e78 to
+// its AmbientParticleEffect) with an action neither CEffectMP1GOC nor IMP1EntityBaseGOC
+// translates (0xd9c9e4, 0xc51ea4: 0xffff, no message) never reaches the effect, so it neither
+// connects nor drives it.
+bool MissesEffect(const Room& room, const std::set<int>& effects, const Connection& c, int t) {
+  const Component& target = room.Components()[size_t(t)];
+  return target.type != kEntity && target.type != kEffectMP1 && effects.count(target.entity) != 0 &&
+         EffectAct(c.action) == 0 && !IsEntityBaseAction(c.action);
+}
+
 }  // namespace
 
 std::set<int> ConnectedEntities(const Room& room) {
   const std::vector<Component>& comps = room.Components();
+  const std::set<int> effects = EffectEntities(room);
   std::set<int> out;
   for (const Connection& c : ReadConnections(room)) {
     const int t = room.ByGuid(c.target);
-    if (t >= 0) {
+    if (t >= 0 && !MissesEffect(room, effects, c, t)) {
       out.insert(comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity);
     }
   }
@@ -290,10 +564,11 @@ std::set<int> ConnectedEntities(const Room& room) {
 
 std::set<int> DrivableEntities(const Room& room) {
   const std::vector<Component>& comps = room.Components();
+  const std::set<int> effects = EffectEntities(room);
   std::set<int> connected, refused;
   for (const Connection& c : ReadConnections(room)) {
     const int t = room.ByGuid(c.target);
-    if (t < 0) {
+    if (t < 0 || MissesEffect(room, effects, c, t)) {
       continue;
     }
     const int entity = comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity;
@@ -1227,6 +1502,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   std::vector<PortRoomEffects::Generator> generators;
   size_t generatedCount = 0;  // effects added that a generator copies
   size_t reserved = 0;  // the barrier's actors, left to it
+  std::map<int, uint32_t> addOnOf;  // entity -> the add-on its EffectMP1 became
   for (const Component* c : effects) {
     if (c->entity < 0 || !seen.insert(c->entity).second) {
       continue;
@@ -1368,6 +1644,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     }
     e.id = PortRoomEffects::AddOnId(retailLayer, areaBits, uint32_t(added.size()));
     followerIs(c->entity, e.id);
+    addOnOf[c->entity] = e.id;
     for (PortRoomEffects::Drive& d : drives) {
       d.target = e.id;
       allDrives.push_back(d);
@@ -1794,7 +2071,22 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                   "PART), %zu Remastered-only effect slot(s) (%zu without an asset)",
                   patterned.size(), patternedNoPart, patches.size(), patchNoPart, actorSlots.size(), actorSlotNoPart);
   }
-  char generatorNote[384] = "";
+  // The ambient particle spawners, filling the effects they link (CAmbientParticleEffectGOC).
+  std::vector<PortRoomEffects::Ambient> ambients;
+  std::map<std::string, size_t> ambientsLeftOut;
+  for (const Component& c : room.Components()) {
+    if (c.type != kAmbientParticleEffect) {
+      continue;
+    }
+    PortRoomEffects::Ambient a;
+    const char* why = "";
+    if (!AmbientRecord(room, c, area.xf, addOnOf, a, why)) {
+      ++ambientsLeftOut[why];
+    } else if (a.rate > 0.f) {
+      ambients.push_back(std::move(a));
+    }
+  }
+  char generatorNote[512] = "";
   if (!generators.empty()) {
     std::snprintf(generatorNote, sizeof generatorNote, ", %zu of them copied by %zu generator(s)", generatedCount,
                   generators.size());
@@ -1818,6 +2110,14 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   if (!followsLeftOut.empty()) {
     const size_t at = std::strlen(generatorNote);
     std::snprintf(generatorNote + at, sizeof generatorNote - at, ", follows left out: %s", followsLeftOut.c_str() + 2);
+  }
+  if (!ambients.empty()) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu ambient spawner(s)", ambients.size());
+  }
+  for (const auto& [why, count] : ambientsLeftOut) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu ambient(s) left out: %s", count, why.c_str());
   }
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
@@ -1847,6 +2147,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   file.triggers = std::move(triggers);
   file.relays = std::move(relays);
   file.follows = std::move(follows);
+  file.ambients = std::move(ambients);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;

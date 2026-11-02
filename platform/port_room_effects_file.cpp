@@ -341,7 +341,8 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool relays = !file.relays.empty();
+  const bool ambients = !file.ambients.empty();
+  const bool relays = ambients || !file.relays.empty();
   const bool triggers = relays || !file.triggers.empty();
   const bool follows = triggers || !file.follows.empty();
   const bool timers = follows || !file.timers.empty();
@@ -352,7 +353,7 @@ std::vector<uint8_t> Write(const File& file) {
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, relays ? 15 : triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, ambients ? 16 : relays ? 15 : triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -517,6 +518,31 @@ std::vector<uint8_t> Write(const File& file) {
     for (const Relay& r : file.relays) {
       PutLE32(out, r.id);
       PutLE32(out, r.flags);
+    }
+  }
+  if (ambients) {
+    PutLE32(out, uint32_t(file.ambients.size()));
+    for (const Ambient& a : file.ambients) {
+      PutLEFloat(out, a.rate);
+      PutLE32(out, a.owner);
+      for (float v : a.offset) PutLEFloat(out, v);
+      PutLEFloat(out, a.radius);
+      PutLE32(out, uint32_t(a.weights.size()));
+      for (int32_t w : a.weights) PutLE32(out, uint32_t(w));
+      PutLE32(out, uint32_t(a.emitters.size()));
+      for (const AmbientEmitter& e : a.emitters) {
+        PutLE32(out, e.index);
+        PutLE32(out, e.id);
+      }
+      PutLE32(out, uint32_t(a.shapes.size()));
+      for (const AmbientShape& s : a.shapes) {
+        PutLE32(out, s.type);
+        for (float v : s.center) PutLEFloat(out, v);
+        for (const auto& row : s.axes) {
+          for (float v : row) PutLEFloat(out, v);
+        }
+        for (float v : s.half) PutLEFloat(out, v);
+      }
     }
   }
   return out;
@@ -1018,6 +1044,56 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         return false;
       }
       file.relays.push_back(r);
+    }
+  }
+  if (version >= 16) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 36) {
+      error = "truncated ambient list";
+      return false;
+    }
+    auto readFloat = [&](float& f) {
+      uint32_t bits = 0;
+      const bool ok = ReadLE32(data, at, bits);
+      std::memcpy(&f, &bits, 4);
+      return ok && std::isfinite(f) && std::fabs(f) < 1e5f;
+    };
+    for (uint32_t i = 0; i < count; ++i) {
+      Ambient a;
+      bool ok = readFloat(a.rate) && a.rate >= 0.f && a.rate <= kMaxAmbientRate && ReadLE32(data, at, a.owner) &&
+                isObject(a.owner);
+      for (float& v : a.offset) ok = ok && readFloat(v);
+      ok = ok && readFloat(a.radius) && a.radius > 0.f;
+      uint32_t n = 0;
+      ok = ok && ReadLE32(data, at, n) && n <= kMaxAmbientWeights && n <= (data.size() - at) / 4;
+      for (uint32_t k = 0; ok && k < n; ++k) {
+        uint32_t w = 0;
+        ok = ReadLE32(data, at, w);
+        a.weights.push_back(int32_t(w));
+      }
+      ok = ok && ReadLE32(data, at, n) && n <= kMaxAmbientEmitters && n <= (data.size() - at) / 8;
+      for (uint32_t k = 0; ok && k < n; ++k) {
+        AmbientEmitter e;
+        ok = ReadLE32(data, at, e.index) && ReadLE32(data, at, e.id) && e.index < a.weights.size() &&
+             isObject(e.id);
+        a.emitters.push_back(e);
+      }
+      ok = ok && ReadLE32(data, at, n) && n <= kMaxAmbientShapes && n <= (data.size() - at) / 64;
+      for (uint32_t k = 0; ok && k < n; ++k) {
+        AmbientShape s;
+        ok = ReadLE32(data, at, s.type) && s.type <= kAmbientSphere;
+        for (float& v : s.center) ok = ok && readFloat(v);
+        for (auto& row : s.axes) {
+          for (float& v : row) ok = ok && readFloat(v);
+        }
+        for (float& v : s.half) ok = ok && readFloat(v) && v >= 0.f;
+        a.shapes.push_back(s);
+      }
+      if (!ok || a.emitters.empty()) {
+        error = "invalid ambient " + std::to_string(i);
+        return false;
+      }
+      file.ambients.push_back(std::move(a));
     }
   }
   auto isTrigger = [&](uint32_t id) {

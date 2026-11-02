@@ -830,6 +830,15 @@ std::vector<Connection> ReadConnections(const Room& room);
 std::vector<int> ReadEntityLinks(const Room& room, size_t i);
 // The same links with their link ids: (u32 id, linked component or -1).
 std::vector<std::pair<uint32_t, int>> ReadEntityLinkIds(const Room& room, size_t i);
+// The same links with their link data: a typed one carries its type and payload (span in the
+// room), an untyped one type 0 and an empty payload.
+struct EntityLink {
+  uint32_t id = 0;
+  int target = -1;
+  uint32_t type = 0;
+  Span payload;
+};
+std::vector<EntityLink> ReadEntityLinkData(const Room& room, size_t i);
 // The EnvironmentFX colour intensity the room sets when it loads: the density controller (kEnvFxDensityController)
 // that a RelayAutoFire reaches, through Relays, with kActionEnvFxApply, else 1. A controller
 // nothing reaches at load (fired by a trigger, or by nothing) is left out, and noted in `notes`.
@@ -949,6 +958,20 @@ constexpr uint32_t kEffectMP1 = 0xb421cdcb;
 constexpr uint32_t kActionEffectActivate = 0xdbe5cb30;
 constexpr uint32_t kActionEffectDeactivate = 0x7dcfa087;
 constexpr uint32_t kActionEffectToggle = 0xda662fc8;
+// EffectMP1's own actions (CEffectMP1GOC::TranslateScriptActionToMessage 0xd9c9e4): retail
+// Activate, Deactivate and ToggleActive.
+inline uint8_t EffectAct(uint32_t action) {
+  return action == kActionEffectActivate     ? PortRoomGeo::kShow
+         : action == kActionEffectDeactivate ? PortRoomGeo::kHide
+         : action == kActionEffectToggle     ? PortRoomGeo::kToggle
+                                             : 0;
+}
+// The actions every MP1 entity takes (IMP1EntityBaseGOC::TranslateScriptActionToMessage
+// 0xc51ea4): 'ACMP', 'ACTV', 'ICMP', 'ICTV' and 'XDEL'.
+inline bool IsEntityBaseAction(uint32_t action) {
+  return action == 0x41434d50 || action == kActionEntityActivate || action == 0x49434d50 ||
+         action == kActionEntityDeactivate || action == kActionHintDelete;
+}
 // CScriptGeneratorMP1 (0xf44128): retail CScriptGenerator. Its Zero -> Generate connections name
 // the templates, Zero -> Follow the follows; SetToZero (99ea1c2c) generates, Activate (799391e0),
 // Deactivate (15494612) and Toggle (ab440330) switch it.

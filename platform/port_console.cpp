@@ -1243,6 +1243,21 @@ void CmdFxQuery() {
         }
       }
     }
+    for (const PortRoomEffects::AmbientState& s : PortRoomEffects::AmbientsOf(mrea)) {
+      const PortRoomEffects::Ambient& a = s.ambient;
+      std::string emitters;
+      for (const PortRoomEffects::AmbientEmitter& e : a.emitters) {
+        char text[24];
+        std::snprintf(text, sizeof text, " %u:%08X", unsigned(e.index), e.id);
+        emitters += text;
+      }
+      Out("  ambient of %08X: %.2f point(s)/s, %zu shape(s), %zu spawned, emitters%s", a.owner, a.rate,
+          a.shapes.size(), s.spawned, emitters.c_str());
+      for (const PortRoomEffects::AmbientShape& sh : a.shapes) {
+        Out("    shape %u at (%.1f %.1f %.1f) half (%.1f %.1f %.1f)", unsigned(sh.type), sh.center[0], sh.center[1],
+            sh.center[2], sh.half[0], sh.half[1], sh.half[2]);
+      }
+    }
   } else if (sub == "barrier") {
     // The Parasite Queen barrier group (port_queen_barrier.h), from each live ring controller.
     const CStateManager* const mgr = PortDebug::StateManager();

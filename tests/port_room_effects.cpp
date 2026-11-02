@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 15);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 16);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -654,6 +654,66 @@ void TestFileRelays() {
   refused([&](File& f) { f.drives = {{r, 0x041A0010, 9, 11, 0.f}}; }, "ResetAndStart to a relay");
 }
 
+// Version 16 adds AmbientParticleEffects: points spawned near the camera into this file's effects.
+void TestFileAmbients() {
+  File in;
+  PortRoomEffects::Layer layer;
+  layer.layer = 1;
+  PortRoomEffects::AppendEffect(MakeEffect(1, 0), layer.objects);
+  PortRoomEffects::AppendEffect(MakeEffect(1, 1), layer.objects);
+  layer.count = 2;
+  in.layers.push_back(layer);
+  const uint32_t a = MakeEffect(1, 0).id, b = MakeEffect(1, 1).id;
+  PortRoomEffects::Ambient amb;
+  amb.rate = 2.5f;
+  amb.owner = a;
+  amb.weights = {100, 50};
+  amb.emitters = {{0, a}, {1, b}};
+  PortRoomEffects::AmbientShape box;
+  box.center[0] = 3.f;
+  box.half[0] = box.half[1] = box.half[2] = 4.f;
+  PortRoomEffects::AmbientShape cyl = box;
+  cyl.type = PortRoomEffects::kAmbientCylinder;
+  amb.shapes = {box, cyl};
+  in.ambients.push_back(amb);
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 16);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.ambients.size() == 1);
+  const PortRoomEffects::Ambient& o = out.ambients[0];
+  CHECK(o.rate == 2.5f && o.owner == a && o.offset[1] == 10.f && o.radius == 15.f && o.weights == amb.weights);
+  CHECK(o.emitters.size() == 2 && o.emitters[1].index == 1 && o.emitters[1].id == b);
+  CHECK(o.shapes.size() == 2 && o.shapes[1].type == PortRoomEffects::kAmbientCylinder && o.shapes[0].center[0] == 3.f &&
+        o.shapes[0].half[2] == 4.f && o.shapes[0].axes[1][1] == 1.f);
+  for (size_t cut = 1; cut <= 20; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  const auto refused = [&](auto change, const char* what) {
+    File f = in;
+    change(f.ambients[0]);
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  refused([](PortRoomEffects::Ambient& x) { x.rate = -1.f; }, "a negative rate");
+  refused([](PortRoomEffects::Ambient& x) { x.radius = 0.f; }, "no radius");
+  refused([](PortRoomEffects::Ambient& x) { x.owner = 0x041A0020; }, "a retail owner");
+  refused([](PortRoomEffects::Ambient& x) { x.emitters[0].id = 0x041A0020; }, "a retail emitter");
+  refused([](PortRoomEffects::Ambient& x) { x.emitters[1].index = 2; }, "an index without a weight");
+  refused([](PortRoomEffects::Ambient& x) { x.emitters.clear(); }, "no emitter");
+  refused([](PortRoomEffects::Ambient& x) { x.shapes[0].type = 3; }, "an unknown shape");
+  refused([](PortRoomEffects::Ambient& x) { x.shapes[0].half[0] = -1.f; }, "a negative extent");
+  refused([](PortRoomEffects::Ambient& x) { x.shapes[0].center[0] = NAN; }, "a NaN");
+  refused([](PortRoomEffects::Ambient& x) { x.weights.assign(PortRoomEffects::kMaxAmbientWeights + 1, 1); },
+          "too many weights");
+  // Without ambients it stays version 15 or older.
+  File f = in;
+  f.ambients.clear();
+  CHECK(PortRoomEffects::Write(f)[4] < 16);
+}
+
 // Version 13 adds ObjectFollowLocators: a retail SpecialFunction that moves one of this file's
 // effects (or a retail object) to a retail actor's locator.
 void TestFileFollows() {
@@ -1044,6 +1104,7 @@ int main() {
   TestFileTimers();
   TestFileTriggers();
   TestFileRelays();
+  TestFileAmbients();
   TestFileFollows();
   TestFileBarriers();
   TestExternalVariables();

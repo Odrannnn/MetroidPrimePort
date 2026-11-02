@@ -80,10 +80,14 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   written as version 13 or older.
 //   version 15 then has u32 relays, then per relay: u32 add-on editor id, u32 flags (see Relay).
 //   Files without relays are still written as version 14 or older.
+//   version 16 then has u32 ambients, then per ambient: f32 rate, u32 owner add-on editor id, f32
+//   sphere offset[3], f32 sphere radius, u32 weights and that many i32, u32 emitters and per
+//   emitter u32 index and u32 add-on editor id, u32 shapes and per shape u32 type, f32 center[3], f32 axes[9], f32 half[3]
+//   (see Ambient). Files without ambients are still written as version 15 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 15;
+constexpr uint32_t kFileVersion = 16;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -361,6 +365,44 @@ struct Relay {
   uint32_t flags = kRelayActive;
 };
 
+// A Remastered AmbientParticleEffect (CAmbientParticleEffectGOC::BeforeThink 0x4ba150): each
+// frame it adds rate * dt points (the fraction carried over) to draw, at random in a sphere
+// `offset` ahead of the camera (its current transform, camera axes), keeps those inside any of
+// its shapes (NTouchableUtils::ErasePointsInsideShapeList 0x897be0) and starts one particle at
+// each in the effects it links (SpawnParticlesAtPositions 0x4bb0a0, link data `index`): the
+// points split by `weights` between the indices, the rest at random. The rate is the sphere's
+// volume times the density (+0xd8) over the lifetime (+0xdc). Its two splines, of the GPU
+// availability, are identity and are taken at full availability. It spawns while the add-on its
+// own entity's EffectMP1 became (`owner`) is active.
+constexpr uint32_t kAmbientBox = 0;       // COBBoxShapeData cef3fcf1
+constexpr uint32_t kAmbientCylinder = 1;  // CCappedCylinderShapeData 06c7e0ae
+constexpr uint32_t kAmbientSphere = 2;    // CSphereShapeData 6ede23e6
+constexpr uint32_t kMaxAmbientShapes = 256;
+constexpr uint32_t kMaxAmbientWeights = 16;
+constexpr uint32_t kMaxAmbientEmitters = 16;
+constexpr float kMaxAmbientRate = 1e6f;  // points per second
+struct AmbientShape {
+  uint32_t type = kAmbientBox;
+  float center[3] = {0, 0, 0};  // GameCube world space
+  // A box: its axes (rows, world space) and half extents along them. A cylinder: axes[0] its
+  // axis, half[0] half its height and half[1] its radius. A sphere: half[0] its radius.
+  float axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+  float half[3] = {0, 0, 0};
+};
+struct AmbientEmitter {
+  uint32_t index = 0;
+  uint32_t id = 0;  // an add-on effect
+};
+struct Ambient {
+  float rate = 0.f;
+  uint32_t owner = 0;            // an add-on effect
+  float offset[3] = {0, 10, 0};  // camera space, GameCube axes
+  float radius = 15.f;
+  std::vector<int32_t> weights;
+  std::vector<AmbientEmitter> emitters;
+  std::vector<AmbientShape> shapes;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -377,6 +419,7 @@ struct File {
   std::vector<Follow> follows;
   std::vector<Trigger> triggers;
   std::vector<Relay> relays;
+  std::vector<Ambient> ambients;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -459,5 +502,12 @@ struct GeneratorState {
   size_t made;
 };
 std::vector<GeneratorState> GeneratorsOf(uint32_t mrea);
+
+// The area's ambient spawners, with how many points fell inside their shapes so far.
+struct AmbientState {
+  Ambient ambient;
+  size_t spawned;
+};
+std::vector<AmbientState> AmbientsOf(uint32_t mrea);
 
 }  // namespace PortRoomEffects

@@ -5,8 +5,12 @@
 #include "port_log.h"
 #include "port_mods.h"
 
+#include "Kyoto/CRandom16.hpp"
+#include "Kyoto/Particles/CElementGen.hpp"
 #include "Kyoto/Streams/CMemoryInStream.hpp"
 #include "MetroidPrime/CGameArea.hpp"
+#include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "MetroidPrime/Cameras/CGameCamera.hpp"
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/Enemies/CWallCrawlerSwarm.hpp"
@@ -15,6 +19,7 @@
 #include "MetroidPrime/TCastTo.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -53,8 +58,122 @@ struct Driven {
   std::vector<bool> active;               // by generator
   std::vector<size_t> made;               // by generator: copies made
   std::map<uint32_t, Template> templates;  // by add-on editor id
+  std::vector<Ambient> ambients;
+  std::vector<float> carry;     // by ambient: the fraction of a point carried over
+  std::vector<size_t> spawned;  // by ambient: points inside its shapes so far
 };
 std::map<uint32_t, Driven> sDriven;  // by MREA
+CRandom16 sAmbientRandom;
+
+CScriptEffect* EffectOf(CStateManager& mgr, uint32_t id) {
+  return TCastToPtr< CScriptEffect >(mgr.ObjectById(mgr.GetIdForScript(TEditorId(id))));
+}
+
+bool InShape(const AmbientShape& s, const CVector3f& p) {
+  const float d[3] = {p.GetX() - s.center[0], p.GetY() - s.center[1], p.GetZ() - s.center[2]};
+  const auto along = [&](int axis) {
+    return s.axes[axis][0] * d[0] + s.axes[axis][1] * d[1] + s.axes[axis][2] * d[2];
+  };
+  switch (s.type) {
+  case kAmbientBox:
+    return std::fabs(along(0)) <= s.half[0] && std::fabs(along(1)) <= s.half[1] && std::fabs(along(2)) <= s.half[2];
+  case kAmbientCylinder: {
+    const float t = along(0);
+    return std::fabs(t) <= s.half[0] && d[0] * d[0] + d[1] * d[1] + d[2] * d[2] - t * t <= s.half[1] * s.half[1];
+  }
+  default:
+    return d[0] * d[0] + d[1] * d[1] + d[2] * d[2] <= s.half[0] * s.half[0];
+  }
+}
+
+// SpawnParticlesAtPositions 0x4bb0a0: the points, in each effect linked with `index`.
+void SpawnAmbient(CStateManager& mgr, const Ambient& a, uint32_t index, const CVector3f* points, int n) {
+  if (n <= 0) {
+    return;
+  }
+  std::vector<CVector3f> local(size_t(n), CVector3f(0.f, 0.f, 0.f));
+  for (const AmbientEmitter& e : a.emitters) {
+    CScriptEffect* const effect = e.index == index ? EffectOf(mgr, e.id) : nullptr;
+    CElementGen* const gen = effect != nullptr && effect->GetActive() ? effect->PortParticleSystem() : nullptr;
+    if (gen == nullptr) {
+      continue;
+    }
+    const CVector3f& t = gen->GetGlobalTranslation();
+    const CVector3f& s = gen->GetGlobalScale();
+    for (int k = 0; k < n; ++k) {
+      local[size_t(k)] = CVector3f((points[k].GetX() - t.GetX()) / s.GetX(), (points[k].GetY() - t.GetY()) / s.GetY(),
+                                   (points[k].GetZ() - t.GetZ()) / s.GetZ());
+    }
+    gen->PortCreateParticlesAtPositionsIncludingChildren(n, local.data());
+  }
+}
+
+// CAmbientParticleEffectGOC::BeforeThink 0x4ba150 (see Ambient).
+void ThinkAmbient(CStateManager& mgr, const Ambient& a, float& carry, size_t& spawned, float dt) {
+  const CScriptEffect* const owner = EffectOf(mgr, a.owner);
+  if (owner == nullptr || !owner->GetActive()) {
+    return;
+  }
+  // The game scales the rate, and removes particles older than its life, by two tweak splines of
+  // SGPUFrameTimingData::CalculateGPUAvailabilityScale 0xb2a94c; that scale is 1 unless the GPU
+  // runs late, and both splines are 1 there (read live), so neither applies.
+  const float want = a.rate * dt + carry;
+  const int n = int(want);
+  carry = want - float(n);
+  if (n <= 0) {
+    return;
+  }
+  const CTransform4f& cam = mgr.GetCameraManager()->GetCurrentCamera(mgr).GetTransform();
+  const CVector3f center = cam.GetTranslation() + cam.Rotate(CVector3f(a.offset[0], a.offset[1], a.offset[2]));
+  const float r = a.radius;
+  std::vector<CVector3f> drawn;
+  drawn.reserve(size_t(n));
+  for (int i = 0; i < n; ++i) {
+    CVector3f p(0.f, 0.f, 0.f);
+    do {
+      const float x = sAmbientRandom.Float(), y = sAmbientRandom.Float(), z = sAmbientRandom.Float();
+      p = CVector3f(2.f * r * x - r, 2.f * r * y - r, 2.f * r * z - r);
+    } while (p.MagSquared() > r * r);
+    drawn.push_back(center + p);
+  }
+  // ErasePointsInsideShapeList 0x897be0: shape by shape, each point inside moved out, the last
+  // point taking its place.
+  std::vector<CVector3f> points;
+  for (const AmbientShape& s : a.shapes) {
+    for (size_t i = 0; i < drawn.size();) {
+      if (!InShape(s, drawn[i])) {
+        ++i;
+        continue;
+      }
+      points.push_back(drawn[i]);
+      drawn[i] = drawn.back();
+      drawn.pop_back();
+    }
+  }
+  const int kept = int(points.size());
+  spawned += size_t(kept);
+  const int count = int(a.weights.size());
+  int sum = 0, minPositive = 0;
+  for (int32_t w : a.weights) {
+    if (w > 0) {
+      sum += w;
+      minPositive = minPositive == 0 ? w : std::min(minPositive, int(w));
+    }
+  }
+  int done = 0;
+  if (count >= 1 && sum > 0 && minPositive * kept / sum >= 1) {
+    for (int i = 0; i < count; ++i) {
+      if (a.weights[size_t(i)] >= 1) {
+        const int k = std::min(a.weights[size_t(i)] * kept / sum, kept - done);
+        SpawnAmbient(mgr, a, uint32_t(i), points.data() + done, k);
+        done += k;
+      }
+    }
+  }
+  for (; count >= 1 && done < kept; ++done) {
+    SpawnAmbient(mgr, a, uint32_t(sAmbientRandom.Range(0, count - 1)), points.data() + done, 1);
+  }
+}
 
 // CScriptGeneratorMP1::AcceptScriptMsg 0xf44128 for one of the file's generators (see Generator).
 void Generate(CStateManager& mgr, Driven& area, size_t index, TUniqueId sender, const Drive& d) {
@@ -142,8 +261,11 @@ void BeginArea(uint32_t mrea) {
   for (uint32_t id : sFile.skips) {
     sSkips.insert(id & 0x3FFFFFF);
   }
-  if (!sFile.drives.empty() || !sFile.generators.empty()) {
+  if (!sFile.drives.empty() || !sFile.generators.empty() || !sFile.ambients.empty()) {
     Driven& driven = sDriven[mrea];
+    driven.ambients = sFile.ambients;
+    driven.carry.assign(sFile.ambients.size(), 0.f);
+    driven.spawned.assign(sFile.ambients.size(), 0);
     driven.drives = sFile.drives;
     driven.generators = sFile.generators;
     driven.made.assign(sFile.generators.size(), 0);
@@ -498,6 +620,9 @@ void Think(CStateManager& mgr, float dt) {
       area.pending.erase(next);
       Deliver(mgr, area, kInvalidUniqueId, area.drives[drive]);
     }
+    for (size_t i = 0; i < area.ambients.size(); ++i) {
+      ThinkAmbient(mgr, area.ambients[i], area.carry[i], area.spawned[i], dt);
+    }
     ++it;
   }
 }
@@ -521,6 +646,15 @@ std::vector<GeneratorState> GeneratorsOf(uint32_t mrea) {
   const auto found = sDriven.find(mrea);
   for (size_t i = 0; found != sDriven.end() && i < found->second.generators.size(); ++i) {
     out.push_back({found->second.generators[i], found->second.active[i], found->second.made[i]});
+  }
+  return out;
+}
+
+std::vector<AmbientState> AmbientsOf(uint32_t mrea) {
+  std::vector<AmbientState> out;
+  const auto found = sDriven.find(mrea);
+  for (size_t i = 0; found != sDriven.end() && i < found->second.ambients.size(); ++i) {
+    out.push_back({found->second.ambients[i], found->second.spawned[i]});
   }
   return out;
 }
