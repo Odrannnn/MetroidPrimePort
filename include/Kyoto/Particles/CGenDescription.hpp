@@ -75,6 +75,13 @@ struct CPortVfxData {
   u32 vtmtCount = 0;
   // VTRS: a header sprite's TEXR TRST (x, y, sx, sy, rot in degrees), or all null.
   CRealElement* vtrs[5] = {};
+  // VATX: a header sprite's TEXR ATEX as Remastered's CUVEAnimTexture, its tile rects (x0 y0 x1 y1
+  // per tile, none without one), cycle frames and loop.
+  std::vector< float > atexRects;
+  float atexCycle = 0.f;
+  bool atexLoop = false;
+  // VAT2: an ATX2's cycle, evaluated per particle frame in place of atexCycle; null for VATX.
+  CIntElement* atexCycleElem = nullptr;
   std::vector< CPortVfxElem > vpmt;
   std::vector< CPortVfxElem > vsmt;
   CRealElement* ssze = nullptr;

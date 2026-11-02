@@ -1333,6 +1333,18 @@ public:
     io.flipbook = [&](const EffectGuid& stored) { return Flipbook(Swap(stored)); };
     io.materialData = [&](const EffectGuid& material) { return MaterialData(material); };
     io.vfxTexture = [&](const EffectGuid& stored) { return VfxTexture(stored); };
+    // The top mip's size, as GetFullTextureWidth/Height.
+    io.textureSize = [&](const EffectGuid& stored, uint32_t& width, uint32_t& height) {
+      int w = 0, h = 0;
+      std::vector<uint8_t> rgba;
+      std::string error;
+      if (!m_io.texture || !m_io.texture(Swap(stored), w, h, rgba, error) || w <= 0 || h <= 0) {
+        return false;
+      }
+      width = uint32_t(w);
+      height = uint32_t(h);
+      return true;
+    };
     if (m_io.modelMesh) {
       io.modelMesh = [&](uint32_t model) { return m_io.modelMesh(model); };
     }

@@ -5835,6 +5835,87 @@ void TestHeaderMaterial() {
                 parts[0].approximated[0] == "VMAT: header shader b42cacf5 has a TEXR TRST with a wrap mode",
             "a header TRST with its own wrap mode is refused");
 
+  // A constant TEXR ATEX is CUVEAnimTexture: VATX carries the Remastered texture's size, the tile
+  // and stride sizes, the cycle and the loop; without the size it is refused.
+  const auto atex = [](std::vector<uint8_t>& o) {
+    PutProperty(o, "TEXR", 0);
+    PutFourCC(o, "ATEX");
+    PutGuid(o, Legacy(0x1234ABCD));
+    for (uint32_t each : {32u, 32u, 32u, 32u, 64u, 1u}) {
+      PutConstant(o, each);
+    }
+  };
+  const auto vatxOf = [](const ConvertedPart& part) {
+    std::vector<RetailPartProperty> props;
+    std::string error;
+    if (SplitRetailPart(part.part.data(), part.part.size(), props, error)) {
+      for (const auto& prop : props) {
+        if (prop.fourcc == EffectFourCC("VATX")) {
+          return prop.value;
+        }
+      }
+    }
+    return std::vector<uint8_t>{};
+  };
+  parts = ConvertOne(withShader(OneGenerator(atex), 0xb42cacf5), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && vatxOf(parts[0]).empty() &&
+                parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 has an ATEX TEXR whose texture size is unknown",
+            "a header ATEX without the texture's size is refused");
+  EffectConvertIO sized = io;
+  sized.textureSize = [](const EffectGuid&, uint32_t& width, uint32_t& height) {
+    width = 128;
+    height = 64;
+    return true;
+  };
+  parts = ConvertOne(withShader(OneGenerator(atex), 0xb42cacf5), sized);
+  const std::vector<uint8_t> vatx = parts.size() == 1 ? vatxOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmatOf(parts[0]), 24) == 0x5EED0009 &&
+                vatx.size() == 32 && VmatWord(vatx, 0) == 128 && VmatWord(vatx, 4) == 64 &&
+                VmatWord(vatx, 8) == 32 && VmatWord(vatx, 20) == 32 && VmatWord(vatx, 24) == 64 &&
+                VmatWord(vatx, 28) == 1,
+            "a header sprite's TEXR ATEX is written as VATX");
+
+  // An ATX2 is the same class with a grid and an element cycle: VAT2 carries the size, columns,
+  // rows and loop, then the tag-1 cycle ILPT(100) as the port's PLPT offset 0 (the system's PSLT).
+  const auto atx2 = [](uint8_t tag) {
+    return [tag](std::vector<uint8_t>& o) {
+      PutProperty(o, "TEXR", tag);
+      PutFourCC(o, "ATX2");
+      PutGuid(o, Legacy(0x1234ABCD));
+      PutConstant(o, 4);
+      PutConstant(o, 2);
+      PutFourCC(o, "ILPT");
+      PutConstant(o, 100);
+      PutConstant(o, 1);
+    };
+  };
+  const auto vat2Of = [](const ConvertedPart& part) {
+    std::vector<RetailPartProperty> props;
+    std::string error;
+    if (SplitRetailPart(part.part.data(), part.part.size(), props, error)) {
+      for (const auto& prop : props) {
+        if (prop.fourcc == EffectFourCC("VAT2")) {
+          return prop.value;
+        }
+      }
+    }
+    return std::vector<uint8_t>{};
+  };
+  parts = ConvertOne(withShader(OneGenerator(atx2(1)), 0xb42cacf5), sized);
+  const std::vector<uint8_t> vat2 = parts.size() == 1 ? vat2Of(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmatOf(parts[0]), 24) == 0x5EED0009 &&
+                vat2.size() == 5 * 4 + 16 && VmatWord(vat2, 0) == 128 && VmatWord(vat2, 4) == 64 &&
+                VmatWord(vat2, 8) == 4 && VmatWord(vat2, 12) == 2 && VmatWord(vat2, 16) == 1 &&
+                VmatWord(vat2, 20) == EffectFourCC("PLPT") && VmatWord(vat2, 24) == 0 &&
+                VmatWord(vat2, 28) == EffectFourCC("CNST") && VmatWord(vat2, 32) == 100,
+            "a header sprite's TEXR ATX2 is written as VAT2");
+  parts = ConvertOne(withShader(OneGenerator(atx2(3)), 0xb42cacf5), sized);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && vat2Of(parts[0]).empty() &&
+                parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 has an ATX2 TEXR of tag 3",
+            "a header ATX2 off tag 1 is refused");
+
   parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x1e245375), io);
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
   CHECK_MSG(VmatWord(vmat, 8) == 2 && VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,

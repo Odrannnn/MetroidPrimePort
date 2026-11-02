@@ -224,6 +224,71 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
       e = GetRealElement(in);
     }
   } break;
+  case SBIG('VATX'): {
+    // The header sprite's TEXR ATEX: the texture's full width and height, tile width and height,
+    // stride width and height, cycle frames, loop. The rects are CUVEAnimTexture's (ctor 0x2cd0f4):
+    // rows bottom up, each left to right.
+    CPortVfxData& vfx = PortVfxData(vfxPtr);
+    u32 w[8];
+    for (u32& word : w) {
+      word = in.ReadLong();
+    }
+    vfx.atexRects.clear();
+    if (w[0] == 0 || w[1] == 0 || w[4] == 0 || w[5] == 0) {
+      break;
+    }
+    const s32 xTiles = std::max(1, s32(w[0] / w[4]));
+    const s32 yTiles = std::max(1, s32(w[1] / w[5]));
+    if (s64(xTiles) * yTiles > 65536) {
+      break;
+    }
+    const float width = float(w[0]), height = float(w[1]);
+    for (s32 row = yTiles - 1; row >= 0; --row) {
+      for (s32 x = 0; x < xTiles; ++x) {
+        vfx.atexRects.push_back(float(x * s32(w[4])) / width);
+        vfx.atexRects.push_back(float(row * s32(w[5])) / height);
+        vfx.atexRects.push_back(float(x * s32(w[4]) + s32(w[2])) / width);
+        vfx.atexRects.push_back(float(row * s32(w[5]) + s32(w[3])) / height);
+      }
+    }
+    vfx.atexCycle = float(s32(w[6]));
+    vfx.atexLoop = w[7] != 0;
+    delete vfx.atexCycleElem;
+    vfx.atexCycleElem = nullptr;
+  } break;
+  case SBIG('VAT2'): {
+    // The header sprite's TEXR ATX2: the texture's full width and height, columns, rows, loop,
+    // then the cycle as an int element. The rects are CUVEAnimTexture's (ctor 0x2cd3f4, builder
+    // 0x2cd510): a cols x rows grid, rows bottom up, each left to right, the edges times 1/size.
+    CPortVfxData& vfx = PortVfxData(vfxPtr);
+    u32 w[5];
+    for (u32& word : w) {
+      word = in.ReadLong();
+    }
+    delete vfx.atexCycleElem;
+    vfx.atexCycleElem = GetIntElement(in);
+    vfx.atexCycle = 0.f;
+    vfx.atexLoop = w[4] != 0;
+    vfx.atexRects.clear();
+    const s32 cols = std::max(1, s32(w[2]));
+    const s32 rows = std::max(1, s32(w[3]));
+    if (w[0] == 0 || w[1] == 0 || s64(cols) * rows > 65536) {
+      break;
+    }
+    const float width = float(w[0]), height = float(w[1]);
+    const float tileW = width / float(cols), tileH = height / float(rows);
+    const float invW = 1.f / width, invH = 1.f / height;
+    for (s32 row = rows - 1; row >= 0; --row) {
+      const float y = tileH * float(row);
+      for (s32 x = 0; x < cols; ++x) {
+        const float x0 = tileW * float(x);
+        vfx.atexRects.push_back(invW * x0);
+        vfx.atexRects.push_back(invH * y);
+        vfx.atexRects.push_back(invW * (tileW + x0));
+        vfx.atexRects.push_back(invH * (tileH + y));
+      }
+    }
+  } break;
   case SBIG('VPMT'):
   case SBIG('VSMT'): {
     // VPMT: {kind row comp element}; VSMT: {target kind element}

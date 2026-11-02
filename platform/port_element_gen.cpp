@@ -223,6 +223,11 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
     if (vfx->vtrs[0] != nullptr) {
       out.vfx += " VTRS";
     }
+    if (!vfx->atexRects.empty()) {
+      std::snprintf(buf, sizeof(buf), " %s*%zu", vfx->atexCycleElem != nullptr ? "VAT2" : "VATX",
+                    vfx->atexRects.size() / 4);
+      out.vfx += buf;
+    }
     if (!vfx->vpmt.empty()) {
       std::snprintf(buf, sizeof(buf), " VPMT*%zu", vfx->vpmt.size());
       out.vfx += buf;

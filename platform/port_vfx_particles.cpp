@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <vector>
 
 #include "Kyoto/Graphics/CColor.hpp"
@@ -63,6 +64,46 @@ float EvalReal(CRealElement* e, int frame, float def) {
     e->GetValue(frame, v);
   }
   return v;
+}
+
+// AArch64 FRECPE on a float (FPRecipEstimate): 8 bits of the reciprocal from the top 8 of the
+// mantissa. Outside normal inputs whose reciprocal is normal it falls back to the true one.
+float RecipEstimate(float x) {
+  u32 bits;
+  std::memcpy(&bits, &x, sizeof(bits));
+  const u32 exp = bits >> 23 & 0xff;
+  if (exp == 0 || exp >= 253) {
+    return 1.f / x;
+  }
+  const u32 a = (0x100 | (bits >> 15 & 0xff)) * 2 + 1;
+  const u32 r = ((1u << 19) / a + 1) / 2;
+  const u32 out = (bits & 0x80000000u) | (253 - exp) << 23 | (r & 0xff) << 15;
+  float result;
+  std::memcpy(&result, &out, sizeof(result));
+  return result;
+}
+
+// CUVEAnimTexture::GetValue 0x2cd750's tile: frame x count over the cycle, the reciprocal FRECPE
+// with two fused FRECPS steps; looping wraps, else it holds the last tile.
+u32 AtexTile(const CPortVfxData& vfx, float cycle, int frame) {
+  const s32 count = s32(vfx.atexRects.size() / 4);
+  if (cycle == 0.f) {
+    return 0;
+  }
+  float e = RecipEstimate(cycle);
+  e *= std::fma(-e, cycle, 2.f);
+  e *= std::fma(-e, cycle, 2.f);
+  s32 tile = s32(float(count) * float(frame) * e);
+  if (vfx.atexLoop) {
+    tile = std::max(tile, 0);
+    if (tile >= count) {
+      tile %= count;
+    }
+  } else if (tile >= count) {
+    tile = count - 1;
+  }
+  // Remastered reads before its table for a negative one; nothing shipped reaches it.
+  return u32(std::max(tile, 0));
 }
 
 // One TMTR TRSS(A..F) as the shipped vertex shaders see it: GetValue 0x2de7dc packs it with
@@ -235,6 +276,7 @@ CPortVfxData::~CPortVfxData() {
   for (CRealElement* e : vtrs) {
     delete e;
   }
+  delete atexCycleElem;
   delete ssze;
   delete iten;
 }
@@ -665,6 +707,22 @@ void CElementGen::PortRenderParticlesVfx() {
       trsCos = std::cos(rot);
       trsSin = std::sin(rot);
     }
+    // VATX, the header sprite's TEXR ATEX: the VS maps the corner into this frame's tile rect,
+    // q = mix(rect.xy, rect.zw, corner) (048_1).
+    // VAT2's cycle (an ATX2's, TEXR tag 1) reads the time context's slot 0, the system's PSLT
+    // (CElementGen ctor 0x244cfc), so it runs on the system's lifetime as PortEvalSys does.
+    float atexCycle = vfx.atexCycle;
+    if (vfx.atexCycleElem != nullptr && !vfx.atexRects.empty()) {
+      CParticleGlobals::SetParticleLifetime(x268_PSLT);
+      CParticleGlobals::UpdateParticleLifetimeTweenValues(partFrame);
+      int cycle = 1;
+      vfx.atexCycleElem->GetValue(partFrame, cycle);
+      atexCycle = float(cycle);
+      CParticleGlobals::SetParticleLifetime(p.x0_endFrame - p.x28_startFrame);
+      CParticleGlobals::UpdateParticleLifetimeTweenValues(partFrame);
+    }
+    const float* atexRect =
+        vfx.atexRects.empty() ? nullptr : &vfx.atexRects[AtexTile(vfx, atexCycle, partFrame) * 4];
 
     // A lit perm (ParticleLit) reads no ITEN: Remastered's 080_1 passes the colour through without it.
     const float iten = lit ? 1.f : p.xPortIten * inverseExposure;
@@ -786,9 +844,13 @@ void CElementGen::PortRenderParticlesVfx() {
       v.pos[1] = pos.GetY();
       v.pos[2] = pos.GetZ();
       float tu = qx, tv = qy;
+      if (atexRect != nullptr) {
+        tu = atexRect[0] + (atexRect[2] - atexRect[0]) * qx;
+        tv = atexRect[1] + (atexRect[3] - atexRect[1]) * qy;
+      }
       if (hasVtrs) {
-        const float du = trsSx * qx + trsX - 0.5f;
-        const float dv = trsSy * qy + trsY - 0.5f;
+        const float du = trsSx * tu + trsX - 0.5f;
+        const float dv = trsSy * tv + trsY - 0.5f;
         tu = 0.5f + trsCos * du - trsSin * dv;
         tv = 0.5f + trsSin * du + trsCos * dv;
       }

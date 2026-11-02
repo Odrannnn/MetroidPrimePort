@@ -3593,8 +3593,88 @@ public:
     mati.shader = shader;
     Recipe recipe{shader, 0, {}, {}};
     std::vector<uint8_t> vtrs;
-    if (header->textured) {
-      // Remastered's TEXR `CNST(id), NONE` or `CNST(id), TRST`; an ATEX or atlas is not this perm's
+    std::vector<uint8_t> vatx;
+    if (header->textured && texr != nullptr && texr->value.size() == 1 && IsElement(texr->value[0], F("ATEX"))) {
+      // ATEX(id, tileW, tileH, strideW, strideH, cycle, loop), all constants: CUVEAnimTexture (ctor
+      // 0x2cd0f4) cuts the texture's full size into tiles, GetValue (0x2cd750) picks one per frame.
+      const EffectValue& atex = texr->value[0];
+      if (atex.args.size() != 7 || atex.args[0].kind != EffectValue::Kind::Guid) {
+        return refuse("has an ATEX TEXR the port can't read");
+      }
+      uint32_t words[6];
+      for (size_t i = 0; i < 6; ++i) {
+        const EffectValue& arg = atex.args[i + 1];
+        if (!IsElement(arg, F("CNST")) || arg.args.size() != 1 ||
+            (arg.args[0].kind != EffectValue::Kind::Word && arg.args[0].kind != EffectValue::Kind::Byte)) {
+          return refuse("has an ATEX TEXR that is not constant");
+        }
+        words[i] = arg.args[0].word;
+      }
+      uint32_t width = 0, height = 0;
+      if (!m_io.textureSize || !m_io.textureSize(atex.args[0].guid, width, height) || width == 0 || height == 0) {
+        return refuse("has an ATEX TEXR whose texture size is unknown");
+      }
+      // Remastered divides by the strides; a zero one never shipped.
+      if (int32_t(words[0]) <= 0 || int32_t(words[1]) <= 0 || int32_t(words[2]) <= 0 || int32_t(words[3]) <= 0) {
+        return refuse("has an ATEX TEXR with a tile or stride that is not positive");
+      }
+      AppendBE32(vatx, F("VATX"));
+      AppendBE32(vatx, width);
+      AppendBE32(vatx, height);
+      for (size_t i = 0; i < 4; ++i) {
+        AppendBE32(vatx, words[i]);
+      }
+      AppendBE32(vatx, words[4]);              // cycle frames
+      AppendBE32(vatx, words[5] != 0 ? 1 : 0); // loop
+      mati.textures["TEXR"] = MatiTexture{atex.args[0].guid, 0, 1, -1, -1};
+      recipe.features = kColorTex;
+      recipe.textures = {{"TEXR", Role::Color, -1, -1}};
+      recipe.alphaGamma = 2.2f;
+    } else if (header->textured && texr != nullptr && texr->value.size() == 1 &&
+               IsElement(texr->value[0], F("ATX2"))) {
+      // ATX2(id, cols, rows, cycle, loop): CUVEAnimTexture again (ctor 0x2cd3f4), a cols x rows grid
+      // over the full size and its cycle an element GetValue evaluates at the particle's frame.
+      const EffectValue& atx2 = texr->value[0];
+      if (atx2.args.size() != 5 || atx2.args[0].kind != EffectValue::Kind::Guid) {
+        return refuse("has an ATX2 TEXR the port can't read");
+      }
+      uint32_t words[3];
+      for (size_t i = 0; i < 3; ++i) {
+        const EffectValue& arg = atx2.args[i == 2 ? 4 : i + 1];
+        if (!IsElement(arg, F("CNST")) || arg.args.size() != 1 ||
+            (arg.args[0].kind != EffectValue::Kind::Word && arg.args[0].kind != EffectValue::Kind::Byte)) {
+          return refuse("has an ATX2 TEXR whose grid or loop is not constant");
+        }
+        words[i] = arg.args[0].word;
+      }
+      uint32_t width = 0, height = 0;
+      if (!m_io.textureSize || !m_io.textureSize(atx2.args[0].guid, width, height) || width == 0 || height == 0) {
+        return refuse("has an ATX2 TEXR whose texture size is unknown");
+      }
+      // A tag-1 TEXR's ILPT reads slot 0, the system's PSLT (see LifetimeOffset), which the port's
+      // sprite loop puts in the lifetime globals around the cycle: offset 0.
+      if (texr->tag != 1) {
+        return refuse("has an ATX2 TEXR of tag " + std::to_string(texr->tag));
+      }
+      std::string why;
+      std::vector<uint8_t> cycle;
+      m_lifetimeOffset = 0;
+      if (!Element(atx2.args[3], Type::Int, cycle, why)) {
+        return refuse("has an ATX2 cycle the port can't evaluate: " + why);
+      }
+      AppendBE32(vatx, F("VAT2"));
+      AppendBE32(vatx, width);
+      AppendBE32(vatx, height);
+      AppendBE32(vatx, words[0]);               // columns
+      AppendBE32(vatx, words[1]);               // rows
+      AppendBE32(vatx, words[2] != 0 ? 1 : 0);  // loop
+      vatx.insert(vatx.end(), cycle.begin(), cycle.end());
+      mati.textures["TEXR"] = MatiTexture{atx2.args[0].guid, 0, 1, -1, -1};
+      recipe.features = kColorTex;
+      recipe.textures = {{"TEXR", Role::Color, -1, -1}};
+      recipe.alphaGamma = 2.2f;
+    } else if (header->textured) {
+      // Remastered's TEXR `CNST(id), NONE` or `CNST(id), TRST`; an atlas is not this perm's
       // single map.
       if (texr == nullptr || texr->value.size() != 2 || !IsElement(texr->value[0], F("CNST")) ||
           texr->value[0].args.size() != 1 || texr->value[0].args[0].kind != EffectValue::Kind::Guid) {
@@ -3630,6 +3710,7 @@ public:
       AppendBE32(result.part, F("VTRS"));
       result.part.insert(result.part.end(), vtrs.begin(), vtrs.end());
     }
+    result.part.insert(result.part.end(), vatx.begin(), vatx.end());
     return true;
   }
 
@@ -6401,6 +6482,10 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       for (int i = 0; i < 5 && ok; ++i) {
         ok = reader.Element(Type::Real);
       }
+    } else if (part && fourcc == F("VATX")) {
+      ok = reader.Skip(8 * 4);  // eight words
+    } else if (part && fourcc == F("VAT2")) {
+      ok = reader.Skip(5 * 4) && reader.Element(Type::Int);  // five words, the cycle
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||
