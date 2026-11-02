@@ -1640,7 +1640,19 @@ void CPlayer::SetCameraState(EPlayerCameraState camState, CStateManager& mgr) {
 }
 
 void CPlayer::UpdateFreeLookState(const CFinalInput& input, float dt, CStateManager& mgr) {
+  mMouseLookButtonHeld = false;
   if (MouseControlsAllowed(mgr)) {
+    // Port: the mouse owns the view, but R still does what holding it does to the
+    // camera timers (UpdateCameraTimers). That zeroes the jump camera timer, so a
+    // later L in the air keeps Samus's momentum (CheckPostGrapple skips ComputeDash):
+    // the R-jump (issue #252).
+    const bool hold1 = ControlMapper::GetDigitalInput(ControlMapper::kC_LookHold1, input);
+    const bool hold2 = ControlMapper::GetDigitalInput(ControlMapper::kC_LookHold2, input);
+    mMouseLookButtonHeld =
+        gpTweakPlayer->mHoldButtonsForFreeLook &&
+        (gpTweakPlayer->mTwoButtonsForFreeLook ? hold1 && hold2 : hold1 || hold2) &&
+        x304_orbitState != kOS_ForcedOrbitObject &&
+        (x3b8_grappleState == kGS_None || x3b8_grappleState == kGS_Firing);
     x3dc_inFreeLook = false;
     x3dd_lookButtonHeld = false;
     x3de_lookAnalogHeld = false;
@@ -1730,7 +1742,7 @@ void CPlayer::UpdateFreeLookState(const CFinalInput& input, float dt, CStateMana
 }
 
 void CPlayer::UpdateCameraTimers(float dt, const CFinalInput& input) {
-  if (x3dc_inFreeLook || x3dd_lookButtonHeld) {
+  if (x3dc_inFreeLook || x3dd_lookButtonHeld || mMouseLookButtonHeld) {
     x294_jumpCameraTimer = 0.f;
     x29c_fallCameraTimer = 0.f;
     return;

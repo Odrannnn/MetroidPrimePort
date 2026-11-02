@@ -714,6 +714,7 @@ private:
   float x3f0_vertFreeLookAngleVel;
   float mTouchLookPitch = 0.f;     // port: touch-drag free-look pitch target
   bool mTouchLookActive = false;   // port: touch look owns the free-look state
+  bool mMouseLookButtonHeld = false;  // port: R held under mouse aim (R-jump, issue #252)
   TUniqueId x3f4_aimTarget;
   CVector3f x3f8_targetAimPosition;
   TReservedAverage< CVector3f, 10 > x404_aimTargetAverage;

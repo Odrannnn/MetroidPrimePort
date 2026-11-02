@@ -2437,6 +2437,7 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPlayer >() {
       {"x3f0_vertFreeLookAngleVel", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::x3f0_vertFreeLookAngleVel), PES_ADDR(CPlayer, x3f0_vertFreeLookAngleVel), nullptr, nullptr},
       {"mTouchLookPitch", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::mTouchLookPitch), PES_ADDR(CPlayer, mTouchLookPitch), nullptr, nullptr},
       {"mTouchLookActive", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CPlayer::mTouchLookActive), PES_ADDR(CPlayer, mTouchLookActive), PES_GETI(CPlayer, mTouchLookActive), PES_SETI(CPlayer, mTouchLookActive)},
+      {"mMouseLookButtonHeld", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CPlayer::mMouseLookButtonHeld), PES_ADDR(CPlayer, mMouseLookButtonHeld), PES_GETI(CPlayer, mMouseLookButtonHeld), PES_SETI(CPlayer, mMouseLookButtonHeld)},
       {"x3f4_aimTarget", "TUniqueId", PortSchemaKind::uid, 0, kPortSchemaPrivate, sizeof(CPlayer::x3f4_aimTarget), PES_ADDR(CPlayer, x3f4_aimTarget), nullptr, nullptr},
       {"x3f8_targetAimPosition", "CVector3f", PortSchemaKind::math, 0, kPortSchemaPrivate, sizeof(CPlayer::x3f8_targetAimPosition), PES_ADDR(CPlayer, x3f8_targetAimPosition), nullptr, nullptr},
       {"x404_aimTargetAverage", "TReservedAverage<CVector3f, 10>", PortSchemaKind::other, 0, kPortSchemaPrivate, sizeof(CPlayer::x404_aimTargetAverage), PES_ADDR(CPlayer, x404_aimTargetAverage), nullptr, nullptr},
@@ -2582,7 +2583,7 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CPlayer >() {
       {"xPortSteamTime", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::xPortSteamTime), PES_ADDR(CPlayer, xPortSteamTime), nullptr, nullptr},
       {"xPortSteamAmount2", "float", PortSchemaKind::float_, 0, kPortSchemaPrivate, sizeof(CPlayer::xPortSteamAmount2), PES_ADDR(CPlayer, xPortSteamAmount2), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CPlayer", "CPhysicsActor", fields, 220, 0x60B11F6C0E79D2FDull};
+  static const PortSchemaClass desc = {"CPlayer", "CPhysicsActor", fields, 221, 0x80CB8BB57B08FEB7ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CPoisonProjectile >() {
@@ -4699,4 +4700,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3425;
+const int PortEntitySchema::kFieldCount = 3426;
