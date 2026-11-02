@@ -191,9 +191,10 @@ const Signatures& ElementsOf(Type type) {
       {F("SUB_"), "vv"},    {F("CTVC"), "c"},     {F("PQAD"), "vv"},
       // Port-only (CParticleDataFactory under TARGET_PC): NORM, and the generator's system
       // vectors (camera in world and in system space, external translation, scale and rotation as
-      // Euler degrees, the camera rotation as Euler degrees), and PRZY.
+      // Euler degrees, the camera rotation as Euler degrees), PRZY and PRYZ.
       {F("NORM"), "v"},     {F("CMPS"), ""},      {F("CPSS"), ""},      {F("EXTT"), ""},
       {F("EXTS"), ""},      {F("EXTR"), ""},      {F("CMRT"), ""},      {F("PRZY"), "vvv"},
+      {F("PRYZ"), "vvv"},
       // Port-only CVEPortBasis: Remastered's particle space to retail's and back.
       {F("BSIS"), "v"},     {F("BSSC"), "v"},
       // Port-only CVEPortAngleCone: Remastered's ANCR with its REUL as three angles.
@@ -2376,7 +2377,7 @@ public:
   // (0x29d69c), so it conjugates back to R.
   bool ModelRotation(const std::vector<EffectValue>& value, std::vector<uint8_t>& out, std::string& why) const {
     if (value.size() != 1) {
-      why = "a rotation that is not REUL/RADD/RAZY/MPCB/EXTR/CMRT";
+      why = "a rotation that is not REUL/RADD/RAZY/RAYZ/MPCB/EXTR/CMRT";
       return false;
     }
     if (IsElement(value[0], F("MPCB")) && value[0].args.size() == 1) {
@@ -2396,7 +2397,8 @@ public:
   // REUL(x, y, z, #00) -> CNST(x, y, z); RADD(a, b) -> PQAD(a, b) (the ordered product);
   // RAZY(first, second, fallback) -> the port-only PRZY (CERotationFromAxis 0x29d1bc as
   // GetRotationElement 0x25e418 builds it: Z = first, X = second x Z, Y = Z x X, or the
-  // fallback when either is degenerate). PRZY's vectors stay in Remastered's space.
+  // fallback when either is degenerate); RAYZ the same way as PRYZ (0x25e068: Y = first,
+  // X = Y x second, Z = X x Y). Their vectors stay in Remastered's space.
   // MPCB(r) -> PQAD(B, PQAD(r, B)) (qB * r * qB, 0x29d69c); EXTR (AddRefVar(0, 4, 10),
   // GetRotationElement 0x25d59c) -> the port-only EXTR vector, the system orientation.
   // `keep`: the rotation sits under a KPIN (CERotationKeepInitial 0x29c214, the child's value at
@@ -2432,8 +2434,8 @@ public:
       AppendBE32(out, F("PQAD"));
       return SourceRotation(rot.args[0], out, why, keep) && SourceRotation(rot.args[1], out, why, keep);
     }
-    if (IsElement(rot, F("RAZY")) && rot.args.size() == 3) {
-      AppendBE32(out, F("PRZY"));
+    if ((IsElement(rot, F("RAZY")) || IsElement(rot, F("RAYZ"))) && rot.args.size() == 3) {
+      AppendBE32(out, IsElement(rot, F("RAZY")) ? F("PRZY") : F("PRYZ"));
       return Element(rot.args[0], Type::Vector, out, why) && Element(rot.args[1], Type::Vector, out, why) &&
              SourceRotation(rot.args[2], out, why);
     }
@@ -2457,7 +2459,7 @@ public:
       AppendBE32(out, F("CMRT"));
       return true;
     }
-    why = "a rotation that is not REUL/RADD/RAZY/MPCB/EXTR/CMRT";
+    why = "a rotation that is not REUL/RADD/RAZY/RAYZ/MPCB/EXTR/CMRT";
     return false;
   }
 

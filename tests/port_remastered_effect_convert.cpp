@@ -3046,7 +3046,7 @@ void TestComposedModelRotation() {
               }),
               {});
   CHECK_MSG(!parts.empty() && parts[0].dropped.size() == 1 &&
-                parts[0].dropped[0] == "PMRQ: a rotation that is not REUL/RADD/RAZY/MPCB/EXTR/CMRT",
+                parts[0].dropped[0] == "PMRQ: a rotation that is not REUL/RADD/RAZY/RAYZ/MPCB/EXTR/CMRT",
             "ordered PMRQ refuses a non-REUL operand rather than adding Euler components");
 }
 
@@ -5827,10 +5827,10 @@ void TestModelsOnly() {
 // PMRQ's camera-facing form: RADD(RAZY(SUB_(CPSS, PLOC), CNST(0, 1, 0), REUL(0, 0, 0, #00)),
 // REUL(x, y, z, #00)). `angles` writes the second REUL's three angle arguments.
 template <typename Angles>
-void PutFacingPmrq(std::vector<uint8_t>& out, Angles angles) {
+void PutFacingPmrq(std::vector<uint8_t>& out, Angles angles, const char* axis = "RAZY") {
   PutProperty(out, "PMRQ", 3);
   PutFourCC(out, "RADD");
-  PutFourCC(out, "RAZY");
+  PutFourCC(out, axis);
   PutFourCC(out, "SUB_");
   PutFourCC(out, "CPSS");
   PutFourCC(out, "PLOC");
@@ -5868,6 +5868,28 @@ void TestFacingRotation() {
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a facing PMRQ becomes PMRT with PRZY");
   CHECK_MSG(!parts.empty() && parts[0].dropped.empty() && parts[0].approximated.empty(),
             "a facing PMRQ is exact");
+  // RAYZ (Y = first) becomes PRYZ the same way.
+  auto yz = ConvertOne(OneGenerator([](auto& o) {
+              PutFacingPmrq(
+                  o,
+                  [](auto& o) {
+                    PutConstant(o, 0);
+                    PutConstant(o, 0);
+                    PutConstant(o, Bits(90.0f));
+                  },
+                  "RAYZ");
+              PutTexr(o, 0x1234ABCD);
+            }),
+            {});
+  std::vector<uint8_t> wantYz = want.bytes;
+  const uint8_t przy[] = {'P', 'R', 'Z', 'Y'};
+  const auto at = std::search(wantYz.begin(), wantYz.end(), std::begin(przy), std::end(przy));
+  if (at != wantYz.end()) {
+    at[2] = 'Y';
+    at[3] = 'Z';
+  }
+  CHECK_MSG(yz.size() == 1 && yz[0].part == wantYz, "a RAYZ PMRQ becomes PMRT with PRYZ");
+  CHECK_MSG(!yz.empty() && yz[0].dropped.empty() && yz[0].approximated.empty(), "a RAYZ PMRQ is exact");
 
   // An IRND spin is kept as a real expression (PIRN samples it once per particle).
   parts = ConvertOne(OneGenerator([](auto& o) {
@@ -5911,7 +5933,7 @@ void TestFacingRotation() {
   plain.f("GPSM").f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == plain.bytes, "a RAZY with a vector fallback writes nothing");
   CHECK_MSG(!parts.empty() && parts[0].dropped.size() == 1 &&
-                parts[0].dropped[0] == "PMRQ: a rotation that is not REUL/RADD/RAZY/MPCB/EXTR/CMRT",
+                parts[0].dropped[0] == "PMRQ: a rotation that is not REUL/RADD/RAZY/RAYZ/MPCB/EXTR/CMRT",
             "a RAZY with a vector fallback is dropped");
 }
 

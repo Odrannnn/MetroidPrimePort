@@ -1853,11 +1853,12 @@ CVectorElement* CParticleDataFactory::GetVectorElement(CInputStream& in) {
   case SBIG('BSSC'):
     ret = rs_new CVEPortBasis(GetVectorElement(in), clsId == SBIG('BSSC'));
     break;
-  case SBIG('PRZY'): {
+  case SBIG('PRZY'):
+  case SBIG('PRYZ'): {
     CVectorElement* first = GetVectorElement(in);
     CVectorElement* second = GetVectorElement(in);
     CVectorElement* fallback = GetVectorElement(in);
-    ret = rs_new CVEPortRotationFromAxis(first, second, fallback);
+    ret = rs_new CVEPortRotationFromAxis(first, second, fallback, clsId == SBIG('PRYZ'));
     break;
   }
   case SBIG('PEMV'): {

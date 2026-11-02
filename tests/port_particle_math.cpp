@@ -263,6 +263,20 @@ int main() {
     CHECK_MSG(!RotationFromAxisZY(CVector3f(0.f, 2.f, 0.f), CVector3f(0.f, 1.f, 0.f), x, y, z),
               "RAZY refuses parallel vectors");
   }
+  // RAYZ (GetRotationElement 0x25e068): Y = first, X = Y x second, Z = X x Y.
+  {
+    CVector3f x, y, z;
+    CHECK_MSG(RotationFromAxisYZ(CVector3f(0.f, 2.f, 0.f), CVector3f(0.f, 0.f, 3.f), x, y, z) &&
+                  NearVector(x, CVector3f(1.f, 0.f, 0.f), 1e-6f) && NearVector(y, CVector3f(0.f, 1.f, 0.f), 1e-6f) &&
+                  NearVector(z, CVector3f(0.f, 0.f, 1.f), 1e-6f),
+              "RAYZ Y up, Z second is the identity");
+    CHECK_MSG(RotationFromAxisYZ(CVector3f(1.f, 0.f, 0.f), CVector3f(0.f, 0.f, 1.f), x, y, z) &&
+                  NearVector(x, CVector3f(0.f, -1.f, 0.f), 1e-6f) && NearVector(y, CVector3f(1.f, 0.f, 0.f), 1e-6f) &&
+                  NearVector(z, CVector3f(0.f, 0.f, 1.f), 1e-6f),
+              "RAYZ rows follow first, then first x second");
+    CHECK_MSG(!RotationFromAxisYZ(CVector3f(0.f, 2.f, 0.f), CVector3f(0.f, 1.f, 0.f), x, y, z),
+              "RAYZ refuses parallel vectors");
+  }
   {
     CRandom16 random(0);
     CHECK_MSG(random.PortFloat28() == 12345.f / 268435456.f, "Remastered draw is the low 28 bits");

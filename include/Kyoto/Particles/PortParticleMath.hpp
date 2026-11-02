@@ -408,6 +408,23 @@ inline bool RotationFromAxisZY(const CVector3f& first, const CVector3f& second, 
   return NormalizedCross(second, z, x) && NormalizedCross(z, x, y);
 }
 
+// RAYZ (the same GetValue as GetRotationElement 0x25e068 builds it: axis pair 1, normalised row 1,
+// second pair 2): Y = the first vector normalised, X = normalize(Y x second), Z = normalize(X x Y).
+inline bool RotationFromAxisYZ(const CVector3f& first, const CVector3f& second, CVector3f& x,
+                               CVector3f& y, CVector3f& z) {
+  const float xx = first.GetX() * first.GetX();
+  const float yy = first.GetY() * first.GetY();
+  const float zz = first.GetZ() * first.GetZ();
+  const float xy = xx + yy;
+  const float squared = xy + zz;
+  if (squared < kMinNormalizableMagSqd) {
+    return false;
+  }
+  const float s = InvSqrtF(squared);
+  y = CVector3f(s * first.GetX(), s * first.GetY(), s * first.GetZ());
+  return NormalizedCross(y, second, x) && NormalizedCross(x, y, z);
+}
+
 // CPSS (CVECameraPositionInSystemSpace::GetValue 0x2a24fc): the camera position in the system's
 // global frame, conj(q) * (camera - t) * q with q = (w, x, y, z) unnormalised, then times
 // InverseScale(s) per axis. Separate statements: Remastered uses unfused fmul/fadd/fsub.

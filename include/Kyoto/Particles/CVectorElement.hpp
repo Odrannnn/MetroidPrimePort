@@ -410,10 +410,12 @@ private:
 
 // Port-only PRZY: Remastered's rotation RAZY(first, second, fallback) (CERotationFromAxis 0x29d298,
 // PortParticleMath::RotationFromAxisZY) as the Euler degrees PQAD and REUL use, all in
-// Remastered's particle space; the fallback is Euler degrees too.
+// Remastered's particle space; the fallback is Euler degrees too. PRYZ is RAYZ the same way
+// (PortParticleMath::RotationFromAxisYZ).
 class CVEPortRotationFromAxis : public CVectorElement {
 public:
-  CVEPortRotationFromAxis(CVectorElement* first, CVectorElement* second, CVectorElement* fallback);
+  CVEPortRotationFromAxis(CVectorElement* first, CVectorElement* second, CVectorElement* fallback,
+                          bool firstIsY = false);
   ~CVEPortRotationFromAxis() override;
 
   bool GetValue(int frame, CVector3f& valOut) const override;
@@ -422,6 +424,7 @@ private:
   CVectorElement* mFirst;
   CVectorElement* mSecond;
   CVectorElement* mFallback;
+  bool mFirstIsY;
 };
 
 // Port-only PEMV: Remastered's EMRV, the generator's per-tick change of its translation over its

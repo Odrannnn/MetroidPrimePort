@@ -475,8 +475,8 @@ CVector3f EulerDegreesFromQuaternion(const CQuaternion& rotation) {
 } // namespace
 
 CVEPortRotationFromAxis::CVEPortRotationFromAxis(CVectorElement* first, CVectorElement* second,
-                                                 CVectorElement* fallback)
-: mFirst(first), mSecond(second), mFallback(fallback) {}
+                                                 CVectorElement* fallback, bool firstIsY)
+: mFirst(first), mSecond(second), mFallback(fallback), mFirstIsY(firstIsY) {}
 
 CVEPortRotationFromAxis::~CVEPortRotationFromAxis() {
   delete mFirst;
@@ -490,7 +490,8 @@ bool CVEPortRotationFromAxis::GetValue(int frame, CVector3f& valOut) const {
   mFirst->GetValue(frame, first);
   mSecond->GetValue(frame, second);
   CVector3f x, y, z;
-  if (PortParticleMath::RotationFromAxisZY(first, second, x, y, z)) {
+  if (mFirstIsY ? PortParticleMath::RotationFromAxisYZ(first, second, x, y, z)
+                : PortParticleMath::RotationFromAxisZY(first, second, x, y, z)) {
     valOut = EulerDegreesFromMatrix(CMatrix3f(x.GetX(), y.GetX(), z.GetX(), x.GetY(), y.GetY(),
                                               z.GetY(), x.GetZ(), y.GetZ(), z.GetZ()));
     return false;
