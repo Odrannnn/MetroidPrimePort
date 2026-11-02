@@ -99,6 +99,9 @@ struct EffectConvertIO {
   // The VMSH blob of a converted model (one the import wrote under this retail CMDL id), or
   // empty for one that is not (a disc model). Left empty, no VMSH is written.
   std::function<std::vector<uint8_t>(uint32_t model)> modelMesh;
+  // Whether the Remastered model an effect names (its stored id) has an ANUV program: false
+  // when it cannot be read. Left empty, a PMPH is refused.
+  std::function<bool(const EffectGuid& model, bool& animatesUv)> modelAnimatesUv;
 };
 
 struct ConvertedPart {

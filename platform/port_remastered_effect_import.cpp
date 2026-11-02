@@ -1350,6 +1350,11 @@ public:
     if (m_io.modelMesh) {
       io.modelMesh = [&](uint32_t model) { return m_io.modelMesh(model); };
     }
+    if (m_io.modelAnimatesUv) {
+      io.modelAnimatesUv = [&](const EffectGuid& stored, bool& animatesUv) {
+        return m_io.modelAnimatesUv(Swap(stored), animatesUv);
+      };
+    }
     return io;
   }
 

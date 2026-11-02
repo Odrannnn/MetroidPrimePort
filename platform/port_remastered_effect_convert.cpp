@@ -2812,6 +2812,31 @@ public:
     return true;
   }
 
+  // The stored ids of every model a PMDL names: its asset, or each entry of its SLCT's ARRY.
+  std::vector<EffectGuid> ModelGuids(const std::vector<EffectValue>& value) const {
+    std::vector<EffectGuid> out;
+    if (value.size() == 1 && IsElement(value[0], F("SLCT")) && value[0].args.size() == 2 &&
+        IsElement(value[0].args[1], F("ARRY")) && !value[0].args[1].args.empty() &&
+        value[0].args[1].args[0].kind == EffectValue::Kind::Raw) {
+      const EffectValue& array = value[0].args[1].args[0];
+      const uint8_t* p = m_data + array.offset;
+      const uint32_t count = array.size >= 4 ? ReadLE32(p) : 0;
+      for (uint32_t i = 0; i < count && 4 + size_t(i + 1) * 20 <= array.size; ++i) {
+        EffectGuid guid;
+        std::memcpy(guid.data(), p + 4 + size_t(i) * 20 + 4, 16);
+        out.push_back(guid);
+      }
+    } else if (value.size() == 1 && value[0].kind == EffectValue::Kind::Guid) {
+      out.push_back(value[0].guid);
+    } else if (value.size() == 1 && IsElement(value[0], F("CNST")) && value[0].args.size() == 1 &&
+               value[0].args[0].kind == EffectValue::Kind::Guid) {
+      out.push_back(value[0].args[0].guid);
+    } else if (value.size() == 2 && value[1].kind == EffectValue::Kind::Guid) {
+      out.push_back(value[1].guid);
+    }
+    return out;
+  }
+
   // PMDL's SLCT(index, ARRY of n CNST ids), as the model ids a particle picks from by its seed.
   // Remastered takes entry index % n; IRND(0, h) is latched per particle, so the list is
   // expanded to h + 1 entries (entry i = model i % n) to keep its odds, and CNST(k) is one model.
@@ -4754,6 +4779,8 @@ public:
     bool texture = false;
     uint32_t pmdl = 0;          // the PMDL's id, when it is one constant
     bool pmdlVariants = false;  // a PMDV was written (a mesh would cover only one model)
+    std::vector<EffectGuid> pmdlModels;  // every model the PMDL can pick, as stored
+    bool pmph = false;                   // a PMPH was read
     std::vector<Started> started;  // by the spawn table
     std::set<uint32_t> written;    // retail properties
     // Remastered's visor effect data (CGenDescription::Compile 0x2a7d0c): any VE* property marks
@@ -5362,6 +5389,16 @@ public:
     // set by every MP1 owner: CParticleSystemParms(ESpecialInit) 0x2af2e0 writes 7, children
     // copy their parent's (CParticleGen 0x27b088, CElementGen 0x24bc64), and no MP1 call site
     // clears it. With it set, the two predicates agree with retail's, so KPAL changes nothing.
+    // PMPH (desc+0x434, a real; loader 0x258b6c) is a model particle's animated-UV phase:
+    // UpdateModelRenderState 0x246afc evaluates it per particle into SModelParticleRenderData+0xc
+    // (default 0, ctor 0x28aeac), WriteModelDataInstancingComponents 0x2c0148 sends it as a
+    // CSetAnimUvPhaseCommand ('AUVP') and CModelAnimUvDataSourceInstance::SetAnimUvPhase 0x232a50
+    // sets the phase of the model's ANUV program. A model without ANUV has no such instance, so
+    // PMPH changes nothing for it; the end of the PART checks every PMDL model has none.
+    if (s.part && fourcc == F("PMPH")) {
+      s.pmph = true;
+      return true;
+    }
     if (s.part && fourcc == F("KPAL")) {
       return true;
     }
@@ -5928,6 +5965,12 @@ public:
       Basis(F("BSIS"), inner, s.out);
       return true;
     }
+    // EMTU (desc+0x3f0 bit 3, CreateGPSM 0x2590a8) has one reader, SolveParticleTransform 0x247004
+    // in the PMOV branch (the up vector becomes the system's). PMOV above is dropped while EMTU is
+    // set, so EMTU itself changes nothing the port draws.
+    if (s.part && fourcc == F("EMTU")) {
+      return true;
+    }
     // A POFS goes out with an INTT written as POFS above, added to it.
     if (s.part && fourcc == F("POFS") &&
         std::any_of(s.node.properties.begin(), s.node.properties.end(),
@@ -5987,6 +6030,9 @@ public:
     }
     std::vector<uint8_t> bytes;
     std::string why;
+    if (s.part && fourcc == F("PMDL")) {
+      s.pmdlModels = ModelGuids(property.value);
+    }
     // A model chosen per particle: the first as PMDL, all of them as PMDV.
     if (s.part && fourcc == F("PMDL") && property.value.size() == 1 && IsElement(property.value[0], F("SLCT"))) {
       std::vector<uint32_t> ids;
@@ -6159,6 +6205,19 @@ public:
       for (const uint32_t fourcc : s.portOnly) {
         if (!(ownModelMaterials && fourcc == F("ITEN"))) {
           s.result.dropped.push_back(EffectFourCCString(fourcc) + ": no VMAT");
+        }
+      }
+    }
+    if (s.pmph) {
+      for (const EffectGuid& model : s.pmdlModels) {
+        bool animatesUv = true;
+        if (!m_io.modelAnimatesUv || !m_io.modelAnimatesUv(model, animatesUv)) {
+          s.result.dropped.push_back("PMPH: CMDL " + EffectGuidString(model) + " unread");
+          break;
+        }
+        if (animatesUv) {
+          s.result.dropped.push_back("PMPH: CMDL " + EffectGuidString(model) + " has ANUV");
+          break;
         }
       }
     }

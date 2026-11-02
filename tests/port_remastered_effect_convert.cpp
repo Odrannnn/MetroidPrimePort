@@ -2678,6 +2678,38 @@ void TestFixedBounds() {
             "a PART with PFXB/PFXC passes the retail element reader");
 }
 
+// PMPH (a model's ANUV phase) is consumed when no PMDL model has ANUV; a model with one, one
+// that cannot be read, or no io to ask stays diagnosed.
+void TestModelUvPhase() {
+  const auto effect = OneGenerator([&](auto& o) {
+    PutProperty(o, "PMDL", 0);
+    PutGuid(o, Legacy(0x0ABC0001));
+    PutProperty(o, "PMPH", 1);
+    PutFourCC(o, "LFTW");
+    PutConstant(o, Bits(0.f));
+    PutConstant(o, Bits(1.f));
+  });
+  const auto pmphDropped = [](const std::vector<ConvertedPart>& parts) {
+    return parts.size() == 1 && std::any_of(parts[0].dropped.begin(), parts[0].dropped.end(),
+                                            [](const std::string& why) { return why.rfind("PMPH", 0) == 0; });
+  };
+  const auto withModel = [](bool readable, bool anuv) {
+    EffectConvertIO io;
+    io.modelAnimatesUv = [=](const EffectGuid& model, bool& animatesUv) {
+      CHECK_MSG(model == Legacy(0x0ABC0001), "PMPH asks about the PMDL model");
+      animatesUv = anuv;
+      return readable;
+    };
+    return io;
+  };
+  auto parts = ConvertOne(effect, withModel(true, false));
+  CHECK_MSG(parts.size() == 1 && !pmphDropped(parts) && !Contains(parts[0].part, {'P', 'M', 'P', 'H'}),
+            "PMPH on a model without ANUV is consumed and writes nothing");
+  CHECK_MSG(pmphDropped(ConvertOne(effect, withModel(true, true))), "PMPH on a model with ANUV is diagnosed");
+  CHECK_MSG(pmphDropped(ConvertOne(effect, withModel(false, false))), "PMPH on an unread model is diagnosed");
+  CHECK_MSG(pmphDropped(ConvertOne(effect, {})), "PMPH without modelAnimatesUv is diagnosed");
+}
+
 void TestDvvnDefaultSize() {
   // The source reader mutates IEXP at each DVVN/IEXP occurrence; test both orders and resets.
   for (const bool versionLast : {false, true}) {
@@ -3441,6 +3473,14 @@ void TestShutdownAndPivot() {
   CHECK_MSG(parts.size() == 1 &&
                 std::count(parts[0].dropped.begin(), parts[0].dropped.end(), "PMOV: EMTU makes its up the system's") == 1,
             "PMOV with EMTU is dropped with its reason");
+  parts = pmov("EMTU", 1);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.size() == 1, "EMTU itself is consumed; only its PMOV is reported");
+  parts = convert([&](auto& o) {
+    PutProperty(o, "EMTU", 0);
+    PutFourCC(o, "CNST");
+    o.push_back(1);
+  });
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), "EMTU without PMOV is consumed");
 }
 
 // INTS is the system scale in place of the external one (Compile 0x289af0): the port-only PINS,
@@ -6645,6 +6685,7 @@ int main() {
   TestDepthBias();
   TestDvvnDefaultSize();
   TestFixedBounds();
+  TestModelUvPhase();
   TestShutdownAndPivot();
   TestGpuAvailability();
   TestCurlNoise();

@@ -2434,6 +2434,26 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       const auto found = effectMeshes.find(model);
       return found != effectMeshes.end() ? found->second : std::vector<uint8_t>();
     };
+    std::map<EffectGuid, bool> effectAnuv;  // whether a Remastered model has ANUV, by id
+    effectIO.modelAnimatesUv = [&](const EffectGuid& id, bool& animatesUv) {
+      const auto known = effectAnuv.find(id);
+      if (known != effectAnuv.end()) {
+        animatesUv = known->second;
+        return true;
+      }
+      std::vector<uint8_t> raw;
+      Model model;
+      std::string error;
+      try {
+        if (!remastered.ReadModel(id, raw, error) || !ParseModel(raw.data(), raw.size(), model, error)) {
+          return false;
+        }
+      } catch (const std::exception&) {
+        return false;
+      }
+      animatesUv = effectAnuv.emplace(id, !model.anuv.empty()).first->second;
+      return true;
+    };
     effectIO.model = [&](const EffectGuid& id, uint32_t retailId, std::string& effectError) {
       if (!effectModels) {
         ConvertIO io = makeIO(0, staging);
