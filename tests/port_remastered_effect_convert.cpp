@@ -5433,6 +5433,37 @@ void TestVmatSceneWarpRecipes() {
   check(0xcc155f99, "BCLR", "TCH0", kColorTex | kSceneWarp, 0, "cc155f99 is SceneWarp on BCLR, warped by TCH0");
   check(0x04276ae1, "BCLR", "TCH0", kColorTex | kSceneWarp, 0, "04276ae1 is SceneWarp on BCLR, warped by TCH0");
   check(0xd955396d, "TCH0", "TCH1", kOpacityTex | kSceneWarp, 1, "d955396d is SceneWarp on TCH0, warped by TCH1");
+
+  // Three maps (90ce7873, 03ac7d53): only the warp map's slot carries CCH0.xy; the role slots follow the
+  // three texture records.
+  constexpr uint32_t kRamp = 8;
+  const auto check3 = [](uint32_t shader, uint32_t features, int warpSlot, std::array<int, 3> roles,
+                         const char* what) {
+    auto [parts, blob] = ConvertVmat(MatiCch0(shader, {{"BCLR", Fresh(8)}, {"TCH0", Fresh(8)}, {"TCH1", Fresh(8)},
+                                                       {"TCH2", Fresh(8)}},
+                                              0.25f, -0.125f, 1.0f, 1.0f));
+    CHECK_MSG(parts.size() == 1 && !blob.empty() && parts[0].approximated.empty(), what);
+    if (blob.size() < 24 + 3 * 44 + 7 * 4) {
+      return;
+    }
+    CHECK_MSG(VmatWord(blob, 12) == features && VmatWord(blob, 20) == 3, what);
+    for (int i = 0; i < 3; ++i) {
+      CHECK_MSG(VmatWord(blob, 24 + 44 * i + 32) == (i == warpSlot ? 1u : 0u), what);
+    }
+    float u = 0.f, v = 0.f;
+    const uint32_t uw = VmatWord(blob, 24 + 44 * warpSlot + 36), vw = VmatWord(blob, 24 + 44 * warpSlot + 40);
+    std::memcpy(&u, &uw, 4);
+    std::memcpy(&v, &vw, 4);
+    CHECK_MSG(u == 0.25f && v == -0.125f, what);
+    // roles: the role index (Color 0, Opacity 1, Ramp 2, Indirect 5) of slots 0..2.
+    for (int i = 0; i < 3; ++i) {
+      CHECK_MSG(VmatWord(blob, 24 + 3 * 44 + 4 * roles[i]) == uint32_t(i), what);
+    }
+  };
+  check3(0x90ce7873, kColorTex | kOpacityTex | kSceneWarp, 2, {0, 1, 5},
+         "90ce7873 is SceneWarp on BCLR x opacity TCH0, warped by TCH1");
+  check3(0x03ac7d53, kOpacityTex | kRamp | kSceneWarp, 0, {5, 2, 1},
+         "03ac7d53 is SceneWarp on ramp TCH1 x opacity TCH2, warped by TCH0");
 }
 
 // An ELC2 child of a root, with `body` writing its properties.

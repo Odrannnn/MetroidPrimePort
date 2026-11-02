@@ -725,6 +725,15 @@ const Recipe* RecipeOf(uint32_t shader) {
       {0xd955396d, kOpacityTex | kSceneWarp,
        {{"TCH0", Role::Opacity, -1, -1}, {"TCH1", Role::Indirect, 0, 1}},
        {}},
+      // The same scene copy over the colour (90ce7873, _Color_Opacity: BCLR, opacity TCH0, warp TCH1; alpha
+      // BCLR.a x TCH0.x x vc.a) or over the ramp colour (03ac7d53, _ColorRamp_Opacity: warp TCH0, ramp TCH1
+      // picking between the two ramp rows by .x cubed, alpha TCH1.y x the rows' mixed alpha x TCH2.x x vc.a).
+      {0x90ce7873, kColorTex | kOpacityTex | kSceneWarp,
+       {{"BCLR", Role::Color, -1, -1}, {"TCH0", Role::Opacity, -1, -1}, {"TCH1", Role::Indirect, 0, 1}},
+       {}},
+      {0x03ac7d53, kOpacityTex | kRamp | kSceneWarp,
+       {{"TCH0", Role::Indirect, 0, 1}, {"TCH1", Role::Ramp, -1, -1}, {"TCH2", Role::Opacity, -1, -1}},
+       {}},
       // VFX_IceChargeBeam (perms 000_1/000_0, ICECHARGE.md): PMTR C x CCH0.x x COLOR.z x CCH2.x, plus
       // PMTR A/B blended by NMAP.x x BCLR.x, plus the NMAP-bumped facing term x BCLR.rgb, x vc.rgb; alpha
       // vc.a alone. The VS's hash rotation and shake run in CPortVfxMeshBatch::Add. CCH0..2 in VPRM.
@@ -826,6 +835,12 @@ const Recipe* RecipeOf(uint32_t shader) {
        {{kSrcErosion, 0, 0}}},
       {0x8e6bfa33, kRamp | kIndirect | kThresholding,
        {{"TCH0", Role::Ramp, 1, 2}, {"TCH1", Role::Threshold, -1, -1}, {"TCH2", Role::Indirect, -1, -1}},
+       {{kSrcThrX, 2, 0}, {kSrcThrY, 2, 1}, {kSrcThrW, -1, 0}}},
+      // 8e6bfa33 with an opacity map (VFX_ColorRamp_Indirect_Opacity_Thresholding_Unlit): the same VS and CCH0
+      // layout; ramp TCH0, warp TCH1, opacity TCH2 (x the alpha), threshold TCH3.
+      {0xd47ffcc3, kOpacityTex | kRamp | kIndirect | kThresholding,
+       {{"TCH0", Role::Ramp, 1, 2}, {"TCH1", Role::Indirect, -1, -1}, {"TCH2", Role::Opacity, -1, -1},
+        {"TCH3", Role::Threshold, -1, -1}},
        {{kSrcThrX, 2, 0}, {kSrcThrY, 2, 1}, {kSrcThrW, -1, 0}}},
       {0x6c165efd, kOpacityTex | kRamp,
        {{"TCH0", Role::Ramp, -1, -1}, {"TCH2", Role::Opacity, -1, -1}},
@@ -3488,7 +3503,7 @@ public:
     auto find = [this, &node, swoosh, electric](uint32_t fourcc) -> const EffectProperty* {
       for (const EffectProperty& property : node.properties) {
         if (property.fourcc == fourcc) {
-          m_lifetimeOffset = LifetimeOffset(!swoosh, false, electric, property);
+          m_lifetimeOffset = LifetimeOffset(!swoosh, swoosh && !electric, electric, property);
           return &property;
         }
       }
