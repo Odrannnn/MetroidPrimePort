@@ -203,7 +203,11 @@ of the front end and every room, so a first start compiles the game's shaders in
 background instead of skipping draws as it meets them. It holds retail rows only, plus
 the contexts (global, front end, each area) that used each one: lazy mode, always on
 Android, builds the global and front-end rows at startup and an area's rows when the game
-prefetches that area, so a seed without them builds nothing ahead of use. When
+prefetches that area, so a seed without them builds nothing ahead of use. A row holds
+the sample count it was recorded at; aurora also queues each non-shadow row at the
+running MSAA setting (`queue_cached_row`), so a seed recorded at either setting covers
+both. The fog curve and alpha compare references are uniforms, so rows differ only by
+fog on or off and by constant references (aurora folds older rows on load). When
 aurora bumps a pipeline config version, aurora ignores the seed and the
 `port_pipeline_seed` test fails. To record it again, run
 `python3 tools/pipeline_seed.py tour`, then `merge` (see the script's `--help`).

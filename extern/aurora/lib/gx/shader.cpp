@@ -568,8 +568,9 @@ AlphaCompareExpr alpha_compare_xnor(const AlphaCompareExpr& lhs, const AlphaComp
   return {fmt::format("({} == {})", lhs.expr, rhs.expr), -1};
 }
 
-AlphaCompareExpr alpha_compare(GXCompare comp, u8 ref) {
-  const auto iref = static_cast<u32>(ref);
+// ref is the pipeline's (pipeline_alpha_ref): AlphaRefUniform reads it from alpha_ref.x (comp0) or .y.
+AlphaCompareExpr alpha_compare(GXCompare comp, u32 ref, char slot) {
+  const auto iref = ref == AlphaRefUniform ? fmt::format("ubuf.alpha_ref.{}", slot) : fmt::format("{}u", ref);
   switch (comp) {
     DEFAULT_FATAL("invalid alpha comp {}", underlying(comp));
   case GX_NEVER:
@@ -578,26 +579,26 @@ AlphaCompareExpr alpha_compare(GXCompare comp, u8 ref) {
     if (ref == 0) {
       return alpha_compare_const(false);
     }
-    return {fmt::format("(alphaCompare < {}u)", iref), -1};
+    return {fmt::format("(alphaCompare < {})", iref), -1};
   case GX_LEQUAL:
     if (ref == 255) {
       return alpha_compare_const(true);
     }
-    return {fmt::format("(alphaCompare <= {}u)", iref), -1};
+    return {fmt::format("(alphaCompare <= {})", iref), -1};
   case GX_EQUAL:
-    return {fmt::format("(alphaCompare == {}u)", iref), -1};
+    return {fmt::format("(alphaCompare == {})", iref), -1};
   case GX_NEQUAL:
-    return {fmt::format("(alphaCompare != {}u)", iref), -1};
+    return {fmt::format("(alphaCompare != {})", iref), -1};
   case GX_GEQUAL:
     if (ref == 0) {
       return alpha_compare_const(true);
     }
-    return {fmt::format("(alphaCompare >= {}u)", iref), -1};
+    return {fmt::format("(alphaCompare >= {})", iref), -1};
   case GX_GREATER:
     if (ref == 255) {
       return alpha_compare_const(false);
     }
-    return {fmt::format("(alphaCompare > {}u)", iref), -1};
+    return {fmt::format("(alphaCompare > {})", iref), -1};
   case GX_ALWAYS:
     return alpha_compare_const(true);
   }
@@ -605,8 +606,8 @@ AlphaCompareExpr alpha_compare(GXCompare comp, u8 ref) {
 
 // When the alpha compare drops a pixel, in terms of alphaCompare (the alpha as 0-255).
 AlphaCompareExpr alpha_compare_discard(const ShaderConfig& config) {
-  const auto comp0 = alpha_compare(config.alphaCompare.comp0, config.alphaCompare.ref0);
-  const auto comp1 = alpha_compare(config.alphaCompare.comp1, config.alphaCompare.ref1);
+  const auto comp0 = alpha_compare(config.alphaCompare.comp0, config.alphaCompare.ref0, 'x');
+  const auto comp1 = alpha_compare(config.alphaCompare.comp1, config.alphaCompare.ref1, 'y');
   AlphaCompareExpr pass;
   switch (config.alphaCompare.op) {
     DEFAULT_FATAL("invalid alpha compare op {}", underlying(config.alphaCompare.op));
@@ -5061,47 +5062,33 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
         "    a: f32,\n"
         "    b: f32,\n"
         "    c: f32,\n"
-        "    range_center: f32,\n"
-        "    range_k: array<vec4f, 3>,\n"
+        "    kind: u32,\n"
         "}";
     uniBufAttrs += "\n    fog: Fog,";
 
     const std::string_view fogDepth = UseReversedZ ? "(1.0 - in.pos.z)" : "in.pos.z";
-    if ((config.fogType & 0x08) != 0) {
-      fragmentFn += fmt::format("\n    // Orthographic fog\n    var fogBase = ubuf.fog.a * {};", fogDepth);
-    } else {
-      fragmentFn +=
-          fmt::format("\n    // Perspective fog\n    var fogBase = ubuf.fog.a / (ubuf.fog.b - {});", fogDepth);
-    }
+    // The GXFogType from the uniform: one pipeline for every fog type (ShaderConfig::fogType).
+    fragmentFn += fmt::format(
+        "\n    var fogBase: f32;"
+        "\n    if ((ubuf.fog.kind & 8u) != 0u) {{"
+        "\n        fogBase = ubuf.fog.a * {0};"
+        "\n    }} else {{"
+        "\n        fogBase = ubuf.fog.a / (ubuf.fog.b - {0});"
+        "\n    }}",
+        fogDepth);
     if (config.fogRangeEnabled) {
       fragmentFn += "\n        fogBase *= bitcast<f32>(abuf[imm.fog_range_base + u32(in.pos.x)]);";
     }
-    fragmentFn += "\n    var fogF = clamp(fogBase - ubuf.fog.c, 0.0, 1.0);";
-    switch (config.fogType) {
-      DEFAULT_FATAL("invalid fog type {}", config.fogType);
-    case GX_FOG_PERSP_LIN:
-    case GX_FOG_ORTHO_LIN:
-      fragmentFn += "\n    var fogZ = fogF;";
-      break;
-    case GX_FOG_PERSP_EXP:
-    case GX_FOG_ORTHO_EXP:
-      fragmentFn += "\n    var fogZ = 1.0 - exp2(-8.0 * fogF);";
-      break;
-    case GX_FOG_PERSP_EXP2:
-    case GX_FOG_ORTHO_EXP2:
-      fragmentFn += "\n    var fogZ = 1.0 - exp2(-8.0 * fogF * fogF);";
-      break;
-    case GX_FOG_PERSP_REVEXP:
-    case GX_FOG_ORTHO_REVEXP:
-      fragmentFn += "\n    var fogZ = exp2(-8.0 * (1.0 - fogF));";
-      break;
-    case GX_FOG_PERSP_REVEXP2:
-    case GX_FOG_ORTHO_REVEXP2:
-      fragmentFn +=
-          "\n    fogF = 1.0 - fogF;"
-          "\n    var fogZ = exp2(-8.0 * fogF * fogF);";
-      break;
-    }
+    fragmentFn +=
+        "\n    var fogF = clamp(fogBase - ubuf.fog.c, 0.0, 1.0);"
+        "\n    var fogZ = fogF;" // GX_FOG_PERSP_LIN, GX_FOG_ORTHO_LIN
+        "\n    switch ubuf.fog.kind & 7u {"
+        "\n        case 4u: { fogZ = 1.0 - exp2(-8.0 * fogF); }"
+        "\n        case 5u: { fogZ = 1.0 - exp2(-8.0 * fogF * fogF); }"
+        "\n        case 6u: { fogZ = exp2(-8.0 * (1.0 - fogF)); }"
+        "\n        case 7u: { fogZ = exp2(-8.0 * (1.0 - fogF) * (1.0 - fogF)); }"
+        "\n        default: {}"
+        "\n    }";
     if (pbrThermalEmitted) {
       // Model_ThermalOverride has no fog.
     } else if (config.sceneHdr && pbrEmitted) {
@@ -5151,6 +5138,9 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
     uniBufAttrs += "\n    shadow_color: vec4f,";
     uniBufAttrs += "\n    shadow_splits: vec4f,";
     uniBufAttrs += "\n    shadow_fade: vec4f,";
+  }
+  if (info.usesAlphaRef) {
+    uniBufAttrs += "\n    alpha_ref: vec4u,"; // the alpha compare references (pipeline_alpha_ref)
   }
   // HDR PBR light above 1 is light, not a TEV byte overflow: only its alpha wraps.
   const bool hdrPbrColor = config.sceneHdr && pbrEmitted;
