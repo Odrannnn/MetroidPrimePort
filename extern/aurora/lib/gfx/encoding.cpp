@@ -1,5 +1,6 @@
 #include "encoding.hpp"
 #include "overdraw.hpp"
+#include "vis_query.hpp"
 
 #include "frame.hpp"
 
@@ -246,13 +247,18 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
   // Timed per pass index, so gputimes splits a frame's EFB passes (not by size: dynamic
   // resolution would intern a name per size).
   const auto profName = fmt::format("EFB pass {}", passIndex);
+  // A pass carries one occlusion query set: overdraw's capture, else the game's visibility queries.
+  wgpu::QuerySet occlusion =
+      overdraw::pass_begin(passIndex, passInfo.colorAttachments[SceneColorAttachmentIndex].size, passInfo.msaaSamples);
+  if (wgpu::QuerySet visibility = vis_query::detail::pass_begin(static_cast<bool>(occlusion))) {
+    occlusion = std::move(visibility);
+  }
   const wgpu::RenderPassDescriptor renderPassDescriptor{
       .label = label.c_str(),
       .colorAttachmentCount = passInfo.colorAttachmentCount,
       .colorAttachments = attachments.data(),
       .depthStencilAttachment = depthStencilAttachmentPtr,
-      .occlusionQuerySet = overdraw::pass_begin(passIndex, passInfo.colorAttachments[SceneColorAttachmentIndex].size,
-                                                passInfo.msaaSamples),
+      .occlusionQuerySet = occlusion,
       .timestampWrites = webgpu::gpu_prof::pass_writes(profName),
   };
 
@@ -260,6 +266,7 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
   render_pass(pass, frame, passInfo);
   pass.End();
   overdraw::pass_end();
+  vis_query::detail::pass_end();
 
   if (passInfo.captureDepthSnapshot) {
     depth_peek::encode_frame_snapshot(cmd, passInfo.copySourceDepthView,

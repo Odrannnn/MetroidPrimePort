@@ -2537,6 +2537,12 @@ bool CREPortShutdownRemaining::GetValue(int, float& out) const {
   return false;
 }
 
+bool CREPortVisibility::GetValue(int, float& out) const {
+  const CParticleGlobals::SParticleSystem* system = CParticleGlobals::GetCurrentParticleSystem();
+  out = system != nullptr && system->x4_system != nullptr ? system->x4_system->PortVisibility() : 1.f;
+  return false;
+}
+
 bool CREPortDominantLight::GetValue(int, float& out) const {
   float dir[3];
   PortRoomEnv::DominantLight(dir);
@@ -2767,6 +2773,9 @@ void CElementGen::Render() {
 #endif
 
 #ifdef TARGET_PC
+  if (x28_loadedGenDesc->xPortVisibilityQuery) {
+    PortVisibilityQuery(); // before `fx mute`: a muted system still keeps its visibility
+  }
   if (PortFx::gMuteActive && PortFx::IsMuted(*this)) {
     CGraphics::SetLightState(x274_backupLightActive);
     return; // `fx mute`: still updates and lives, just not drawn

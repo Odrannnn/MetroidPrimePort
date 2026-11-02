@@ -51,9 +51,111 @@
 #include "port_fx_debug.h"
 #include "port_room_env.h"
 #include "port_vfx_particles.h"
+
+#include "aurora/vis_query.hpp"
 #endif
 
 #ifdef TARGET_PC
+// VISQ's occlusion queries, UpdateOcclusionQueries 0x2b0dd0, once per frame for a system whose
+// description reads VISQ. It first takes last frames' results: with both a depth-tested (A) and
+// an untested (B) count, the visibility is A/B (0 when B covered nothing); else it keeps its
+// value. Then it draws both queries again: a box of half extent max((max-min)/2, 0.1) around the
+// AABB pos +- (VISD/2, VISD/2, 0.05), VISD = (1, 1), so (0.5, 0.5, 0.1), at the render state's
+// +0xa0 (below), turned to the camera (render_queries 0x2c2810: LookAt(center, eye, up = the
+// camera's forward) x Scale), its back faces culled.
+void CElementGen::PortVisibilityQuery() {
+  static uint32_t sNextId = 0;
+  const int frame = CGraphics::GetFrameCounter();
+  if (xPortVisibilityFrame == frame) {
+    return;
+  }
+  xPortVisibilityFrame = frame;
+  if (xPortVisibilityId == 0) {
+    xPortVisibilityId = ++sNextId;
+    if (xPortVisibilityId == 0) {
+      xPortVisibilityId = ++sNextId;
+    }
+  }
+  const uint64_t keyA = uint64_t(xPortVisibilityId) << 32;
+  const uint64_t keyB = keyA | 1;
+
+  uint64_t samplesA = 0;
+  uint64_t samplesB = 0;
+  const bool haveA = aurora::gfx::vis_query::take(keyA, samplesA);
+  const bool haveB = aurora::gfx::vis_query::take(keyB, samplesB);
+  if (haveA && haveB) {
+    xPortVisibility = samplesB != 0 ? float(double(samplesA) / double(samplesB)) : 0.f;
+  }
+
+  const CTransform4f& camera = CParticleGlobals::PortCameraTransform();
+  // The render state's +0xa0, vec 0x12 (desc +0xb8, SetupTransformMode 0x2887d8) as is: under
+  // XFMD 2 the system translation over the system scale, under 3 and 4 (no EMVR) zero. XFMD 5
+  // (T_l/S_g + INTT) reads as 2 here; no VISQ generator uses it.
+  CVector3f center = CVector3f::Zero();
+  if (x28_loadedGenDesc->xPortXfmd == kPortXfmdRetail) {
+    const CVector3f scale = PortSystemScale();
+    const CVector3f t = PortSystemTranslation();
+    center = CVector3f(t.GetX() / scale.GetX(), t.GetY() / scale.GetY(), t.GetZ() / scale.GetZ());
+  }
+  const CVector3f eye = camera.GetTranslation();
+  const CVector3f up = camera.GetForward();
+  const float eps = 1.f / 524288.f; // 2^-19
+
+  CVector3f f = eye - center;
+  const float fLen = f.Magnitude();
+  f = fLen > eps ? f * (1.f / fLen) : CVector3f(0.f, 0.f, 1.f);
+  const float upDot = rstl::max_val(-1.f, rstl::min_val(1.f, CVector3f::Dot(up, f)));
+  CVector3f r = up - f * upDot;
+  if (r.Magnitude() <= eps) {
+    r = CVector3f(0.f, 1.f, 0.f) - f * f.GetY();
+    if (r.Magnitude() <= eps) {
+      r = CVector3f(0.f, 0.f, 1.f) - f * f.GetZ();
+    }
+  }
+  r = r.AsNormalized();
+  const CVector3f axes[3] = {CVector3f::Cross(r, f), r, f};
+  const float half[3] = {0.5f, 0.5f, 0.1f};
+
+  // The six faces of the +-1 cube, each as its axis, sign and the two other axes.
+  float verts[36][3];
+  uint32_t count = 0;
+  for (int axis = 0; axis < 3; ++axis) {
+    const int u = (axis + 1) % 3;
+    const int v = (axis + 2) % 3;
+    for (int sign = -1; sign <= 1; sign += 2) {
+      const CVector3f normal = axes[axis] * float(sign);
+      const CVector3f faceCenter = center + normal * half[axis];
+      if (CVector3f::Dot(normal, eye - faceCenter) <= 0.f) {
+        continue;
+      }
+      const CVector3f du = axes[u] * half[u];
+      const CVector3f dv = axes[v] * half[v];
+      const CVector3f corners[4] = {faceCenter - du - dv, faceCenter + du - dv, faceCenter + du + dv,
+                                    faceCenter - du + dv};
+      static const int kTri[6] = {0, 1, 2, 0, 2, 3};
+      for (int i = 0; i < 6; ++i) {
+        const CVector3f& c = corners[kTri[i]];
+        verts[count][0] = c.GetX();
+        verts[count][1] = c.GetY();
+        verts[count][2] = c.GetZ();
+        ++count;
+      }
+    }
+  }
+  if (count == 0) {
+    // The eye inside the box: Remastered's culled cube covers nothing, both counts read 0.
+    for (int i = 0; i < 3; ++i) {
+      verts[i][0] = center.GetX();
+      verts[i][1] = center.GetY();
+      verts[i][2] = center.GetZ();
+    }
+    count = 3;
+  }
+  CGraphics::SetModelMatrix(CTransform4f::Identity());
+  aurora::gfx::vis_query::draw(keyA, verts, count, true);
+  aurora::gfx::vis_query::draw(keyB, verts, count, false);
+}
+
 // Draws the system between its last two tick states when uncapped. The
 // retail sub-frame path (x80_timeDeltaScale < 1) already draws particles
 // between their previous and current positions; this feeds it the
@@ -276,6 +378,10 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
   }
   if (desc.xPortIrnd) {
     out.vfx += out.vfx.empty() ? "IRND" : " IRND";
+  }
+  if (desc.xPortVisibilityQuery) {
+    std::snprintf(buf, sizeof(buf), "%sVISQ=%.3f", out.vfx.empty() ? "" : " ", xPortVisibility);
+    out.vfx += buf;
   }
   if (desc.xPortSsze != nullptr) {
     out.vfx += out.vfx.empty() ? "SSZE" : " SSZE";

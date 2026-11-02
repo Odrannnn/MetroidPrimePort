@@ -1298,6 +1298,9 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     }
   }
 
+#ifdef TARGET_PC
+  desc->xPortVisibilityQuery = CPortParticleParseScope::visibilityQuery;
+#endif
   return true;
 }
 
@@ -1470,6 +1473,10 @@ CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
   // Port-only PSDT: the system's shutdown countdown fraction left (SDTR).
   case SBIG('PSDT'):
     return rs_new CREPortShutdownRemaining();
+  // Port-only PVSQ: the system's occlusion-query visibility (VISQ); the system then issues queries.
+  case SBIG('PVSQ'):
+    CPortParticleParseScope::visibilityQuery = true;
+    return rs_new CREPortVisibility();
   // Port-only PDML: a component (0-2) of the dominant light direction (Remastered's DOML).
   case SBIG('PDML'): {
     const u32 component = in.ReadLong();

@@ -103,6 +103,8 @@ constexpr ElementSig kElementSigs[] = {
     // ATFB (CUVEAnimFlipBookTexture, ctor in GetTextureElement 0x266ba4): an id, the animation time as
     // an int read as a real, a flag. BNID (CIEBoneIndex, GetIntElement 0x26a910): a bone name and a flag.
     {"ATFB", "gee"},    {"BNID", "Se"},
+    // VISQ (CREVisibilityQuery, GetRealElement 0x2619e8): one int, read as a constant and unused.
+    {"VISQ", "e"},
 };
 
 // Elements by the type of value they are read as, with typed arguments: I an
@@ -131,7 +133,7 @@ constexpr ElementSig kRealSigs[] = {
     {"SUB_", "RR"},   {"GTCR", "C"},    {"GTCG", "C"},    {"GTCB", "C"},     {"GTCA", "C"},    {"DFCP", "RR"},
     {"CREL", "BRR"}, {"DFCS", "RR"}, {"MPRD", "RR eeee"}, {"TPVF", "gR"}, {"DPVF", "gR"}, {"SPAF", "bR"}, {"KPIN", "R"},
     {"SLCT", "Re"},   {"DIVD", "RR"},   {"SLTW", "RR"},   {"ABS_", "R"},    {"MPXV", "IR"},   {"COSE", "RRR"},  {"RSGN", "R"},     {"IRSN", "R"},
-    {"NEGT", "R"},    {"T2S_", "I"},    {"SDTR", "-"},
+    {"NEGT", "R"},    {"T2S_", "I"},    {"SDTR", "-"},    {"VISQ", "I"},
 };
 constexpr ElementSig kVectorSigs[] = {
     {"NONE", "-"},   {"CNST", "RRR"},   {"KEYE", "k"},    {"KEYP", "k"},   {"ANGC", "RRRRR"}, {"CONE", "VR"},

@@ -402,6 +402,15 @@ public:
   bool GetValue(int frame, float& out) const override;
 };
 
+// PVSQ (port-only; Remastered's VISQ, CREVisibilityQuery 0x299790): the current system's
+// occlusion visibility (samples passing the depth test over samples drawn), 1 with none yet.
+class CREPortVisibility : public CRealElement {
+public:
+  CREPortVisibility() {}
+  ~CREPortVisibility() override {}
+  bool GetValue(int frame, float& out) const override;
+};
+
 // PDML (port-only; one component of Remastered's DOML vector, CVEDominantLightDirectionInWorldSpace
 // 0x2a40e8): the dominant light direction LightHints set (PortRoomEnv::DominantLight), world space.
 class CREPortDominantLight : public CRealElement {

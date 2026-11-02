@@ -135,6 +135,8 @@ public:
   void PortSetSpawnSpread(const CVector3f& spread, const CVector3f& origin) override;
   // SDTR: the countdown's remaining over its total, 1 when none is running.
   float PortShutdownTimeRemaining() const;
+  void PortVisibilityQuery();
+  float PortVisibility() const { return xPortVisibility; }
 #endif
   virtual void SetModulationColor(const CColor& col) override;
   virtual void SetGeneratorRate(float rate) override;
@@ -425,6 +427,11 @@ private:
   bool xPortVelocityGlobal[4] = {}; // packed alongside x280_VELSources, as Fixup 0x292ed4
   int xPortShutdownCountdown = -1; // ticks to the delayed shutdown, -1 = not counting
   int xPortShutdownTotal = 0;
+  // VISQ's value (render state +0xa0): the depth-tested over untested sample ratio of the
+  // occlusion queries UpdateOcclusionQueries 0x2b0dd0 issues each frame (PortVisibilityQuery).
+  float xPortVisibility = 1.f;
+  uint32_t xPortVisibilityId = 0;
+  int xPortVisibilityFrame = -1; // CGraphics::GetFrameCounter of the last issue
 #endif
   rstl::vector< CParticleGen* > x290_activePartChildren;
   int x2a0_CSSD;

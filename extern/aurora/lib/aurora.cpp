@@ -5,6 +5,7 @@
 #ifdef AURORA_ENABLE_GX
 #include "gfx/resources.hpp"
 #include "gfx/overdraw.hpp"
+#include "gfx/vis_query.hpp"
 #include "gfx/frame.hpp"
 #include "gfx/pipeline_cache.hpp"
 #include "gfx/recording.hpp"
@@ -577,6 +578,7 @@ void end_frame() noexcept {
     }
     webgpu::gpu_prof::frame_end(encoder);
     gfx::overdraw::frame_end(encoder);
+    gfx::vis_query::detail::frame_end(encoder);
     const wgpu::CommandBufferDescriptor cmdBufDescriptor{.label = "Redraw command buffer"};
     const auto buffer = encoder.Finish(&cmdBufDescriptor);
     {
@@ -588,6 +590,7 @@ void end_frame() noexcept {
     phase::set(phase::Render, "after submit");
     webgpu::gpu_prof::after_submit();
     gfx::overdraw::after_submit();
+    gfx::vis_query::detail::after_submit();
     if (canPresent && g_surface) {
       ZoneScopedN("Present");
       wgpu::ConvertibleStatus status = wgpu::Status::Error;

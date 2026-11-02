@@ -289,6 +289,9 @@ public:
   // port-only PITP: Remastered's ITPE 1: with several particles born in a tick and a moving system,
   // their positions are spread back along the change of translation (CreateNewParticles 0x24a630).
   bool xPortSpread = false;
+  // A PVSQ (Remastered's VISQ) is in this description: the system issues the two occlusion
+  // queries each frame (CParticleSceneNode::UpdateOcclusionQueries 0x2b0dd0).
+  bool xPortVisibilityQuery = false;
   // port-only PDBS: Remastered's DBIS (desc+0xd4), the depth bias in world units, negative toward the
   // camera (CPortParticleDepthBias). 0 = none.
   float xPortDepthBias = 0.f;

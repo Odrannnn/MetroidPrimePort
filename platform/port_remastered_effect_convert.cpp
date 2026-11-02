@@ -273,9 +273,9 @@ const Signatures& PortElementsOf(Type type) {
   static const Signatures realElements = {
       // VARF: a PVRT index. PSYR: a PSYS slot. PSDT: the shutdown countdown's remaining over its
       // total. PMXV: the index, then the fallback. PSLW: the two reals the system tween blends.
-      // PDML: a component of the dominant light direction (DOML).
+      // PDML: a component of the dominant light direction (DOML). PVSQ: the occlusion visibility.
       {F("VARF"), "w"}, {F("PSYR"), "w"}, {F("PSDT"), ""}, {F("PMXV"), "ir"}, {F("PSLW"), "rr"},
-      {F("PDML"), "w"},
+      {F("PDML"), "w"}, {F("PVSQ"), ""},
   };
   static const Signatures vectorElements = {
       // VARV: a PVRT index. PCRC: centre, axis, start degrees, count, variance, radius, then the
@@ -1977,6 +1977,17 @@ public:
         return false;
       }
       AppendBE32(out, F("PSDT"));
+      return true;
+    }
+    // VISQ (CREVisibilityQuery 0x299790) is the system's occlusion-query visibility, 1 before
+    // any result; its int (0x2619e8) is read and unused. A generator's port-only PVSQ; a swoosh
+    // or electric issues no queries in the port.
+    if (value.fourcc == F("VISQ") && type == Type::Real) {
+      if (!m_gpsm || value.args.size() != 1) {
+        why = "VISQ outside a generator needs Remastered's occlusion queries";
+        return false;
+      }
+      AppendBE32(out, F("PVSQ"));
       return true;
     }
     const Signatures& elements = ElementsOf(type);
