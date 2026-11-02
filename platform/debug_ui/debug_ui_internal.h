@@ -312,6 +312,9 @@ extern bool sSettingsLogged;
 using namespace DebugUi;
 
 namespace PortDebug {
+// Flick Stick's turn this tick (radians, right positive) for the right stick at
+// (x, y); false when the stick aims as usual instead (input.cpp).
+bool FlickStickTurn(float x, float y, float dt, float& yaw);
 
 // Pages and sections, each drawn by the file it is named after.
 struct DebugPage {

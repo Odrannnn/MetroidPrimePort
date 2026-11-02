@@ -148,6 +148,17 @@
   a C-stick held from the keyboard is not consumed, so keyboard beam keys still
   pick beams, and an L from a key or mouse button stays lock-on. Fire
   stays on whatever is bound to A; remap it in Controls > Remap.
+- `MP_FLICK_STICK=1` (Controls > Options "Flick stick" under twin stick, persisted
+  as `flick_stick`, off by default): the twin-stick right stick as Flick Stick.
+  Tilting it past 90% turns the view to face that direction relative to the
+  current view (right 90 degrees, down 180) over 0.1 s; rotating the held stick
+  turns the view by the same angle, small rotations smoothed (fully below
+  180 deg/s, none above 360 deg/s); it flicks again once let go below 75%. Only
+  yaw: nothing aims up and down without gyro aim, which F1 warns about, and the
+  stick speed settings do not apply (F1 and the pause menu hide them). A pad's stick only, not the touch overlay's.
+  Off while a radial menu or a lock-on with free aim takes the stick; under
+  pointer aim it flicks only while the gyro drives the aim, and otherwise moves
+  the pointer as before.
 - Gyro aim (Controls > Touch & gyro): tilting the pad or phone aims through the
   same free aim as the mouse, so it needs mouse aim, twin stick or the touch
   controls. `gyro_mode` is 0 off, 1 hold to aim (aims while the "Gyro aim" action

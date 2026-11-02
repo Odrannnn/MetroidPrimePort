@@ -271,7 +271,8 @@ static const SGameOption skPortControllerOptions[] = {
     {PORT_OPTION(kPO_RapidCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {kGO_RestoreDefaults, 35, 0.f, 1.f, 1.f, kOT_RestoreDefaults},
 };
-// The same without Stick Aim Speed, which only shows while Twin Stick is on.
+// The same without Stick Aim Speed, which only shows while Twin Stick is on
+// (and Flick Stick, which has no speed, off).
 static const SGameOption skPortControllerOptionsNoAim[] = {
     {kGO_ReverseYAxis, 32, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {kGO_Rumble, 33, 0.f, 1.f, 1.f, kOT_DoubleEnum},
@@ -549,7 +550,7 @@ static const SOptionCategory& GetOptionCategory(int category, bool frontEnd) {
   if (frontEnd) {
     return skGameOptions[category];
   }
-  if (category == 3 && !PortDebug::PadTwinStick()) {
+  if (category == 3 && (!PortDebug::PadTwinStick() || PortDebug::FlickStick())) {
     return skPortControllerCategoryNoAim;
   }
   return skPauseOptions[category];

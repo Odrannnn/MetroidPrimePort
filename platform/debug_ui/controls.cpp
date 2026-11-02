@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstring>
 
 namespace PortDebug {
 
@@ -310,8 +311,34 @@ void DrawControlsController() {
   }
   ItemHelp("Moves as in Remastered and PrimeHack: even diagonal speed and a smooth jump arc. Off: "
            "GameCube movement. Classic controls always use GameCube movement.");
-  // Shown only with twin stick on, as the pause menu's Stick Aim Speed row.
   if (sInput.twinStick) {
+    bool flickStick = sInput.flickStick;
+    if (ImGui::Checkbox("Flick stick", &flickStick)) {
+      SetFlickStick(flickStick);
+    }
+    ItemHelp("Tilting the right stick turns you to face that way (right: a quarter turn, down: turn "
+             "around); rotating the held stick turns with it. Left and right only: aim up and down with "
+             "gyro aim.");
+    if (sInput.flickStick) {
+      const char* warning = nullptr;
+      if (sInput.gyroMode == 0) {
+        warning = "Flick stick only turns left and right: turn on Gyro aim (Controls > Touch & gyro) to "
+                  "aim up and down.";
+      } else if (std::strcmp(GyroStatus(), "no gyro found") == 0) {
+        warning = "No gyro found: flick stick only turns left and right, so nothing aims up and down.";
+      } else if (PointerAim()) {
+        warning = "Under Pointer aim the right stick flicks only while the gyro is aiming; otherwise it "
+                  "moves the pointer.";
+      }
+      if (warning != nullptr) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeWarnColor());
+        ImGui::TextWrapped("%s", warning);
+        ImGui::PopStyleColor();
+      }
+    }
+  }
+  // Shown only with twin stick on, as the pause menu's Stick Aim Speed row; flick stick has no speed.
+  if (sInput.twinStick && !sInput.flickStick) {
     float stickRate = sInput.stickAimRate;
     if (ImGui::SliderFloat("Stick aim speed", &stickRate, 100.f, 8100.f, "%.0f px/s")) {
       SetStickAimRate(stickRate);

@@ -14,6 +14,7 @@
 #include "port_config_reset.h"
 #include "port_input_devices.h"
 #include "port_savestate.h"
+#include "port_flick_stick.h"
 #include "port_mouse.h"
 
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
@@ -729,6 +730,22 @@ bool UpdateMouseAim(bool active, bool locked, float x, float y, float z, bool po
   sAimAppliedLastTick = applied;
   return applied;
 }
+bool FlickStickTurn(float x, float y, float dt, float& yaw) {
+  static PortFlickStick::State sFlick;
+  // On from the start: the first tick that reads a pad (it may come tilted) flicks.
+  static bool sFlickOn = true;
+  // Under pointer aim the stick moves the pointer unless the gyro drives the aim; a radial
+  // menu or a lock with free aim takes the stick's travel as it is.
+  const bool on = FlickStick() && !Visible() && !PortRadial::Capturing() && !sPointerAimLocked &&
+                  (!PointerAim() || sGyroDrivesAim);
+  // Off and back on, a stick still tilted must be let go before it flicks.
+  if (on != sFlickOn) sFlick.Reset();
+  sFlickOn = on;
+  if (!on) return false;
+  yaw = sFlick.Update(x, y, dt);
+  return true;
+}
+
 void SynchronizeMouseAim(float x, float y, float z) { sMouseAimState.Synchronize(x, y, z); }
 void TurnMouseAim(float dyaw) { sMouseAimState.Turn(dyaw, 0.f); }
 

@@ -710,6 +710,9 @@ void SetGyroOverride(bool active, float pitch, float yaw);
 // sensitivity, so both share the same feel).
 float StickAimRate();
 void SetStickAimRate(float pixelsPerSecond);
+// Twin stick's right stick as Flick Stick (a controller's, not the touch overlay's).
+bool FlickStick();
+void SetFlickStick(bool enabled);
 // Gyro aiming. Mode: 0 off, 1 aim while the Gyro aim button is held, 2 always
 // aim, 3 aim except while it is held, 4 press to toggle aim (initially off).
 // Source: 0 auto (a pad's gyro if it has

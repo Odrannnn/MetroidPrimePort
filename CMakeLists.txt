@@ -853,6 +853,8 @@ if(MP_BUILD_TESTS)
         INCLUDES platform/include
         LIBRARIES ZLIB::ZLIB)
     mp_port_test(port_mouse_tests SOURCES tests/port_mouse.cpp INCLUDES platform/include)
+    # Header-only (port_flick_stick.h): Flick Stick's flicks, rotation and smoothing.
+    mp_port_test(port_flick_stick_tests SOURCES tests/port_flick_stick.cpp INCLUDES platform/include)
     # Header-only (port_input_gate.h): pad 0's neutral-while-F1-is-open gate.
     mp_port_test(port_input_gate_tests SOURCES tests/port_input_gate.cpp INCLUDES platform/include)
     # Drives a real SDL virtual gamepad through the touch overlay's own code.

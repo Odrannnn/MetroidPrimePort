@@ -77,6 +77,9 @@ struct Settings {
   // stickAimRate only the horizontal; off, stickAimRate drives both.
   bool stickAimSplit = false;
   float stickAimRateY = 900.f;
+  // Twin stick's right stick as Flick Stick: it turns the view to face the way
+  // it points and turns with it, yaw only (PortFlickStick).
+  bool flickStick = false;
   // Gyro aiming: off / hold to aim / always / hold to pause / toggle to aim, auto / controller /
   // phone, and how far the camera turns per turn of the pad (1 = the same angle).
   int gyroMode = 0;

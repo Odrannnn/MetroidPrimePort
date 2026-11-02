@@ -1021,6 +1021,10 @@ int StoredPadAltButton(int bit) {
 
 void SetTwinStick(bool enabled) { StoreSetting(sInput.twinStick, enabled); }
 
+bool FlickStick() { return TwinStick() && Loaded(sInput.flickStick) && !TouchActive(); }
+
+void SetFlickStick(bool enabled) { StoreSetting(sInput.flickStick, enabled); }
+
 int PadPreset() { return Loaded(sInput.padPreset); }
 
 void SetPadPreset(int preset) { StoreSetting(sInput.padPreset, preset); }
@@ -1313,8 +1317,17 @@ void SetStickAimRate(float pixelsPerSecond) {
 
 void AddStickAim(float x, float y, float dt) {
   EnsureInitialized();
-  if (!TwinStick() || Visible() || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(dt) ||
-      dt <= 0.f) {
+  if (!TwinStick() || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(dt) || dt <= 0.f) {
+    return;
+  }
+  float flickYaw = 0.f;
+  const bool flick = FlickStickTurn(x, y, dt, flickYaw);
+  if (Visible()) return;
+  if (flick) {
+    // An exact angle, so the mouse sensitivity is divided out and Invert X undone.
+    const float travelX = flickYaw / MouseSensitivity() * (MouseInvertX() ? -1.f : 1.f);
+    sMouseFrameX += travelX;
+    sStickFrameX += travelX;
     return;
   }
   // Stick aim stands in for free look, so it follows the game's Reverse Y Axis
