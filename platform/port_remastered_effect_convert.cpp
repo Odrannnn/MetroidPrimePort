@@ -4808,6 +4808,8 @@ public:
     // LSPS: the light block's +0x50, CLight+0x74, which widens the light's specular lobe
     // (roughness r + (1 - r) * LSPS in the PBR shaders). A CNST real's bits; 0 = none.
     uint32_t nestedLightWiden = 0;
+    // The light is built once and never updated (port-only PLON); see NestedLight.
+    bool lightOnce = false;
     // FXBR/FXBM/FXBO/FXBI, the system's own bounds (FixedBounds): the constant box in the port's
     // space (min then max), written as PFXB, and whether children's bounds are left out (PFXC).
     std::optional<std::array<float, 6>> fixedBounds;
@@ -5007,6 +5009,18 @@ public:
       } else if (ltyp != nullptr && SmallInteger(*ltyp, lightType) && lightType == 2) {
         s.result.dropped.push_back("PHDR: point light lacks constant LFOT or supported LCLR/LINT/LIRD/LORD");
       }
+      // CParticleLight::Create 0x2def58 builds every generator's light in its ctor; only
+      // TickSystem_Light 0x24af3c calls CParticleLight::Update. Compile 0x290e4c picks that tick
+      // for a type-4 generator (desc+0x318) that makes no particles: desc+0x31c bit 2, set by
+      // SParticle::CompileSystem 0x290aa8 for no LTME, a constant LTME 0, or no GRTE (desc+0x2fa
+      // bit 1, SEmitter::CompileSystem 0x28e00c). Any other generator keeps its first values.
+      const EffectProperty* ltme = unique(F("LTME"));
+      if (ltme == nullptr) {
+        ltme = unique(F("LTM2"));
+      }
+      const bool noParticles = ltme == nullptr || (ltme->value.size() == 1 && ConstIs(ltme->value[0], 0)) ||
+                               !s.Has(F("GRTE"));
+      s.lightOnce = ltyp != nullptr && !(s.node.primitiveType == 3 && noParticles);
     }
   }
 
@@ -6624,6 +6638,11 @@ public:
         AppendBE32(s.out, s.nestedLightWiden);
       }
     }
+    if (s.lightOnce) {
+      AppendBE32(s.out, F("PLON"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, 1);
+    }
   }
 
   // The top node is the effect's own PART whatever its root flag says
@@ -7232,7 +7251,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && fourcc == F("PSHT")) {
       ok = reader.Element(Type::Int);
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
-                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
+                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PLON") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("POSD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||

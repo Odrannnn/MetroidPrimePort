@@ -236,8 +236,8 @@ inline constexpr int kModels = 30;
 // 163: header planar squares (shaders 4ba0aadc, c38294d2). 164: VMAT slots bind Remastered's sRGB textures.
 // 182: a vector SMTR (DOML, CNST) sets a CCH row's xyz; DOML reads the LightHints' direction (PDML).
 // 183: a vector PSAn reads the system's SVVn (PSYV). 184: a swoosh's SEED and child seed (PSED, PGID).
-// 185: a swoosh's TXUP (PTXU).
-inline constexpr int kEffects = 185;   // swoosh TXUP
+// 185: a swoosh's TXUP (PTXU). 186: a light TickSystem_Light does not update is built once (PLON).
+inline constexpr int kEffects = 186;   // PLON: a generator's light is built once
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

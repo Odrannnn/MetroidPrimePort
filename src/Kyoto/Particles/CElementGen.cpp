@@ -230,6 +230,7 @@ CElementGen::CElementGen(TToken< CGenDescription > gen, EModelOrientationType or
 , xPortNestedHdrInnerRadius(0.f)
 , xPortNestedHdrOuterRadius(0.f)
 , xPortNestedHdrRadiiValid(false)
+, xPortLightEvaluated(false)
 , xPortSeed(sSeed)
 #endif
 {
@@ -996,6 +997,11 @@ void CElementGen::UpdateLightParameters() {
   // default instead of calling through a null element (tablet crash: a light
   // with no LOFF).
   CGenDescription* desc = x28_loadedGenDesc;
+  // Remastered evaluates a PLON light once, at frame 0, so a RAND LINT holds still.
+  if (desc->xPortLightOnce && xPortLightEvaluated) {
+    return;
+  }
+  xPortLightEvaluated = true;
   if (desc->xf0_LCLR) {
     desc->xf0_LCLR->GetValue(x74_curFrame, x30c_LCLR);
     if (desc->xPortNestedHdrLight) {

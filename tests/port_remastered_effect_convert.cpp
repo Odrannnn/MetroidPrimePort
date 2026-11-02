@@ -295,6 +295,21 @@ void PutRealKey(std::vector<uint8_t>& out, float first, float second) {
   Put32(out, Bits(second));
 }
 
+// A one-generator effect whose body (properties) `body` writes.
+template <typename Body>
+std::vector<uint8_t> OneGenerator(Body body, int primitive = 1) {
+  std::vector<uint8_t> out(0x3c, 0);
+  std::memcpy(out.data(), "RFRM", 4);
+  std::memcpy(out.data() + 0x14, "GENP", 4);
+  PutGenerator(out, true);
+  out[0x3c + 21] = uint8_t(primitive + 1);
+  body(out);
+  PutProperty(out, "_END", 4);
+  Put32(out, 0);
+  out.insert(out.end(), {'F', 'O', 'O', 'T'});
+  return out;
+}
+
 std::vector<uint8_t> NestedLightEffect(const EffectGuid& childId, uint8_t lightType = 2,
                                        uint8_t falloff = 3, bool includeRadii = true,
                                        int inverseExposed = 1, float specWiden = -1.f) {
@@ -472,6 +487,40 @@ void TestPlasmaNestedHdrLight() {
       CHECK_MSG(plain.size() == 2 && findIn(plain[1], "PLSP", props) == nullptr,
                 "a light without LSPS writes no PLSP");
     }
+  }
+  // A light is built once (PLON 1) unless TickSystem_Light updates it: a primitive-3
+  // generator with no LTME, a constant LTME 0, or no GRTE.
+  {
+    std::vector<RetailPartProperty> props;
+    const RetailPartProperty* once = anyChild.size() == 2 ? findIn(anyChild[1], "PLON", props) : nullptr;
+    CHECK_MSG(once != nullptr && once->value.size() == 8 && std::memcmp(once->value.data(), "CNST", 4) == 0 &&
+                  once->value[7] == 1,
+              "a particle generator's light is written PLON 1");
+    struct Case {
+      int primitive;
+      int lifetime;  // -1: no LTME
+      bool rate;
+      bool once;
+    };
+    for (const Case c : {Case{3, -1, true, false}, Case{3, 0, true, false}, Case{3, 5, false, false},
+                         Case{3, 5, true, true}, Case{1, -1, false, true}}) {
+      const auto parts = ConvertOne(OneGenerator([&](auto& out) {
+        PutProperty(out, "LTYP", 0);
+        out.push_back(2);
+        if (c.lifetime >= 0) {
+          PutProperty(out, "LTME", 3);
+          PutConstant(out, uint32_t(c.lifetime));
+        }
+        if (c.rate) {
+          PutProperty(out, "GRTE", 0);
+          PutConstant(out, Bits(1.f));
+        }
+      }, c.primitive), {});
+      CHECK_MSG(parts.size() == 1 && (findIn(parts[0], "PLON", props) != nullptr) == c.once,
+                "only TickSystem_Light's generators update their light");
+    }
+    const auto unlit = ConvertOne(OneGenerator([](auto&) {}), {});
+    CHECK_MSG(unlit.size() == 1 && findIn(unlit[0], "PLON", props) == nullptr, "no LTYP writes no PLON");
   }
   // A spot light (LTYP 3) stays on the retail path.
   const auto spot = ConvertOne(NestedLightEffect(Fresh(7), 3, 2), {});
@@ -983,7 +1032,7 @@ void TestRejects() {
   CHECK_MSG(parts.size() == 1 && parts[0].droppedRetail == 1, "RADD in SIZE is dropped");
   Retail root;
   root.f("GPSM").f("LFOT").f("CNST").w(3).f("LTYP").f("CNST").w(2);
-  root.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+  root.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).pirn().pslt().f("PLON").f("CNST").w(1).f("_END");
   CHECK_MSG(parts.size() == 1 && parts[0].part == root.bytes, "LFOT byte 3 is retail 3, LTYP byte 1 is retail 2");
 }
 }  // namespace
@@ -1874,21 +1923,6 @@ void TestPortSpawnComponents() {
   std::vector<RetailPartProperty> properties;
   CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error) && properties.size() == 4,
             "the component reads back");
-}
-
-// A one-generator effect whose body (properties) `body` writes.
-template <typename Body>
-std::vector<uint8_t> OneGenerator(Body body, int primitive = 1) {
-  std::vector<uint8_t> out(0x3c, 0);
-  std::memcpy(out.data(), "RFRM", 4);
-  std::memcpy(out.data() + 0x14, "GENP", 4);
-  PutGenerator(out, true);
-  out[0x3c + 21] = uint8_t(primitive + 1);
-  body(out);
-  PutProperty(out, "_END", 4);
-  Put32(out, 0);
-  out.insert(out.end(), {'F', 'O', 'O', 'T'});
-  return out;
 }
 
 void PutTxfb(std::vector<uint8_t>& out, bool trst, float scale, bool mirror, float lifeHigh = 1.0f) {

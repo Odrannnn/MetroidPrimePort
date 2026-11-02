@@ -211,6 +211,9 @@ public:
   bool xPortNestedLightInverseExposure = false;
   // port-only PLSP: Remastered's LSPS, the light's specular roughness widen (CLight::SetPortHdrWiden)
   float xPortNestedLightWiden = 0.f;
+  // port-only PLON: Remastered builds this generator's light once (CParticleLight::Create
+  // 0x2def58, from the ctor) and never updates it, as every tick mode but TickSystem_Light does.
+  bool xPortLightOnce = false;
   // port-only PFXB: Remastered's fixed system bounds (CBoundsFixedEval), a box in the system's
   // space that replaces the particles' bounds; PFXC: children's bounds are left out (FXBI).
   bool xPortFixedBounds = false;

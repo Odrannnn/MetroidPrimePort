@@ -490,6 +490,8 @@ private:
   float xPortNestedHdrColor[4];
   float xPortNestedHdrInnerRadius, xPortNestedHdrOuterRadius;
   bool xPortNestedHdrRadiiValid;
+  // The light parameters were evaluated once; a PLON light keeps them (UpdateLightParameters).
+  bool xPortLightEvaluated;
   // A converted Remastered system keeps its seed as 32 bits (x94 is 16): the SEED value, else the
   // seed it was built with (sPortChildSeed for a Remastered child, else sSeed).
   uint xPortSeed;

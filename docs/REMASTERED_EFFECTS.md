@@ -495,6 +495,14 @@ lights set it, from their constant LSPS (port-only `PLSP`,
 them, or "off", for every light it loads. Retail-material draws keep the
 retail light.
 
+Remastered builds a generator's light once, in its constructor, and only
+`TickSystem_Light` updates it: a primitive-3 generator that makes no
+particles (no LTME, a constant LTME 0, or no GRTE). Every other lit
+generator, the beam impact lights among them, keeps its frame-0 colour,
+intensity and radii; only the position follows the system. The converter
+marks those with port-only `PLON 1`, and `CElementGen::UpdateLightParameters`
+then evaluates the light once. Without it a RAND LINT flickers every frame.
+
 `MP_REMASTERED_BALL_LIGHT=0` keeps retail's light, and
 `MP_REMASTERED_BALL_LIGHT_SCALE=<x>` scales the intensity. The console's
 `roomenv balllight on|off|<scale>` does the same while the game runs.
