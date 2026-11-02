@@ -540,9 +540,12 @@ std::set<int> EffectEntities(const Room& room) {
 // A connection addressed to another component of an effect's entity (a Boolean's c53a2e78 to
 // its AmbientParticleEffect) with an action neither CEffectMP1GOC nor IMP1EntityBaseGOC
 // translates (0xd9c9e4, 0xc51ea4: 0xffff, no message) never reaches the effect, so it neither
-// connects nor drives it.
+// connects nor drives it. Nor does one on Default, which is never sent (NeverSent).
 bool MissesEffect(const Room& room, const std::set<int>& effects, const Connection& c, int t) {
   const Component& target = room.Components()[size_t(t)];
+  if (NeverSent(room.Components()[c.sender].type, c.event)) {
+    return true;
+  }
   return target.type != kEntity && target.type != kEffectMP1 && effects.count(target.entity) != 0 &&
          EffectAct(c.action) == 0 && !IsEntityBaseAction(c.action);
 }
@@ -1282,6 +1285,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   std::vector<Vec3> added;
   std::set<int> seen;
   std::map<std::string, size_t> connectedWhy;  // connected ones left out, by cause
+  std::map<std::string, std::string> connectedWho;  // their entities' guids, by cause (MP_REMASTERED_MISS)
   size_t connectedCount = 0, noPart = 0, noLayer = 0, kept = 0, keptOwn = 0, overridden = 0, full = 0, badVars = 0;
   size_t drivenCount = 0;  // connected ones added, with drives
   std::vector<PortRoomEffects::Drive> allDrives;
@@ -1642,6 +1646,13 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       if (!untraced.empty()) {
         ++connectedCount;
         ++connectedWhy[untraced];
+        static const bool logMisses = port::EnvFlag("MP_REMASTERED_MISS");
+        if (logMisses) {
+          const Id16& guid = room.Components()[size_t(c->entity)].guid;
+          char text[16];
+          std::snprintf(text, sizeof text, " %02x%02x%02x%02x", guid[0], guid[1], guid[2], guid[3]);
+          connectedWho[untraced] += text;
+        }
         continue;
       }
       for (const PortRoomGeo::Link& l : links != scripts.links.end() ? links->second : std::vector<PortRoomGeo::Link>()) {
@@ -2165,9 +2176,13 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                 name.c_str(), added.size(), replacedNear, overridden, connectedCount, drivenCount, generatorNote, kept + keptOwn + overridden,
                 keptOwn, noPart, noLayer, full != 0 ? ", the id range is full" : "",
                 badVars != 0 ? ", unreadable particle variables" : "", barrierNote, patternedNote, steamNote);
+  std::string summary = line;
+  for (const auto& [why, who] : connectedWho) {
+    summary += "; left out for " + why + ":" + who;
+  }
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
       steams.empty() && actorSlots.empty() && follows.empty()) {
-    return line;
+    return summary;
   }
   PortRoomEffects::File file;
   file.skips.assign(skips.begin(), skips.end());
@@ -2226,7 +2241,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   if (!io.write(fileName, PortRoomEffects::Write(file))) {
     return "  " + name + ": could not write " + fileName;
   }
-  return line;
+  return summary;
 }
 
 std::vector<std::array<uint8_t, 16>> RoomEffectGenpsOf(const Room& room) {

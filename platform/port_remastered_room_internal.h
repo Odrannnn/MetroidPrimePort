@@ -762,6 +762,13 @@ constexpr uint32_t kEventSpecialFunctionClosed = 0x290f7c1f;
 // object sends the same state, kNever when it never fires in the port, kUnknown otherwise.
 enum class SpecialFunctionSend { kUnknown, kRetail, kNever };
 SpecialFunctionSend SpecialFunctionSends(const Room& room, const Component& c, uint32_t event, bool matched);
+// The retail state a component type's event stands for, -1 when unknown.
+int RetailState(uint32_t type, uint32_t event);
+// Default (30) is never sent: in Remastered it is only read, by CActorMP1's InitializedInArea
+// (0xc4d854) for the draw parent, as retail's CActor reads it for xc6_nextDrawNode (CActor.cpp:748).
+// A connection on it neither connects nor drives what it names.
+constexpr int kStateDefault = 30;
+inline bool NeverSent(uint32_t type, uint32_t event) { return RetailState(type, event) == kStateDefault; }
 // The retail message (1 Activate, 4 Deactivate) a follow locator's Play action is to a target
 // of this GOC type; 0 for one it does not translate or that is not known.
 uint32_t FollowMessage(uint32_t target, uint32_t action);

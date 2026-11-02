@@ -103,7 +103,6 @@ int RetailType(uint32_t type) {
   return it == table.end() ? -1 : it->second;
 }
 
-// The retail state a component type's event stands for, -1 when unknown.
 int RetailState(uint32_t type, uint32_t event) {
   static const std::map<std::pair<uint32_t, uint32_t>, int> table = [] {
     std::map<std::pair<uint32_t, uint32_t>, int> t;
@@ -1334,6 +1333,11 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         remasteredIn[t];
         continue;
       }
+      // Nor an unmatched sender's event that is never sent (a matched one's names it as retail's
+      // link on Default does, which tells which retail Effect it is).
+      if ((s < 0 || match[size_t(s)] < 0) && NeverSent(comps[c.sender].type, c.event)) {
+        continue;
+      }
       const int state = RetailState(comps[c.sender].type, c.event);
       if (s < 0 || match[size_t(s)] < 0 || state < 0) {
         untraced.insert(t);
@@ -1957,6 +1961,10 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
               SpecialFunctionSend::kNever) {
             continue;
           }
+        }
+        // Nor does Default, which is never sent (NeverSent).
+        if (effect && NeverSent(sender.type, c->event)) {
+          continue;
         }
         // Remastered's own objects, and keyframes, are followed by the script (below).
         if (sender.type == kTemplateManager || sender.type == kDebugOptions || isScriptObject(c->sender) ||
