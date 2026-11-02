@@ -2344,6 +2344,13 @@ bool CREPortShutdownRemaining::GetValue(int, float& out) const {
   return false;
 }
 
+bool CREPortDominantLight::GetValue(int, float& out) const {
+  float dir[3];
+  PortRoomEnv::DominantLight(dir);
+  out = dir[x4_component];
+  return false;
+}
+
 float CElementGen::PortShutdownTimeRemaining() const {
   if (xPortShutdownCountdown == -1 || xPortShutdownTotal == 0) {
     return 1.f;

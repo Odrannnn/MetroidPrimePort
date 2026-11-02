@@ -15,7 +15,7 @@ namespace PortRoomEnv {
 namespace {
 
 constexpr uint32_t kMagic = 0x5645504D; // 'MPEV'
-constexpr uint32_t kVersion = 33;
+constexpr uint32_t kVersion = 34;
 constexpr uint32_t kMaxGrades = 64;
 // A fog record up to its link count (inclusive).
 constexpr size_t kFogBytes = 368;
@@ -1275,6 +1275,37 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         d.delay = 0.f;
       }
       at += 8;
+    }
+  }
+  if (version >= 34) {
+    if (data.size() - at < 4) {
+      error = "cut short";
+      return false;
+    }
+    const uint32_t hints = ReadLE32(data.data() + at);
+    at += 4;
+    constexpr uint32_t kMaxLightHints = 64;
+    constexpr size_t kHintBytes = 20;
+    if (hints > kMaxLightHints || (data.size() - at) / kHintBytes < hints) {
+      error = "cut short";
+      return false;
+    }
+    out.lightHints.resize(hints);
+    for (LightHint& h : out.lightHints) {
+      h.layer = int32_t(ReadLE32(data.data() + at));
+      h.on = data[at + 4] != 0;
+      for (int i = 0; i < 3; ++i) {
+        h.dir[i] = ReadLEFloat(data.data() + at + 8 + 4 * i);
+      }
+      const float len = std::sqrt(h.dir[0] * h.dir[0] + h.dir[1] * h.dir[1] + h.dir[2] * h.dir[2]);
+      if (!std::isfinite(len) || len < 1e-6f) {
+        error = "bad light hint";
+        return false;
+      }
+      for (float& v : h.dir) {
+        v /= len;
+      }
+      at += kHintBytes;
     }
   }
   out.data = std::move(data);

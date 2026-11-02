@@ -273,7 +273,9 @@ const Signatures& PortElementsOf(Type type) {
   static const Signatures realElements = {
       // VARF: a PVRT index. PSYR: a PSYS slot. PSDT: the shutdown countdown's remaining over its
       // total. PMXV: the index, then the fallback. PSLW: the two reals the system tween blends.
+      // PDML: a component of the dominant light direction (DOML).
       {F("VARF"), "w"}, {F("PSYR"), "w"}, {F("PSDT"), ""}, {F("PMXV"), "ir"}, {F("PSLW"), "rr"},
+      {F("PDML"), "w"},
   };
   static const Signatures vectorElements = {
       // VARV: a PVRT index. PCRC: centre, axis, start degrees, count, variance, radius, then the
@@ -4546,6 +4548,38 @@ public:
               continue;
             }
             AppendBE32(items, kPortVfxParamTarget + 4 * cch + c);
+            AppendBE32(items, 0);
+            items.insert(items.end(), element.begin(), element.end());
+            ++count;
+          }
+          continue;
+        }
+        // A vector (group 2) entry sets three components from its own: DOML (the dominant light
+        // direction) as a PDML each, or a CNST of three reals.
+        if (cch < uint32_t(recipe->params) && item.fourcc == 2 && item.args.size() == 2) {
+          const EffectValue& vec = item.args[0];
+          const uint32_t comp = item.args[1].word >> 8 & 0xff;
+          const bool doml = vec.kind == EffectValue::Kind::Element && vec.fourcc == F("DOML") && vec.args.empty();
+          const bool cnst = vec.kind == EffectValue::Kind::Element && vec.fourcc == F("CNST") && vec.args.size() == 3;
+          if (comp > 1 || (!doml && !cnst)) {
+            result.dropped.push_back("SMTR: CCH" + std::to_string(cch) + " vector " +
+                                     (vec.kind == EffectValue::Kind::Element ? EffectFourCCString(vec.fourcc) : "value") +
+                                     " at component " + std::to_string(comp));
+            continue;
+          }
+          for (uint32_t c = 0; c < 3; ++c) {
+            std::vector<uint8_t> element;
+            if (doml) {
+              AppendBE32(element, F("PDML"));
+              AppendBE32(element, c);
+            } else {
+              std::string why;
+              if (!Element(vec.args[c], Type::Real, element, why)) {
+                result.dropped.push_back("SMTR: " + why);
+                continue;
+              }
+            }
+            AppendBE32(items, kPortVfxParamTarget + 4 * cch + comp + c);
             AppendBE32(items, 0);
             items.insert(items.end(), element.begin(), element.end());
             ++count;

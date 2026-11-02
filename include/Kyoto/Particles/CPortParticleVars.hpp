@@ -384,6 +384,17 @@ public:
   bool GetValue(int frame, float& out) const override;
 };
 
+// PDML (port-only; one component of Remastered's DOML vector, CVEDominantLightDirectionInWorldSpace
+// 0x2a40e8): the dominant light direction LightHints set (PortRoomEnv::DominantLight), world space.
+class CREPortDominantLight : public CRealElement {
+  u32 x4_component;
+
+public:
+  explicit CREPortDominantLight(u32 component) : x4_component(component) {}
+  ~CREPortDominantLight() override {}
+  bool GetValue(int frame, float& out) const override;
+};
+
 // PSYI (port-only; a hidden init-only int, such as a PEOD IRND): the current system's int slot.
 class CIEPortSysVar : public CIntElement {
   u32 x4_slot;

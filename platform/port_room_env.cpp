@@ -925,6 +925,35 @@ const std::vector<IceDarkener>* IceDarkeners(uint32_t mrea) {
   return it == sAreas.end() ? nullptr : &it->second.file.iceDarkeners;
 }
 
+namespace {
+float sDominantLight[3] = {0.f, 0.f, -1.f}; // skDownVector, retail's -Z
+} // namespace
+
+void UpdateLightHints() {
+  // Areas in the order they loaded, as their entities came in.
+  std::vector<Area*> order;
+  for (auto& [mrea, area] : sAreas) {
+    if (area.hasFile && !area.file.lightHints.empty()) {
+      order.push_back(&area);
+    }
+  }
+  std::sort(order.begin(), order.end(), [](const Area* a, const Area* b) { return a->loadSeq < b->loadSeq; });
+  for (Area* area : order) {
+    const std::vector<LightHint>& hints = area->file.lightHints;
+    area->lightHints.resize(hints.size(), 0);
+    for (size_t i = 0; i < hints.size(); ++i) {
+      const LightHint& h = hints[i];
+      const bool on = h.on && (h.layer < 0 || h.layer >= 64 || ((area->layers >> h.layer) & 1) != 0);
+      if (on && area->lightHints[i] == 0) {
+        std::copy(h.dir, h.dir + 3, sDominantLight);
+      }
+      area->lightHints[i] = on ? 1 : 0;
+    }
+  }
+}
+
+void DominantLight(float out[3]) { std::copy(sDominantLight, sDominantLight + 3, out); }
+
 float EnvFxIntensity() {
   const auto view = sAreas.find(sViewArea);
   return view == sAreas.end() ? 1.f : view->second.file.envFxIntensity;

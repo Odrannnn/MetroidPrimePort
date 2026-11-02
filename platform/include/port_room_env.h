@@ -184,6 +184,8 @@
 // Version 33 adds, at the end, u32 iceDarkeners, then each f32 factor, f32 delay: the
 //   ActorIceDarkenerMP1s the room fires at load (IceDarkeners), each giving every physics actor
 //   present `delay` seconds after the area loads its icy shell darkening `factor`.
+// Version 34 adds, at the end, u32 lightHints, then each s32 layer, u8 on, 3 pad, f32 dir[3]:
+//   the room's LightHints (LightHint), their entity's +Z in world space.
 // The tonemap is Remastered's: the exposure value without auto exposure, the radiance
 // that comes out as middle grey once exposed, and how far the curve's toe and shoulder
 // are pulled in.
@@ -611,6 +613,15 @@ struct IceDarkener {
   float delay = 0.f;
 };
 
+// A LightHint (version 34; CLightHintGOC, no properties): while it owns the dominant light,
+// CLightHintManager::BeforeThink 0x598054 sets the direction to its entity's +Z (`dir`, world
+// space, normalised). See DominantLight.
+struct LightHint {
+  int32_t layer = -1; // its story layer, -1 for none
+  bool on = true;     // its entity starts active
+  float dir[3] = {0.f, 0.f, -1.f};
+};
+
 struct File {
   uint32_t version = 0;
   float tonemap[4] = {};
@@ -627,6 +638,7 @@ struct File {
   std::vector<EnvOp> envOps;             // version 31
   std::vector<EnvBranch> envBranches;    // version 31
   std::vector<IceDarkener> iceDarkeners; // version 33
+  std::vector<LightHint> lightHints;     // version 34
   float contrast = 0.f;
   float bloomThreshold = 0.9f;
   std::vector<float> bloomTints; // RGBA; empty: the room has no bloom
@@ -1100,6 +1112,15 @@ float EnvFxIntensity();
 // The ice darkeners of a loaded area's room environment (File::iceDarkeners); null while the area's
 // file is not loaded (SetLoadedAreas).
 const std::vector<IceDarkener>* IceDarkeners(uint32_t mrea);
+// Once a frame, after SetAreaLayers: a LightHint of a loaded area that turns on (its file is read
+// with the hint and its layer active, or its layer comes on) takes the dominant light, as
+// CLightHintGOC::AreaEntitiesLoaded 0x597f04 and OnActivationStateChange 0x597fc8 register it
+// (RegisterExclusivePrimaryLightDirectionOwner 0x59811c: the last one wins).
+void UpdateLightHints();
+// The dominant light direction effects read (DOML, CParticleGen::GetDominantLightDirectionById
+// 0x27b3c0), world space: the last LightHint's to take it. Remastered starts it at skDownVector
+// and never resets it, not on unregistering nor across loads, so it lasts the process.
+void DominantLight(float out[3]);
 // Once a frame, after SetViewArea: moves the frame's exposure and tone curve on
 // (CPostFXManager::UpdateTonemapping). The tonemap moves linearly to the camera room's
 // over a second; with an auto exposure hint the exposure is the tonemap's EV until the

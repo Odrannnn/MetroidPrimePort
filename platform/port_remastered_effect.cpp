@@ -148,6 +148,8 @@ constexpr ElementSig kVectorSigs[] = {
     {"LINV", "VVIRb"},
     // CVEBonePosition (GetVectorElement 0x251974, GetValue 0x2a2690): the bone index element.
     {"BNPS", "e"},
+    // CVEDominantLightDirectionInWorldSpace (GetValue 0x2a40e8): no arguments.
+    {"DOML", "-"},
 };
 constexpr ElementSig kModVectorSigs[] = {
     {"NONE", "-"},     {"CNST", "RRR"},   {"GRAV", "V"},     {"WIND", "VR"},   {"EXPL", "RR"},

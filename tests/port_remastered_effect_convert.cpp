@@ -5059,15 +5059,20 @@ void TestVmatIceChargeCollisionRecipe() {
       PutProperty(extra, "DFOG", 1);
       PutConstant(extra, 1);
     }
-    // One real entry (CCH5.y) in group 0 and one colour entry (CCH6) in group 4.
+    // One real entry (CCH5.y) in group 0, one vector entry (DOML into CCH0.xyz) in group 2 and
+    // one colour entry (CCH6) in group 4.
     PutProperty(extra, "SMTR", 0);
     extra.push_back(0);
-    extra.push_back(2);
+    extra.push_back(3);
     extra.push_back(1);
     PutSmtrItem(extra, {"CCH5", 1, 4.f});
-    for (int group = 1; group < 4; ++group) {
-      extra.push_back(0);
-    }
+    extra.push_back(0);
+    extra.push_back(1);
+    PutFourCC(extra, "DOML");
+    PutFourCC(extra, "CCH0");
+    extra.push_back(0);
+    extra.push_back(0);
+    extra.push_back(0);
     extra.push_back(1);
     PutColour(extra, 0.6f, 0.8f, 1.f, 1.f);
     PutFourCC(extra, "CCH6");
@@ -5121,13 +5126,20 @@ void TestVmatIceChargeCollisionRecipe() {
             "VPRM carries the MATI's CCH0..6");
   const std::vector<uint8_t> vsmt = value(properties, EffectFourCC("VSMT"));
   // The class, the count, then {target, kind, element (CNST value)}.
-  CHECK_MSG(VmatWord(vsmt, 4) == 5 && VmatWord(vsmt, 8) == kPortVfxParamTarget + 4 * 5 + 1,
+  CHECK_MSG(VmatWord(vsmt, 4) == 8 && VmatWord(vsmt, 8) == kPortVfxParamTarget + 4 * 5 + 1,
             "SMTR CCH5.y goes to its VPRM target");
-  bool row = VmatWord(vsmt, 4) == 5;
-  for (uint32_t c = 0; row && c < 4; ++c) {
-    row = VmatWord(vsmt, 8 + 16 * (1 + c)) == kPortVfxParamTarget + 4 * 6 + c;
+  bool doml = VmatWord(vsmt, 4) == 8;
+  for (uint32_t c = 0; doml && c < 3; ++c) {
+    const size_t at = 8 + 16 * (1 + c);
+    doml = VmatWord(vsmt, at) == kPortVfxParamTarget + c && VmatWord(vsmt, at + 8) == EffectFourCC("PDML") &&
+           VmatWord(vsmt, at + 12) == c;
   }
-  CHECK_MSG(row && VmatWord(vsmt, 8 + 16 + 12) == Bits(0.6f) && VmatWord(vsmt, 8 + 64 + 12) == Bits(1.f),
+  CHECK_MSG(doml, "the vector SMTR DOML sets CCH0.xyz, a PDML component each");
+  bool row = VmatWord(vsmt, 4) == 8;
+  for (uint32_t c = 0; row && c < 4; ++c) {
+    row = VmatWord(vsmt, 8 + 16 * (4 + c)) == kPortVfxParamTarget + 4 * 6 + c;
+  }
+  CHECK_MSG(row && VmatWord(vsmt, 8 + 64 + 12) == Bits(0.6f) && VmatWord(vsmt, 8 + 112 + 12) == Bits(1.f),
             "the colour SMTR CCH6 sets the whole row, one target per component");
 
   properties.clear();

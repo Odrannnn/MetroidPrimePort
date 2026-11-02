@@ -234,7 +234,8 @@ inline constexpr int kModels = 30;
 // 152: ambient particle spawners (roomfx v16).
 // 153: ambients into matched retail effects. 157: recipes 90ce7873, 03ac7d53, d47ffcc3; a swoosh VMAT's PMTR life.
 // 163: header planar squares (shaders 4ba0aadc, c38294d2). 164: VMAT slots bind Remastered's sRGB textures.
-inline constexpr int kEffects = 181;   // Pyro reads its Light map and CCH0
+// 182: a vector SMTR (DOML, CNST) sets a CCH row's xyz; DOML reads the LightHints' direction (PDML).
+inline constexpr int kEffects = 182;   // DOML material overrides
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -289,7 +290,8 @@ inline constexpr int kEffects = 181;   // Pyro reads its Light map and CCH0
 // 78: retail objects whose position follows a component, flavor or active field match (turrets);
 // an effect Remastered dropped links into matches the one retail Effect with all of its links,
 // or whose parts Generator's one incoming link Remastered sends it directly.
-inline constexpr int kRooms = 78;
+// 79: roomenv version 34, LightHints (the dominant light direction DOML reads).
+inline constexpr int kRooms = 79;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

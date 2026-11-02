@@ -95,6 +95,7 @@ struct Area {
   ExposureHints hints;   // the fluid-mode exposure hints' state
   bool hintSnap = false; // a fluid hint registered this frame: the exposure snaps
   uint64_t layers = ~uint64_t(0); // its active script layers (SetAreaLayers)
+  std::vector<uint8_t> lightHints; // by file.lightHints entry: on last UpdateLightHints
   // Its grades' requests (Remastered's CAreaPrioritizedGameHintManager): on or off, and
   // when they were last turned on, which decides between equal priorities.
   struct GradeRequest {

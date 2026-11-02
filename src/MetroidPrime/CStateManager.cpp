@@ -3373,6 +3373,7 @@ void CStateManager::PortCaptureProbeFace() const {
       PortRoomEnv::SetAreaLayers(area.GetAreaAssetId(), active);
     }
   }
+  PortRoomEnv::UpdateLightHints();
   if (x8cc_nextAreaId != kInvalidAreaId) {
     PortRoomEnv::SetViewArea(x850_world->GetArea(x8cc_nextAreaId)->GetAreaAssetId());
   }

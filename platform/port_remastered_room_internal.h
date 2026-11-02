@@ -66,6 +66,7 @@ constexpr uint32_t kDoorMP1 = 0x564a1641;
 constexpr uint32_t kModCon = 0x451740eb;
 constexpr uint32_t kActorMP1 = 0xb6200be6;
 constexpr uint32_t kLightDynamic = 0x9ee5541d;
+constexpr uint32_t kLightHint = 0x56cf02a6; // CLightHintGOC, no properties
 
 // Property ids.
 constexpr uint32_t kPropRoomId = 0x30a4d63d;

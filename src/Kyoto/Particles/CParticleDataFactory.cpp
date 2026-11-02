@@ -1424,6 +1424,11 @@ CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
   // Port-only PSDT: the system's shutdown countdown fraction left (SDTR).
   case SBIG('PSDT'):
     return rs_new CREPortShutdownRemaining();
+  // Port-only PDML: a component (0-2) of the dominant light direction (Remastered's DOML).
+  case SBIG('PDML'): {
+    const u32 component = in.ReadLong();
+    return component < 3 ? rs_new CREPortDominantLight(component) : nullptr;
+  }
   // Port-only PSYR: a PSYS real slot of the system being evaluated.
   case SBIG('PSYR'):
     return rs_new CREPortSysVar(in.ReadLong());

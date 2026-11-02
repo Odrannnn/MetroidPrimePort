@@ -3454,7 +3454,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  AppendLE32(out, 33);
+  AppendLE32(out, 34);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
@@ -3849,6 +3849,57 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     }
     for (const std::string& n : notes) {
       Log("  " + r.name + ": " + n);
+    }
+  }
+  {
+    // The LightHints (version 34): each one's entity +Z, turned Rz * Ry * Rx as a spot's, is the
+    // direction CLightHintManager::BeforeThink 0x598054 gives the dominant light once its hint
+    // owns it.
+    struct Hint {
+      int32_t layer;
+      bool on;
+      float dir[3];
+    };
+    std::vector<Hint> hints;
+    for (const Component* c : r.room.Of(kLightHint)) {
+      Vec3 pos, euler, scale;
+      if (!r.room.Xform(*c, pos, euler, scale)) {
+        continue;
+      }
+      constexpr double kDegToRad = 3.14159265358979323846 / 180;
+      const double x = euler[0] * kDegToRad, y = euler[1] * kDegToRad, z = euler[2] * kDegToRad;
+      const double cx = std::cos(x), sx = std::sin(x), cy = std::cos(y), sy = std::sin(y), cz = std::cos(z),
+                   sz = std::sin(z);
+      const Vec3 fwd = MulR2G({cz * sy * cx + sz * sx, sz * sy * cx - cz * sx, cy * cx});
+      Vec3 d{};
+      for (size_t i = 0; i < 3; ++i) {
+        d[i] = m.a[i][0] * fwd[0] + m.a[i][1] * fwd[1] + m.a[i][2] * fwd[2];
+      }
+      const double len = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+      if (!(len > 1e-6)) {
+        continue;
+      }
+      Hint h{};
+      for (size_t i = 0; i < 3; ++i) {
+        h.dir[i] = float(d[i] / len);
+      }
+      const auto layer = scripts.layer.find(c->entity);
+      h.layer = layer != scripts.layer.end() ? int32_t(layer->second) : -1;
+      h.on = r.room.Active(*c);
+      char line[160];
+      std::snprintf(line, sizeof line, "  %s: light hint (%.3f, %.3f, %.3f) layer %d%s", r.name.c_str(), h.dir[0],
+                    h.dir[1], h.dir[2], int(h.layer), h.on ? "" : " (off)");
+      Log(line);
+      hints.push_back(h);
+    }
+    AppendLE32(out, uint32_t(hints.size()));
+    for (const Hint& h : hints) {
+      AppendLE32(out, uint32_t(h.layer));
+      out.push_back(h.on ? 1 : 0);
+      out.insert(out.end(), 3, 0);
+      for (float v : h.dir) {
+        AppendLEFloat(out, v);
+      }
     }
   }
   if (!scripts.envOps.empty() || scripts.envUnresolved != 0) {
