@@ -71,6 +71,8 @@ public:
   uint xPortSeed = 0;
   // port-only PGID: the first word of the swoosh's GUID (CElementGen::PortChildSeed)
   u32 xPortGuidWord = 0;
+  // port-only PTXU: Remastered's TXUP (desc+0x22c bit 0x80); u scrolls back one TSPN step per point created
+  bool xPortTexUScroll = false;
   // port-only PDFG: Remastered's DFOG 1, drawn without volumetric fog (CGenDescription::xPortUnfogged)
   bool xPortUnfogged = false;
   // port-only PZTS: Remastered's ZTES 0, the depth test passes everywhere (compare ALWAYS)

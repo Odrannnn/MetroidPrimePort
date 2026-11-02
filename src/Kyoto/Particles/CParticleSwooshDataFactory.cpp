@@ -231,6 +231,11 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       CParticleDataFactory::GetClassID(in);
       swoosh->xPortGuidWord = in.ReadLong();
       break;
+    // Port-only Remastered TXUP (xPortTexUScroll).
+    case 'PTXU':
+      CParticleDataFactory::GetClassID(in);
+      swoosh->xPortTexUScroll = in.ReadLong() != 0;
+      break;
     // Port-only Remastered material, as a PART's.
     case 'VMAT':
     case 'VTMT':

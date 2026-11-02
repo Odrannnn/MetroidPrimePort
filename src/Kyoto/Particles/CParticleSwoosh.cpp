@@ -274,6 +274,9 @@ const bool CParticleSwoosh::Update(double dt) {
         x1c_desc->x40_TSPN->GetValue(x28_curFrame, tspn);
       }
       x1cc_TSPN = tspn;
+#ifdef TARGET_PC
+      ++xPortCreated; // CreateNewParticle 0x27d128
+#endif
     } else if (x15c_swooshes[x158_curParticle].mActive) {
       x1ac_particleCount = rstl::max_val(0, x1ac_particleCount - 1);
       x15c_swooshes[x158_curParticle].mActive = false;
@@ -781,6 +784,23 @@ bool CParticleSwoosh::PortVfxSwoosh() const {
   return vfx != nullptr && vfx->mat.Supported() && x1b8_SIDE >= 2 && !x1c_desc->x44_29_WIRE;
 }
 
+// TXUP (UpdateRenderState 0x27e6b0): with a live point, the uv rect's u bounds move back by
+// (created % n) / n, n = TSPN, else max(ring size - 1, 1), so the texture stays put along the trail
+// as points are added.
+float CParticleSwoosh::PortTexUScroll() const {
+  if (!x1c_desc->xPortTexUScroll || x1ac_particleCount < 1) {
+    return 0.f;
+  }
+  int n = 0;
+  if (x1c_desc->x40_TSPN) {
+    x1c_desc->x40_TSPN->GetValue(x28_curFrame, n);
+  }
+  if (n <= 0) {
+    n = rstl::max_val(static_cast< int >(x15c_swooshes.size()) - 1, 1);
+  }
+  return static_cast< float >(xPortCreated % n) / static_cast< float >(n);
+}
+
 // RenderNSidedSpline's geometry through the swoosh's VFX material (VMAT). The base uv is
 // retail's (u along the trail, TSPN segments per repeat; v 0..1 across), run through VTMT.
 // Colour, ITEN and the VPMT rows run from the segment's point to the next older one, as
@@ -844,6 +864,7 @@ void CParticleSwoosh::PortRenderVfx() {
     x1ec_TSPN = x15c_swooshes.size() - 1;
   }
   const float uvSpan = x1ec_TSPN > 0 ? 1.f / x1ec_TSPN : 1.f;
+  const float uScroll = PortTexUScroll();
   CPortVfxUvXf uvXf;
   uvXf.Eval(vfx, x28_curFrame);
   const float modu[4] = {x20c_moduColor.GetRed(), x20c_moduColor.GetGreen(), x20c_moduColor.GetBlue(),
@@ -944,7 +965,7 @@ void CParticleSwoosh::PortRenderVfx() {
       }
     };
 
-    float uMin = (x1ec_TSPN > 0 ? i % x1ec_TSPN : i) * uvSpan;
+    float uMin = (x1ec_TSPN > 0 ? i % x1ec_TSPN : i) * uvSpan - uScroll;
     const float segUvSpan = uvSpan / (x1b0_SPLN + 1);
     for (int splineIdx = 0; splineIdx < x1b0_SPLN + 1; ++splineIdx) {
       const float t0 = splineIdx / static_cast< float >(x1b0_SPLN + 1);
@@ -1797,6 +1818,7 @@ void CParticleSwoosh::PortDoShutdownBehavior(u32 mode) {
   if (use == 1) {
     x158_curParticle = 0;
     x1ac_particleCount = 0;
+    xPortCreated = 0;
     for (int i = 0; i < x15c_swooshes.capacity(); ++i) {
       x15c_swooshes.data()[i].mActive = false;
     }

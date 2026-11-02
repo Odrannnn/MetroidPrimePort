@@ -1342,6 +1342,30 @@ void TestSwooshSeed() {
   CHECK_MSG(part.part == zero.bytes && part.dropped.empty(), "SEED 0 writes nothing");
 }
 
+// A swoosh's TXUP (desc+0x22c bit 0x80, CreateSWSH 0x2dc4f8) becomes the port-only PTXU when true.
+void TestSwooshTxup() {
+  const auto txup = [](uint8_t value) {
+    return ConvertSwoosh([=](auto& o) {
+      PutProperty(o, "TXUP", 0);
+      PutFourCC(o, "CNST");
+      o.push_back(value);
+    });
+  };
+  ConvertedPart part = txup(1);
+  Retail want;
+  want.f("SWSH").f("PTXU").f("CNST").w(1).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == want.bytes && part.dropped.empty(), "TXUP 1 becomes PTXU 1");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), part.part.data(), part.part.size(), properties, error),
+            "PTXU reads as a swoosh property");
+
+  part = txup(0);
+  Retail off;
+  off.f("SWSH").f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == off.bytes && part.dropped.empty(), "TXUP 0 writes nothing");
+}
+
 // A swoosh has no per-particle variables: PAP9, PAP0..3 reads and ADV9/IAVn are dropped.
 void TestSwooshParticleVars() {
   const auto dropped = [](const ConvertedPart& part, const char* what) {
@@ -6775,6 +6799,7 @@ int main() {
   TestSwooshRazyProt();
   TestSwooshZProt();
   TestSwooshSeed();
+  TestSwooshTxup();
   TestConvert();
   TestRejects();
   TestSingleNode();

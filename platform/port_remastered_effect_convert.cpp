@@ -6122,6 +6122,19 @@ public:
       }
       return;
     }
+    // A swoosh's TXUP is a GetBool into desc+0x22c bit 0x80 (CreateSWSH 0x2dc4f8), read by
+    // UpdateRenderState 0x27e6b0 (CParticleSwoosh::PortTexUScroll). The port-only PTXU.
+    if (s.swoosh && fourcc == F("TXUP")) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value) || value > 1) {
+        s.result.dropped.push_back("TXUP: invalid constant");
+      } else if (value != 0) {
+        AppendBE32(s.out, F("PTXU"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, 1);
+      }
+      return;
+    }
     if (found == s.retail.end()) {
       s.result.dropped.push_back(EffectFourCCString(property.fourcc) + ": Remastered only");
       return;
@@ -7227,7 +7240,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
                (vfx && fourcc == F("PIRN")) ||
-               (type == F("SWHC") && (fourcc == F("PGID") || fourcc == F("PSED")))) {
+               (type == F("SWHC") && (fourcc == F("PGID") || fourcc == F("PSED") || fourcc == F("PTXU")))) {
       ok = reader.PortWord();
     } else if (vfx && fourcc == F("PVRT")) {
       ok = reader.PortVariables();
