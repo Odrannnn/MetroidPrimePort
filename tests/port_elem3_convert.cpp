@@ -305,7 +305,7 @@ void TestSwooshSust() {
     PutConstant(o, Bits(1.0f));
   });
   Retail want;
-  want.f("SWSH").f("LRAD").f("CNST").w(Bits(1.0f)).f("PIRN").f("CNST").w(1).f("_END");
+  want.f("SWSH").f("LRAD").f("CNST").w(Bits(1.0f)).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == want.bytes, "SUST(x) in a swoosh is x");
   CHECK_MSG(part.dropped.empty(), "the swoosh SUST strip drops nothing");
 

@@ -29,6 +29,10 @@
 #endif
 
 uint CParticleSwoosh::mSwooshAliveCount = 0;
+#ifdef TARGET_PC
+uint CParticleSwoosh::sPortChildSeed = 0;
+bool CParticleSwoosh::sPortChildSeedSet = false;
+#endif
 static float kFrameTime = 1.f / 60.f;
 
 #pragma sym on
@@ -77,6 +81,18 @@ CParticleSwoosh::CParticleSwoosh(const TToken< CSwooshDescription > desc, const 
   // The generator that builds this swoosh, for SPA*/DPV*/TPV*.
   xPortVars.SetParent(CPortVarGlobals::sCurrent);
   CPortVarScope portVarScope(&xPortVars);
+  const bool portChildSeed = sPortChildSeedSet;
+  sPortChildSeedSet = false;
+  if (x1c_desc->xPortIrnd) {
+    // Remastered reads CRND and drops it (CreateSWSH 0x2dc4cc). The CParticleGen ctor seeds the
+    // system from its parms (0x279724: 99 by default, ctor 0x2af2e0; a parent's child seed), and
+    // a nonzero SEED (desc+0x204) replaces that (CParticleSwoosh ctor 0x27c6bc).
+    uint seed = portChildSeed ? sPortChildSeed : 99;
+    if (x1c_desc->xPortSeed != 0) {
+      seed = x1c_desc->xPortSeed;
+    }
+    x1c0_rand.SetSeed(seed);
+  }
 #endif
   CGlobalRandom _(x1c0_rand);
   mSwooshAliveCount++;

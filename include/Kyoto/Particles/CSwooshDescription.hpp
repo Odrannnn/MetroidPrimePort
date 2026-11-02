@@ -67,6 +67,10 @@ public:
   bool xPortXfmdMover = false;
   // port-only PIRN: a converted Remastered swoosh, whose COLR runs over the live points
   bool xPortIrnd = false;
+  // port-only PSED: Remastered's SEED (desc+0x204); nonzero replaces the system's seed
+  uint xPortSeed = 0;
+  // port-only PGID: the first word of the swoosh's GUID (CElementGen::PortChildSeed)
+  u32 xPortGuidWord = 0;
   // port-only PDFG: Remastered's DFOG 1, drawn without volumetric fog (CGenDescription::xPortUnfogged)
   bool xPortUnfogged = false;
   // port-only PZTS: Remastered's ZTES 0, the depth test passes everywhere (compare ALWAYS)

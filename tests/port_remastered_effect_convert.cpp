@@ -1256,7 +1256,7 @@ void TestSwooshElectric() {
   swoosh.f("SWSH").f("LENG").f("CNST").w(8).f("AALP").f("CNST").b(1);
   // DVVN after IEXP resets it, so both stay in stream order (CreateSWSH 0x2dceac).
   swoosh.f("IEXP").f("CNST").w(0).f("DVVN").f("CNST").w(1);
-  swoosh.f("TEXR").f("CNST").f("CNST").w(0x5EED0002).f("PIRN").f("CNST").w(1).f("_END");
+  swoosh.f("TEXR").f("CNST").f("CNST").w(0x5EED0002).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(parts[1].type == EffectFourCC("SWHC") && parts[1].id == Legacy(0x0000AAAA), "swoosh child is an SWHC");
   CHECK_MSG(parts[1].part == swoosh.bytes, "SBDM becomes AALP and MTIN the swoosh's TEXR");
   CHECK_MSG(parts[1].droppedRetail == 0, "swoosh drops nothing");
@@ -1315,6 +1315,31 @@ ConvertedPart ConvertSwoosh(Body body) {
   }
   std::vector<ConvertedPart> parts = ConvertEffect(effect, out.data(), {});
   return parts.size() == 2 ? parts[1] : ConvertedPart{};
+}
+
+// A swoosh's SEED becomes the port-only PSED (desc+0x204, CreateSWSH 0x2dc420); 0 is the
+// default and writes nothing. Every swoosh carries its GUID word (PGID) for its child seed.
+void TestSwooshSeed() {
+  ConvertedPart part = ConvertSwoosh([](auto& o) {
+    PutProperty(o, "SEED", 1);
+    PutConstant(o, 1234);
+  });
+  Retail want;
+  want.f("SWSH").f("PSED").f("CNST").w(1234).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == want.bytes, "SEED 1234 becomes PSED 1234, and the swoosh gets PGID");
+  CHECK_MSG(part.dropped.empty(), "a constant SEED drops nothing");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), part.part.data(), part.part.size(), properties, error),
+            "PSED and PGID read as swoosh properties");
+
+  part = ConvertSwoosh([](auto& o) {
+    PutProperty(o, "SEED", 1);
+    PutConstant(o, 0);
+  });
+  Retail zero;
+  zero.f("SWSH").f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == zero.bytes && part.dropped.empty(), "SEED 0 writes nothing");
 }
 
 // A swoosh has no per-particle variables: PAP9, PAP0..3 reads and ADV9/IAVn are dropped.
@@ -1380,14 +1405,14 @@ void TestSwooshRazyProt() {
   Retail want;
   want.f("SWSH").f("LENG").f("CNST").w(8);
   want.f("PRAZ").f("CNST").f("CNST").w(0x80000000u).f("CNST").w(0).f("CNST").w(Bits(1.0f));
-  want.f("PRAF").f("CNST").w(0).f("PIRN").f("CNST").w(1).f("_END");
+  want.f("PRAF").f("CNST").w(0).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == want.bytes, "a RAZY PROT becomes PRAZ with an identity PRAF");
   CHECK_MSG(part.dropped.empty() && part.droppedRetail == 0, "a RAZY PROT drops nothing");
 
   part = ConvertSwoosh([](auto& o) { PutRazyProt(o, [](auto& o) { PutFourCC(o, "RLCL"); }); });
   Retail local;
   local.f("SWSH").f("PRAZ").f("CNST").f("CNST").w(0x80000000u).f("CNST").w(0).f("CNST").w(Bits(1.0f));
-  local.f("PRAF").f("CNST").w(1).f("PIRN").f("CNST").w(1).f("_END");
+  local.f("PRAF").f("CNST").w(1).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == local.bytes, "an RLCL fallback becomes PRAF 1");
 
   part = ConvertSwoosh([](auto& o) {
@@ -1439,7 +1464,7 @@ void TestSwooshZProt() {
     o.push_back(0);
   });
   Retail want;
-  want.f("SWSH").f("PROZ").f("CNST").w(3).f("CNST").w(Bits(90.0f)).f("PIRN").f("CNST").w(1).f("_END");
+  want.f("SWSH").f("PROZ").f("CNST").w(3).f("CNST").w(Bits(90.0f)).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == want.bytes, "KPIN(RADD(EXTR, REUL(0, 0, 90))) becomes PROZ 3");
   CHECK_MSG(part.dropped.empty(), "a Z PROT drops nothing");
 
@@ -1462,7 +1487,7 @@ void TestSwooshZProt() {
   Retail sine;
   sine.f("SWSH").f("PROZ").f("CNST").w(1).f("MULT").f("ADD_").f("SINE").f("CNST").w(Bits(30.0f));
   sine.f("CNST").w(Bits(100.0f)).f("CNST").w(0).f("CNST").w(0).f("CNST").w(Bits(-1.0f));
-  sine.f("PIRN").f("CNST").w(1).f("_END");
+  sine.f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == sine.bytes, "a z kept under KPIN becomes PROZ 1");
 
   // REUL(0, 0, MULT(SUST(RAND(0, 360)), -1)): a new angle every frame.
@@ -1479,7 +1504,7 @@ void TestSwooshZProt() {
   });
   Retail rand;
   rand.f("SWSH").f("PROZ").f("CNST").w(0).f("MULT").f("RAND").f("CNST").w(0).f("CNST").w(Bits(360.0f));
-  rand.f("CNST").w(Bits(-1.0f)).f("PIRN").f("CNST").w(1).f("_END");
+  rand.f("CNST").w(Bits(-1.0f)).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == rand.bytes, "a per-frame z becomes PROZ 0");
 
   // A SINE outside SUST runs on the point's age, which the port does not evaluate on.
@@ -1506,7 +1531,7 @@ void TestSwooshZProt() {
   });
   Retail follow;
   follow.f("SWSH").f("XFMD").f("CNST").w(3).f("PROZ").f("CNST").w(0).f("CNST").w(Bits(90.0f));
-  follow.f("PIRN").f("CNST").w(1).f("_END");
+  follow.f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == follow.bytes, "XFMD 3 with REUL(0, 0, 90) becomes XFMD 3 and PROZ 0");
   CHECK_MSG(part.dropped.empty(), "XFMD 3 with a plain Z PROT drops nothing");
 
@@ -1520,7 +1545,7 @@ void TestSwooshZProt() {
     o.push_back(0);
   });
   Retail split;
-  split.f("SWSH").f("PROZ").f("CNST").w(0).f("CNST").w(Bits(90.0f)).f("PIRN").f("CNST").w(1).f("_END");
+  split.f("SWSH").f("PROZ").f("CNST").w(0).f("CNST").w(Bits(90.0f)).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == split.bytes && part.dropped.empty(), "XFMD 5 with REUL(0, 0, 90) becomes PROZ 0");
 
   // EXTR under XFMD 3 is the emitter's turn, which XFMD 3 draws again globally.
@@ -1556,7 +1581,7 @@ void TestSwooshZProt() {
     putMover(o, 0.f);
   });
   Retail mover;
-  mover.f("SWSH").f("XFMD").f("CNST").w(4).f("PIRN").f("CNST").w(1).f("_END");
+  mover.f("SWSH").f("XFMD").f("CNST").w(4).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == mover.bytes && part.dropped.empty(), "XFMD 4 with SMOV(EXTT, 0, EXTR) becomes XFMD 4");
 
   // An EMVR with an offset is not the emitter's transform.
@@ -6749,6 +6774,7 @@ int main() {
   TestSwooshParticleVars();
   TestSwooshRazyProt();
   TestSwooshZProt();
+  TestSwooshSeed();
   TestConvert();
   TestRejects();
   TestSingleNode();

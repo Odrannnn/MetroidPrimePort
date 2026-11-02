@@ -194,6 +194,13 @@ private:
   CColor x20c_moduColor;
 
 #ifdef TARGET_PC
+public:
+  // The seed a Remastered parent gives the converted swoosh it constructs next; consumed by
+  // that ctor (CElementGen::PortSeedSwooshChild).
+  static uint sPortChildSeed;
+  static bool sPortChildSeedSet;
+
+private:
   CPortVarMemory xPortVars; // PVRT variables, initialised from the description's defaults
   CVector3f xPortSpawnSpread{1.f, 1.f, 1.f}; // PortSetSpawnSpread
   CVector3f xPortSpawnOrigin{0.f, 0.f, 0.f};

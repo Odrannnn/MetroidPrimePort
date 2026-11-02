@@ -16,6 +16,7 @@
 #include "Kyoto/TToken.hpp"
 
 class CGenDescription;
+class CSwooshDescription;
 class CModVectorElement;
 
 #pragma cpp_extensions on
@@ -495,7 +496,9 @@ private:
   // The seed a Remastered parent gives the child it constructs next; consumed by that ctor.
   static uint sPortChildSeed;
   static bool sPortChildSeedSet;
-  uint PortChildSeed(const CGenDescription& child) const;
+  uint PortChildSeed(u32 childGuidWord) const;
+  // Hands a converted swoosh child its seed (CParticleSwoosh::sPortChildSeed).
+  void PortSeedSwooshChild(TToken< CSwooshDescription > child) const;
   // Remastered's CElementGen::SpawnChildSystems (0x249bd8) for a converted effect, and its
   // spawn tables (PKSM); xPortKssmPeriods are the tables' period slots (their CVars).
   std::vector< int > xPortKssmPeriods;

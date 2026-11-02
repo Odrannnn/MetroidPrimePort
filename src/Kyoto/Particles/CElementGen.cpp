@@ -21,6 +21,7 @@
 #include "Kyoto/Particles/CParticleGlobals.hpp"
 #include "Kyoto/Particles/CParticleSwoosh.hpp"
 #include "Kyoto/Particles/CSpawnSystemKeyframeData.hpp"
+#include "Kyoto/Particles/CSwooshDescription.hpp"
 #include "Kyoto/Particles/CWarp.hpp"
 #ifdef TARGET_PC
 #include "Kyoto/Particles/PortParticleMath.hpp"
@@ -1516,12 +1517,20 @@ void CElementGen::UpdatePSTranslationAndOrientation() {
 // Remastered's child seed (0x2c59e0, called from 0x27b014 for every child a generator constructs):
 // FNV-1a over 32-bit words of the parent's seed, the child description's GUID word 0, the parent's
 // frame and the parent's live child count before the push.
-uint CElementGen::PortChildSeed(const CGenDescription& child) const {
+uint CElementGen::PortChildSeed(u32 childGuidWord) const {
   const uint kPrime = 0x01000193;
   uint hash = (xPortSeed ^ 0x811c9dc5u) * kPrime;
-  hash = (hash ^ child.xPortGuidWord) * kPrime;
+  hash = (hash ^ childGuidWord) * kPrime;
   hash = (hash ^ uint(x74_curFrame)) * kPrime;
   return (hash ^ uint(x290_activePartChildren.size())) * kPrime;
+}
+
+// Every child type gets the seed (0x27b220, before ConstructNewParticleSystem 0x27ab20).
+void CElementGen::PortSeedSwooshChild(TToken< CSwooshDescription > child) const {
+  if (x28_loadedGenDesc->xPortIrnd && (*child)->xPortIrnd) {
+    CParticleSwoosh::sPortChildSeed = PortChildSeed((*child)->xPortGuidWord);
+    CParticleSwoosh::sPortChildSeedSet = true;
+  }
 }
 
 // A swoosh or electric child: Remastered places every child it constructs alike
@@ -1933,6 +1942,7 @@ void CElementGen::PortSpawnTableEntry(size_t table, int frame) {
           x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
           x290_activePartChildren.push_back(state.child);
         } else if (spawn.type == 'SWHC') {
+          PortSeedSwooshChild(*spawn.swoosh);
           state.child = rs_new CParticleSwoosh(*spawn.swoosh, 0);
           PortAddChild(state.child);
         } else {
@@ -2035,6 +2045,7 @@ void CElementGen::PortSpawnChildSystems() {
     }
   }
   if (desc->xc0_SSWH && x74_curFrame == x2ac_SSSD) {
+    PortSeedSwooshChild(*desc->xc0_SSWH);
     CParticleSwoosh* swoosh = rs_new CParticleSwoosh(*desc->xc0_SSWH, 0);
     swoosh->SetGlobalTranslation(xe8_globalTranslation);
     swoosh->SetGlobalScale(x100_globalScale);
@@ -2050,6 +2061,7 @@ void CElementGen::PortSpawnChildSystems() {
     if (x74_curFrame != extra.frame) {
       continue;
     }
+    PortSeedSwooshChild(extra.swoosh);
     CParticleSwoosh* swoosh = rs_new CParticleSwoosh(extra.swoosh, 0);
     swoosh->SetGlobalTranslation(xe8_globalTranslation);
     swoosh->SetGlobalScale(x100_globalScale);
@@ -2094,7 +2106,7 @@ void CElementGen::PortSpawnChildSystems() {
 CElementGen* CElementGen::ConstructChildParticleSystem(TToken< CGenDescription > desc) const {
 #ifdef TARGET_PC
   if (x28_loadedGenDesc->xPortIrnd && desc->xPortIrnd) {
-    sPortChildSeed = PortChildSeed(**desc);
+    sPortChildSeed = PortChildSeed((**desc).xPortGuidWord);
     sPortChildSeedSet = true;
   }
 #endif
@@ -2196,6 +2208,9 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
 
   // SSWH - swoosh child particle system
   if (x28_loadedGenDesc->xc0_SSWH && x84_prevFrame != x74_curFrame && x74_curFrame == x2ac_SSSD) {
+#ifdef TARGET_PC
+    PortSeedSwooshChild(*x28_loadedGenDesc->xc0_SSWH);
+#endif
     CParticleSwoosh* swoosh = rs_new CParticleSwoosh(*x28_loadedGenDesc->xc0_SSWH, 0);
     swoosh->SetGlobalTranslation(xe8_globalTranslation);
     swoosh->SetGlobalScale(x100_globalScale);
@@ -2218,6 +2233,7 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
       if (x74_curFrame != extra.frame) {
         continue;
       }
+      PortSeedSwooshChild(extra.swoosh);
       CParticleSwoosh* swoosh = rs_new CParticleSwoosh(extra.swoosh, 0);
       swoosh->SetGlobalTranslation(xe8_globalTranslation);
       swoosh->SetGlobalScale(x100_globalScale);

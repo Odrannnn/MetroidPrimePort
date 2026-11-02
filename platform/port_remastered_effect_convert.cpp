@@ -4932,7 +4932,7 @@ public:
     VisorWrites(s);
     const uint32_t guidWord = uint32_t(s.node.id[0]) | uint32_t(s.node.id[1]) << 8 |
                               uint32_t(s.node.id[2]) << 16 | uint32_t(s.node.id[3]) << 24;
-    if (s.part && guidWord != 0) {
+    if ((s.part || s.swoosh) && guidWord != 0) {
       // Port-only: the first word of the effect's GUID (little-endian, as the Switch reads it). A
       // Remastered child's seed hashes it in (CElementGen::PortChildSeed); absent means 0.
       AppendBE32(s.out, F("PGID"));
@@ -6108,6 +6108,20 @@ public:
       }
       return;
     }
+    // A swoosh's SEED is GetIntElementAsConst into desc+0x204 (CreateSWSH 0x2dc420: the value
+    // when the element is constant, else 0), which replaces the system's seed when nonzero
+    // (CParticleSwoosh ctor 0x27c6bc). The port-only PSED.
+    if (s.swoosh && fourcc == F("SEED")) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value)) {
+        s.result.dropped.push_back("SEED: not a CNST");
+      } else if (value != 0) {
+        AppendBE32(s.out, F("PSED"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, value);
+      }
+      return;
+    }
     if (found == s.retail.end()) {
       s.result.dropped.push_back(EffectFourCCString(property.fourcc) + ": Remastered only");
       return;
@@ -7212,7 +7226,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          (fourcc >= F("VGD1") && fourcc <= F("VGD4")) ||
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
-               (vfx && fourcc == F("PIRN"))) {
+               (vfx && fourcc == F("PIRN")) ||
+               (type == F("SWHC") && (fourcc == F("PGID") || fourcc == F("PSED")))) {
       ok = reader.PortWord();
     } else if (vfx && fourcc == F("PVRT")) {
       ok = reader.PortVariables();

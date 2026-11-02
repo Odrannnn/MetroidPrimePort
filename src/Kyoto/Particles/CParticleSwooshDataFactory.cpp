@@ -222,6 +222,15 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       CParticleDataFactory::GetClassID(in);
       swoosh->xPortIrnd = in.ReadLong() != 0;
       break;
+    // Port-only Remastered SEED (xPortSeed) and GUID word (xPortGuidWord).
+    case 'PSED':
+      CParticleDataFactory::GetClassID(in);
+      swoosh->xPortSeed = in.ReadLong();
+      break;
+    case 'PGID':
+      CParticleDataFactory::GetClassID(in);
+      swoosh->xPortGuidWord = in.ReadLong();
+      break;
     // Port-only Remastered material, as a PART's.
     case 'VMAT':
     case 'VTMT':
