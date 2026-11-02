@@ -274,6 +274,9 @@ public:
   // port-only PDBS: Remastered's DBIS (desc+0xd4), the depth bias in world units, negative toward the
   // camera (CPortParticleDepthBias). 0 = none.
   float xPortDepthBias = 0.f;
+  // port-only PSBS: Remastered's SBIS (desc+0xd8, GetSortBias 0x288248), world units added to the
+  // translucent sort depth (SortFarToNear 0x1f3000); positive sorts farther. 0 = none.
+  float xPortSortBias = 0.f;
   // port-only PSHM: Remastered's SHTM, what a shutdown does (CParticleGen::DoShutdownBehavior
   // 0x27b88c): 0 stops emission, 1 also destroys the live particles. Other values do neither.
   u8 xPortShutdownMode = 0;

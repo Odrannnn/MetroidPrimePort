@@ -2667,6 +2667,26 @@ void TestDepthBias() {
     CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "DBIS becomes PDBS, 0 nothing");
     CHECK_MSG(!parts.empty() && parts[0].dropped.empty() && parts[0].approximated.empty(), "DBIS is exact");
   }
+  // SBIS (the sort bias, desc+0xd8) the same way, as PSBS after PDBS.
+  for (float bias : {-5.0f, 0.0f}) {
+    const auto parts = ConvertOne(OneGenerator([bias](auto& o) {
+                                    PutProperty(o, "SBIS", 3);
+                                    PutConstant(o, Bits(bias));
+                                    PutProperty(o, "DBIS", 3);
+                                    PutConstant(o, Bits(1.0f));
+                                    PutTexr(o, 0x1234ABCD);
+                                  }),
+                                  {});
+    Retail want;
+    want.f("GPSM").f("TEXR").f("CNST").f("CNST").w(0x1234ABCD);
+    want.f("PDBS").f("CNST").w(Bits(1.0f));
+    if (bias != 0.0f) {
+      want.f("PSBS").f("CNST").w(Bits(bias));
+    }
+    want.end();
+    CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "SBIS becomes PSBS, 0 nothing");
+    CHECK_MSG(!parts.empty() && parts[0].dropped.empty() && parts[0].approximated.empty(), "SBIS is exact");
+  }
   const ConvertedPart swoosh = ConvertSwoosh([](auto& o) {
     PutProperty(o, "DBIS", 3);
     PutConstant(o, Bits(-2.0f));

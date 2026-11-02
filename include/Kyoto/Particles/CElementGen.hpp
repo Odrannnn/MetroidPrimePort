@@ -543,6 +543,7 @@ public:
   // PZTS (Remastered ZTES 0): the depth test passes everywhere (static render state compare 1 = ALWAYS)
   bool PortNoZTest() const { return x28_loadedGenDesc->xPortNoZTest; }
   u8 PortWaterSort() const { return x28_loadedGenDesc->xPortWaterSort; }
+  float PortSortBias() const { return x28_loadedGenDesc->xPortSortBias; }
 
 private:
   bool PortHasMover() const;

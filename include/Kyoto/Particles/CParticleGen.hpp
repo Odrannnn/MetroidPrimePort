@@ -74,6 +74,8 @@ public:
   // scaling the particles themselves: HUD effects use it to cover a view wider than 4:3. `origin`
   // is the parent's translation: a child placed off it (SSPO/SEPO) has its offset spread too.
   virtual void PortSetSpawnSpread(const CVector3f& spread, const CVector3f& origin) {}
+  // Remastered's sort bias (SBIS), added to the view depth the renderer sorts the generator by.
+  virtual float PortSortBias() const { return 0.f; }
   // Remastered's DoShutdownBehavior (vtable +0x1e8), which a parent with ISDT calls on its children:
   // mode 0xff is the generator's own SHTM, acting at once (no SHTT countdown); 0 and 1 stop emitting.
   virtual void PortDoShutdownBehavior(u32 mode) {

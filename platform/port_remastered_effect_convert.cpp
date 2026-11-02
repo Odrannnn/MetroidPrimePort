@@ -4747,6 +4747,7 @@ public:
     int spreadMode = -1;    // ITPE 1, port-only PITP with EMRV's mode word (-1 none)
     bool itpe = false;      // the node has an ITPE of its own
     uint32_t depthBias = 0;  // DBIS as float bits (nonzero), port-only PDBS
+    uint32_t sortBias = 0;   // SBIS as float bits (nonzero), port-only PSBS
     const EffectProperty* mover = nullptr;
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
     bool anth = false;               // an ANTH, drawn only by a header material
@@ -5143,6 +5144,19 @@ public:
         s.result.dropped.push_back("DBIS: not a constant");
       } else if ((bits & 0x7fffffffu) != 0) {
         s.depthBias = bits;
+      }
+      return true;
+    }
+    // SBIS is the particle sort bias (desc+0xd8 of CreateGPSM, constant only):
+    // CParticleSceneNode::PreRenderForContextConcurrent 0x2b22b8 puts GetSortBias 0x288248 in the
+    // translucent sort entry (+0x24), which SortFarToNear 0x1f3000 adds to the bounds' view depth.
+    // Retail has no such property: the port-only PSBS.
+    if (s.part && fourcc == F("SBIS")) {
+      uint32_t bits = 0;
+      if (property.value.size() != 1 || !ConstWord(property.value[0], bits)) {
+        s.result.dropped.push_back("SBIS: not a constant");
+      } else if ((bits & 0x7fffffffu) != 0) {
+        s.sortBias = bits;
       }
       return true;
     }
@@ -6068,6 +6082,11 @@ public:
       AppendBE32(s.out, F("CNST"));
       AppendBE32(s.out, s.depthBias);
     }
+    if (s.sortBias != 0) {
+      AppendBE32(s.out, F("PSBS"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, s.sortBias);
+    }
     if ((s.part || s.swoosh) && !m_vars.empty()) {
       // Port-only: the effect's PVAR table (names, kinds, defaults) for VARF/VARI/VARV/VARC.
       AppendBE32(s.out, F("PVRT"));
@@ -6835,7 +6854,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||
-                         fourcc == F("PVBS") || fourcc == F("PITN"))) ||
+                         fourcc == F("PVBS") || fourcc == F("PITN") || fourcc == F("PSBS"))) ||
                (vfx && (fourcc == F("ITEN") || fourcc == F("PDBS")))) {
       ok = reader.Element(Type::Real);
     } else if (part && (fourcc == F("PINS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||

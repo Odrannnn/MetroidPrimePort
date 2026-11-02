@@ -638,6 +638,11 @@ void CCubeRenderer::AddParticleGen(const CParticleGen& gen) {
   AUTO(bounds, gen.GetBounds());
   if (bounds) {
     CVector3f closestPoint = bounds->ClosestPointAlongVector(GetViewPlane().GetNormal());
+#ifdef TARGET_PC
+    // Remastered adds SBIS to the sort depth (SSceneRenderSortEntry +0x24, SortFarToNear
+    // 0x1f3000); the view normal is unit length, so the shift along it adds exactly that.
+    closestPoint += GetViewPlane().GetNormal() * gen.PortSortBias();
+#endif
     Buckets::Insert(closestPoint, *bounds, kDT_Particle, static_cast< const void* >(&gen),
                     GetViewPlane(), 0);
   }
@@ -645,7 +650,12 @@ void CCubeRenderer::AddParticleGen(const CParticleGen& gen) {
 
 void CCubeRenderer::AddParticleGen(const CParticleGen& gen, const CVector3f& pos,
                                    const CAABox& bounds) {
+#ifdef TARGET_PC
+  Buckets::Insert(pos + GetViewPlane().GetNormal() * gen.PortSortBias(), bounds, kDT_Particle,
+                  static_cast< const void* >(&gen), GetViewPlane(), 0);
+#else
   Buckets::Insert(pos, bounds, kDT_Particle, static_cast< const void* >(&gen), GetViewPlane(), 0);
+#endif
 }
 
 void CCubeRenderer::AddPlaneObject(const void* obj, const CAABox& aabb, const CPlane& plane,
