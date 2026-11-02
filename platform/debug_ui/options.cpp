@@ -22,6 +22,7 @@
 #include "port_discord.h"
 #include "port_savestate.h"
 #include "port_mouse.h"
+#include "port_prompts.h"
 
 #include "MetroidPrime/Player/CGameOptions.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
@@ -993,7 +994,14 @@ bool TouchActive() {
 #endif
 }
 
-bool DirectAim() { return MouseAim() || TwinStick() || TouchDirectAim(); }
+// Direct aim takes the pad off the classic scheme (the left stick strafes, R no
+// longer looks), so mouse aim switches it on while a pad is in use only when the
+// pad itself aims there, by twin stick or gyro: else the classic GameCube preset
+// could neither turn nor look (#253).
+bool DirectAim() {
+  return TwinStick() || TouchDirectAim() ||
+         (MouseAim() && (!PortPrompts::PadActive() || Loaded(sInput.gyroMode) != 0));
+}
 
 // The pad-preset getters below read as the GameCube preset (off / unbound) while touch is in use: the
 // touch overlay always does what its buttons say. The F1 menu (Visible) sees the stored values.

@@ -843,6 +843,10 @@ void Poll() {
 }
 bool KeyboardActive() { return sActiveInput.load(std::memory_order_relaxed) == ActiveInput::Keyboard; }
 
+bool PadActive() {
+  return sActiveInput.load(std::memory_order_relaxed) == ActiveInput::Pad && PADGetIndexForPort(PAD_CHAN0) >= 0;
+}
+
 bool IsPromptAsset(uint32_t id) { return FindAsset(id) != nullptr; }
 
 bool BindTexture(const void* owner, uint32_t id, uint32_t width, uint32_t height) {

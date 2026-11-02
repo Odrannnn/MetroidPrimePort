@@ -25,6 +25,10 @@ const char* ActiveDevice();
 // pad left plugged in does not shake while the game is played on keyboard/mouse.
 bool KeyboardActive();
 
+// True while a connected pad is the input the player last used (not the touch
+// overlay's virtual one). Starts true: no key or click yet means no keyboard.
+bool PadActive();
+
 // Call once after Aurora is up, with the same texture root the replacements
 // came from (null or empty disables the module).
 void Initialize(const char* textureRoot);
