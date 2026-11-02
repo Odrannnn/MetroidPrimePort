@@ -1247,12 +1247,14 @@ public:
       }
       return m_black != 0 ? FlipbookAtlas{m_black, 1, 1, 1} : FlipbookAtlas{};
     }
-    const std::optional<uint32_t> retail = EffectRetailId(stored);
-    if (retail && m_io.retailId(*retail)) {
-      return FlipbookAtlas{*retail, 1, 1, 1};
-    }
+    // Remastered's own file under a carried-over id comes first: it is an sRGB texture its
+    // shaders sample decoded, where the disc's GC texture holds the encoded bytes.
     const EffectGuid id = Swap(stored);
     if (m_io.typeOf(id) != kTxtr) {
+      const std::optional<uint32_t> retail = EffectRetailId(stored);
+      if (retail && m_io.retailId(*retail)) {
+        return FlipbookAtlas{*retail, 1, 1, 1};
+      }
       return {};
     }
     int width = 0, height = 0, layers = 0;

@@ -1134,7 +1134,7 @@ const Recipe* RecipeOf(uint32_t shader) {
 // A GPSM's header MTRL (node.baseMaterial, drawn where MTIN is nil), as its shader's perm 048: FS 048_0 is
 // rgb = vc.rgb x v1.x and a = sat(v1.y x vc.a), textured x TEXR.rgb and x pow(|TEXR.a|, 2.2) (one FS for
 // every untextured shader below: md5 77e87faf). VS 048_1 passes colour and v1 through; the quad differs.
-enum class HeaderQuad { RotatedSprite, Sprite, Axis };
+enum class HeaderQuad { RotatedSprite, Sprite, Axis, Planar };
 struct HeaderShader {
   uint32_t shader;
   bool textured;
@@ -1155,6 +1155,9 @@ const HeaderShader* HeaderShaderOf(uint32_t shader) {
       {0xe27845ed, true, HeaderQuad::Axis},
       {0xe512fad9, false, HeaderQuad::Axis},
       {0x471bb62f, false, HeaderQuad::Axis},
+      // P + (q.x - 0.5) A + (q.y - 0.5) B from the instance matrix: the port's PPRM 2 planar square.
+      {0x4ba0aadc, true, HeaderQuad::Planar},
+      {0xc38294d2, false, HeaderQuad::Planar},
   };
   for (const HeaderShader& entry : table) {
     if (entry.shader == shader) {
@@ -3552,7 +3555,11 @@ public:
       return false;
     };
     // Anything else draws as retail, as before, named here so the report says which shader it lacks.
-    const HeaderShader* header = node.primitiveType == 1 ? HeaderShaderOf(shader) : nullptr;
+    // Primitive 1 draws the sprite quads, primitive 2 the planar square.
+    const HeaderShader* header = HeaderShaderOf(shader);
+    if (header != nullptr && (header->quad == HeaderQuad::Planar ? node.primitiveType != 2 : node.primitiveType != 1)) {
+      header = nullptr;
+    }
     if (header == nullptr) {
       return refuse("is not ported (primitive " + std::to_string(node.primitiveType) + ")");
     }
@@ -3586,7 +3593,8 @@ public:
     if (header->quad == HeaderQuad::Axis ? orient == 0 : orient != 0) {
       return refuse("draws a different quad from ORNT " + std::to_string(orient));
     }
-    if (header->quad == HeaderQuad::Sprite && rota != nullptr) {
+    // The planar square takes its axes from the particle transform alone; no shipped one has a ROTA.
+    if ((header->quad == HeaderQuad::Sprite || header->quad == HeaderQuad::Planar) && rota != nullptr) {
       return refuse("does not rotate, and the particle has a ROTA");
     }
     Mati mati;

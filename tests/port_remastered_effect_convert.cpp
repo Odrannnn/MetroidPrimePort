@@ -5812,6 +5812,21 @@ void TestHeaderMaterial() {
             "a textured header sprite gets a VMAT v4 with its TEXR and alpha gamma 2.2");
   CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty(), "a textured header sprite is exact");
 
+  // 4ba0aadc is the planar square: primitive 2 takes it, a sprite does not; 048_0 is the textured FS.
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }, 2), 0x4ba0aadc), io);
+  vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmat, 8) == 4 &&
+                VmatWord(vmat, 24) == 0x5EED0009,
+            "a header planar square (4ba0aadc) gets a textured VMAT");
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x4ba0aadc), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader 4ba0aadc is not ported (primitive 1)",
+            "the planar header shader on a sprite is refused");
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }, 2), 0xb42cacf5), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 is not ported (primitive 2)",
+            "a sprite header shader on a planar square is refused");
+
   // A nil MTIN is no material instance (ctor 0x28bfc4): the header MTRL draws.
   parts = ConvertOne(withShader(OneGenerator([](auto& o) {
                                   PutProperty(o, "MTIN", 0);
@@ -5946,6 +5961,16 @@ void TestHeaderMaterial() {
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
   CHECK_MSG(VmatWord(vmat, 8) == 2 && VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,
             "an untextured header sprite gets a VMAT v2 with no features or textures");
+  // c38294d2 is the untextured planar square.
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }, 2), 0xc38294d2), io);
+  vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmat, 8) == 2 &&
+                VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,
+            "an untextured header planar square (c38294d2) gets a VMAT v2 with no textures");
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0xc38294d2), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader c38294d2 is not ported (primitive 1)",
+            "the untextured planar header shader on a sprite is refused");
 
   parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x00000001), io);
   CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&

@@ -106,6 +106,63 @@ u32 AtexTile(const CPortVfxData& vfx, float cycle, int frame) {
   return u32(std::max(tile, 0));
 }
 
+// The header MTRL's TEXR as perm 048's VS places it (sprites and planar squares alike): the corner
+// q goes into the ATEX tile rect, q = mix(rect.xy, rect.zw, corner), then through TRST,
+// uv = 0.5 + R(rot) (diag(sx, sy) q + (x, y) - 0.5).
+struct HeaderTexr {
+  const float* rect = nullptr;
+  bool trs = false;
+  float x = 0.f, y = 0.f, sx = 1.f, sy = 1.f, cosR = 1.f, sinR = 0.f;
+
+  void Apply(float qx, float qy, float& tu, float& tv) const {
+    tu = qx;
+    tv = qy;
+    if (rect != nullptr) {
+      tu = rect[0] + (rect[2] - rect[0]) * qx;
+      tv = rect[1] + (rect[3] - rect[1]) * qy;
+    }
+    if (trs) {
+      const float du = sx * tu + x - 0.5f;
+      const float dv = sy * tv + y - 0.5f;
+      tu = 0.5f + cosR * du - sinR * dv;
+      tv = 0.5f + sinR * du + cosR * dv;
+    }
+  }
+};
+
+// Element trees read the current particle's lifetime globals, which the caller has set to
+// particleLifetime; the ATX2 cycle alone runs on systemLifetime.
+HeaderTexr EvalHeaderTexr(const CPortVfxData& vfx, int partFrame, int systemLifetime, int particleLifetime) {
+  HeaderTexr h;
+  // VTRS, TEXR TRST: rot goes to radians when the instance is written (0x2b4a04).
+  if (vfx.vtrs[0] != nullptr) {
+    h.trs = true;
+    h.x = EvalReal(vfx.vtrs[0], partFrame, 0.f);
+    h.y = EvalReal(vfx.vtrs[1], partFrame, 0.f);
+    h.sx = EvalReal(vfx.vtrs[2], partFrame, 1.f);
+    h.sy = EvalReal(vfx.vtrs[3], partFrame, 1.f);
+    const float rot = EvalReal(vfx.vtrs[4], partFrame, 0.f) * 0.017453292f;
+    h.cosR = std::cos(rot);
+    h.sinR = std::sin(rot);
+  }
+  // VATX, TEXR ATEX. VAT2's cycle (an ATX2's, TEXR tag 1) reads the time context's slot 0, the
+  // system's PSLT (CElementGen ctor 0x244cfc), so it runs on the system's lifetime as PortEvalSys does.
+  if (!vfx.atexRects.empty()) {
+    float cycle = vfx.atexCycle;
+    if (vfx.atexCycleElem != nullptr) {
+      CParticleGlobals::SetParticleLifetime(systemLifetime);
+      CParticleGlobals::UpdateParticleLifetimeTweenValues(partFrame);
+      int value = 1;
+      vfx.atexCycleElem->GetValue(partFrame, value);
+      cycle = float(value);
+      CParticleGlobals::SetParticleLifetime(particleLifetime);
+      CParticleGlobals::UpdateParticleLifetimeTweenValues(partFrame);
+    }
+    h.rect = &vfx.atexRects[AtexTile(vfx, cycle, partFrame) * 4];
+  }
+  return h;
+}
+
 // One TMTR TRSS(A..F) as the shipped vertex shaders see it: GetValue 0x2de7dc packs it with
 // pack_texture_transform 0x20e8f0 (A, B and E as 16-bit fields), and the VS unpacks them.
 Tm EvalTrss(CRealElement* const* r, int frame) {
@@ -516,6 +573,9 @@ void CElementGen::PortRenderPlanarVfx(const CParticle& particle, int frame) {
   CGraphics::SetDepthWriteMode(x26c_28_zTest, kE_LEqual, x26c_26_AAPH ? false : x26c_27_ZBUF);
   CPortVfxUvXf uv;
   uv.Eval(vfx, frame);
+  // A header MTRL square (4ba0aadc): its 048_1 reads the same ATEX rect and TRST as the sprite's.
+  const HeaderTexr header =
+      EvalHeaderTexr(vfx, frame, x268_PSLT, particle.x0_endFrame - particle.x28_startFrame);
   const float gain = lit ? 1.f : particle.xPortIten * PortVfxExposureGain(*x28_loadedGenDesc);
   const float modulation[4] = {x338_moduColor.GetRed(), x338_moduColor.GetGreen(),
                                 x338_moduColor.GetBlue(), x338_moduColor.GetAlpha()};
@@ -548,7 +608,9 @@ void CElementGen::PortRenderPlanarVfx(const CParticle& particle, int frame) {
     const CVector3f corner = PortParticleMath::PlanarSquareCorner(u, v);
     vertex.pos[0] = corner.GetX();
     vertex.pos[2] = corner.GetZ();
-    uv.Apply(u, v, vertex.uv);
+    float tu, tv;
+    header.Apply(u, v, tu, tv);
+    uv.Apply(tu, tv, vertex.uv);
     for (int c = 0; c < 4; ++c) {
       vertex.color[c] = particle.xPortColor[c] * modulation[c] * (c == 3 ? 1.f : gain);
       for (int j = 0; j < 4; ++j) vertex.extra[c][j] = particle.xPortVpmt[c][j];
@@ -694,35 +756,7 @@ void CElementGen::PortRenderParticlesVfx() {
       CRealElement* const* r = &vfx.vtmt[s * 6];
       tm[s] = EvalTrss(r, partFrame);
     }
-    // VTRS, the header sprite's TEXR TRST, as Remastered's sprite VS (header MTRL perm 048): rot goes
-    // to radians when the instance is written (0x2b4a04), then uv = 0.5 + R(rot) (diag(sx, sy) q + (x, y) - 0.5).
-    const bool hasVtrs = vfx.vtrs[0] != nullptr;
-    float trsX = 0.f, trsY = 0.f, trsSx = 1.f, trsSy = 1.f, trsCos = 1.f, trsSin = 0.f;
-    if (hasVtrs) {
-      trsX = EvalReal(vfx.vtrs[0], partFrame, 0.f);
-      trsY = EvalReal(vfx.vtrs[1], partFrame, 0.f);
-      trsSx = EvalReal(vfx.vtrs[2], partFrame, 1.f);
-      trsSy = EvalReal(vfx.vtrs[3], partFrame, 1.f);
-      const float rot = EvalReal(vfx.vtrs[4], partFrame, 0.f) * 0.017453292f;
-      trsCos = std::cos(rot);
-      trsSin = std::sin(rot);
-    }
-    // VATX, the header sprite's TEXR ATEX: the VS maps the corner into this frame's tile rect,
-    // q = mix(rect.xy, rect.zw, corner) (048_1).
-    // VAT2's cycle (an ATX2's, TEXR tag 1) reads the time context's slot 0, the system's PSLT
-    // (CElementGen ctor 0x244cfc), so it runs on the system's lifetime as PortEvalSys does.
-    float atexCycle = vfx.atexCycle;
-    if (vfx.atexCycleElem != nullptr && !vfx.atexRects.empty()) {
-      CParticleGlobals::SetParticleLifetime(x268_PSLT);
-      CParticleGlobals::UpdateParticleLifetimeTweenValues(partFrame);
-      int cycle = 1;
-      vfx.atexCycleElem->GetValue(partFrame, cycle);
-      atexCycle = float(cycle);
-      CParticleGlobals::SetParticleLifetime(p.x0_endFrame - p.x28_startFrame);
-      CParticleGlobals::UpdateParticleLifetimeTweenValues(partFrame);
-    }
-    const float* atexRect =
-        vfx.atexRects.empty() ? nullptr : &vfx.atexRects[AtexTile(vfx, atexCycle, partFrame) * 4];
+    const HeaderTexr header = EvalHeaderTexr(vfx, partFrame, x268_PSLT, p.x0_endFrame - p.x28_startFrame);
 
     // A lit perm (ParticleLit) reads no ITEN: Remastered's 080_1 passes the colour through without it.
     const float iten = lit ? 1.f : p.xPortIten * inverseExposure;
@@ -843,17 +877,8 @@ void CElementGen::PortRenderParticlesVfx() {
       v.pos[0] = pos.GetX();
       v.pos[1] = pos.GetY();
       v.pos[2] = pos.GetZ();
-      float tu = qx, tv = qy;
-      if (atexRect != nullptr) {
-        tu = atexRect[0] + (atexRect[2] - atexRect[0]) * qx;
-        tv = atexRect[1] + (atexRect[3] - atexRect[1]) * qy;
-      }
-      if (hasVtrs) {
-        const float du = trsSx * tu + trsX - 0.5f;
-        const float dv = trsSy * tv + trsY - 0.5f;
-        tu = 0.5f + trsCos * du - trsSin * dv;
-        tv = 0.5f + trsSin * du + trsCos * dv;
-      }
+      float tu, tv;
+      header.Apply(qx, qy, tu, tv);
       for (int s = 0; s < 3; ++s) {
         const Tm& t = tm[s];
         const float dx = (tu - 0.5f) * t.c;
