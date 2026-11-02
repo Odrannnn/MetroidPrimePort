@@ -809,6 +809,25 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortNestedLightWiden = in.ReadFloat();
       break;
+    // Port-only: Remastered's fixed system bounds (FXBR/FXBM/FXBO), min then max.
+    case SBIG('PFXB'): {
+      GetClassID(in);
+      if (in.ReadLong() != 6) {
+        return false;
+      }
+      float bounds[6];
+      for (int i = 0; i < 6; ++i) {
+        bounds[i] = in.ReadFloat();
+      }
+      desc->xPortFixedBounds = true;
+      desc->xPortFixedBoundsMin = CVector3f(bounds[0], bounds[1], bounds[2]);
+      desc->xPortFixedBoundsMax = CVector3f(bounds[3], bounds[4], bounds[5]);
+      break;
+    }
+    case SBIG('PFXC'):
+      GetClassID(in);
+      desc->xPortBoundsNoChildren = in.ReadLong() != 0;
+      break;
     case SBIG('POR0'):
       delete desc->xPortNestedLightOuterRadius;
       desc->xPortNestedLightOuterRadius = GetRealElement(in);

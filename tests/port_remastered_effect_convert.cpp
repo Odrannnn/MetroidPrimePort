@@ -2596,6 +2596,88 @@ void TestInheritedMotion() {
 // a swoosh; 0 is the default and writes nothing.
 // A drawing sprite with DVVN 1..4 and no SIZE gets Remastered's default SIZE 1.0 (retail's is 0.1);
 // DVVN 0 or an authored SIZE writes none.
+// FXBR/FXBM/FXBO become the port's PFXB box (Remastered (x, y, z) to (-x, z, y)), and FXBI the
+// PFXC child exclusion; all four are consumed.
+bool Contains(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& what);
+void TestFixedBounds() {
+  const auto vector = [](auto& o, const char* name, float x, float y, float z) {
+    PutProperty(o, name, 3);
+    PutFourCC(o, "CNST");
+    PutConstant(o, Bits(x));
+    PutConstant(o, Bits(y));
+    PutConstant(o, Bits(z));
+  };
+  const auto real = [](auto& o, const char* name, float value) {
+    PutProperty(o, name, 1);
+    PutConstant(o, Bits(value));
+  };
+  const auto fxbi = [](auto& o, uint8_t value) {
+    PutProperty(o, "FXBI", 0);
+    PutFourCC(o, "CNST");
+    o.push_back(value);
+  };
+  const auto noneDropped = [](const ConvertedPart& part) {
+    return std::none_of(part.dropped.begin(), part.dropped.end(),
+                        [](const std::string& why) { return why.rfind("FXB", 0) == 0; });
+  };
+  const auto box = [](float a, float b, float c, float d, float e, float f) {
+    Retail out;
+    out.f("PFXB").f("CNST").w(6).w(Bits(a)).w(Bits(b)).w(Bits(c)).w(Bits(d)).w(Bits(e)).w(Bits(f));
+    return out.bytes;
+  };
+  Retail pfxc;
+  pfxc.f("PFXC").f("CNST").w(1);
+  // Box mode wins over FXBR: m..m+o is (-2,-7.5,-1.25)..(2.5,7.5,6), so (-2.5,-1.25,-7.5)..(2,6,7.5).
+  auto parts = ConvertOne(OneGenerator([&](auto& o) {
+    real(o, "FXBR", 3.f);
+    vector(o, "FXBM", -2.f, -7.5f, -1.25f);
+    vector(o, "FXBO", 4.5f, 15.f, 7.25f);
+  }), {});
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, box(-2.5f, -1.25f, -7.5f, 2.f, 6.f, 7.5f)) &&
+                Contains(parts[0].part, pfxc.bytes) && noneDropped(parts[0]),
+            "FXBM/FXBO bound m..m+o in the port's space and leave children out");
+  // A sphere about FXBO; FXBI 0 takes children in.
+  parts = ConvertOne(OneGenerator([&](auto& o) {
+    real(o, "FXBR", 7.f);
+    vector(o, "FXBO", 0.f, 2.f, 0.f);
+    fxbi(o, 0);
+  }), {});
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, box(-7.f, -7.f, -5.f, 7.f, 7.f, 9.f)) &&
+                !Contains(parts[0].part, pfxc.bytes) && noneDropped(parts[0]),
+            "FXBR 7 about FXBO (0,2,0) is (-7,-7,-5)..(7,7,9); FXBI 0 keeps children");
+  // FXBR with FXBM alone is a sphere about the origin (FXBM is the box's).
+  parts = ConvertOne(OneGenerator([&](auto& o) {
+    real(o, "FXBR", 9.f);
+    vector(o, "FXBM", 9.f, 9.f, 9.f);
+    fxbi(o, 1);
+  }), {});
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, box(-9.f, -9.f, -9.f, 9.f, 9.f, 9.f)) &&
+                Contains(parts[0].part, pfxc.bytes) && noneDropped(parts[0]),
+            "FXBR without FXBO is a sphere about the origin");
+  // FXBI 1 without bounds leaves children out of the particles' bounds; no box.
+  parts = ConvertOne(OneGenerator([&](auto& o) { fxbi(o, 1); }), {});
+  CHECK_MSG(parts.size() == 1 && !Contains(parts[0].part, {'P', 'F', 'X', 'B'}) &&
+                Contains(parts[0].part, pfxc.bytes) && noneDropped(parts[0]),
+            "FXBI 1 alone writes PFXC only");
+  // A non-constant FXBR is not taken and stays dropped.
+  parts = ConvertOne(OneGenerator([&](auto& o) {
+    PutProperty(o, "FXBR", 1);
+    PutFourCC(o, "RAND");
+    PutConstant(o, 0);
+    PutConstant(o, Bits(1.f));
+  }), {});
+  CHECK_MSG(parts.size() == 1 && !Contains(parts[0].part, {'P', 'F', 'X', 'B'}) && !noneDropped(parts[0]),
+            "a non-constant FXBR stays dropped");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  parts = ConvertOne(OneGenerator([&](auto& o) {
+    real(o, "FXBR", 1.f);
+    PutTexr(o, 0x1234ABCD);
+  }), {});
+  CHECK_MSG(parts.size() == 1 && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+            "a PART with PFXB/PFXC passes the retail element reader");
+}
+
 void TestDvvnDefaultSize() {
   // The source reader mutates IEXP at each DVVN/IEXP occurrence; test both orders and resets.
   for (const bool versionLast : {false, true}) {
@@ -6562,6 +6644,7 @@ int main() {
   TestInheritedMotion();
   TestDepthBias();
   TestDvvnDefaultSize();
+  TestFixedBounds();
   TestShutdownAndPivot();
   TestGpuAvailability();
   TestCurlNoise();

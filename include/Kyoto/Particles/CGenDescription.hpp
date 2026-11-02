@@ -7,6 +7,7 @@
 #include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "Kyoto/Particles/CSpawnSystemKeyframeData.hpp"
 #include "Kyoto/Particles/IElement.hpp"
+#include "Kyoto/Math/CVector3f.hpp"
 #include "Kyoto/TToken.hpp"
 
 #include "rstl/optional_object.hpp"
@@ -210,6 +211,12 @@ public:
   bool xPortNestedLightInverseExposure = false;
   // port-only PLSP: Remastered's LSPS, the light's specular roughness widen (CLight::SetPortHdrWiden)
   float xPortNestedLightWiden = 0.f;
+  // port-only PFXB: Remastered's fixed system bounds (CBoundsFixedEval), a box in the system's
+  // space that replaces the particles' bounds; PFXC: children's bounds are left out (FXBI).
+  bool xPortFixedBounds = false;
+  bool xPortBoundsNoChildren = false;
+  CVector3f xPortFixedBoundsMin = CVector3f(0.f, 0.f, 0.f);
+  CVector3f xPortFixedBoundsMax = CVector3f(0.f, 0.f, 0.f);
   // port-only PINS: Remastered's INTS, the system scale in place of the external one (EXTS still
   // reads the external scale; CElementGen::PortSystemScale). Owned here; null = the external scale.
   CVectorElement* xPortIntScale = nullptr;

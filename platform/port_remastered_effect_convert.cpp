@@ -4735,6 +4735,11 @@ public:
     // LSPS: the light block's +0x50, CLight+0x74, which widens the light's specular lobe
     // (roughness r + (1 - r) * LSPS in the PBR shaders). A CNST real's bits; 0 = none.
     uint32_t nestedLightWiden = 0;
+    // FXBR/FXBM/FXBO/FXBI, the system's own bounds (FixedBounds): the constant box in the port's
+    // space (min then max), written as PFXB, and whether children's bounds are left out (PFXC).
+    std::optional<std::array<float, 6>> fixedBounds;
+    bool boundsNoChildren = false;
+    bool boundsConsumed = false;
     // Swooshes: SBDM is Remastered's blend mode, 0 or 1, which retail has as
     // AALP (additive). Taken only where there's no AALP of its own.
     bool additive = false;
@@ -4823,6 +4828,7 @@ public:
       AppendBE32(s.out, 1);
     }
     NestedLight(s);
+    FixedBounds(s);
     NodeModes(s);
     ReadSystemItems(s);
     s.result.drawsNothing = s.drawsNothing;
@@ -4859,6 +4865,19 @@ public:
       AppendBE32(s.out, guidWord);
     }
     NestedLightWrites(s);
+    if (s.fixedBounds) {
+      AppendBE32(s.out, F("PFXB"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, 6);
+      for (const float value : *s.fixedBounds) {
+        AppendBE32(s.out, FloatBits(value));
+      }
+    }
+    if (s.boundsNoChildren) {  // absent PFXC takes the children's bounds in
+      AppendBE32(s.out, F("PFXC"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, 1);
+    }
     AppendBE32(s.out, F("_END"));
     s.result.approximated = std::move(m_approximated);
     m_approximated.clear();
@@ -4914,6 +4933,91 @@ public:
         s.result.dropped.push_back("PHDR: point light lacks constant LFOT or supported LCLR/LINT/LIRD/LORD");
       }
     }
+  }
+
+  // The system's own bounds. SSystem::CompileSystem 0x28d028: FXBM and FXBO make a box (whatever
+  // FXBR), else FXBR a sphere; either takes CBoundsFixedEval (CElementGen::InitBounds 0x2455cc),
+  // whose SolveFunc 0x27fe9c bounds m..m+o (FXBM, FXBO) or o-r..o+r (FXBO, absent 0; FXBR) and
+  // turns it by the system's T*R*S. Children's bounds join only with FXBI 0 (desc+0x1b8 bit 13 set,
+  // bit 12 clear); without bounds FXBI 1 leaves them out of the particles' bounds. Constants only,
+  // and no FXBT (the emitter transform), which no shipped effect has.
+  void FixedBounds(GeneratorState& s) const {
+    if (!s.part || s.Has(F("FXBT"))) {
+      return;
+    }
+    const auto unique = [&s](uint32_t fourcc, const EffectProperty*& found) {
+      found = nullptr;
+      for (const EffectProperty& property : s.node.properties) {
+        if (property.fourcc == fourcc) {
+          if (found != nullptr) {
+            return false;
+          }
+          found = &property;
+        }
+      }
+      return true;
+    };
+    const auto real = [](const EffectProperty& property, float& value) {
+      uint32_t word = 0;
+      if (property.value.size() != 1 || !ConstWord(property.value[0], word)) {
+        return false;
+      }
+      value = FloatFromBits(word);
+      return true;
+    };
+    const auto vector = [&real](const EffectProperty& property, std::array<float, 3>& value) {
+      if (property.value.size() != 1 || !IsElement(property.value[0], F("CNST")) ||
+          property.value[0].args.size() != 3) {
+        return false;
+      }
+      for (size_t i = 0; i < 3; ++i) {
+        uint32_t word = 0;
+        if (!ConstWord(property.value[0].args[i], word)) {
+          return false;
+        }
+        value[i] = FloatFromBits(word);
+      }
+      return true;
+    };
+    const EffectProperty *fxbr, *fxbm, *fxbo, *fxbi;
+    if (!unique(F("FXBR"), fxbr) || !unique(F("FXBM"), fxbm) || !unique(F("FXBO"), fxbo) ||
+        !unique(F("FXBI"), fxbi)) {
+      return;
+    }
+    uint32_t ignoreChildren = 0;
+    if (fxbi != nullptr && !SmallInteger(*fxbi, ignoreChildren)) {
+      return;
+    }
+    std::array<float, 3> lo{}, hi{};
+    if (fxbm != nullptr && fxbo != nullptr) {
+      std::array<float, 3> corner, extent;
+      if (!vector(*fxbm, corner) || !vector(*fxbo, extent)) {
+        return;
+      }
+      for (size_t i = 0; i < 3; ++i) {
+        lo[i] = std::min(corner[i], corner[i] + extent[i]);
+        hi[i] = std::max(corner[i], corner[i] + extent[i]);
+      }
+    } else if (fxbr != nullptr) {
+      float radius = 0.f;
+      std::array<float, 3> offset{};
+      if (!real(*fxbr, radius) || (fxbo != nullptr && !vector(*fxbo, offset))) {
+        return;
+      }
+      for (size_t i = 0; i < 3; ++i) {
+        lo[i] = std::min(offset[i] - radius, offset[i] + radius);
+        hi[i] = std::max(offset[i] - radius, offset[i] + radius);
+      }
+    }
+    s.boundsConsumed = true;  // an FXBM or FXBO without the other and no FXBR is never read
+    if (fxbr == nullptr && (fxbm == nullptr || fxbo == nullptr)) {
+      s.boundsNoChildren = ignoreChildren != 0;
+      return;
+    }
+    // Bit 12 is set when FXBI didn't specify it.
+    s.boundsNoChildren = fxbi == nullptr || ignoreChildren != 0;
+    // (x, y, z) to the port's (-x, z, y), an axis-aligned box to an axis-aligned box.
+    s.fixedBounds = std::array<float, 6>{-hi[0], lo[2], lo[1], -lo[0], hi[2], hi[1]};
   }
 
   // The node-wide modes its properties are read under: AALP, MAXP, XFMD, POFS and the PVAR table.
@@ -5832,6 +5936,10 @@ public:
     }
     if (s.nestedHdrLight && (fourcc == F("LIRD") || fourcc == F("LORD") || fourcc == F("LIXP"))) {
       return true;  // consumed as PIR0/POR0/PLIX below
+    }
+    if (s.boundsConsumed &&
+        (fourcc == F("FXBR") || fourcc == F("FXBM") || fourcc == F("FXBO") || fourcc == F("FXBI"))) {
+      return true;  // consumed as PFXB/PFXC below
     }
     uint32_t widen = 0;
     if (s.nestedHdrLight && fourcc == F("LSPS") && property.value.size() == 1 && ConstWord(property.value[0], widen)) {
@@ -6954,7 +7062,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && fourcc == F("PSHT")) {
       ok = reader.Element(Type::Int);
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
-                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PGID") || fourcc == F("PBDM") ||
+                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
                          fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||
@@ -6967,7 +7075,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PortVariables();
     } else if (part && fourcc == F("PSYS")) {
       ok = reader.PortSystemVars();
-    } else if (part && fourcc == F("PADO")) {
+    } else if (part && (fourcc == F("PADO") || fourcc == F("PFXB"))) {
       ok = reader.PortWords();
     } else if (part && fourcc == F("PPVR")) {
       ok = reader.PortPartVars();

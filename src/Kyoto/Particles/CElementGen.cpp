@@ -4508,7 +4508,22 @@ void CElementGen::BuildParticleSystemBounds() {
 
   x264_recursiveParticleCount = GetParticleCountAllInternal();
 
+#ifdef TARGET_PC
+  // Remastered's CBoundsFixedEval::SolveFunc 0x27fe9c: the authored box under the system's
+  // translation * orientation * scale, in place of the particles' bounds; FXBI leaves the
+  // children's out (CElementGen::InitBounds 0x2455cc). The retail particle-count gate in
+  // GetBounds stays.
+  const CGenDescription* desc = x28_loadedGenDesc;
+  if (desc->xPortFixedBounds) {
+    const CTransform4f system = CTransform4f::Translate(xe8_globalTranslation) *
+                                CTransform4f(x22c_globalOrientation) *
+                                CTransform4f::Scale(x100_globalScale);
+    x2f0_systemBounds =
+        CAABox(desc->xPortFixedBoundsMin, desc->xPortFixedBoundsMax).GetTransformedAABox(system);
+  } else if (GetParticleCount() > 0) {
+#else
   if (GetParticleCount() > 0) {
+#endif
     CVector3f scale = CVector3f::ByElementMultiply(
         CVector3f(x2ec_maxSize, x2ec_maxSize, x2ec_maxSize), x100_globalScale);
 
@@ -4529,6 +4544,11 @@ void CElementGen::BuildParticleSystemBounds() {
     x2f0_systemBounds = CAABox::MakeMaxInvertedBox();
   }
 
+#ifdef TARGET_PC
+  if (desc->xPortBoundsNoChildren) {
+    accumulated = false;
+  }
+#endif
   if (accumulated) {
     x2f0_systemBounds.AccumulateBounds(childBounds.GetMinPoint());
     x2f0_systemBounds.AccumulateBounds(childBounds.GetMaxPoint());
