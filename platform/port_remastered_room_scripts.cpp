@@ -194,6 +194,17 @@ uint8_t TimerAct(uint32_t action) {
   return message != 0 ? uint8_t(kLinkMessage | message) : 0;
 }
 
+// The retail message a TriggerMP1's action is (CTriggerMP1GOC's table), as kLinkMessage | message;
+// 0 for one with no retail message. Its 'ACTV' and 'ICTV' reach OnActivationStateChange (0xf3f35c),
+// which does nothing (0xc51ab0), so they have none.
+uint8_t TriggerAct(uint32_t action) {
+  const uint32_t message = action == kActionTriggerActivate     ? 1u    // Activate
+                           : action == kActionTriggerDeactivate ? 4u    // Deactivate
+                           : action == kActionTriggerToggle     ? 17u   // ToggleActive
+                                                                : 0u;
+  return message != 0 ? uint8_t(kLinkMessage | message) : 0;
+}
+
 bool IsPass(int retailType) {
   for (const Pass& p : kPasses) {
     if (p.retailType == retailType) {
@@ -960,6 +971,74 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     t.baseLayer = c.baseLayer;
     return t;
   };
+  std::map<int, const Component*> triggerComps;  // the TriggerMP1s, by entity
+  for (const Component* c : room.Of(kTriggerMP1)) {
+    if (c->entity >= 0) {
+      triggerComps.emplace(c->entity, c);
+    }
+  }
+  // A TriggerMP1 as a retail CScriptTrigger (SLdrTriggerMP1::Load 0xf3e95c, CTriggerMP1GOC::Create
+  // 0xf3f230): its box is the scale through the area's rotation (GetAreaTransformedScale 0xd1e2d0),
+  // the entity's own rotation left out. None with a force, contact damage, KillOnEnter, camera
+  // detection or boolean intersection, which the add-on does not carry.
+  const auto triggerOf = [&](const Component& c) -> std::optional<SceneryScripts::Trigger> {
+    Vec3 pos, rot, scale;
+    if (!room.Xform(c, pos, rot, scale)) {
+      return std::nullopt;
+    }
+    const auto zero = [&](const Span& s) {
+      const uint8_t* b = room.Bytes(s);
+      return std::all_of(b, b + s.size, [](uint8_t v) { return v == 0; });
+    };
+    Span sp;
+    if (room.Nested(c, {kPropTriggerForce}, sp) && !zero(sp)) {
+      return std::nullopt;
+    }
+    if (room.Nested(c, {kPropTriggerDamageAmount[0]}, sp)) {
+      std::vector<Prop> damage;
+      if (!PropList(room.Bytes(sp), sp.size, &damage)) {
+        return std::nullopt;
+      }
+      for (const Prop& p : damage) {
+        const Span v{sp.start + p.data.start, p.data.size};
+        if (p.id == kPropTriggerDamageAmount[1] ? !zero(v) : p.id != kPropDamageWeaponType) {
+          return std::nullopt;
+        }
+      }
+    }
+    const auto f = room.Flat(c);
+    const auto flag = [&](uint32_t id) {
+      const auto it = f.find(id);
+      return it != f.end() && it->second.size >= 1 && room.Bytes(it->second)[0] != 0;
+    };
+    SceneryScripts::Trigger t;
+    const auto flags = f.find(kPropTriggerFlags);
+    if (flags != f.end() && flags->second.size == 4) {
+      t.flags = ReadLE32(room.Bytes(flags->second));
+    }
+    if ((t.flags & (0x800u | kTriggerDetectCamera | 0x8000u)) != 0) {
+      return std::nullopt;
+    }
+    const Vec3 w = Apply(area.xf, MulR2G(pos));
+    const Vec3 s = MulR2G(scale);
+    for (size_t i = 0; i < 3; ++i) {
+      double extent = 0.;
+      for (size_t j = 0; j < 3; ++j) {
+        extent += std::fabs(area.xf[i][j]) * std::fabs(double(s[j]));
+      }
+      t.pos[i] = float(w[i]);
+      t.extent[i] = float(extent);
+      if (!std::isfinite(t.pos[i]) || !std::isfinite(t.extent[i]) || std::fabs(t.pos[i]) >= 1e5f ||
+          t.extent[i] >= 1e5f) {
+        return std::nullopt;
+      }
+    }
+    t.active = room.Active(c);
+    t.deactivateOnEntered = flag(kPropTriggerDeactivateOnEntered);
+    t.deactivateOnExited = flag(kPropTriggerDeactivateOnExited);
+    t.baseLayer = c.baseLayer;
+    return t;
+  };
   auto valid = [](const ScriptObject& o) {
     return o.hasPos && std::isfinite(o.pos[0]) && std::isfinite(o.pos[1]) && std::isfinite(o.pos[2]) &&
            std::fabs(o.pos[0]) < 1e5 && std::fabs(o.pos[1]) < 1e5 && std::fabs(o.pos[2]) < 1e5;
@@ -1665,10 +1744,16 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     // So is a TimerMP1 no retail object matched, which may become a timer add-on: its actions are
     // retail messages.
     const bool isTimer = timerComps.count(e.entity) != 0 && match[size_t(&e - ents.data())] < 0;
-    const bool effect = isEffect || generator || isTimer;
+    // And a TriggerMP1 no retail object matched, which may become a trigger add-on.
+    const bool isTrigger = triggerComps.count(e.entity) != 0 && match[size_t(&e - ents.data())] < 0 &&
+                           triggerOf(*triggerComps.at(e.entity)).has_value();
+    const bool effect = isEffect || generator || isTimer || isTrigger;
     const auto act = [&](uint32_t action) -> uint8_t {
       if (isTimer) {
         return TimerAct(action);
+      }
+      if (isTrigger) {
+        return TriggerAct(action);
       }
       if (generator) {
         return action == kActionGeneratorSetToZero                                       ? PortRoomGeo::kGenerate
@@ -1804,6 +1889,21 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           links.push_back({kSenderTimer | uint32_t(sender.entity), uint8_t(state), timerAct, delay, depth > 0});
           return true;
         };
+        // So does an unmatched TriggerMP1's Entered or Exited (retail Entered/Exited), as a trigger add-on.
+        const auto viaTrigger = [&]() {
+          if (!effect || sender.type != kTriggerMP1 || sender.entity < 0 || (s >= 0 && match[size_t(s)] >= 0) ||
+              (c->event != kEventEntered && c->event != kEventExited) || state < 0 || state >= 256) {
+            return false;
+          }
+          const uint8_t triggerAct = act(first);
+          std::optional<SceneryScripts::Trigger> t = triggerOf(sender);
+          if (triggerAct == 0 || !t) {
+            return false;
+          }
+          result.triggers.try_emplace(sender.entity, std::move(*t));
+          links.push_back({kSenderTrigger | uint32_t(sender.entity), uint8_t(state), triggerAct, delay, depth > 0});
+          return true;
+        };
         if (s >= 0 && match[size_t(s)] >= 0 && state >= 0) {
           // A DamageableTrigger reads its own MaxReached -> Activate connections and never
           // sends them, so only a direct one counts.
@@ -1865,7 +1965,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           } else {
             miss(sender, *c, first, depth);
           }
-        } else if (!viaTimer()) {
+        } else if (!viaTimer() && !viaTrigger()) {
           miss(sender, *c, first, depth);
         }
       }
@@ -1876,6 +1976,13 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       if (std::optional<SceneryScripts::Timer> t = timerOf(*timerComps.at(e.entity))) {
         t->links = std::move(links);
         result.timers[e.entity] = std::move(*t);
+      }
+      links.clear();
+    } else if (isTrigger) {
+      // The same for a trigger's.
+      if (std::optional<SceneryScripts::Trigger> t = triggerOf(*triggerComps.at(e.entity))) {
+        t->links = std::move(links);
+        result.triggers[e.entity] = std::move(*t);
       }
       links.clear();
     }

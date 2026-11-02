@@ -1009,30 +1009,45 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   const std::set<int> drivable = DrivableEntities(room);
   // The Remastered timers that can be retail CScriptTimer add-ons (PortRoomEffects::Timer): every
   // connection into them traced to retail messages, on a known layer, and every timer they hear
-  // from one too (until nothing more drops out).
-  std::set<int> timersOk;
+  // from one too (until nothing more drops out). The same for the TriggerMP1s that can be retail
+  // CScriptTrigger add-ons (PortRoomEffects::Trigger), which timers may drive and be driven by.
+  std::set<int> timersOk, triggersOk;
+  const auto addOnOk = [&](int entity, bool baseLayer, const std::vector<PortRoomGeo::Link>& links) {
+    return scripts.unresolved.count(entity) == 0 && (baseLayer || scripts.layer.count(entity) != 0) &&
+           std::all_of(links.begin(), links.end(), [](const PortRoomGeo::Link& l) {
+             return (l.action & kLinkMessage) != 0 && l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
+           });
+  };
   for (const auto& [t, timer] : scripts.timers) {
-    if (scripts.unresolved.count(t) == 0 && (timer.baseLayer || scripts.layer.count(t) != 0) &&
-        std::all_of(timer.links.begin(), timer.links.end(), [](const PortRoomGeo::Link& l) {
-          return (l.action & kLinkMessage) != 0 && l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
-        })) {
+    if (addOnOk(t, timer.baseLayer, timer.links)) {
       timersOk.insert(t);
     }
   }
-  const auto timerSenderOk = [&](const PortRoomGeo::Link& l) {
-    return !IsTimerSender(l.sender) || timersOk.count(int(l.sender & ~kSenderTimer)) != 0;
+  for (const auto& [t, trigger] : scripts.triggers) {
+    if (addOnOk(t, trigger.baseLayer, trigger.links)) {
+      triggersOk.insert(t);
+    }
+  }
+  const auto addOnSenderOk = [&](const PortRoomGeo::Link& l) {
+    return IsTimerSender(l.sender)     ? timersOk.count(int(l.sender & ~kSenderTimer)) != 0
+           : IsTriggerSender(l.sender) ? triggersOk.count(int(l.sender & ~kSenderTrigger)) != 0
+                                       : true;
   };
   for (bool dropped = true; dropped;) {
     dropped = false;
-    for (auto it = timersOk.begin(); it != timersOk.end();) {
-      const std::vector<PortRoomGeo::Link>& links = scripts.timers.at(*it).links;
-      if (std::all_of(links.begin(), links.end(), timerSenderOk)) {
-        ++it;
-      } else {
-        it = timersOk.erase(it);
-        dropped = true;
+    const auto prune = [&](std::set<int>& ok, const auto& addOns) {
+      for (auto it = ok.begin(); it != ok.end();) {
+        const std::vector<PortRoomGeo::Link>& links = addOns.at(*it).links;
+        if (std::all_of(links.begin(), links.end(), addOnSenderOk)) {
+          ++it;
+        } else {
+          it = ok.erase(it);
+          dropped = true;
+        }
       }
-    }
+    };
+    prune(timersOk, scripts.timers);
+    prune(triggersOk, scripts.triggers);
   }
   // The GeneratorMP1s that copy effects, kept where they are exact (PortRoomEffects::Generator):
   // every connection into them traced, one template, no Follow targets, a spawn count in range.
@@ -1064,7 +1079,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
           !std::all_of(links->second.begin(), links->second.end(), [&](const PortRoomGeo::Link& l) {
             return (l.action == PortRoomGeo::kGenerate || l.action == PortRoomGeo::kShow ||
                     l.action == PortRoomGeo::kHide || l.action == PortRoomGeo::kToggle) &&
-                   l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && timerSenderOk(l);
+                   l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && addOnSenderOk(l);
           })) {
         continue;
       }
@@ -1303,7 +1318,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
            std::all_of(links->second.begin(), links->second.end(), [&](const PortRoomGeo::Link& l) {
              return (l.action == PortRoomGeo::kShow || l.action == PortRoomGeo::kHide ||
                      l.action == PortRoomGeo::kToggle) &&
-                    l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && timerSenderOk(l);
+                    l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && addOnSenderOk(l);
            })) &&
           (!generated || std::all_of(generatedBy->second.begin(), generatedBy->second.end(),
                                      [&](int g) { return generatorPlans.at(g).ok; }));
@@ -1400,31 +1415,40 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   if (!group) {
     connectedCount += reserved;
   }
-  // The timers the drives written hear from, and the timers those hear from: their ids follow
-  // the barrier's.
+  // The timers and triggers the drives written hear from, and the ones those hear from: the
+  // timers' ids follow the barrier's, and the triggers' the timers'.
   std::vector<PortRoomEffects::Timer> timers;
+  std::vector<PortRoomEffects::Trigger> triggers;
   {
-    std::map<int, uint32_t> timerIds;  // by entity
-    std::vector<int> queue;
+    std::map<int, uint32_t> timerIds, triggerIds;  // by entity
+    std::vector<uint32_t> queue;                   // senders
     const auto need = [&](uint32_t sender) {
-      if (IsTimerSender(sender) && timerIds.emplace(int(sender & ~kSenderTimer), 0).second) {
-        queue.push_back(int(sender & ~kSenderTimer));
+      if ((IsTimerSender(sender) && timerIds.emplace(int(sender & ~kSenderTimer), 0).second) ||
+          (IsTriggerSender(sender) && triggerIds.emplace(int(sender & ~kSenderTrigger), 0).second)) {
+        queue.push_back(sender);
       }
+    };
+    const auto linksOf = [&](uint32_t sender) -> const std::vector<PortRoomGeo::Link>& {
+      return IsTimerSender(sender) ? scripts.timers.at(int(sender & ~kSenderTimer)).links
+                                   : scripts.triggers.at(int(sender & ~kSenderTrigger)).links;
     };
     for (const PortRoomEffects::Drive& d : allDrives) {
       need(d.sender);
     }
     for (size_t q = 0; q < queue.size(); ++q) {
-      for (const PortRoomGeo::Link& l : scripts.timers.at(queue[q]).links) {
+      for (const PortRoomGeo::Link& l : linksOf(queue[q])) {
         need(l.sender);
       }
     }
     const size_t first = added.size() + (group ? barrier.effects.size() : 0);
-    if (first + timerIds.size() > PortRoomEffects::kMaxAddOns) {
+    if (first + timerIds.size() + triggerIds.size() > PortRoomEffects::kMaxAddOns) {
       // Never reached by retail's rooms; the drives they would send are dropped, so say so.
       ++full;
-      std::erase_if(allDrives, [](const PortRoomEffects::Drive& d) { return IsTimerSender(d.sender); });
+      std::erase_if(allDrives, [](const PortRoomEffects::Drive& d) {
+        return IsTimerSender(d.sender) || IsTriggerSender(d.sender);
+      });
       timerIds.clear();
+      triggerIds.clear();
     }
     for (auto& [t, id] : timerIds) {
       const SceneryScripts::Timer& timer = scripts.timers.at(t);
@@ -1435,24 +1459,44 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                             (timer.autoStart ? PortRoomEffects::kTimerAutoStart : 0u) |
                             (timer.active ? PortRoomEffects::kTimerActive : 0u)});
     }
-    for (const auto& [t, id] : timerIds) {
-      for (const PortRoomGeo::Link& l : scripts.timers.at(t).links) {
-        allDrives.push_back({id, l.sender, l.state, uint32_t(l.action & ~kLinkMessage), l.delay,
-                             l.relayed ? PortRoomEffects::kDriveRelayed : 0u});
-      }
+    for (auto& [t, id] : triggerIds) {
+      const SceneryScripts::Trigger& trigger = scripts.triggers.at(t);
+      const uint32_t retailLayer = trigger.baseLayer ? 0 : scripts.layer.at(t);
+      id = PortRoomEffects::AddOnId(retailLayer, areaBits, uint32_t(first + timers.size() + triggers.size()));
+      PortRoomEffects::Trigger record;
+      record.id = id;
+      std::copy(trigger.pos, trigger.pos + 3, record.pos);
+      std::copy(trigger.extent, trigger.extent + 3, record.extent);
+      record.triggerFlags = trigger.flags;
+      record.flags = (trigger.active ? PortRoomEffects::kTriggerActive : 0u) |
+                     (trigger.deactivateOnEntered ? PortRoomEffects::kTriggerDeactivateOnEntered : 0u) |
+                     (trigger.deactivateOnExited ? PortRoomEffects::kTriggerDeactivateOnExited : 0u);
+      triggers.push_back(record);
     }
+    const auto addDrives = [&](const std::map<int, uint32_t>& ids, const auto& addOns) {
+      for (const auto& [t, id] : ids) {
+        for (const PortRoomGeo::Link& l : addOns.at(t).links) {
+          allDrives.push_back({id, l.sender, l.state, uint32_t(l.action & ~kLinkMessage), l.delay,
+                               l.relayed ? PortRoomEffects::kDriveRelayed : 0u});
+        }
+      }
+    };
+    addDrives(timerIds, scripts.timers);
+    addDrives(triggerIds, scripts.triggers);
     for (PortRoomEffects::Drive& d : allDrives) {
       if (IsTimerSender(d.sender)) {
         d.sender = timerIds.at(int(d.sender & ~kSenderTimer));
+      } else if (IsTriggerSender(d.sender)) {
+        d.sender = triggerIds.at(int(d.sender & ~kSenderTrigger));
       }
     }
   }
   // The follow locators whose effect was written (or is a retail object): their ids follow the
-  // timers'.
+  // triggers'.
   std::vector<PortRoomEffects::Follow> follows;
   std::string followsLeftOut;  // "; <reason>" per locator left out
   {
-    const size_t first = added.size() + (group ? barrier.effects.size() : 0) + timers.size();
+    const size_t first = added.size() + (group ? barrier.effects.size() : 0) + timers.size() + triggers.size();
     for (auto& [sf, plan] : followPlans) {
       if (!plan.ok || plan.followerId == 0) {
         followsLeftOut += plan.ok ? "; its effect not written" : std::string("; ") + plan.why;
@@ -1736,6 +1780,10 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     const size_t at = std::strlen(generatorNote);
     std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu timer(s)", timers.size());
   }
+  if (!triggers.empty()) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu trigger(s)", triggers.size());
+  }
   if (!follows.empty()) {
     const size_t at = std::strlen(generatorNote);
     std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu follow(s)", follows.size());
@@ -1769,6 +1817,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   file.drives = std::move(allDrives);
   file.generators = std::move(generators);
   file.timers = std::move(timers);
+  file.triggers = std::move(triggers);
   file.follows = std::move(follows);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;

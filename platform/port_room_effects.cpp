@@ -318,6 +318,43 @@ void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_
       sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, 0xFFFFFFFF, "Remastered timer", 0});
     }
   }
+  // The Remastered triggers, as the SCLY Trigger object ScriptLoader::LoadTrigger reads: no
+  // connections, name, position, extent, no damage (CDamageInfo: 4 properties, weapon type 0,
+  // damage, radius, knockback), no force, flags, active, deactivate on entered and on exited.
+  for (const Trigger& t : sFile.triggers) {
+    if ((t.id >> 26) != layer) continue;
+    std::vector<uint8_t> object;
+    auto be32 = [&](uint32_t v) {
+      for (int s = 24; s >= 0; s -= 8) object.push_back(uint8_t(v >> s));
+    };
+    auto beFloat = [&](float f) {
+      uint32_t v;
+      std::memcpy(&v, &f, 4);
+      be32(v);
+    };
+    be32(t.id);
+    be32(0);
+    be32(9);
+    for (char c : std::string("trigger")) object.push_back(uint8_t(c));
+    object.push_back(0);
+    for (float v : t.pos) beFloat(v);
+    for (float v : t.extent) beFloat(v);
+    be32(4);
+    be32(0);
+    for (int i = 0; i < 3; ++i) beFloat(0.f);
+    for (int i = 0; i < 3; ++i) beFloat(0.f);
+    be32(t.triggerFlags);
+    object.push_back((t.flags & kTriggerActive) != 0);
+    object.push_back((t.flags & kTriggerDeactivateOnEntered) != 0);
+    object.push_back((t.flags & kTriggerDeactivateOnExited) != 0);
+    CMemoryInStream in(object.data(), int(object.size()));
+    const rstl::pair<TEditorId, TUniqueId> made = mgr.LoadScriptObject(
+        TAreaId(area), static_cast<EScriptObjectType>(kTriggerType), uint(object.size()), in);
+    if (made.first != kInvalidEditorId) {
+      ids.push_back(made.first.value);
+      sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, 0xFFFFFFFF, "Remastered trigger", 0});
+    }
+  }
   // The follows, as the SCLY SpecialFunction ScriptLoader::LoadSpecialFunction reads: Play ->
   // Activate to the followed actor and Play -> Deactivate to the follower (never sent: the
   // function reads them), then its 15 properties, the unused ones as retail's FogVolume has them.

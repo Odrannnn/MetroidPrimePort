@@ -230,7 +230,8 @@ inline constexpr int kModels = 30;
 // 143: event states from the GOCs' TranslateScriptEventToState. 144: moved effects match by senders.
 // 145: TimerMP1s retail lacks become retail Timers (roomfx v12). 146: WSTP becomes the port-only PWST.
 // 147: ObjectFollowLocators retail lacks become follows (roomfx v13).
-inline constexpr int kEffects = 148;   // retail positions after a type's leading field (GunTurret, flavors, Dock)
+// 148: retail positions after a type's leading field (GunTurret, flavors, Dock).
+inline constexpr int kEffects = 149;   // TriggerMP1s retail lacks become retail Triggers (roomfx v14)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

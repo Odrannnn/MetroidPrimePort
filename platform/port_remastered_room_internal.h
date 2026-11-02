@@ -629,6 +629,15 @@ constexpr uint32_t kPropMaterialVariable[2] = {0x0238c7cb, 0x4c107e13};
 constexpr uint32_t kDebugOptions = 0xef2184e8;  // answers the debug menu only
 constexpr uint32_t kPropTriggerFlags = 0x7ad69562;
 constexpr uint32_t kTriggerDetectCamera = 0x4000;
+// SLdrTriggerMP1::Load 0xf3e95c: the force (SLdrVector_MP1Typedef, +0x08), the contact damage
+// (SLdrContactDamage_MP1Typedef, +0x14; its amount 0xd1f418), and the bools at +0x44..+0x47 the
+// CScriptTriggerMP1 ctor (0xd089d8) keeps as bits 0x40, 0x80, 0x04 (deactivate on Entered) and
+// 0x08 (deactivate on Exited); the first two only change how a force is applied.
+constexpr uint32_t kPropTriggerForce = 0xf00155e9;
+constexpr uint32_t kPropTriggerDamageAmount[2] = {0x3360e95e, 0xfb168838};
+constexpr uint32_t kPropDamageWeaponType = 0x6e9e14b9;  // ContactDamage +0x10 (ctor 0xd1f3d0)
+constexpr uint32_t kPropTriggerDeactivateOnEntered = 0x9598280a;
+constexpr uint32_t kPropTriggerDeactivateOnExited = 0x6b3ae137;
 constexpr uint32_t kPropCounterMax = 0xce73c1a7;
 constexpr uint32_t kEventEntered = 0xcba5a77b;
 constexpr uint32_t kEventExited = 0x8e8dd42d;
@@ -678,6 +687,7 @@ constexpr uint32_t kActionScriptRelayFire = 0x379d362e;
 // msg 1 / msg 4; kb topic/triggermp1-active-state.md).
 constexpr uint32_t kActionTriggerActivate = 0xb5dd4543;
 constexpr uint32_t kActionTriggerDeactivate = 0x3067f115;
+constexpr uint32_t kActionTriggerToggle = 0xda363167;
 // An ActorKeyframe's Play (retail kSS_Play) tells its actor to play the keyframe's
 // animation (property kPropKeyframeAnim, a name in STRP; kPropKeyframeLoop: it loops).
 constexpr uint32_t kActorKeyframeMP1 = 0x3ce6630a;
@@ -839,6 +849,9 @@ constexpr uint8_t kLinkMessage = 0x80;
 // entity. Only the effects import reads these (as its timer add-ons); nothing else sends them.
 constexpr uint32_t kSenderTimer = 0xFC000000;
 constexpr bool IsTimerSender(uint32_t sender) { return (sender & 0xFF000000) == kSenderTimer; }
+// The same for a Remastered TriggerMP1 no retail object stands for: kSenderTrigger | its entity.
+constexpr uint32_t kSenderTrigger = 0xFB000000;
+constexpr bool IsTriggerSender(uint32_t sender) { return (sender & 0xFF000000) == kSenderTrigger; }
 
 // What drives the scenery actors of a room.
 struct SceneryScripts {
@@ -853,6 +866,20 @@ struct SceneryScripts {
     std::vector<PortRoomGeo::Link> links;
   };
   std::map<int, Timer> timers;  // by entity
+  // A TriggerMP1 no retail object matched whose Entered or Exited drives an effect, a generator,
+  // a timer or another such trigger (as kSenderTrigger | entity), as a retail CScriptTrigger:
+  // exact where it does no damage and applies no force (CTriggerMP1GOC::Create 0xf3f230, the
+  // CScriptTriggerMP1 ctor 0xd089d8). Its box is axis-aligned, `extent` across (the area's
+  // rotation applied to its scale, NScriptLoaderUtils::GetAreaTransformedScale 0xd1e2d0). Its
+  // links are what switches it, traced like a timer's.
+  struct Trigger {
+    float pos[3] = {0, 0, 0};     // GameCube world space
+    float extent[3] = {0, 0, 0};  // GameCube axes
+    uint32_t flags = 1;           // ETriggerFlags (Remastered's are retail's)
+    bool active = true, deactivateOnEntered = false, deactivateOnExited = false, baseLayer = false;
+    std::vector<PortRoomGeo::Link> links;
+  };
+  std::map<int, Trigger> triggers;  // by entity
   std::map<int, uint8_t> layer;  // by entity: the retail layer it is drawn on
   std::map<int, std::vector<PortRoomGeo::Link>> links;  // by entity
   std::map<int, size_t> unresolved;                      // by entity: connections not traced

@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 13);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 14);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -555,6 +555,66 @@ void TestFileTimers() {
   CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "ResetAndStart to an effect");
 }
 
+// Version 14 adds retail Triggers: drives may activate, deactivate or toggle one, and its
+// Entered and Exited may send drives.
+void TestFileTriggers() {
+  File in;
+  PortRoomEffects::Layer layer;
+  layer.layer = 1;
+  PortRoomEffects::AppendEffect(MakeEffect(1, 0), layer.objects);
+  layer.count = 1;
+  in.layers.push_back(layer);
+  const uint32_t a = MakeEffect(1, 0).id, t = PortRoomEffects::AddOnId(0, 0x1A, 1);
+  PortRoomEffects::Trigger trigger;
+  trigger.id = t;
+  trigger.pos[0] = -10.f;
+  trigger.pos[2] = 3.5f;
+  trigger.extent[0] = 4.f;
+  trigger.extent[1] = 2.f;
+  trigger.extent[2] = 8.f;
+  trigger.triggerFlags = 0x1001;
+  trigger.flags = PortRoomEffects::kTriggerActive | PortRoomEffects::kTriggerDeactivateOnEntered;
+  in.triggers.push_back(trigger);
+  in.drives.push_back({t, 0x041A0010, 9, 17, 0.f});
+  in.drives.push_back({a, t, 3, 1, 0.f});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 14);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.triggers.size() == 1 && out.drives.size() == 2);
+  const PortRoomEffects::Trigger& o = out.triggers[0];
+  CHECK(o.id == t && o.pos[0] == -10.f && o.pos[1] == 0.f && o.pos[2] == 3.5f && o.extent[0] == 4.f &&
+        o.extent[1] == 2.f && o.extent[2] == 8.f && o.triggerFlags == 0x1001 && o.flags == trigger.flags);
+  for (size_t cut = 1; cut <= 36; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  const auto refused = [&](const auto& change, const char* what) {
+    File f = in;
+    change(f.triggers[0]);
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  using T = PortRoomEffects::Trigger;
+  refused([](T& b) { b.id = 5; }, "a retail id");
+  refused([&](T& b) { b.id = a; }, "an effect's id");
+  refused([](T& b) { b.pos[1] = NAN; }, "a NaN position");
+  refused([](T& b) { b.extent[2] = -1.f; }, "a negative extent");
+  refused([](T& b) { b.triggerFlags |= PortRoomEffects::kTriggerKillOnEnter; }, "KillOnEnter");
+  refused([](T& b) { b.triggerFlags |= PortRoomEffects::kTriggerDetectCamera; }, "a camera trigger");
+  refused([](T& b) { b.flags |= 8; }, "an unknown flag");
+  File f = in;
+  f.triggers.push_back(in.triggers[0]);
+  CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "two triggers, one id");
+  f = in;
+  f.timers.push_back({t, 1.f, 0.f});
+  CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "a trigger and a timer, one id");
+  f = in;
+  f.drives = {{t, 0x041A0010, 9, 11, 0.f}};
+  CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "ResetAndStart to a trigger");
+}
+
 // Version 13 adds ObjectFollowLocators: a retail SpecialFunction that moves one of this file's
 // effects (or a retail object) to a retail actor's locator.
 void TestFileFollows() {
@@ -943,6 +1003,7 @@ int main() {
   TestFileDrives();
   TestFileGenerators();
   TestFileTimers();
+  TestFileTriggers();
   TestFileFollows();
   TestFileBarriers();
   TestExternalVariables();

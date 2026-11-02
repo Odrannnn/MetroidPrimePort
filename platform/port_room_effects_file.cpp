@@ -341,7 +341,8 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool follows = !file.follows.empty();
+  const bool triggers = !file.triggers.empty();
+  const bool follows = triggers || !file.follows.empty();
   const bool timers = follows || !file.timers.empty();
   const bool generators = timers || !file.generators.empty() ||
                           std::any_of(file.drives.begin(), file.drives.end(), [](const Drive& d) { return d.flags != 0; });
@@ -350,7 +351,7 @@ std::vector<uint8_t> Write(const File& file) {
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -498,6 +499,16 @@ std::vector<uint8_t> Write(const File& file) {
       PutLE32(out, f.flags);
       PutLE32(out, uint32_t(f.locator.size()));
       out.insert(out.end(), f.locator.begin(), f.locator.end());
+    }
+  }
+  if (triggers) {
+    PutLE32(out, uint32_t(file.triggers.size()));
+    for (const Trigger& t : file.triggers) {
+      PutLE32(out, t.id);
+      for (float v : t.pos) PutLEFloat(out, v);
+      for (float v : t.extent) PutLEFloat(out, v);
+      PutLE32(out, t.triggerFlags);
+      PutLE32(out, t.flags);
     }
   }
   return out;
@@ -935,13 +946,55 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
       file.follows.push_back(std::move(f));
     }
   }
-  // Only the add-ons, timers and generators this file has, and only what CScriptEffect, the
-  // generator or CScriptTimer takes from a connection.
+  if (version >= 14) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 36) {
+      error = "truncated trigger list";
+      return false;
+    }
+    if (total + file.timers.size() + file.follows.size() + count > kMaxAddOns) {
+      error = "too many objects";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      Trigger t;
+      ReadLE32(data, at, t.id);
+      for (float* v : {t.pos, t.extent}) {
+        for (int k = 0; k < 3; ++k) {
+          uint32_t bits = 0;
+          ReadLE32(data, at, bits);
+          std::memcpy(&v[k], &bits, 4);
+        }
+      }
+      ReadLE32(data, at, t.triggerFlags);
+      ReadLE32(data, at, t.flags);
+      const auto same = [&](uint32_t id) { return NormalizedId(id) == NormalizedId(t.id); };
+      if (!IsAddOnId(t.id) ||
+          std::any_of(objects.begin(), objects.end(), [&](const LayerObject& o) { return same(o.id); }) ||
+          std::any_of(file.timers.begin(), file.timers.end(), [&](const Timer& o) { return same(o.id); }) ||
+          std::any_of(file.follows.begin(), file.follows.end(), [&](const Follow& o) { return same(o.id); }) ||
+          std::any_of(file.triggers.begin(), file.triggers.end(), [&](const Trigger& o) { return same(o.id); }) ||
+          !std::all_of(std::begin(t.pos), std::end(t.pos), [](float f) { return std::fabs(f) < 1e5f; }) ||
+          !std::all_of(std::begin(t.extent), std::end(t.extent), [](float f) { return f >= 0.f && f < 1e5f; }) ||
+          (t.triggerFlags & kTriggerRejectedFlags) != 0 ||
+          (t.flags & ~(kTriggerActive | kTriggerDeactivateOnEntered | kTriggerDeactivateOnExited)) != 0) {
+        error = "invalid trigger " + std::to_string(i);
+        return false;
+      }
+      file.triggers.push_back(t);
+    }
+  }
+  auto isTrigger = [&](uint32_t id) {
+    return std::any_of(file.triggers.begin(), file.triggers.end(), [&](const Trigger& t) { return t.id == id; });
+  };
+  // Only the add-ons, timers, triggers and generators this file has, and only what CScriptEffect,
+  // the generator, CScriptTimer or CScriptTrigger takes from a connection.
   for (size_t i = 0; i < file.drives.size(); ++i) {
     const Drive& d = file.drives[i];
     const bool toGenerator = (d.flags & kDriveToGenerator) != 0;
     const bool toTimer = !toGenerator && isTimer(d.target);
-    const bool known = toGenerator ? d.target < file.generators.size() : toTimer || isObject(d.target);
+    const bool known =
+        toGenerator ? d.target < file.generators.size() : toTimer || isTrigger(d.target) || isObject(d.target);
     const bool timerMessage = d.message == 10 || d.message == 11 || d.message == 14 || d.message == 15 ||
                               d.message == 16;
     if (!known || d.state > 0xff || (d.flags & ~(kDriveToGenerator | kDriveRelayed)) != 0 ||

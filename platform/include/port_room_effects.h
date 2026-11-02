@@ -75,10 +75,13 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 13 then has u32 follows, then per follow: u32 add-on editor id, u32 followed editor
 //   id, u32 follower editor id, u32 flags (see Follow), u32 locator length and that many bytes.
 //   Files without follows are still written as version 12 or older.
+//   version 14 then has u32 triggers, then per trigger: u32 add-on editor id, f32 position[3],
+//   f32 extent[3], u32 trigger flags, u32 flags (see Trigger). Files without triggers are still
+//   written as version 13 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 13;
+constexpr uint32_t kFileVersion = 14;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -324,6 +327,27 @@ struct Follow {
   std::string locator;
 };
 
+// A Remastered TriggerMP1 retail has no object for, created as a retail Trigger
+// (ScriptLoader::LoadTrigger, CScriptTrigger) where it is exact: no force, no damage, and none
+// of KillOnEnter, DetectCamera or UseBooleanIntersection (CTriggerMP1GOC::Create 0xf3f230).
+// Drives send it Activate, Deactivate and ToggleActive; its Entered and Exited send the drives
+// it is the sender of.
+constexpr uint8_t kTriggerType = 4;
+constexpr uint32_t kTriggerKillOnEnter = 0x800;
+constexpr uint32_t kTriggerDetectCamera = 0x4000;
+constexpr uint32_t kTriggerBooleanIntersection = 0x8000;
+constexpr uint32_t kTriggerRejectedFlags = kTriggerKillOnEnter | kTriggerDetectCamera | kTriggerBooleanIntersection;
+constexpr uint32_t kTriggerActive = 1;
+constexpr uint32_t kTriggerDeactivateOnEntered = 2;
+constexpr uint32_t kTriggerDeactivateOnExited = 4;
+struct Trigger {
+  uint32_t id = 0;
+  float pos[3] = {0, 0, 0};     // GameCube world space, the box's centre
+  float extent[3] = {0, 0, 0};  // the box's size, world axes
+  uint32_t triggerFlags = 1;    // ETriggerFlags
+  uint32_t flags = kTriggerActive;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -338,6 +362,7 @@ struct File {
   std::vector<Generator> generators;
   std::vector<Timer> timers;
   std::vector<Follow> follows;
+  std::vector<Trigger> triggers;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
