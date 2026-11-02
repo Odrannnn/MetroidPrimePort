@@ -53,7 +53,10 @@ inline CVector3f DefaultParticleVelocity(uint8_t version) {
 // constant NDC depth shift, applied by replacing the projection's m22 with m22 - shift.
 // m22, m23, m32, m33 are the GX/retro projection elements (clip z = m22 * -d + m23, w = m33 - m32 * d);
 // ComputeNdcDepthFromRetroDepth 0x12e234 is (m23 - m22 * d) / (m33 - m32 * d).
-inline float DepthBiasedProjM22(float m22, float m23, float m32, float m33, float depth, float bias) {
+// The shift is multiplied by `rangeSpan` (0x22a690..0x22a6a0): the device depth range's far - near
+// when the description's DBSO bit is set, else 1 (RemasteredDepthRangeSpan).
+inline float DepthBiasedProjM22(float m22, float m23, float m32, float m33, float depth, float bias,
+                                float rangeSpan = 1.f) {
   constexpr float kEps = 1.1920929e-07f;
   const auto ndc = [&](float d) {
     float w = m33 - m32 * d;
@@ -65,12 +68,27 @@ inline float DepthBiasedProjM22(float m22, float m23, float m32, float m33, floa
   if (depth - kEps < 0.f) {
     depth = kEps;
   }
-  const float shift = ndc(depth + bias) - ndc(depth);
+  const float shift = (ndc(depth + bias) - ndc(depth)) * rangeSpan;
   const float biased = m22 - shift;
   if (std::fabs(biased) >= 1e-5f) {
     return biased;
   }
   return m22 - shift >= 0.f ? kEps : -kEps;
+}
+
+// The span of the device depth range Remastered has where the port draws with retail's
+// [near, far]: the game pass sets the world range (0.0390625, 1) (SGameRenderDepthRanges
+// 0x1d2d7dc, CGameRenderJob::RenderGamePass 0xb30324) and gun draws take flag bit 8's
+// (0.0097656, 0.0386719) (NCustomRender::construct_depth_range_from_flags 0xb40e20). Other
+// ranges have no known counterpart and keep retail's span.
+inline float RemasteredDepthRangeSpan(float near, float far) {
+  if (near == 0.125f && far == 1.f) {
+    return 1.f - 0.0390625f;
+  }
+  if (near == 1.f / 64.f && far == 1.f / 32.f) {
+    return 0.038671873509883881f - 0.0097656231373548508f;
+  }
+  return far - near;
 }
 
 // XFMD3 particles already carry the emitter's global orientation in their positions.

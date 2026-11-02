@@ -576,7 +576,8 @@ bool CParticleSwoosh::IsSystemDeletable() const {
 void CParticleSwoosh::Render() {
 #ifdef TARGET_PC
   PortFx::RenderScope fxScope(x1c_desc->xPortUnfogged);
-  CPortParticleDepthBias portDepthBias(*this, x1c_desc->xPortDepthBias);
+  // CreateSWSH never reads DBSO: a swoosh keeps CParticleDescription's default (0x288314), on.
+  CPortParticleDepthBias portDepthBias(*this, x1c_desc->xPortDepthBias, true);
   if (PortFx::gMuteActive && PortFx::IsMuted(*this)) {
     return;
   }

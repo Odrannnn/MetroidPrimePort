@@ -2743,7 +2743,8 @@ void CElementGen::Render() {
   CStopwatch timer;
 #ifdef TARGET_PC
   PortFx::RenderScope fxScope(x28_loadedGenDesc->xPortUnfogged);
-  CPortParticleDepthBias portDepthBias(*this, x28_loadedGenDesc->xPortDepthBias);
+  CPortParticleDepthBias portDepthBias(*this, x28_loadedGenDesc->xPortDepthBias,
+                                       x28_loadedGenDesc->xPortDepthBiasUsesDepthRange);
 #endif
 
   x274_backupLightActive = CGraphics::GetLightMask();

@@ -289,6 +289,9 @@ public:
   // port-only PDBS: Remastered's DBIS (desc+0xd4), the depth bias in world units, negative toward the
   // camera (CPortParticleDepthBias). 0 = none.
   float xPortDepthBias = 0.f;
+  // port-only PDBO: Remastered's DBSO 0 (desc+0x6b bit 2, on by default), the depth bias no longer
+  // scales by the depth range's span (CParticleSceneNode::ConstructDepthBias 0x2b1004).
+  bool xPortDepthBiasUsesDepthRange = true;
   // port-only PSBS: Remastered's SBIS (desc+0xd8, GetSortBias 0x288248), world units added to the
   // translucent sort depth (SortFarToNear 0x1f3000); positive sorts farther. 0 = none.
   float xPortSortBias = 0.f;

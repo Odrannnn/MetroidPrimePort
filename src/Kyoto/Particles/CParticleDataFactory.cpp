@@ -1091,6 +1091,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortDepthBias = in.ReadFloat();
       break;
+    // Port-only: Remastered's DBSO 0 (xPortDepthBiasUsesDepthRange).
+    case SBIG('PDBO'):
+      GetClassID(in);
+      desc->xPortDepthBiasUsesDepthRange = in.ReadLong() != 0;
+      break;
     // Port-only: Remastered's SBIS (xPortSortBias), a constant real.
     case SBIG('PSBS'):
       GetClassID(in);

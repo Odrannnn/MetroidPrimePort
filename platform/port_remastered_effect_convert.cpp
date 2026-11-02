@@ -4854,6 +4854,7 @@ public:
     int spreadMode = -1;    // ITPE 1, port-only PITP with EMRV's mode word (-1 none)
     bool itpe = false;      // the node has an ITPE of its own
     uint32_t depthBias = 0;  // DBIS as float bits (nonzero), port-only PDBS
+    bool depthBiasUsesDepthRange = true;  // DBSO (desc+0x6b bit 2), port-only PDBO when false
     uint32_t sortBias = 0;   // SBIS as float bits (nonzero), port-only PSBS
     const EffectProperty* mover = nullptr;
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
@@ -5370,6 +5371,19 @@ public:
         s.result.dropped.push_back("DBIS: not a constant");
       } else if ((bits & 0x7fffffffu) != 0) {
         s.depthBias = bits;
+      }
+      return true;
+    }
+    // DBSO (CreateGPSM 0x258f18, GetBool) is desc+0x6b bit 2, on by default (CParticleDescription
+    // ctor 0x288314): ConstructDepthBias scales the DBIS shift by the device depth range's span
+    // when it is set, by 1 when it is clear. CreateSWSH does not read it, so a swoosh keeps the
+    // default. Port-only PDBO, written only when DBSO turns it off.
+    if (s.part && fourcc == F("DBSO")) {
+      uint32_t value = 0;
+      if (SmallInteger(property, value) && value <= 1u) {
+        s.depthBiasUsesDepthRange = value != 0;
+      } else {
+        s.result.dropped.push_back("DBSO: not a constant");
       }
       return true;
     }
@@ -6491,6 +6505,11 @@ public:
       AppendBE32(s.out, F("CNST"));
       AppendBE32(s.out, s.depthBias);
     }
+    if (s.depthBias != 0 && !s.depthBiasUsesDepthRange) {
+      AppendBE32(s.out, F("PDBO"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, 0u);
+    }
     if (s.sortBias != 0) {
       AppendBE32(s.out, F("PSBS"));
       AppendBE32(s.out, F("CNST"));
@@ -7287,7 +7306,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
                          fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PLON") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
-                         fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("POSD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
+                         fourcc == F("PITP") || fourcc == F("PDBO") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("POSD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||
                          (fourcc >= F("VGD1") && fourcc <= F("VGD4")) ||
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||

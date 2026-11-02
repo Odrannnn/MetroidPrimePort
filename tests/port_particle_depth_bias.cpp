@@ -28,6 +28,13 @@ void TestBias() {
   // Orthographic (m32 0, m33 1): ndc = m23 - m22 * d, shift -0.1, so m22 = -0.02 + 0.1.
   const float ortho = PortParticleMath::DepthBiasedProjM22(-0.02f, -1.02f, 0.f, 1.f, 10.f, -5.f);
   CHECK_MSG(Near(ortho, 0.08), "orthographic");
+  // DBSO: the shift times the depth range's span, -0.101 * 0.5.
+  CHECK_MSG(Near(PortParticleMath::DepthBiasedProjM22(m22, m23, -1.f, 0.f, 10.f, -5.f, 0.5f), -0.01 + 0.0505),
+            "range span scales the shift");
+  // Retail's world and gun ranges take Remastered's (0.0390625, 1) and (0.0097656, 0.0386719).
+  CHECK_MSG(Near(PortParticleMath::RemasteredDepthRangeSpan(0.125f, 1.f), 0.9609375), "world span");
+  CHECK_MSG(Near(PortParticleMath::RemasteredDepthRangeSpan(1.f / 64.f, 1.f / 32.f), 0.0289063, 1e-6), "gun span");
+  CHECK_MSG(Near(PortParticleMath::RemasteredDepthRangeSpan(0.f, 1.f / 512.f), 1.0 / 512.0), "other ranges keep theirs");
 }
 
 }  // namespace

@@ -316,7 +316,7 @@ public:
 #ifdef TARGET_PC
   // Port: reload the projection with Remastered's particle depth bias (PortParticleMath::DepthBiasedProjM22);
   // bias 0 reloads it unbiased.
-  static void PortSetProjectionDepthBias(float bias, float depth);
+  static void PortSetProjectionDepthBias(float bias, float depth, float rangeSpan);
 #endif
   static void SetDefaultVtxAttrFmt();
   static CMatrix4f GetPerspectiveProjectionMatrix();
