@@ -1,4 +1,5 @@
 #include "MetroidPrime/CEntity.hpp"
+#include "port_room_effects.h"
 #include "port_room_geo.h"
 
 rstl::vector< SConnection > CEntity::NullConnectionList;
@@ -46,13 +47,17 @@ void CEntity::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid, CStateMan
 void CEntity::SendScriptMsgs(EScriptObjectState state, CStateManager& mgr,
                              EScriptObjectMessage skipMsg) {
   // Remastered scenery a mod draws in place of the room's own shows and hides on states.
-  PortRoomGeo::OnScriptState(mgr, GetEditorId().value, state);
+  const uint32_t editorId = GetEditorId().value;
+  const TUniqueId uid = GetUniqueId();
+  PortRoomGeo::OnScriptState(mgr, editorId, state);
   rstl::vector< SConnection >::const_iterator it = x20_conns.begin();
   for (; it != x20_conns.end(); ++it) {
     if (it->x0_state == state && it->x4_msg != skipMsg) {
       mgr.SendScriptMsg(GetUniqueId(), it->x8_objId, it->x4_msg, state);
     }
   }
+  // Then the Remastered effects a mod adds that this state drives, as more connections.
+  PortRoomEffects::OnScriptState(mgr, uid.value, editorId, state);
 }
 
 void CEntity::PreThink(float dt, CStateManager& mgr) {}

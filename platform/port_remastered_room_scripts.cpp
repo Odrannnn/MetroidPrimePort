@@ -118,6 +118,15 @@ int RetailState(uint32_t type, uint32_t event) {
   return it == table.end() ? -1 : it->second;
 }
 
+// EffectMP1's own actions (CEffectMP1GOC::TranslateScriptActionToMessage 0xd9c9e4): retail
+// Activate, Deactivate and ToggleActive.
+uint8_t EffectAct(uint32_t action) {
+  return action == kActionEffectActivate     ? PortRoomGeo::kShow
+         : action == kActionEffectDeactivate ? PortRoomGeo::kHide
+         : action == kActionEffectToggle     ? PortRoomGeo::kToggle
+                                             : 0;
+}
+
 // What a connection's action does to the geometry or hint it reaches.
 uint8_t LinkAct(uint32_t action) {
   return action == kActionActivate || action == kActionIncrement || action == kActionEntityActivate ||
@@ -853,6 +862,12 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     ents.push_back(e);
   }
   result.entities = ents.size();
+  std::set<int> effectEntities;  // the EffectMP1 actors, whatever component comes first
+  for (const Component* c : room.Of(kEffectMP1)) {
+    if (c->entity >= 0) {
+      effectEntities.insert(c->entity);
+    }
+  }
   auto valid = [](const ScriptObject& o) {
     return o.hasPos && std::isfinite(o.pos[0]) && std::isfinite(o.pos[1]) && std::isfinite(o.pos[2]) &&
            std::fabs(o.pos[0]) < 1e5 && std::fabs(o.pos[1]) < 1e5 && std::fabs(o.pos[2]) < 1e5;
@@ -1435,7 +1450,16 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     const bool driverStart = driverStarts.count(e.entity) != 0;
     // The show and hide of an actor a driver fades come through the script's longest chains.
     const int maxDepth = driverStart || result.drivers.count(e.entity) != 0 ? 8 : 6;
+    // An EffectMP1 is driven only where every connection into it is traced: its own actions
+    // too (CEffectMP1GOC::TranslateScriptActionToMessage 0xd9c9e4), and none left out.
+    const bool effect = effectEntities.count(e.entity) != 0;
     const auto act = [&](uint32_t action) -> uint8_t {
+      if (effect) {
+        const uint8_t effectAct = EffectAct(action);
+        if (effectAct != 0) {
+          return effectAct;
+        }
+      }
       if (driverStart && action == kActionDriverStart) {
         return PortRoomGeo::kShow;
       }
@@ -1496,6 +1520,9 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         if (sender.type == kTemplateManager || sender.type == kDebugOptions || isScriptObject(c->sender) ||
             (sender.type == kActorKeyframeMP1 && IsKeyframePlay(c->action)) ||
             (depth > 0 && !PassFires(via, c->action))) {
+          if (effect && sender.type != kDebugOptions) {
+            miss(sender, *c, depth > 0 ? action : c->action, depth);
+          }
           continue;
         }
         const int s = entityOf(int(c->sender));
@@ -1510,10 +1537,11 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           const uint8_t linkAct = follows ? static_cast<uint8_t>(PortRoomGeo::kFollow) : act(first);
           if (linkAct != 0 && state < 256) {
             links.push_back({objects[size_t(match[size_t(s)])].id, uint8_t(state), linkAct, delay});
+          } else if (effect) {
+            miss(sender, *c, first, depth);
           }
         } else if (IsPass(type) && sender.entity >= 0 && depth < maxDepth &&
                    std::find(seen.begin(), seen.end(), sender.entity) == seen.end()) {
-          seen.push_back(sender.entity);
           float wait = 0.f;
           if (type == kRetailTimer) {
             const auto f = room.Flat(sender);
@@ -1522,7 +1550,28 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
               wait = ReadLEFloat(room.Bytes(prop->second));
               wait = std::isfinite(wait) ? std::clamp(wait, 0.f, 600.f) : 0.f;
             }
+            // An effect's drive waits as one restarting delay per link: exact only for a timer
+            // that a single ResetAndStart starts, with neither of its flags (SLdrTimerMP1::Load
+            // 0xf36d14: autostart +0x11, +0x10) set; Start (14) does not restart a running timer.
+            if (effect) {
+              const auto flag = [&](uint32_t id) {
+                const auto it = f.find(id);
+                return it != f.end() && it->second.size >= 1 && room.Bytes(it->second)[0] != 0;
+              };
+              const auto feeds = incoming.find(sender.entity);
+              size_t starts = 0;
+              for (size_t k = 0; feeds != incoming.end() && k < feeds->second.size(); ++k) {
+                starts += PassFires(kRetailTimer, feeds->second[k]->action) ? 1 : 0;
+              }
+              if (flag(kPropTimerAutostart) || flag(kPropTimerFlag10) || starts != 1 ||
+                  std::any_of(feeds->second.begin(), feeds->second.end(),
+                              [](const Connection* fc) { return fc->action == kActionTimerStart[1]; })) {
+                miss(sender, *c, first, depth);
+                continue;
+              }
+            }
           }
+          seen.push_back(sender.entity);
           walk(sender.entity, first, depth + 1, type, delay + wait);
           seen.pop_back();
         } else if (const ScriptObject* counter = hintEntities.count(e.entity) != 0 && sender.type == kCounterMP1 &&

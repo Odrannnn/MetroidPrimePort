@@ -1212,6 +1212,12 @@ void CmdFxQuery() {
       const bool alive = ent != nullptr && ent->GetEditorId().Value() == (s.eid & 0x3FFFFFF);
       Out("  %08X u%u PART %08X %s %s, %zu variable(s) set", s.eid, unsigned(s.uid), s.part,
           !alive ? "gone" : ent->GetActive() ? "active" : "inactive", s.name.c_str(), s.vars);
+      for (const auto& [d, pending] : PortRoomEffects::DrivesOf(mrea)) {
+        if ((d.target & 0x3FFFFFF) == (s.eid & 0x3FFFFFF)) {
+          Out("    driven by %08X state %u: msg %u after %.2fs%s", d.sender, unsigned(d.state), unsigned(d.message),
+              d.delay, pending != 0 ? ", pending" : "");
+        }
+      }
     }
   } else if (sub == "barrier") {
     // The Parasite Queen barrier group (port_queen_barrier.h), from each live ring controller.

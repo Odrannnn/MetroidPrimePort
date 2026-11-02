@@ -341,11 +341,12 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool actorSlots = !file.actorSlots.empty();
+  const bool drives = !file.drives.empty();
+  const bool actorSlots = drives || !file.actorSlots.empty();
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -451,6 +452,16 @@ std::vector<uint8_t> Write(const File& file) {
       PutLE32(out, a.id);
       PutLE32(out, a.slot);
       PutLE32(out, a.part);
+    }
+  }
+  if (drives) {
+    PutLE32(out, uint32_t(file.drives.size()));
+    for (const Drive& d : file.drives) {
+      PutLE32(out, d.target);
+      PutLE32(out, d.sender);
+      PutLE32(out, d.state);
+      PutLE32(out, d.message);
+      PutLEFloat(out, d.delay);
     }
   }
   return out;
@@ -753,6 +764,32 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         return false;
       }
       file.actorSlots.push_back(a);
+    }
+  }
+  if (version >= 10) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 20) {
+      error = "truncated drive list";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      Drive d;
+      uint32_t bits = 0;
+      ReadLE32(data, at, d.target);
+      ReadLE32(data, at, d.sender);
+      ReadLE32(data, at, d.state);
+      ReadLE32(data, at, d.message);
+      ReadLE32(data, at, bits);
+      std::memcpy(&d.delay, &bits, 4);
+      // Only the add-ons this file has, and only what CScriptEffect takes from a connection.
+      const bool known = std::any_of(objects.begin(), objects.end(),
+                                     [&](const LayerObject& o) { return o.id == d.target; });
+      if (!known || d.state > 0xff || (d.message != 1 && d.message != 4 && d.message != 17) ||
+          !(d.delay >= 0.f && d.delay <= kMaxDriveDelay)) {
+        error = "invalid drive " + std::to_string(i);
+        return false;
+      }
+      file.drives.push_back(d);
     }
   }
   if (at != data.size()) {

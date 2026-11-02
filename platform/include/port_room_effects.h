@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 class CStateManager;
@@ -18,8 +19,9 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 // objects the file names are not created (the effects Remastered replaced).
 //
 // The add-ons live outside the area's layer buffers, so nothing saves them: a save, a save
-// state, a memory relay and the randomizer's dumps see only the retail objects. Only effects
-// no script object talks to are added (the import counts the others).
+// state, a memory relay and the randomizer's dumps see only the retail objects. An effect a
+// script object talks to is added only when every connection into it traces back to retail
+// senders (Drive); the import counts the others.
 //
 // Their editor ids are the area's, on the retail layer they load with, with instance numbers
 // from kFirstInstance up: no retail area uses those (the import checks).
@@ -61,10 +63,13 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 9 then has u32 actor slots, then per record: u32 editor id (layer bits included),
 //   u32 slot, u32 asset (see ActorSlotEffect). Files without them are still written as
 //   version 8 or older.
+//   version 10 then has u32 drives, then per record: u32 add-on editor id, u32 sender editor id
+//   (both layer bits included), u32 state, u32 message, f32 delay (see Drive). Files without
+//   them are still written as version 9 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 9;
+constexpr uint32_t kFileVersion = 10;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -240,6 +245,19 @@ struct ActorSlotEffect {
   uint32_t part = 0;
 };
 
+// A connection into an add-on, as retail would have it on the sender: when the retail object
+// `sender` sends `state`, the add-on `target` is sent `message` (Activate, Deactivate or
+// ToggleActive), `delay` seconds later when Remastered passed it through timers retail has no
+// object for (sent again before then, the wait starts over).
+constexpr float kMaxDriveDelay = 600.f;  // seconds
+struct Drive {
+  uint32_t target = 0;
+  uint32_t sender = 0;
+  uint32_t state = 0;
+  uint32_t message = 0;
+  float delay = 0.f;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -250,6 +268,7 @@ struct File {
   std::vector<PropertyPatch> patches;
   std::vector<Steam> steams;
   std::vector<ActorSlotEffect> actorSlots;
+  std::vector<Drive> drives;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -312,9 +331,17 @@ struct Spawned {
   std::string name;
   size_t vars;  // particle variables it sets
 };
+// From CEntity::SendScriptMsgs, after the sender's own connections: the add-ons of the
+// sender's area its state drives get their messages (or wait their delay).
+void OnScriptState(CStateManager& mgr, uint16_t senderUid, uint32_t editorId, int state);
+// Delivers the delayed messages that are due; drops those of areas no longer loaded.
+void Think(CStateManager& mgr, float dt);
+
 // The add-ons created for an area, as loaded (the console checks they still live).
 std::vector<Spawned> List(uint32_t mrea);
 // The retail objects left out when the area last loaded.
 size_t SkippedCount(uint32_t mrea);
+// A loaded area's drives, with how many messages each still holds back.
+std::vector<std::pair<Drive, size_t>> DrivesOf(uint32_t mrea);
 
 }  // namespace PortRoomEffects

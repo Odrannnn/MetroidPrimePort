@@ -288,6 +288,26 @@ std::set<int> ConnectedEntities(const Room& room) {
   return out;
 }
 
+std::set<int> DrivableEntities(const Room& room) {
+  const std::vector<Component>& comps = room.Components();
+  std::set<int> connected, refused;
+  for (const Connection& c : ReadConnections(room)) {
+    const int t = room.ByGuid(c.target);
+    if (t < 0) {
+      continue;
+    }
+    const int entity = comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity;
+    connected.insert(entity);
+    if (comps[c.sender].type == kSpecialFunction) {
+      refused.insert(entity);
+    }
+  }
+  std::set<int> out;
+  std::set_difference(connected.begin(), connected.end(), refused.begin(), refused.end(),
+                      std::inserter(out, out.end()));
+  return out;
+}
+
 Id16 EffectGenpOf(const Room& room, size_t component) {
   Id16 genp{}, value{};
   if (Property16(room, room.Flat(room.Components()[component]), kPropGenp, value)) {
@@ -982,6 +1002,9 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   std::vector<Vec3> added;
   std::set<int> seen;
   size_t connectedCount = 0, noPart = 0, noLayer = 0, kept = 0, keptOwn = 0, overridden = 0, full = 0, badVars = 0;
+  size_t drivenCount = 0;  // connected ones added, with drives
+  std::vector<PortRoomEffects::Drive> allDrives;
+  const std::set<int> drivable = DrivableEntities(room);
   size_t reserved = 0;  // the barrier's actors, left to it
   for (const Component* c : effects) {
     if (c->entity < 0 || !seen.insert(c->entity).second) {
@@ -1064,9 +1087,29 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       ++overridden;
       continue;
     }
+    // A connected one is added only where every connection into it traced to retail states
+    // that show, hide or toggle it: those become its drives.
+    std::vector<PortRoomEffects::Drive> drives;
     if (connected.count(c->entity) != 0) {
-      ++connectedCount;
-      continue;
+      const auto links = scripts.links.find(c->entity);
+      const bool traced = drivable.count(c->entity) != 0 && links != scripts.links.end() &&
+                          scripts.unresolved.count(c->entity) == 0 &&
+                          std::all_of(links->second.begin(), links->second.end(), [](const PortRoomGeo::Link& l) {
+                            return (l.action == PortRoomGeo::kShow || l.action == PortRoomGeo::kHide ||
+                                    l.action == PortRoomGeo::kToggle) &&
+                                   l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay;
+                          });
+      if (!traced) {
+        ++connectedCount;
+        continue;
+      }
+      for (const PortRoomGeo::Link& l : links->second) {
+        drives.push_back({0, l.sender, l.state,
+                          l.action == PortRoomGeo::kShow   ? 1u    // kSM_Activate
+                          : l.action == PortRoomGeo::kHide ? 4u    // kSM_Deactivate
+                                                           : 17u,  // kSM_ToggleActive
+                          l.delay});
+      }
     }
     if (part == 0) {
       ++noPart;
@@ -1093,6 +1136,11 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       continue;
     }
     e.id = PortRoomEffects::AddOnId(retailLayer, areaBits, uint32_t(added.size()));
+    for (PortRoomEffects::Drive& d : drives) {
+      d.target = e.id;
+      allDrives.push_back(d);
+    }
+    drivenCount += drives.empty() ? 0 : 1;
     PortRoomEffects::Layer& layer = layers[retailLayer];
     layer.layer = retailLayer;
     PortRoomEffects::AppendEffect(e, layer.objects);
@@ -1385,9 +1433,9 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   }
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
-                "Remastered's effect, %zu connected and left out, %zu matched a retail object (%zu of them still on "
+                "Remastered's effect, %zu connected and left out (%zu more added with drives), %zu matched a retail object (%zu of them still on "
                 "the retail PART), %zu without a PART, %zu on an unknown layer%s%s%s%s%s",
-                name.c_str(), added.size(), replacedNear, overridden, connectedCount, kept + keptOwn + overridden,
+                name.c_str(), added.size(), replacedNear, overridden, connectedCount, drivenCount, kept + keptOwn + overridden,
                 keptOwn, noPart, noLayer, full != 0 ? ", the id range is full" : "",
                 badVars != 0 ? ", unreadable particle variables" : "", barrierNote, patternedNote, steamNote);
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
@@ -1405,6 +1453,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   file.patches = std::move(patches);
   file.steams = std::move(steams);
   file.actorSlots = std::move(actorSlots);
+  file.drives = std::move(allDrives);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;
@@ -1450,8 +1499,9 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
 std::vector<std::array<uint8_t, 16>> RoomEffectGenpsOf(const Room& room) {
   std::vector<std::array<uint8_t, 16>> out;
   const std::set<int> connected = ConnectedEntities(room);
+  const std::set<int> drivable = DrivableEntities(room);
   for (const Component* c : room.Of(kEffectMP1)) {
-    if (c->entity < 0 || connected.count(c->entity) != 0) {
+    if (c->entity < 0 || (connected.count(c->entity) != 0 && drivable.count(c->entity) == 0)) {
       continue;
     }
     const auto f = room.Flat(*c);

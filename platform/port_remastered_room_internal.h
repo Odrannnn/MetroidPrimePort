@@ -656,7 +656,8 @@ constexpr uint32_t kPropIceDarkeningFactor = 0x160e1c00;
 constexpr uint32_t kPropIceDarkenEveryFrame = 0x35a2afcb;
 constexpr uint32_t kTimerMP1 = 0x25c6d2a3;
 constexpr uint32_t kPropTimerAutostart = 0xd0ecc8ea;
-constexpr uint32_t kActionTimerStart[2] = {0xd63b8f04, 0x55193b90};
+constexpr uint32_t kActionTimerStart[2] = {0xd63b8f04, 0x55193b90};  // ResetAndStart, Start
+constexpr uint32_t kPropTimerFlag10 = 0x79f25d24;                     // boolean +0x10
 constexpr uint32_t kScriptRelayMP1 = 0x1b78f9a4;
 constexpr uint32_t kActionScriptRelayFire = 0x379d362e;
 // A trigger's own Activate / Deactivate (CTriggerMP1GOC::TranslateScriptActionToMessage 0xf3e434:
@@ -848,15 +849,21 @@ struct SceneryScripts {
 
 // Remastered's own particle effect actors (port_remastered_room_effects.cpp).
 constexpr uint32_t kEffectMP1 = 0xb421cdcb;
+constexpr uint32_t kActionEffectActivate = 0xdbe5cb30;
+constexpr uint32_t kActionEffectDeactivate = 0x7dcfa087;
+constexpr uint32_t kActionEffectToggle = 0xda662fc8;
 // The room's EffectMP1 actors the disc has no object for, as "<MREA id>.roomfx"
 // (port_room_effects.h); a line for the log, empty when there is nothing to say.
 std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t mrea, const Area& area,
                              const SceneryScripts& scripts, const RoomIO& io);
-// The GENPs (in a pak's byte order) those actors are for: the room's unconnected ones, and the
-// barrier's ten when its graph validates.
+// The GENPs (in a pak's byte order) those actors are for: the room's unconnected ones, the
+// connected ones that may be driven, and the barrier's ten when its graph validates.
 std::vector<std::array<uint8_t, 16>> RoomEffectGenpsOf(const Room& room);
 // The entities (their Entity components) that some connection in the room reaches.
 std::set<int> ConnectedEntities(const Room& room);
+// Those of them no SpecialFunctionMP1 connects to: what such a function sends is its own
+// (the barrier controller runs its rings itself), so only these get their links as drives.
+std::set<int> DrivableEntities(const Room& room);
 
 // The Parasite Queen barrier's Remastered graph, which the import validates as a whole before
 // it treats the ten effects as anything but connected actors (port_queen_barrier_assets.h has

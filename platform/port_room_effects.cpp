@@ -6,7 +6,9 @@
 #include "port_mods.h"
 
 #include "Kyoto/Streams/CMemoryInStream.hpp"
+#include "MetroidPrime/CGameArea.hpp"
 #include "MetroidPrime/CStateManager.hpp"
+#include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptEffect.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptSpecialFunction.hpp"
 #include "MetroidPrime/TCastTo.hpp"
@@ -30,6 +32,23 @@ std::map<uint32_t, std::vector<Spawned>> sSpawned;  // by MREA
 std::map<uint32_t, size_t> sSkipped;                // by MREA
 size_t sPatched = 0;                                // property patches applied, this area
 
+// The drives of each loaded area, with the messages their timers still hold back.
+struct Pending {
+  float due;
+  size_t drive;
+};
+struct Driven {
+  std::vector<Drive> drives;
+  std::vector<Pending> pending;
+  float clock = 0.f;
+};
+std::map<uint32_t, Driven> sDriven;  // by MREA
+
+void Deliver(CStateManager& mgr, TUniqueId sender, const Drive& d) {
+  mgr.SendScriptMsg(sender, TEditorId(d.target), static_cast<EScriptObjectMessage>(d.message),
+                    static_cast<EScriptObjectState>(d.state));
+}
+
 }  // namespace
 
 bool Enabled() { return port::EnvFlag("MP_REMASTERED_EFFECT_ACTORS", true); }
@@ -42,6 +61,7 @@ void BeginArea(uint32_t mrea) {
   sSkips.clear();
   sSpawned.erase(mrea);
   sSkipped.erase(mrea);
+  sDriven.erase(mrea);
   if (!Enabled()) {
     return;
   }
@@ -59,6 +79,9 @@ void BeginArea(uint32_t mrea) {
   }
   for (uint32_t id : sFile.skips) {
     sSkips.insert(id & 0x3FFFFFF);
+  }
+  if (!sFile.drives.empty()) {
+    sDriven[mrea].drives = sFile.drives;
   }
 }
 
@@ -200,6 +223,87 @@ void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_
       }
     }
   }
+}
+
+void OnScriptState(CStateManager& mgr, uint16_t senderUid, uint32_t editorId, int state) {
+  if (sDriven.empty()) {
+    return;
+  }
+  // As PortRoomGeo::OnScriptState: the sender's area, made after it counts as loaded.
+  const TAreaId areaId(int((editorId >> 16) & 0x3ff));
+  const CWorld* const world = mgr.GetWorld();
+  if (world == nullptr || areaId.Value() >= world->GetNumAreas() || !world->GetArea(areaId)->IsLoaded()) {
+    return;
+  }
+  const auto found = sDriven.find(world->GetArea(areaId)->GetAreaAssetId());
+  if (found == sDriven.end()) {
+    return;
+  }
+  Driven& area = found->second;
+  const uint32_t sender = editorId & 0x3ffffff;
+  for (size_t i = 0; i < area.drives.size(); ++i) {
+    const Drive& d = area.drives[i];
+    if ((d.sender & 0x3ffffff) != sender || int(d.state) != state) {
+      continue;
+    }
+    if (d.delay > 0.f) {
+      // The ResetAndStart timers it stands for, sent again before they are up: started over.
+      std::erase_if(area.pending, [&](const Pending& p) { return p.drive == i; });
+      area.pending.push_back({area.clock + d.delay, i});
+      continue;
+    }
+    TUniqueId uid;
+    uid.value = senderUid;
+    Deliver(mgr, uid, d);
+  }
+}
+
+void Think(CStateManager& mgr, float dt) {
+  if (sDriven.empty()) {
+    return;
+  }
+  const CWorld* const world = mgr.GetWorld();
+  std::set<uint32_t> loaded;
+  for (int i = 0; world != nullptr && i < world->GetNumAreas(); ++i) {
+    const CGameArea* const area = world->GetArea(TAreaId(i));
+    if (area->IsLoaded()) {
+      loaded.insert(area->GetAreaAssetId());
+    }
+  }
+  for (auto it = sDriven.begin(); it != sDriven.end();) {
+    if (loaded.count(it->first) == 0) {
+      it = sDriven.erase(it);
+      continue;
+    }
+    Driven& area = it->second;
+    area.clock += dt;
+    // In the order they fall due.
+    while (!area.pending.empty()) {
+      const auto next = std::min_element(area.pending.begin(), area.pending.end(),
+                                         [](const Pending& a, const Pending& b) { return a.due < b.due; });
+      if (next->due > area.clock) {
+        break;
+      }
+      const size_t drive = next->drive;
+      area.pending.erase(next);
+      Deliver(mgr, kInvalidUniqueId, area.drives[drive]);
+    }
+    ++it;
+  }
+}
+
+std::vector<std::pair<Drive, size_t>> DrivesOf(uint32_t mrea) {
+  std::vector<std::pair<Drive, size_t>> out;
+  const auto found = sDriven.find(mrea);
+  if (found == sDriven.end()) {
+    return out;
+  }
+  for (size_t i = 0; i < found->second.drives.size(); ++i) {
+    const size_t pending = size_t(std::count_if(found->second.pending.begin(), found->second.pending.end(),
+                                                [i](const Pending& p) { return p.drive == i; }));
+    out.emplace_back(found->second.drives[i], pending);
+  }
+  return out;
 }
 
 std::vector<Spawned> List(uint32_t mrea) {

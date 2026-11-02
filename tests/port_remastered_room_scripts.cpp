@@ -465,7 +465,7 @@ void TestRoomEffects() {
   };
   const std::string line = WriteRoomEffects("room", p.room, area.mrea, area, scripts, io);
   CHECK_MSG(line == "  room: 1 effect actor(s) added, 1 retail effect(s) replaced, 1 retail effect(s) take "
-                    "Remastered's effect, 1 connected and left out, 2 matched a retail object (1 of them still on the "
+                    "Remastered's effect, 1 connected and left out (0 more added with drives), 2 matched a retail object (1 of them still on the "
                     "retail PART), 2 without a PART, 1 on an unknown layer",
             line.c_str());
   REQUIRE_MSG(written.size() == 1 && written.count("1A2B3C4D.roomfx") == 1, "one .roomfx, named by the MREA");
@@ -849,9 +849,20 @@ std::string WriteBarrier(BarrierFixture& b) {
   return WriteRoomEffects("07_Intro_Reactor", p.room, b.area.mrea, b.area, b.scripts, io);
 }
 
+// The barrier's ring GENPs admitted for conversion, in order (the relay's own effect, which may
+// be driven, is admitted too and left out here).
 std::vector<std::array<uint8_t, 16>> BarrierGenps(const BarrierFixture& b) {
   const Parsed p(b.room);
-  return RoomEffectGenpsOf(p.room);
+  std::vector<std::array<uint8_t, 16>> out;
+  for (const auto& genp : RoomEffectGenpsOf(p.room)) {
+    for (const auto& ring : PortQueenBarrier::kRings) {
+      if (genp == SwapUuid(Stored(ring.refraction).data()) || genp == SwapUuid(Stored(ring.glow).data())) {
+        out.push_back(genp);
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 // The group in the .roomfx the fixture wrote, or null when it wrote none.

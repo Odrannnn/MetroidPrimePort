@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 9);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 10);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -401,6 +401,47 @@ void TestFileActorSlots() {
   bad[bad.size() - 8] = uint8_t(PortRoomEffects::kActorSlots);  // the last record's slot
   CHECK(!PortRoomEffects::Parse(bad, out, error));
   in.actorSlots.clear();
+  CHECK(PortRoomEffects::Write(in)[4] == 4);
+}
+
+// Version 10 appends the drives of connected add-ons: each names one of the file's own objects,
+// a retail sender and state, an Activate, Deactivate or ToggleActive, and a delay.
+void TestFileDrives() {
+  File in;
+  PortRoomEffects::Layer layer;
+  layer.layer = 1;
+  PortRoomEffects::AppendEffect(MakeEffect(1, 0), layer.objects);
+  layer.count = 1;
+  in.layers.push_back(layer);
+  const uint32_t target = MakeEffect(1, 0).id;
+  in.drives.push_back({target, 0x041A0010, 0, 1, 0.f});
+  in.drives.push_back({target, 0x041A0011, 9, 4, 2.5f});
+  in.drives.push_back({target, 0x041A0012, 5, 17, 0.f});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 10);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.drives.size() == 3 && out.layers.size() == 1);
+  CHECK(out.drives[1].target == target && out.drives[1].sender == 0x041A0011 && out.drives[1].state == 9 &&
+        out.drives[1].message == 4 && out.drives[1].delay == 2.5f);
+  CHECK(out.drives[2].message == 17);
+  for (size_t cut = 1; cut <= 20; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  const auto refused = [&](PortRoomEffects::Drive d, const char* what) {
+    File f = in;
+    f.drives = {d};
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  refused({target + 1, 0x041A0010, 0, 1, 0.f}, "a target not in the file");
+  refused({target, 0x041A0010, 0x100, 1, 0.f}, "a state past 0xff");
+  refused({target, 0x041A0010, 0, 11, 0.f}, "another message");
+  refused({target, 0x041A0010, 0, 1, -1.f}, "a negative delay");
+  refused({target, 0x041A0010, 0, 1, PortRoomEffects::kMaxDriveDelay * 2}, "a delay past the cap");
+  in.drives.clear();
   CHECK(PortRoomEffects::Write(in)[4] == 4);
 }
 
@@ -737,6 +778,7 @@ int main() {
   TestFilePatches();
   TestFileSteams();
   TestFileActorSlots();
+  TestFileDrives();
   TestFileBarriers();
   TestExternalVariables();
   uint32_t id = 0;
