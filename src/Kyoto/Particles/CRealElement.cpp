@@ -391,8 +391,8 @@ bool CREDistanceFromCameraBlend::GetValue(int frame, float& valOut) const {
       }
     }
   }
-  // The view matrix is already camera-to-world (CGraphics::SetViewPointMatrix).
-  const CTransform4f& camera = CGraphics::GetViewMatrix();
+  // GetCameraTransform 0x27b304: the game camera, camera-to-world like the view matrix.
+  const CTransform4f& camera = CParticleGlobals::PortCameraTransform();
   const float d = CVector3f::Dot(pos - camera.GetTranslation(), camera.GetForward());
   valOut = DistanceBlend(d, a, b);
   return false;

@@ -135,6 +135,13 @@ public:
   // raw 32-bit hash it comes from.
   static u32 PortIrndBits(const CElementGen::CParticle* particle, const void* element);
   static float PortIrndUnit(const CElementGen::CParticle* particle, const void* element);
+  // port-only: Remastered's GetCameraTransform 0x27b304, the game camera (camera-to-world).
+  // CDisplayManager::Update 0xafded0 writes once per frame and the camera elements (DFCS/DFCP,
+  // CMPS, CPSS, CMRT) read at update and draw alike. The view matrix is no stand-in at update: it
+  // holds whatever the last draw left (a HUD or gun view). With no world (front end) it is unset
+  // and they read the view matrix.
+  static void PortSetCameraTransform(const CTransform4f* xf);
+  static const CTransform4f& PortCameraTransform();
 #endif
 };
 

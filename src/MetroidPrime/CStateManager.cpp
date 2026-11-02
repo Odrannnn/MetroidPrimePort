@@ -130,6 +130,7 @@
 #include "Kyoto/Math/CUnitVector3f.hpp"
 #include "Kyoto/Streams/CMemoryInStream.hpp"
 #include "Kyoto/Particles/CParticleElectric.hpp"
+#include "Kyoto/Particles/CParticleGlobals.hpp"
 #include "MetaRender/CCubeRenderer.hpp"
 #include "Weapons/CDecal.hpp"
 #include "WorldFormat/CPVSAreaSet.hpp"
@@ -770,6 +771,7 @@ CStateManager::~CStateManager() {
   if (PortDebug::StateManager() == this) {
     PortDebug::SetStateManager(nullptr);
   }
+  CParticleGlobals::PortSetCameraTransform(nullptr);
   if (gpGameState != nullptr) {
     PortLiveSplit::GameSessionEnd(gpGameState->GetTotalPlayTime());
   }
@@ -2915,6 +2917,8 @@ void CStateManager::PreRender() {
   const CTransform4f curCamXf =
       PortFreeCam::View(x870_cameraManager->GetCurrentCameraTransform(*this));
 #ifdef TARGET_PC
+  // CDisplayManager::Update 0xafded0: the camera the particle elements read, once per frame.
+  CParticleGlobals::PortSetCameraTransform(&curCamXf);
   const float curRenderFov = PortFreeCam::PresentedFovOverride() > 0.f
                                  ? CGameCamera::VertPlusFov(PortFreeCam::PresentedFovOverride(), curCam.GetAspectRatio())
                                  : curCam.GetRenderFov();

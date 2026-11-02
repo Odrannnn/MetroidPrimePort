@@ -578,15 +578,15 @@ bool CVEPortSystemVector::GetValue(int, CVector3f& valOut) const {
   } break;
   case 'CMRT': {
     // CERotationFromCamera 0x29d180: FromMatrix of GetCameraTransform's camera-to-world matrix
-    // (the view matrix), as EXTR in Remastered's particle space.
-    const CQuaternion q = CQuaternion::FromMatrix(CGraphics::GetViewMatrix());
+    // (the game camera), as EXTR in Remastered's particle space.
+    const CQuaternion q = CQuaternion::FromMatrix(CParticleGlobals::PortCameraTransform());
     valOut = EulerDegreesFromQuaternion(
         CQuaternion(q.GetScalar(), CVector3f(-q.AxisX(), q.AxisZ(), q.AxisY())));
   } break;
   case 'CMPS':
-    // CVECameraPositionInWorldSpace 0x2a23ec: GetCameraTransform 0x27b304's translation; the view
-    // matrix is camera-to-world.
-    valOut = CGraphics::GetViewMatrix().GetTranslation();
+    // CVECameraPositionInWorldSpace 0x2a23ec: GetCameraTransform 0x27b304's translation (the
+    // game camera, camera-to-world).
+    valOut = CParticleGlobals::PortCameraTransform().GetTranslation();
     break;
   default: {
     // CPSS: CVECameraPositionInSystemSpace 0x2a24fc, the world camera position taken into the
@@ -595,8 +595,8 @@ bool CVEPortSystemVector::GetValue(int, CVector3f& valOut) const {
     CQuaternion q;
     gen.PortGlobalFrame(t, q, s);
     valOut = PortParticleMath::CameraPositionInSystemSpace(
-        CGraphics::GetViewMatrix().GetTranslation(), t, q.GetScalar(), q.AxisX(), q.AxisY(),
-        q.AxisZ(), s);
+        CParticleGlobals::PortCameraTransform().GetTranslation(), t, q.GetScalar(), q.AxisX(),
+        q.AxisY(), q.AxisZ(), s);
   } break;
   }
   return false;
@@ -920,8 +920,8 @@ bool CVEPortRotateVector::GetValue(int frame, CVector3f& valOut) const {
   } break;
   case 'CMRT': {
     // CMRT: CERotationFromCamera 0x29d180, CQuaternion::FromMatrix of the camera transform
-    // (CVECameraPositionInWorldSpace's matrix, the view matrix), in Remastered's space.
-    const CQuaternion r = CQuaternion::FromMatrix(CGraphics::GetViewMatrix());
+    // (CVECameraPositionInWorldSpace's matrix, the game camera), in Remastered's space.
+    const CQuaternion r = CQuaternion::FromMatrix(CParticleGlobals::PortCameraTransform());
     q = {r.GetScalar(), -r.AxisX(), r.AxisZ(), r.AxisY()};
   } break;
   default:

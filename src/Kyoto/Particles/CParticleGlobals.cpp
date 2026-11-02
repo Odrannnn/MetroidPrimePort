@@ -1,6 +1,7 @@
 #include "Kyoto/Particles/CParticleGlobals.hpp"
 
 #ifdef TARGET_PC
+#include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Particles/CPortParticleVars.hpp"
 #include "Kyoto/Streams/CInputStream.hpp"
 
@@ -48,6 +49,22 @@ const CParticleGlobals::SPortSwooshEval* CParticleGlobals::xPortSwooshEval = nul
 float CParticleGlobals::xPortSystemTween = 0.f;
 int CParticleGlobals::xPortSlot2Percentage = 0;
 float CParticleGlobals::xPortSlot2Remainder = 0.f;
+
+namespace {
+CTransform4f sPortCameraTransform(1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f);
+bool sPortCameraTransformSet = false;
+} // namespace
+
+void CParticleGlobals::PortSetCameraTransform(const CTransform4f* xf) {
+  sPortCameraTransformSet = xf != nullptr;
+  if (xf != nullptr) {
+    sPortCameraTransform = *xf;
+  }
+}
+
+const CTransform4f& CParticleGlobals::PortCameraTransform() {
+  return sPortCameraTransformSet ? sPortCameraTransform : CGraphics::GetViewMatrix();
+}
 
 namespace {
 // UpdateLifetimeTweenValues 0x24ef38 (+0x10): only the 0x1000000 cap (PSLT is min(0x1000000, ..),
