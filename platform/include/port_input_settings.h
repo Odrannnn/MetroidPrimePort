@@ -123,6 +123,7 @@ struct Settings {
   bool touchWheels = true;
   bool touchClassic = false;       // classic GameCube layout
   bool touchTwinStick = false;     // exclusive with touchClassic; classic wins on load
+  bool touchFlickStick = false;    // the twin-stick layout's right stick as Flick Stick
   bool touchVisorTapScan = false;
   // Read from the Android UI thread.
   std::atomic< float > touchSideMargin{kTouchSideMarginDefault};

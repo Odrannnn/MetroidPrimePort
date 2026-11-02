@@ -155,7 +155,10 @@
   turns the view by the same angle, small rotations smoothed (fully below
   180 deg/s, none above 360 deg/s); it flicks again once let go below 75%. Only
   yaw: nothing aims up and down without gyro aim, which F1 warns about, and the
-  stick speed settings do not apply (F1 and the pause menu hide them). A pad's stick only, not the touch overlay's.
+  stick speed settings do not apply (F1 and the pause menu hide them). The
+  touch overlay's twin-stick layout has its own switch,
+  `MP_TOUCH_FLICK_STICK=1` (Controls > Touch & gyro "Flick stick" under Layout,
+  persisted as `touch_flick_stick`, off by default), used while touch is active.
   Off while a radial menu or a lock-on with free aim takes the stick; under
   pointer aim it flicks only while the gyro drives the aim, and otherwise moves
   the pointer as before.

@@ -85,6 +85,7 @@
 {"Controls", "Touch & gyro", "Touch controls", "Turbo fire button", "turbo rapid fire touch button"},
 {"Controls", "Touch & gyro", "Touch controls", "Floating left stick", "floating stick touch move"},
 {"Controls", "Touch & gyro", "Touch controls", "Layout", "touch layout presets gamecube classic beam wheel"},
+{"Controls", "Touch & gyro", "Touch controls", "Flick stick", "flick stick touch twin right stick snap turn gyro"},
 {"Controls", "Touch & gyro", "Touch controls", "Touch aim", "touch look camera finger drag"},
 {"Controls", "Touch & gyro", "Touch controls", "Tap minimap for map", "minimap map touch tap"},
 {"Controls", "Touch & gyro", "Touch controls", "Beam and visor wheels", "beam visor wheel touch d-pad"},

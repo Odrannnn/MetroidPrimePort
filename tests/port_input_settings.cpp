@@ -48,6 +48,10 @@ int main() {
   REQUIRE_MSG(!PortInput::Settings{}.flickStick, "flick_stick defaults off");
   REQUIRE_MSG(ApplySetting("flick_stick", "1") && Get().flickStick, "flick_stick");
   ApplySetting("flick_stick", "0");
+  REQUIRE_MSG(!PortInput::Settings{}.touchFlickStick, "touch_flick_stick defaults off");
+  REQUIRE_MSG(ApplySetting("touch_flick_stick", "1") && Get().touchFlickStick && !Get().flickStick,
+              "touch_flick_stick is its own switch");
+  ApplySetting("touch_flick_stick", "0");
   REQUIRE_MSG(!Get().mouseSensitivitySplit && !Get().touchAimSplit && !Get().gyroSplit, "vertical splits default off");
   // 3.0 on the Source scale (issue #210), both axes.
   REQUIRE_MSG(std::fabs(PortInput::Settings{}.mouseSensitivity - PortMouse::kDefaultSensitivity) < 1e-8f &&

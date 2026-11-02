@@ -296,6 +296,25 @@ void DrawControlsKeyboardMouse() {
   ImGui::TextDisabled("Mouse buttons are bound in Controls > Remap (Keyboard & mouse).");
 }
 
+// Flick stick turns only left and right; say so when nothing aims up and down.
+static void DrawFlickStickWarning() {
+  const char* warning = nullptr;
+  if (sInput.gyroMode == 0) {
+    warning = "Flick stick only turns left and right: turn on Gyro aim (Controls > Touch & gyro) to "
+              "aim up and down.";
+  } else if (std::strcmp(GyroStatus(), "no gyro found") == 0) {
+    warning = "No gyro found: flick stick only turns left and right, so nothing aims up and down.";
+  } else if (PointerAim()) {
+    warning = "Under Pointer aim the right stick flicks only while the gyro is aiming; otherwise it "
+              "moves the pointer.";
+  }
+  if (warning != nullptr) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ThemeWarnColor());
+    ImGui::TextWrapped("%s", warning);
+    ImGui::PopStyleColor();
+  }
+}
+
 void DrawControlsController() {
   ImGui::SeparatorText("Stick aim");
   bool twinStick = sInput.twinStick;
@@ -320,21 +339,7 @@ void DrawControlsController() {
              "around); rotating the held stick turns with it. Left and right only: aim up and down with "
              "gyro aim.");
     if (sInput.flickStick) {
-      const char* warning = nullptr;
-      if (sInput.gyroMode == 0) {
-        warning = "Flick stick only turns left and right: turn on Gyro aim (Controls > Touch & gyro) to "
-                  "aim up and down.";
-      } else if (std::strcmp(GyroStatus(), "no gyro found") == 0) {
-        warning = "No gyro found: flick stick only turns left and right, so nothing aims up and down.";
-      } else if (PointerAim()) {
-        warning = "Under Pointer aim the right stick flicks only while the gyro is aiming; otherwise it "
-                  "moves the pointer.";
-      }
-      if (warning != nullptr) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ThemeWarnColor());
-        ImGui::TextWrapped("%s", warning);
-        ImGui::PopStyleColor();
-      }
+      DrawFlickStickWarning();
     }
   }
   // Shown only with twin stick on, as the pause menu's Stick Aim Speed row; flick stick has no speed.
@@ -444,6 +449,18 @@ void DrawControlsTouchGyro() {
            "Classic GameCube: adds the C-stick and D-pad.\n"
            "Twin stick (Remastered): a right stick aims; Jump, Fire, Morph, Missile, LT Lock; "
            "D-pad for visors, Y + D-pad for beams.");
+  ImGui::BeginDisabled(!sInput.touchTwinStick);
+  bool touchFlickStick = sInput.touchFlickStick;
+  if (ImGui::Checkbox("Flick stick##touch", &touchFlickStick)) {
+    SetTouchFlickStick(touchFlickStick);
+  }
+  ItemHelp("Twin stick layout: pushing the right stick to its edge turns you to face that way (right: "
+           "a quarter turn, down: turn around); circling it turns with it. Left and right only: aim up "
+           "and down with gyro aim.");
+  if (sInput.touchTwinStick && sInput.touchFlickStick) {
+    DrawFlickStickWarning();
+  }
+  ImGui::EndDisabled();
 #endif
   ImGui::BeginDisabled(!sInput.touchClassic);
   bool touchAim = sInput.touchAim;

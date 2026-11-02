@@ -154,6 +154,8 @@ bool ApplySetting(std::string_view keyView, std::string_view valueView) {
     s.touchClassic = ParseBool(value);
   } else if (key == "touch_twin_stick") {
     s.touchTwinStick = ParseBool(value);
+  } else if (key == "touch_flick_stick") {
+    s.touchFlickStick = ParseBool(value);
   } else if (key == "touch_wheels") {
     s.touchWheels = ParseBool(value);
   } else if (key == "touch_visor_tap_scan") {
@@ -403,6 +405,7 @@ void WriteAimSettings(std::ostream& out) {
   out << "touch_map_tap=" << (s.touchMapTap ? 1 : 0) << '\n';
   out << "touch_classic_gc=" << (s.touchClassic ? 1 : 0) << '\n';
   out << "touch_twin_stick=" << (s.touchTwinStick ? 1 : 0) << '\n';
+  out << "touch_flick_stick=" << (s.touchFlickStick ? 1 : 0) << '\n';
   out << "touch_wheels=" << (s.touchWheels ? 1 : 0) << '\n';
   out << "touch_visor_tap_scan=" << (s.touchVisorTapScan ? 1 : 0) << '\n';
   out << "mouse_invert_x=" << (s.mouseInvertX ? 1 : 0) << '\n';
@@ -445,6 +448,9 @@ void ApplyEnvOverrides() {
   }
   if (port::EnvFlag("MP_FLICK_STICK")) {
     s.flickStick = true;
+  }
+  if (port::EnvFlag("MP_TOUCH_FLICK_STICK")) {
+    s.touchFlickStick = true;
   }
   if (port::EnvFlag("MP_MOUSE_INVERT_X")) {
     s.mouseInvertX = true;

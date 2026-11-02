@@ -1021,9 +1021,14 @@ int StoredPadAltButton(int bit) {
 
 void SetTwinStick(bool enabled) { StoreSetting(sInput.twinStick, enabled); }
 
-bool FlickStick() { return TwinStick() && Loaded(sInput.flickStick) && !TouchActive(); }
+// Touch keeps its own switch, as it keeps its own twin-stick layout.
+bool FlickStick() {
+  return TwinStick() && (TouchActive() ? Loaded(sInput.touchFlickStick) : Loaded(sInput.flickStick));
+}
 
 void SetFlickStick(bool enabled) { StoreSetting(sInput.flickStick, enabled); }
+
+void SetTouchFlickStick(bool enabled) { StoreSetting(sInput.touchFlickStick, enabled); }
 
 int PadPreset() { return Loaded(sInput.padPreset); }
 
