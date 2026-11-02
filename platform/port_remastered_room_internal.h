@@ -986,6 +986,7 @@ constexpr uint32_t kActionGeneratorToggle = 0xab440330;
 constexpr uint32_t kPropGeneratorCount = 0x47119176;
 constexpr uint32_t kPropGeneratorNoInheritXf = 0xf142120d;
 constexpr uint32_t kPropGeneratorOffset = 0x93a36614;
+constexpr uint32_t kSoundMP1 = 0x46787ddd;
 // The room's EffectMP1 actors the disc has no object for, as "<MREA id>.roomfx"
 // (port_room_effects.h); a line for the log, empty when there is nothing to say.
 std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t mrea, const Area& area,

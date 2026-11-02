@@ -1278,6 +1278,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   std::vector<PortRoomEffects::Override> overrides;
   std::vector<Vec3> added;
   std::set<int> seen;
+  std::map<std::string, size_t> connectedWhy;  // connected ones left out, by cause
   size_t connectedCount = 0, noPart = 0, noLayer = 0, kept = 0, keptOwn = 0, overridden = 0, full = 0, badVars = 0;
   size_t drivenCount = 0;  // connected ones added, with drives
   std::vector<PortRoomEffects::Drive> allDrives;
@@ -1339,6 +1340,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     PortRoomEffects::Generator record;  // templates filled as the effect is added
     uint32_t count = 1;
     int index = -1;  // in generators, once written
+    const char* why = "its links";  // why it is not exact, for the log
   };
   std::map<int, GeneratorPlan> generatorPlans;  // by generator entity
   for (const auto& [effect, by] : scripts.generatedBy) {
@@ -1364,15 +1366,24 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                     l.action == PortRoomGeo::kHide || l.action == PortRoomGeo::kToggle) &&
                    l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && addOnSenderOk(l);
           })) {
+        plan.why = comp == nullptr ? "not a generator" : "its links";
         continue;
       }
       size_t generates = 0;
-      bool follows = false;
+      bool follows = false, sound = false;
       for (const Connection& c : conns) {
         if (comps[c.sender].type != kGeneratorMP1 || comps[c.sender].entity != g || c.event != kEventGeneratorZero) {
           continue;
         }
         generates += c.action == kActionGenerate ? 1 : 0;
+        // SetToZero (0xf442f8) always takes a SoundMP1 template over the others, as retail does.
+        const int t = room.ByGuid(c.target);
+        if (c.action == kActionGenerate && t >= 0) {
+          const int te = comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity;
+          for (const Component* s : room.Of(kSoundMP1)) {
+            sound = sound || s->entity == te;
+          }
+        }
         follows = follows || c.action == kActionGeneratorFollow;
       }
       const auto f = room.Flat(*comp);
@@ -1399,6 +1410,11 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       plan.ok = generates == 1 && !follows && plan.count >= 1 && plan.count <= PortRoomEffects::kMaxGeneratorTemplates &&
                 std::isfinite(plan.record.offset[0]) && std::isfinite(plan.record.offset[1]) &&
                 std::isfinite(plan.record.offset[2]);
+      plan.why = generates != 1 && sound ? "a sound template wins"
+                 : generates != 1        ? "not one generate"
+                 : follows      ? "it follows"
+                 : plan.ok      ? ""
+                                : "its count or offset";
     }
   }
   // The unmatched ObjectFollowLocators that move effects, as retail SpecialFunctions where exact:
@@ -1600,20 +1616,29 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     const bool followed = scripts.followedBy.count(c->entity) != 0;
     if (connected.count(c->entity) != 0) {
       const auto links = scripts.links.find(c->entity);
-      const bool traced =
-          drivable.count(c->entity) != 0 && (links != scripts.links.end() || generated || followed) &&
-          followsOk(c->entity) &&
-          scripts.unresolved.count(c->entity) == 0 &&
-          (links == scripts.links.end() ||
-           std::all_of(links->second.begin(), links->second.end(), [&](const PortRoomGeo::Link& l) {
-             return (l.action == PortRoomGeo::kShow || l.action == PortRoomGeo::kHide ||
-                     l.action == PortRoomGeo::kToggle) &&
-                    l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay && addOnSenderOk(l);
-           })) &&
-          (!generated || std::all_of(generatedBy->second.begin(), generatedBy->second.end(),
-                                     [&](int g) { return generatorPlans.at(g).ok; }));
-      if (!traced) {
+      // Why it cannot be driven exactly (the first condition it fails), or empty.
+      const std::string untraced = [&]() -> std::string {
+        if (drivable.count(c->entity) == 0) return "not drivable";
+        if (links == scripts.links.end() && !generated && !followed) return "no link";
+        if (!followsOk(c->entity)) return "a follow";
+        if (scripts.unresolved.count(c->entity) != 0) return "an untraced link";
+        for (const PortRoomGeo::Link& l : links != scripts.links.end() ? links->second : std::vector<PortRoomGeo::Link>()) {
+          if (l.action != PortRoomGeo::kShow && l.action != PortRoomGeo::kHide && l.action != PortRoomGeo::kToggle) {
+            return "a link that does not show or hide";
+          }
+          if (!(l.delay >= 0.f && l.delay <= PortRoomEffects::kMaxDriveDelay)) return "a link's delay";
+          if (!addOnSenderOk(l)) return "an add-on sender";
+        }
+        for (int g : generated ? generatedBy->second : std::vector<int>()) {
+          if (!generatorPlans.at(g).ok) {
+            return std::string("its generator: ") + generatorPlans.at(g).why;
+          }
+        }
+        return "";
+      }();
+      if (!untraced.empty()) {
         ++connectedCount;
+        ++connectedWhy[untraced];
         continue;
       }
       for (const PortRoomGeo::Link& l : links != scripts.links.end() ? links->second : std::vector<PortRoomGeo::Link>()) {
@@ -1703,8 +1728,9 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     }
   }
   // A barrier that was not written leaves its ten actors out, as connected ones are: say so.
-  if (!group) {
+  if (!group && reserved != 0) {
     connectedCount += reserved;
+    connectedWhy["the barrier not written"] += reserved;
   }
   // The timers, triggers and relays the drives written hear from, and the ones those hear from:
   // the timers' ids follow the barrier's, the triggers' the timers', the relays' the triggers'.
@@ -2120,6 +2146,10 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   if (!ambients.empty()) {
     const size_t at = std::strlen(generatorNote);
     std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu ambient spawner(s)", ambients.size());
+  }
+  for (const auto& [why, count] : connectedWhy) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu connected left out: %s", count, why.c_str());
   }
   for (const auto& [why, count] : ambientsLeftOut) {
     const size_t at = std::strlen(generatorNote);
