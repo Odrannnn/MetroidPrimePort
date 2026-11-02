@@ -841,7 +841,19 @@ u8 sPortGlassPerfDest;
 // The pause visor's pass CSamusDoll set (CCubeModel::PortInventoryScope), while it is set.
 bool sPortInventoryActive = false;
 CCubeModel::PortInventoryPass sPortInventoryPass = {false, {1.f, 1.f, 1.f, 1.f}, 0.f, 1.f};
+// CCubeModel::PortSetParticleDiffuse, while set.
+bool sPortParticleDiffuseSet = false;
+f32 sPortParticleDiffuse[3] = {1.f, 1.f, 1.f};
 } // namespace
+
+void CCubeModel::PortSetParticleDiffuse(const float* rgb) {
+  sPortParticleDiffuseSet = rgb != nullptr;
+  if (rgb != nullptr) {
+    sPortParticleDiffuse[0] = rgb[0];
+    sPortParticleDiffuse[1] = rgb[1];
+    sPortParticleDiffuse[2] = rgb[2];
+  }
+}
 
 CCubeModel::PortInventoryScope::PortInventoryScope(const PortInventoryPass& pass) {
   assert(!sPortInventoryActive && "PortInventoryScope does not nest");
@@ -1293,6 +1305,12 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
           diffuse[2] = tint.GetBlue();
           diffuse[3] = trans == CModelFlags::kT_One ? tint.GetAlpha() : 1.f;
         }
+      }
+      // A model particle's DIFC (PortSetParticleDiffuse): its alpha rides the blend's fade.
+      if (!icy && sPortParticleDiffuseSet && tintable) {
+        diffuse[0] = sPortParticleDiffuse[0];
+        diffuse[1] = sPortParticleDiffuse[1];
+        diffuse[2] = sPortParticleDiffuse[2];
       }
       GXSetPBRModelModulation(diffuse, incan, 1.f);
     }

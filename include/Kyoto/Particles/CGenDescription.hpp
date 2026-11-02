@@ -264,6 +264,10 @@ public:
   // port-only PISV: Remastered's ISVF, the factor of the system's per-tick translation change
   // (PEMV's delta, no time step) added to a new particle's velocity. Owned here; null = none.
   CRealElement* xPortInheritVel = nullptr;
+  // port-only PITN: the ITEN of a model generator drawn by its CMDL's own materials (no VMAT),
+  // evaluated into CParticle::xPortIten; part of that draw's DIFC (CElementGen::RenderModels).
+  // Owned here; null = not such a generator (retail draws, no DIFC).
+  CRealElement* xPortModelIten = nullptr;
   // port-only PITP: Remastered's ITPE 1: with several particles born in a tick and a moving system,
   // their positions are spread back along the change of translation (CreateNewParticles 0x24a630).
   bool xPortSpread = false;

@@ -206,6 +206,11 @@ public:
     PortInventoryScope& operator=(const PortInventoryScope&);
   };
   static bool PortInventoryKind(float kind) { return kind > 35.5f && kind < 37.5f; }
+  // A Remastered model particle drawn by its CMDL's own materials (no MTIN): while set, the
+  // particle's DIFC rgb, unclamped (RenderNonInstanced 0x2bd27c: COLR x max(ITEN, 0) x the
+  // inverse exposure), replaces the flags' colour on the tinted PBR kinds under every blend,
+  // opaque included. nullptr clears it. Read synchronously by the Draw it wraps.
+  static void PortSetParticleDiffuse(const float* rgb);
   // How a surface draws while a pass may be set. Outside: not the visor's (no pass, or not kind
   // 36 or 37), it takes the usual path. Pbr: the visor's, by its shader. Tev: the visor's, on
   // its TEV fallback with the doll's flags: drawn under another mode than the pass's (blended

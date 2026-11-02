@@ -2371,12 +2371,19 @@ void TestDrawsNothing() {
       }
     }
   }
-  // A model with no MTIN draws its CMDL's own materials, which take no particle colour:
-  // its IEXP is kept and not reported. A sprite's IEXP with no VMAT still is.
-  for (int primitive : {1, 3}) {
+  // A model with no MTIN draws its CMDL's own materials, tinted by the particle's DIFC
+  // (COLR x ITEN x the inverse exposure): its IEXP is kept and not reported, and PITN carries
+  // ITEN (CNST 1 without one). A sprite's IEXP with no VMAT still is reported; it gets no PITN.
+  for (int variant : {0, 1, 2}) {
+    const int primitive = variant == 0 ? 1 : 3;
+    const bool iten = variant == 2;
     auto data = OneGenerator([&](auto& out) {
       PutProperty(out, "IEXP", 1);
       PutConstant(out, 1);
+      if (iten) {
+        PutProperty(out, "ITEN", 3);
+        PutConstant(out, Bits(3.0f));
+      }
       if (primitive == 3) {
         PutProperty(out, "PMDL", 0);
         PutFourCC(out, "CNST");
@@ -2396,6 +2403,13 @@ void TestDrawsNothing() {
                           converted[0].dropped.end();
     CHECK_MSG(!converted[0].drawsNothing && reported == (primitive == 1),
               "IEXP without a VMAT is reported only where a VMAT would carry it");
+    const auto pitn = Retail().f("PITN").f("CNST").w(Bits(iten ? 3.0f : 1.0f)).bytes;
+    const bool hasPitn = std::search(converted[0].part.begin(), converted[0].part.end(), pitn.begin(),
+                                     pitn.end()) != converted[0].part.end();
+    CHECK_MSG(hasPitn == (primitive == 3), "an own-material model carries its ITEN as PITN, 1 by default");
+    CHECK_MSG(std::find(converted[0].dropped.begin(), converted[0].dropped.end(), "ITEN: no VMAT") ==
+                  converted[0].dropped.end(),
+              "an own-material model's ITEN is not reported");
   }
 }
 
@@ -5818,7 +5832,8 @@ void TestModelsOnly() {
   for (uint32_t i = 0; i < 4; ++i) {
     want.f("CNST").w(0xC0DE000A + i);
   }
-  want.f("SIZE").f("CNST").w(Bits(2.0f)).f("PPRM").f("CNST").w(3).end();
+  // PITN: its own materials take the DIFC, ITEN 1 by default.
+  want.f("SIZE").f("CNST").w(Bits(2.0f)).f("PPRM").f("CNST").w(3).f("PITN").f("CNST").w(Bits(1.0f)).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a model generator retains SIZE and selects only the model pass");
   CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "model SIZE remains an evaluator");
   CHECK_MSG(!parts.empty() && parts[0].droppedRetail == 0, "models only drops no retail property");

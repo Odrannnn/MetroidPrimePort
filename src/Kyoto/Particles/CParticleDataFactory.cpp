@@ -952,6 +952,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       desc->xPortInheritVel = GetRealElement(in);
       break;
     }
+    // Port-only: an own-material model generator's ITEN (xPortModelIten).
+    case SBIG('PITN'):
+      delete desc->xPortModelIten;
+      desc->xPortModelIten = GetRealElement(in);
+      break;
     // Port-only: Remastered's ITPE 1 (xPortSpread), with PEMV's mode word.
     case SBIG('PITP'): {
       GetClassID(in);

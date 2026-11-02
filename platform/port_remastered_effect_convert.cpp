@@ -5923,16 +5923,36 @@ public:
     }
     // A node that draws nothing (no primitive, or no material at all) loses no shading.
     // A model generator with no MTIN draws its CMDL's own materials (UpdateModelReadiness
-    // 0x2bba34: no custom material -> SetupInstancingRegistrations), which take no particle
-    // colour, so IEXP has nothing to scale there (gib shader d2d3acca's perms read none).
+    // 0x2bba34: no custom material -> SetupInstancingRegistrations), tinted by the particle's
+    // DIFC (RenderNonInstanced 0x2bd27c: COLR.rgb x max(ITEN, 0) x the inverse exposure IEXP
+    // selects). PITN carries ITEN (CNST 1 where it has none) and marks the generator as one.
     const bool ownModelMaterials =
-        s.part && s.material == nullptr && s.node.primitiveType == 3 && s.Has(F("PMDL"));
+        s.part && !vmat && s.material == nullptr && s.node.primitiveType == 3 && s.Has(F("PMDL"));
+    if (ownModelMaterials) {
+      const auto iten = std::find_if(s.node.properties.begin(), s.node.properties.end(),
+                                     [&](const EffectProperty& property) { return property.fourcc == F("ITEN"); });
+      std::vector<uint8_t> bytes;
+      std::string why;
+      if (iten == s.node.properties.end()) {
+        AppendBE32(bytes, F("CNST"));
+        AppendBE32(bytes, 0x3f800000);
+      } else if (iten->value.size() != 1 || !Element(iten->value[0], Type::Real, bytes, why)) {
+        s.result.dropped.push_back("ITEN: " + (why.empty() ? std::string("not one element") : why));
+        bytes.clear();
+        AppendBE32(bytes, F("CNST"));
+        AppendBE32(bytes, 0x3f800000);
+      }
+      AppendBE32(s.out, F("PITN"));
+      s.out.insert(s.out.end(), bytes.begin(), bytes.end());
+    }
     if (!vmat && !s.drawsNothing) {
       if (s.part && s.inverseExposed && !ownModelMaterials) {
         s.result.dropped.push_back("IEXP: no VMAT");
       }
       for (const uint32_t fourcc : s.portOnly) {
-        s.result.dropped.push_back(EffectFourCCString(fourcc) + ": no VMAT");
+        if (!(ownModelMaterials && fourcc == F("ITEN"))) {
+          s.result.dropped.push_back(EffectFourCCString(fourcc) + ": no VMAT");
+        }
       }
     }
     if (s.xfmd != nullptr) {
@@ -6815,7 +6835,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||
-                         fourcc == F("PVBS"))) ||
+                         fourcc == F("PVBS") || fourcc == F("PITN"))) ||
                (vfx && (fourcc == F("ITEN") || fourcc == F("PDBS")))) {
       ok = reader.Element(Type::Real);
     } else if (part && (fourcc == F("PINS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||

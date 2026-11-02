@@ -47,6 +47,8 @@
 #include "port_debug.h"
 #include "port_fx_debug.h"
 #include "port_vfx_particles.h"
+#include "port_room_env.h"
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #endif
 
 #ifdef TARGET_PC
@@ -80,6 +82,22 @@ static ERglBlendFactor PortBlendSrc(const CGenDescription* desc) {
 
 static ERglBlendFactor PortBlendDst(const CGenDescription* desc) {
   return desc->xPortBlend == 3 ? kBF_Zero : kBF_InvSrcAlpha;
+}
+
+// A converted Remastered model generator drawn by its CMDL's own materials (no VMAT): its draw takes
+// the particle's DIFC (RenderNonInstanced 0x2bd27c), so the particle keeps COLR unclamped and ITEN.
+// The converter marks every such generator with PITN (CNST 1 where it has no ITEN).
+static bool PortModelDifc(const CGenDescription* desc) {
+  return desc->xPortVfx == nullptr && desc->xPortModelIten != nullptr && desc->x48_PMDL;
+}
+
+// The per-particle values the VMAT or the DIFC reads, where SIZE/COLR are evaluated.
+static void PortEvalParticleMaterial(const CGenDescription* desc, CElementGen::CParticle& particle, int frame) {
+  if (desc->xPortVfx) {
+    PortVfxEvalParticle(*desc, particle, frame);
+  } else if (const CRealElement* iten = desc->xPortModelIten) {
+    iten->GetValue(frame, particle.xPortIten);
+  }
 }
 #endif
 
@@ -1200,15 +1218,13 @@ void CElementGen::UpdateExistingParticles() {
     if (CColorElement* colr = x28_loadedGenDesc->x24_COLR) {
       colr->GetValue(particleFrame, p->x34_color);
 #ifdef TARGET_PC
-      if (x28_loadedGenDesc->xPortVfx) {
+      if (x28_loadedGenDesc->xPortVfx || PortModelDifc(x28_loadedGenDesc)) {
         colr->GetValueHdr(particleFrame, p->xPortColor);
       }
 #endif
     }
 #ifdef TARGET_PC
-    if (x28_loadedGenDesc->xPortVfx) {
-      PortVfxEvalParticle(*x28_loadedGenDesc, *p, particleFrame);
-    }
+    PortEvalParticleMaterial(x28_loadedGenDesc, *p, particleFrame);
 #endif
     AccumulateBounds(p->x4_pos, p->x2c_lineLengthOrSize);
     ++p;
@@ -1334,7 +1350,7 @@ void CElementGen::CreateNewParticles(int count) {
     if (CColorElement* colr = x28_loadedGenDesc->x24_COLR) {
       colr->GetValue(0, particle.x34_color);
 #ifdef TARGET_PC
-      if (x28_loadedGenDesc->xPortVfx) {
+      if (x28_loadedGenDesc->xPortVfx || PortModelDifc(x28_loadedGenDesc)) {
         colr->GetValueHdr(0, particle.xPortColor);
       }
 #endif
@@ -1431,9 +1447,7 @@ void CElementGen::CreateNewParticles(int count) {
     }
 
 #ifdef TARGET_PC
-    if (x28_loadedGenDesc->xPortVfx) {
-      PortVfxEvalParticle(*x28_loadedGenDesc, particle, 0);
-    }
+    PortEvalParticleMaterial(x28_loadedGenDesc, particle, 0);
     // CreateNewParticles 0x24abd0 invokes the complete velocity program after initial values.
     // Compile 0x291b90 prepends pos += vel unless a source finalizes position itself;
     // the killing op 0x292b88 terminates the program immediately. Keep prevPos/launchDir
@@ -2401,7 +2415,7 @@ void CElementGen::PortCreateParticlesAtPositions(int n, const CVector3f* pos) {
 
     if (CColorElement* colr = x28_loadedGenDesc->x24_COLR) {
       colr->GetValue(0, particle.x34_color);
-      if (x28_loadedGenDesc->xPortVfx) {
+      if (x28_loadedGenDesc->xPortVfx || PortModelDifc(x28_loadedGenDesc)) {
         colr->GetValueHdr(0, particle.xPortColor);
       }
     }
@@ -2418,9 +2432,7 @@ void CElementGen::PortCreateParticlesAtPositions(int n, const CVector3f* pos) {
       particle.x30_lineWidthOrRota = 0.f;
     }
 
-    if (x28_loadedGenDesc->xPortVfx) {
-      PortVfxEvalParticle(*x28_loadedGenDesc, particle, 0);
-    }
+    PortEvalParticleMaterial(x28_loadedGenDesc, particle, 0);
     AccumulateBounds(particle.x4_pos, particle.x2c_lineLengthOrSize);
 
     ++mParticleAliveCount;
@@ -4353,6 +4365,20 @@ void CElementGen::RenderModels() {
             model = variant;
           }
         }
+        // RenderNonInstanced 0x2bd27c: DIFC = (COLR.rgb x max(ITEN, 0) x inverse exposure, COLR.a);
+        // the exposure is the blended one unless the PBDM row is opaque (static state bit 0x200).
+        // x338_moduColor folds in as it does for `col` (unverified against Remastered).
+        const bool difc = PortModelDifc(x28_loadedGenDesc);
+        if (difc) {
+          const float gain = std::max(particle.xPortIten, 0.f) *
+                             (x28_loadedGenDesc->xPortInverseExposure
+                                  ? PortRoomEnv::ParticleInverseExposure(x28_loadedGenDesc->xPortBlend != 3)
+                                  : 1.f);
+          const float rgb[3] = {particle.xPortColor[0] * x338_moduColor.GetRed() * gain,
+                                particle.xPortColor[1] * x338_moduColor.GetGreen() * gain,
+                                particle.xPortColor[2] * x338_moduColor.GetBlue() * gain};
+          CCubeModel::PortSetParticleDiffuse(rgb);
+        }
 #else
         CModel* model = x28_loadedGenDesc->x48_PMDL->GetObject();
 #endif
@@ -4365,6 +4391,11 @@ void CElementGen::RenderModels() {
         } else {
           model->Draw(CModelFlags::AlphaBlended(col.GetAlpha()).DepthCompareUpdate(true, false));
         }
+#ifdef TARGET_PC
+        if (difc) {
+          CCubeModel::PortSetParticleDiffuse(nullptr);
+        }
+#endif
       }
     }
   }
