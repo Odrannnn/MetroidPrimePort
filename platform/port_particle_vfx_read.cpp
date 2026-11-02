@@ -216,10 +216,12 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
       vfx.vtmt.push_back(GetRealElement(in));
     }
   } break;
-  case SBIG('VTRS'): {
-    // The header sprite's TEXR TRST: x, y, sx, sy, rot (degrees), each a real element.
+  case SBIG('VTRS'):
+  case SBIG('VTRT'): {
+    // The header sprite's TEXR (VTRS) or ANTH (VTRT) TRST: x, y, sx, sy, rot (degrees), each a
+    // real element.
     CPortVfxData& vfx = PortVfxData(vfxPtr);
-    for (CRealElement*& e : vfx.vtrs) {
+    for (CRealElement*& e : clsId == SBIG('VTRS') ? vfx.vtrs : vfx.vtrt) {
       delete e;
       e = GetRealElement(in);
     }
@@ -328,6 +330,15 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
     vfx.atfbCycle = GetIntElement(in);
     vfx.atfbLayers = layers <= 2048 ? layers : 0;
     vfx.atfbLoop = loop != 0;
+  } break;
+  case SBIG('VTFB'): {
+    // The header sprite's TEXR TXFB: the texture array's layer count, then the index as a real
+    // element (CUVEFlipBookTexture::GetValue 0x2ce114).
+    CPortVfxData& vfx = PortVfxData(vfxPtr);
+    const u32 layers = in.ReadLong();
+    delete vfx.txfbIndex;
+    vfx.txfbIndex = GetRealElement(in);
+    vfx.txfbLayers = layers <= 2048 ? layers : 0;
   } break;
   case SBIG('VPMT'):
   case SBIG('VSMT'): {

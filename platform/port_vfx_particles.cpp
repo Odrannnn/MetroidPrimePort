@@ -77,6 +77,10 @@ struct HeaderTexr {
   bool hasLayer = false;
   float layer = 0.f;
   float x = 0.f, y = 0.f, sx = 1.f, sy = 1.f, cosR = 1.f, sinR = 0.f;
+  // VTRT, an ANTH's TRST (shader 31c6b110): the thresholding map's UV (set 1) is the corner q through
+  // it, with no tile rect.
+  bool thr = false;
+  float thrX = 0.f, thrY = 0.f, thrSx = 1.f, thrSy = 1.f, thrCos = 1.f, thrSin = 0.f;
 
   void Apply(float qx, float qy, float& tu, float& tv) const {
     tu = qx;
@@ -91,6 +95,13 @@ struct HeaderTexr {
       tu = 0.5f + cosR * du - sinR * dv;
       tv = 0.5f + sinR * du + cosR * dv;
     }
+  }
+
+  void ApplyThreshold(float qx, float qy, float& tu, float& tv) const {
+    const float du = thrSx * qx + thrX - 0.5f;
+    const float dv = thrSy * qy + thrY - 0.5f;
+    tu = 0.5f + thrCos * du - thrSin * dv;
+    tv = 0.5f + thrSin * du + thrCos * dv;
   }
 };
 
@@ -141,6 +152,24 @@ HeaderTexr EvalHeaderTexr(const CPortVfxData& vfx, int partFrame, int systemLife
       vfx.atfbCycle->GetValue(partFrame, cycle);
     }
     h.layer = float(PortAnimTile(vfx.atfbLayers, vfx.atfbLoop, float(cycle), partFrame));
+  }
+  // VTFB, TEXR TXFB (CUVEFlipBookTexture::GetValue 0x2ce114): layer trunc(clamp(index·layers, 0,
+  // layers - 1)), a NaN layer 0.
+  if (vfx.txfbLayers > 0 && vfx.txfbIndex != nullptr) {
+    h.hasLayer = true;
+    const float v = EvalReal(vfx.txfbIndex, partFrame, 0.f) * float(vfx.txfbLayers);
+    const int last = int(vfx.txfbLayers) - 1;
+    h.layer = float(v >= float(last) ? last : v > 0.f ? int(v) : 0);
+  }
+  if (vfx.vtrt[0] != nullptr) {
+    h.thr = true;
+    h.thrX = EvalReal(vfx.vtrt[0], partFrame, 0.f);
+    h.thrY = EvalReal(vfx.vtrt[1], partFrame, 0.f);
+    h.thrSx = EvalReal(vfx.vtrt[2], partFrame, 1.f);
+    h.thrSy = EvalReal(vfx.vtrt[3], partFrame, 1.f);
+    const float rot = EvalReal(vfx.vtrt[4], partFrame, 0.f) * 0.017453292f;
+    h.thrCos = std::cos(rot);
+    h.thrSin = std::sin(rot);
   }
   return h;
 }
@@ -315,6 +344,10 @@ CPortVfxData::~CPortVfxData() {
   for (CRealElement* e : vtrs) {
     delete e;
   }
+  for (CRealElement* e : vtrt) {
+    delete e;
+  }
+  delete txfbIndex;
   delete atexCycleElem;
   delete txp2Index;
   delete atfbCycle;
@@ -599,6 +632,10 @@ void CElementGen::PortRenderPlanarVfx(const CParticle& particle, int frame) {
     if (header.hasLayer) {
       vertex.uv[0][2] = header.layer;
     }
+    if (header.thr) {
+      header.ApplyThreshold(u, v, vertex.uv[1][0], vertex.uv[1][1]);
+      vertex.uv[1][2] = 0.f;
+    }
     for (int c = 0; c < 4; ++c) {
       vertex.color[c] = particle.xPortColor[c] * modulation[c] * (c == 3 ? 1.f : gain);
       for (int j = 0; j < 4; ++j) vertex.extra[c][j] = particle.xPortVpmt[c][j];
@@ -878,6 +915,10 @@ void CElementGen::PortRenderParticlesVfx() {
       }
       if (header.hasLayer) {
         v.uv[0][2] = header.layer; // the header TEXR is the colour slot; it has no VTMT
+      }
+      if (header.thr) {
+        header.ApplyThreshold(qx, qy, v.uv[1][0], v.uv[1][1]);
+        v.uv[1][2] = 0.f;
       }
       if (visorSplat) {
         // The shader reads PMTR rows 0 and 1 only; rows 2 and 3 carry the world position and the axes.

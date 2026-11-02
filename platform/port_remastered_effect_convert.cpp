@@ -1156,6 +1156,10 @@ struct HeaderShader {
   // LIT_ 1 draws uber perm 040: its FS is 048_0 and its VS 040_1 lights the colour per vertex as
   // 52d26efe's does (b42cacf5 = 29f35b3a perm for perm; their 040_1 lighting is 52d26efe's, reordered).
   bool vertexLit = false;
+  // 31c6b110: the TEXR a TXFB on a texture array (layer from the index), and an ANTH thresholding
+  // map on its own TRST of the quad's corner, cut by the particle's FadeIn/FadeOut/Softness
+  // (kb topic/header-mtrl-31c6b110.md).
+  bool arrayThreshold = false;
 };
 
 const HeaderShader* HeaderShaderOf(uint32_t shader) {
@@ -1165,6 +1169,7 @@ const HeaderShader* HeaderShaderOf(uint32_t shader) {
       {0x29f35b3a, true, HeaderQuad::RotatedSprite, false, false, true},
       {0x4d6746f4, false, HeaderQuad::RotatedSprite},
       {0x52d26efe, true, HeaderQuad::RotatedSprite, false, true, true},
+      {0x31c6b110, true, HeaderQuad::RotatedSprite, false, false, false, true},
       // Unrotated camera-facing quads: a VORN 0 sprite without ROTA.
       {0xe2bfbf91, true, HeaderQuad::Sprite},
       {0x9d1a1432, true, HeaderQuad::Sprite, true},
@@ -3620,6 +3625,7 @@ public:
     const EffectProperty* texr = nullptr;
     const EffectProperty* rota = nullptr;
     const EffectProperty* aero = nullptr;
+    const EffectProperty* anth = nullptr;
     uint32_t orient = 0;
     uint32_t lit = 0;
     uint32_t blit = 0;
@@ -3642,6 +3648,9 @@ public:
       if (property.fourcc == F("AERO")) {
         aero = &property;
       }
+      if (property.fourcc == F("ANTH")) {
+        anth = &property;
+      }
       // Perm 048's UV transform (0.5 + R(E) (diag(C, D) q + (A, B) - 0.5)) is not the port's VTMT.
       if (header->textured && property.fourcc == F("TMTR")) {
         return refuse("has a UV transform (TMTR)");
@@ -3660,6 +3669,9 @@ public:
     if (aero != nullptr && !header->litPalette) {
       return refuse("has an erosion (AERO)");
     }
+    if (anth != nullptr && !header->arrayThreshold) {
+      return refuse("has a thresholding map (ANTH)");
+    }
     if (header->quad == HeaderQuad::Axis ? orient == 0 : orient != 0) {
       return refuse("draws a different quad from ORNT " + std::to_string(orient));
     }
@@ -3671,30 +3683,36 @@ public:
     mati.shader = shader;
     Recipe recipe{shader, 0, {}, {}};
     std::vector<uint8_t> vtrs;
+    std::vector<uint8_t> vtrt;
     std::vector<uint8_t> vatx;
     std::vector<uint8_t> vpmt;
+    uint32_t vpmtCount = 0;
     // TRST(x, y, sx, sy, rot, wrap): CopyPerSpriteDataToSpriteRenderData 0x2477cc evaluates it per sprite
     // and SetupInstancingComponents_SpriteCustom passes rot in radians (x pi/180, 0x2b4a04). The wrap
     // (GetDiffuseTextureWrapMode 0x291434) is the sampler's when -1.
-    const auto transform = [&](const EffectValue& value, std::string& why) {
+    const auto transformInto = [&](const EffectValue& value, std::string& why, std::vector<uint8_t>& out,
+                                   const char* owner) {
       if (IsElement(value, F("NONE"))) {
         return true;
       }
       if (!IsElement(value, F("TRST"))) {
-        why = "has no constant TEXR";
+        why = std::string("has no constant ") + owner;
         return false;
       }
       if (value.args.size() != 6 || value.args[5].kind != EffectValue::Kind::Word || value.args[5].word != 0xffffffffu) {
-        why = "has a TEXR TRST with a wrap mode";
+        why = std::string("has a ") + owner + " TRST with a wrap mode";
         return false;
       }
       for (size_t i = 0; i < 5; ++i) {
-        if (!Element(value.args[i], Type::Real, vtrs, why)) {
-          why = "has a TEXR TRST the port can't evaluate: " + why;
+        if (!Element(value.args[i], Type::Real, out, why)) {
+          why = std::string("has a ") + owner + " TRST the port can't evaluate: " + why;
           return false;
         }
       }
       return true;
+    };
+    const auto transform = [&](const EffectValue& value, std::string& why) {
+      return transformInto(value, why, vtrs, "TEXR");
     };
     const bool atfb = texr != nullptr && !texr->value.empty() && IsElement(texr->value[0], F("ATFB"));
     if (header->flipbook != atfb) {
@@ -3732,6 +3750,69 @@ public:
       mati.textures["TEXR"] = MatiTexture{head.args[0].guid, 0, 1, -1, -1};
       recipe.features = kColorTex;
       recipe.textures = {{"TEXR", Role::Color, -1, -1}};
+      recipe.alphaGamma = 2.2f;
+    } else if (header->arrayThreshold) {
+      // TXFB(id, index) on a texture array: CUVEFlipBookTexture's GetValue (0x2ce114) picks layer
+      // trunc(clamp(index x layers, 0, layers - 1)), NaN -> 0, the index a real element.
+      if (texr == nullptr || texr->value.size() != 2 || !IsElement(texr->value[0], F("TXFB")) ||
+          texr->value[0].args.size() != 2 || texr->value[0].args[0].kind != EffectValue::Kind::Guid) {
+        return refuse("has no TXFB TEXR");
+      }
+      const EffectValue& txfb = texr->value[0];
+      const FlipbookAtlas layers = m_io.vfxTexture(txfb.args[0].guid);
+      if (layers.id == 0 || layers.frames < 1) {
+        return refuse("has a TXFB TEXR whose texture can't be read");
+      }
+      std::string why;
+      std::vector<uint8_t> index;
+      m_lifetimeOffset = LifetimeOffset(true, false, false, *texr);
+      if (!Element(txfb.args[1], Type::Real, index, why)) {
+        return refuse("has a TXFB index the port can't evaluate: " + why);
+      }
+      if (!transform(texr->value[1], why)) {
+        return refuse(why);
+      }
+      AppendBE32(vatx, F("VTFB"));
+      AppendBE32(vatx, uint32_t(layers.frames));
+      vatx.insert(vatx.end(), index.begin(), index.end());
+      // ANTH(map, TRST, FadeIn, FadeOut, Softness) (ReadAnimatedThresholdingParticleInput 0x268894):
+      // the map is sampled at the quad corner through its own TRST (no TEXR rect), and the three
+      // reals are per-particle (UpdateRenderState_Node 0x248598 keeps their variable slots): VS
+      // v6.z/v6.w/softness -> FS v2.x/v2.y/v2.z, the port's thresholding on per-particle row 0.
+      if (anth == nullptr || anth->value.size() != 1 || !IsElement(anth->value[0], F("ANTH")) ||
+          anth->value[0].args.size() != 5 || !IsElement(anth->value[0].args[0], F("CNST")) ||
+          anth->value[0].args[0].args.size() != 1 || anth->value[0].args[0].args[0].kind != EffectValue::Kind::Guid) {
+        return refuse("has no ANTH with a constant map");
+      }
+      const EffectValue& thr = anth->value[0];
+      for (const EffectProperty& property : node.properties) {
+        if (property.fourcc != F("PMTR")) {
+          continue;
+        }
+        for (const EffectValue& item : property.value) {
+          if ((item.word & 0xffff) <= 2) {  // row 0, components 0..2
+            return refuse("has an ANTH and a PMTR on the same component");
+          }
+        }
+      }
+      m_lifetimeOffset = LifetimeOffset(true, false, false, *anth);
+      if (!IsElement(thr.args[1], F("TRST")) || !transformInto(thr.args[1], why, vtrt, "ANTH")) {
+        return refuse(IsElement(thr.args[1], F("TRST")) ? why : "has an ANTH without a TRST");
+      }
+      for (uint32_t comp = 0; comp < 3; ++comp) {
+        AppendBE32(vpmt, 0);  // a real, row 0
+        AppendBE32(vpmt, 0);
+        AppendBE32(vpmt, comp);
+        ++vpmtCount;
+        if (!Element(thr.args[2 + comp], Type::Real, vpmt, why)) {
+          return refuse("has an ANTH the port can't evaluate: " + why);
+        }
+      }
+      mati.textures["TEXR"] = MatiTexture{txfb.args[0].guid, 0, 1, -1, -1};
+      mati.textures["ANTH"] = MatiTexture{thr.args[0].args[0].guid, 1, 1, -1, -1};
+      recipe.features = kColorTex | kThresholding;
+      recipe.textures = {{"TEXR", Role::Color, -1, -1}, {"ANTH", Role::Threshold, -1, -1}};
+      recipe.sources = {{kSrcThrX, 0, 0}, {kSrcThrY, 0, 1}, {kSrcThrW, 0, 2}};
       recipe.alphaGamma = 2.2f;
     } else if (header->textured && texr != nullptr && texr->value.size() == 1 && IsElement(texr->value[0], F("ATEX"))) {
       // ATEX(id, tileW, tileH, strideW, strideH, cycle, loop), all constants: CUVEAnimTexture (ctor
@@ -3866,6 +3947,7 @@ public:
         AppendBE32(vpmt, 0);  // a real, row 0, component 0
         AppendBE32(vpmt, 0);
         AppendBE32(vpmt, 0);
+        ++vpmtCount;
         if (!Element(aero->value[0], Type::Real, vpmt, why)) {
           return refuse("has an AERO the port can't evaluate: " + why);
         }
@@ -3902,10 +3984,14 @@ public:
       AppendBE32(result.part, F("VTRS"));
       result.part.insert(result.part.end(), vtrs.begin(), vtrs.end());
     }
+    if (!vtrt.empty()) {
+      AppendBE32(result.part, F("VTRT"));
+      result.part.insert(result.part.end(), vtrt.begin(), vtrt.end());
+    }
     result.part.insert(result.part.end(), vatx.begin(), vatx.end());
     // After MaterialFrom's VPMT, if any: a second list appends to it.
     if (!vpmt.empty()) {
-      PutList(result.part, F("VPMT"), 1, vpmt);
+      PutList(result.part, F("VPMT"), vpmtCount, vpmt);
     }
     return true;
   }
@@ -4646,6 +4732,7 @@ public:
     uint32_t depthBias = 0;  // DBIS as float bits (nonzero), port-only PDBS
     const EffectProperty* mover = nullptr;
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
+    bool anth = false;               // an ANTH, drawn only by a header material
     const bool textured = retail.count(F("TEXR")) != 0;
     // SetupPrimitiveTypes 0x29069c and FixAndClean 0x2908a4 select geometry,
     // independently of textures/materials. Primitive 2 is a transformed square:
@@ -5200,6 +5287,11 @@ public:
     }
     if (s.part && fourcc == F("SMVR")) {
       s.mover = &property;
+      return true;
+    }
+    // A thresholding map only a header material draws (DrawWrites reports it otherwise).
+    if (s.part && fourcc == F("ANTH")) {
+      s.anth = true;
       return true;
     }
     if (s.part && (fourcc == F("TMTR") || fourcc == F("PMTR") || fourcc == F("SMTR") || fourcc == F("SSZE") ||
@@ -5803,9 +5895,15 @@ public:
     } else if (s.material != nullptr && !s.electric) {
       s.result.dropped.push_back("MTIN: the effect has a TEXR");
     }
-    const bool vmat = ((s.part || s.swoosh || s.electric) && s.material != nullptr &&
-                       Material(*s.material, s.node, s.result, s.swoosh || s.electric, s.electric)) ||
-                      (s.part && !s.customMaterial && !s.drawsNothing && HeaderMaterial(s.node, s.result));
+    const bool customVmat = (s.part || s.swoosh || s.electric) && s.material != nullptr &&
+                            Material(*s.material, s.node, s.result, s.swoosh || s.electric, s.electric);
+    const bool headerVmat =
+        !customVmat && s.part && !s.customMaterial && !s.drawsNothing && HeaderMaterial(s.node, s.result);
+    const bool vmat = customVmat || headerVmat;
+    // ANTH is drawn only by the header shaders that take it (HeaderMaterial refuses it elsewhere).
+    if (s.anth && !headerVmat && !s.drawsNothing) {
+      s.result.dropped.push_back("ANTH: not drawn by this material");
+    }
     // A node that draws nothing (no primitive, or no material at all) loses no shading.
     // A model generator with no MTIN draws its CMDL's own materials (UpdateModelReadiness
     // 0x2bba34: no custom material -> SetupInstancingRegistrations), which take no particle
@@ -6682,7 +6780,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.TextureTransforms();
     } else if (vfx && (fourcc == F("VPMT") || fourcc == F("VSMT"))) {
       ok = reader.PerParticle(fourcc == F("VSMT"));
-    } else if (part && fourcc == F("VTRS")) {
+    } else if (part && (fourcc == F("VTRS") || fourcc == F("VTRT"))) {
       ok = true;
       for (int i = 0; i < 5 && ok; ++i) {
         ok = reader.Element(Type::Real);
@@ -6695,6 +6793,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.Skip(2 * 4) && reader.Element(Type::Int);  // layers, loop, the duration
     } else if (part && fourcc == F("VTP2")) {
       ok = reader.Skip(2 * 4) && reader.Element(Type::Real);  // columns, rows, the index
+    } else if (part && fourcc == F("VTFB")) {
+      ok = reader.Skip(4) && reader.Element(Type::Real);  // layers, the index
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||

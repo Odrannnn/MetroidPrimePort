@@ -92,6 +92,13 @@ struct CPortVfxData {
   u32 atfbLayers = 0;
   bool atfbLoop = false;
   CIntElement* atfbCycle = nullptr;
+  // VTFB: a header sprite's TEXR TXFB as CUVEFlipBookTexture, a texture array's layer count (0
+  // without one) and the index, a real picking layer clamp(index·layers, 0, layers - 1).
+  u32 txfbLayers = 0;
+  CRealElement* txfbIndex = nullptr;
+  // VTRT: a header sprite's ANTH TRST (x, y, sx, sy, rot in degrees) for the thresholding map's
+  // UV (set 1), or all null.
+  CRealElement* vtrt[5] = {};
   std::vector< CPortVfxElem > vpmt;
   std::vector< CPortVfxElem > vsmt;
   CRealElement* ssze = nullptr;

@@ -6171,6 +6171,62 @@ void TestHeaderMaterial() {
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
   CHECK_MSG(VmatWord(vmat, 8) == 2 && VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,
             "an untextured header sprite gets a VMAT v2 with no features or textures");
+  // 31c6b110 (C6A30BCF) picks a TXFB layer (VTFB: layers, the real index) and thresholds by an ANTH:
+  // its map on UV set 1 through its own TRST (VTRT), FadeIn/FadeOut/Softness VPMT reals on row 0.
+  // Retail's TEXR can't take a TXFB off the particle's life: that stays dropped for the retail draw.
+  const auto anthTexr = [](bool anth) {
+    return [anth](std::vector<uint8_t>& o) {
+      PutProperty(o, "TEXR", 0);
+      PutFourCC(o, "TXFB");
+      PutGuid(o, Legacy(0x1234ABCD));
+      PutConstant(o, Bits(0.5f));
+      PutFourCC(o, "NONE");
+      if (anth) {
+        PutProperty(o, "ANTH", 0);
+        PutFourCC(o, "ANTH");
+        PutFourCC(o, "CNST");
+        PutGuid(o, Legacy(0x1234ABCE));
+        PutFourCC(o, "TRST");
+        for (float each : {0.f, 0.f, 2.f, 2.f, 90.f}) {
+          PutConstant(o, Bits(each));
+        }
+        Put32(o, 0xFFFFFFFFu);
+        for (float each : {0.1f, 0.9f, 0.3f}) {
+          PutConstant(o, Bits(each));
+        }
+      }
+    };
+  };
+  parts = ConvertOne(withShader(OneGenerator(anthTexr(true)), 0x31c6b110), layered);
+  {
+    const std::vector<uint8_t> v = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+    const std::vector<uint8_t> vtfb = parts.size() == 1 ? valueOf(parts[0], "VTFB") : std::vector<uint8_t>{};
+    const std::vector<uint8_t> vtrt = parts.size() == 1 ? valueOf(parts[0], "VTRT") : std::vector<uint8_t>{};
+    const std::vector<uint8_t> anthVpmt = parts.size() == 1 ? valueOf(parts[0], "VPMT") : std::vector<uint8_t>{};
+    constexpr uint32_t kThresholdingFeature = 64;
+    CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && (VmatWord(v, 12) & kThresholdingFeature) != 0 &&
+                  VmatWord(v, 20) == 2 && parts[0].dropped.size() == 1,
+              "31c6b110 with a TXFB and an ANTH gets a thresholded two-slot VMAT");
+    CHECK_MSG(vtfb.size() == 12 && VmatWord(vtfb, 0) == 6 && VmatWord(vtfb, 4) == EffectFourCC("CNST") &&
+                  VmatWord(vtfb, 8) == Bits(0.5f),
+              "a TXFB TEXR is written as VTFB");
+    CHECK_MSG(vtrt.size() == 5 * 8 && VmatWord(vtrt, 4 * 8 + 4) == Bits(90.f), "the ANTH TRST is written as VTRT");
+    CHECK_MSG(anthVpmt.size() == 8 + 3 * 20 && VmatWord(anthVpmt, 4) == 3 && VmatWord(anthVpmt, 8 + 8) == 0 &&
+                  VmatWord(anthVpmt, 28 + 8) == 1 && VmatWord(anthVpmt, 48 + 8) == 2 &&
+                  VmatWord(anthVpmt, 48 + 16) == Bits(0.3f),
+              "FadeIn, FadeOut and Softness are VPMT reals on row 0, components 0..2");
+  }
+  parts = ConvertOne(withShader(OneGenerator(anthTexr(false)), 0x31c6b110), layered);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader 31c6b110 has no ANTH with a constant map",
+            "31c6b110 without an ANTH is refused");
+  parts = ConvertOne(withShader(OneGenerator(anthTexr(true)), 0xb42cacf5), layered);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 has a thresholding map (ANTH)" &&
+                std::find(parts[0].dropped.begin(), parts[0].dropped.end(), "ANTH: not drawn by this material") !=
+                    parts[0].dropped.end(),
+            "an ANTH on a header shader without thresholding is refused and reported dropped");
+
   // c38294d2 is the untextured planar square.
   parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }, 2), 0xc38294d2), io);
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
