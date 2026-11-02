@@ -44,6 +44,11 @@ constexpr int kTouchCustomCount = 64;
 
 struct SPoll {
   PADStatus status{};
+  // The C-stick before Aurora's per-axis PADClamp (-1..1, right and up
+  // positive), which pulls a stick near an axis onto it: flick stick turns by
+  // its angle.
+  float cStickX = 0.f;
+  float cStickY = 0.f;
 };
 
 // One poll of port 0: reads the devices, rebuilds the profile when the settings

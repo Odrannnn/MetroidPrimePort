@@ -165,6 +165,15 @@ void CDolphinController::ReadDevices() {
         sx = cx / length * tilt;
         sy = cy / length * tilt;
       }
+      // Flick stick turns by the stick's angle, which PADClamp's dead zone per
+      // axis pulls onto the nearest axis (a snap every 90 degrees while
+      // circling): it reads the stick from before it.
+      const float rawLength = std::sqrt(devices.cStickX * devices.cStickX + devices.cStickY * devices.cStickY);
+      if (PortDebug::FlickStick() && (cx != 0.f || cy != 0.f) && rawLength > 0.f) {
+        const float scale = std::min(rawLength, 1.f) / rawLength;
+        sx = devices.cStickX * scale;
+        sy = devices.cStickY * scale;
+      }
       PortDebug::AddStickAim(sx, sy, PortDebug::TickPeriod());
       // The spring ball's flick threshold was tuned on the clamped scale.
       PortDebug::SetTwinStickRightY(cy / 127.f);

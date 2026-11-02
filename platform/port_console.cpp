@@ -2082,7 +2082,7 @@ void CmdCollision() {
   Finish();
 }
 
-// touchpad [attach|detach|stick <x> <y>]: the touch overlay's kind of virtual gamepad, for
+// touchpad [attach|detach|stick|rstick <x> <y>]: the touch overlay's kind of virtual gamepad, for
 // testing how controllers share the ports with it on any platform.
 void CmdTouchPad() {
   static PortTouchPad::Pad pad;
@@ -2095,12 +2095,15 @@ void CmdTouchPad() {
     }
   } else if (arg == "detach") {
     PortTouchPad::Detach(pad);
-  } else if (arg == "stick" && sCmd.args.size() > 3 && ParseFloat(sCmd.args[2], x) && ParseFloat(sCmd.args[3], y) &&
-             pad.ok()) {
-    SDL_SetJoystickVirtualAxis(pad.handle, SDL_GAMEPAD_AXIS_LEFTX, PortTouchPad::AxisValue(x));
-    SDL_SetJoystickVirtualAxis(pad.handle, SDL_GAMEPAD_AXIS_LEFTY, PortTouchPad::AxisValue(y));
+  } else if ((arg == "stick" || arg == "rstick") && sCmd.args.size() > 3 && ParseFloat(sCmd.args[2], x) &&
+             ParseFloat(sCmd.args[3], y) && pad.ok()) {
+    const bool right = arg == "rstick";
+    SDL_SetJoystickVirtualAxis(pad.handle, right ? SDL_GAMEPAD_AXIS_RIGHTX : SDL_GAMEPAD_AXIS_LEFTX,
+                               PortTouchPad::AxisValue(x));
+    SDL_SetJoystickVirtualAxis(pad.handle, right ? SDL_GAMEPAD_AXIS_RIGHTY : SDL_GAMEPAD_AXIS_LEFTY,
+                               PortTouchPad::AxisValue(y));
   } else if (!arg.empty()) {
-    return Finish("usage: touchpad [attach|detach|stick <x> <y>] (stick needs an attached pad)");
+    return Finish("usage: touchpad [attach|detach|stick|rstick <x> <y>] (stick needs an attached pad)");
   }
   if (pad.ok()) {
     Out("touchpad attached (joystick %u, port %d)", static_cast< unsigned >(pad.id),
@@ -4425,7 +4428,7 @@ const CommandSpec kCommands[] = {
      "remastered [start <image.nsp|xci> [key file] | cancel | toggle]  the Remastered import and its progress;\n"
      "                           toggle turns it on or off, as its binding"},
     {"touchpad", CmdTouchPad, nullptr,
-     "touchpad [attach|detach|stick <x> <y>]  a virtual gamepad like Android's touch overlay"},
+     "touchpad [attach|detach|stick|rstick <x> <y>]  a virtual gamepad like Android's touch overlay"},
     {"minimap", CmdMinimap, nullptr,
      "minimap  the HUD minimap's screen rect (x0 y0 x1 y1, 0..1), or invalid"},
     {"maptap", CmdMapTap, nullptr, "maptap   a touch-overlay minimap tap: one Z press, opens the map"},

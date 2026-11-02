@@ -486,6 +486,17 @@ void FillRawState(PortInput::RawState& raw, unsigned mouseHeld, bool focused) {
                                     useDz);
       }
     }
+    // Flick stick turns by the right stick's angle: a dead zone per axis zeroes
+    // the minor axis near each axis (a snap every 90 degrees while circling), so
+    // under it the right stick's dead zone is round.
+    if (useDz && PortDebug::FlickStick()) {
+      const float x = static_cast< float >(pad.axes[SDL_GAMEPAD_AXIS_RIGHTX]);
+      const float y = static_cast< float >(pad.axes[SDL_GAMEPAD_AXIS_RIGHTY]);
+      const float dzr = static_cast< float >(dz->substickDeadZone);
+      const bool inside = x * x + y * y <= dzr * dzr;
+      raw.padAxes[SDL_GAMEPAD_AXIS_RIGHTX] = inside ? 0.f : StickValue(pad.axes[SDL_GAMEPAD_AXIS_RIGHTX], 0, false);
+      raw.padAxes[SDL_GAMEPAD_AXIS_RIGHTY] = inside ? 0.f : StickValue(pad.axes[SDL_GAMEPAD_AXIS_RIGHTY], 0, false);
+    }
   }
 
   uint32_t mouse = 0;
@@ -1258,6 +1269,10 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   }
 
   r.status = Synthesize(out);
+  if (r.status.substickX != 0 || r.status.substickY != 0) {
+    r.cStickX = std::clamp(out.Value(Action::CRight) - out.Value(Action::CLeft), -1.f, 1.f);
+    r.cStickY = std::clamp(out.Value(Action::CUp) - out.Value(Action::CDown), -1.f, 1.f);
+  }
   // The scan text reads only A: the Menu row's, not gameplay's (issue #93). The
   // other buttons keep gameplay's, so the held lock stays. A mouse button on A
   // (fire under mouse aim) still turns the page, as it does in the other text
