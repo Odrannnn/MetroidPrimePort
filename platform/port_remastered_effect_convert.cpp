@@ -5244,6 +5244,15 @@ public:
     if (fourcc == F("PVAR") && (((s.part || s.swoosh) && m_varsRead) || s.electric)) {
       return true;
     }
+    // KPAL (SSystem flag 0x40, absent = false; CreateGPSM 0x25af00) picks IsSystemDeletable_MP1
+    // 0x24cd68, else _Default 0x24cb58. Default's extra in-lifetime checks run only when the
+    // system parms' bit 0 is clear (CElementGen ctor 0x244e14 -> gen+0x208 bit 2), and it is
+    // set by every MP1 owner: CParticleSystemParms(ESpecialInit) 0x2af2e0 writes 7, children
+    // copy their parent's (CParticleGen 0x27b088, CElementGen 0x24bc64), and no MP1 call site
+    // clears it. With it set, the two predicates agree with retail's, so KPAL changes nothing.
+    if (s.part && fourcc == F("KPAL")) {
+      return true;
+    }
     // Retail reads KSSM, but Remastered's spawn table is laid out differently.
     if (s.part && fourcc == F("KSSM")) {
       std::vector<uint8_t> bytes;
