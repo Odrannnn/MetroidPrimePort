@@ -40,6 +40,9 @@ public:
   // CHUDBillboardEffectMP1::EScaleType, the CreateHUDBillboardEffect argument (0xd7e67c): 1 at
   // every caller but SetMorphBallState's unmorph runoff (0), whose effect stays in HUD units.
   void PortSetScaleType(int type) { xPortScaleType = type; }
+  // A Remastered visor effect (GetVisorEffectCommands): drawn by RenderVisorEffects 0xfa0b30 over
+  // the post output, not in the world (CStateManager::PortDrawVisorEffects).
+  bool PortIsVisorEffect() const { return xPortManagedType == 4 || PortIsRemasteredHUD(); }
 #endif
 
 private:

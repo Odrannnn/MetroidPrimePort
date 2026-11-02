@@ -316,6 +316,9 @@ public:
   void DrawWorld() const;
 #ifdef TARGET_PC
   void PortCaptureProbeFace() const;
+  // Remastered's RenderVisorEffects (0xfa0b30, from RenderAfterPostFX after the camera filters): the
+  // Remastered visor effects the last HDR world pass left out (not thermal), over the post output.
+  void PortDrawVisorEffects() const;
   void PortUpdateIceDarkeners(float dt);
   // CMFGame snapshots this per-world-pass policy; DrawWorld consumes and clears it before
   // recording the LDR probe capture or beginning the real scene.

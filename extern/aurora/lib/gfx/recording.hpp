@@ -172,6 +172,9 @@ void resolve_pass_into(TextureHandle texture, ClipRect rect, bool clearColor, bo
 // where the device can, snapshots its raw depth (R32Float, this frame slot's pool) into depth. The
 // EFB continues on a pass that loads both. False, with nothing recorded, outside an on-screen EFB pass.
 bool resolve_scene_copy(TextureHandle color, const ResolveHdr* hdr, wgpu::TextureView& depth);
+// The visor copy (vfx::begin_visor_effects): one break of the on-screen display EFB pass (not the
+// HDR scene pass) that resolves its colour, sRGB-decoded, into the RGBA16F color, scaled to its size.
+bool resolve_display_linear_copy(TextureHandle color);
 namespace vfx {
 // This frame's scene copy (capture_scene) of the target being drawn, when it was taken in the scene
 // pass of the same kind (hdr); else null.

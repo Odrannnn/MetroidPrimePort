@@ -163,6 +163,11 @@ struct State_ {
     bool mips = true;         // the latest copy is the primary one (flags 3), not a second (flags 1)
   };
   std::array<SceneCopy, detail::FrameSlotCount> scene;
+  // The visor effects' copy per frame slot (begin_visor_effects): the display output after the post,
+  // decoded to linear, half size, no mips, no depth. Same slot ownership as the scene copy.
+  std::array<SceneCopy, detail::FrameSlotCount> visor;
+  // Between begin_visor_effects and end_visor_effects: display draws are visor effects after the post.
+  bool afterPost = false;
 };
 State_ g_state;
 
@@ -182,6 +187,7 @@ struct Payload {
   uint8_t linear[SlotCount];
   uint8_t sceneSlot; // the frame slot whose scene copy the draw binds, NoScene: the dummies
   uint8_t maskSlot;  // the frame slot whose cluster mask the draw binds, NoMask: the dummy
+  uint8_t sceneVisor; // sceneSlot names a visor copy (begin_visor_effects), not a scene copy
 };
 static_assert(sizeof(Payload) <= InlineDrawPayloadSize);
 constexpr uint8_t NoScene = 0xff;
@@ -626,8 +632,8 @@ R"(    let nm = sample_raw(S_NORMAL, uv2, 0).xy;
     // TCH0 flow map, scrolled by CCH1 (u by .w, v by .x x CCH2.y), gives the mask m from its y and w and
     // the glow's signed u. The scene copy at the fragment is offset by CCH0.x x CCH1.z x the map x
     // 0.01 (c1[0].x) and tinted between CCH3.rgb and CCH4.rgb by m: x the tint (b5e12668) or lerped
-    // toward it by m^CCH4.w (d85d4169). The fade (CCH1.z x CCH3.w) is per particle; v2.w is unresolved
-    // and taken as 1, so alpha is the instance alpha (x stays 1 below).
+    // toward it by m^CCH4.w (d85d4169). The fade (CCH1.z x CCH3.w) is per particle. v2.w, the mesh
+    // COLOR's alpha, scales the fade and the alpha: the runtime folds it into vc (x stays 1 below).
     let c0 = u.ice0;
     let c1 = u.ice1;
     let c2 = u.ice2;
@@ -1565,7 +1571,7 @@ bool ensure_registered() {
           wgpu::TextureView sceneDepth = g_state.dummyDepthView;
           wgpu::TextureView sceneColor = g_state.dummyColorView;
           if (p.sceneSlot < detail::FrameSlotCount) {
-            const auto& scene = g_state.scene[p.sceneSlot];
+            const auto& scene = p.sceneVisor != 0 ? g_state.visor[p.sceneSlot] : g_state.scene[p.sceneSlot];
             if (scene.depth) {
               sceneDepth = scene.depth;
             }
@@ -1757,7 +1763,7 @@ bool upload_cluster_mask(const ClusterView& view) {
 wgpu::RenderPipeline create_pipeline(const PipelineConfig& config) { return make_pipeline(config); }
 
 wgpu::BlendState pipeline_blend(const PipelineConfig& config) {
-  return blend_state(static_cast<Blend>(config.blend & ~BlendSceneHdr));
+  return blend_state(static_cast<Blend>(config.blend & ~BlendFlags));
 }
 
 void write_cluster_block(const ClusterView& view, float* uniform) {
@@ -1780,7 +1786,7 @@ std::string pipeline_source(const PipelineConfig& p) {
                                               "S_THRESHOLD", "S_INDIRECT", "S_PALETTE", "S_NORMAL",
                                               "S_ENV"};
   std::string source = "const FEAT: u32 = " + std::to_string(p.features) + "u;\nconst BLEND: u32 = " +
-                       std::to_string(p.blend & ~BlendSceneHdr) + "u;\n";
+                       std::to_string(p.blend & ~BlendFlags) + "u;\n";
   for (uint32_t i = 0; i < std::size(SlotNames); ++i) {
     const uint32_t v = (p.slotKey >> (3 * i)) & 7;
     source += std::string("const ") + SlotNames[i] + ": i32 = " + (v == 7 ? "-1" : std::to_string(v)) + ";\n";
@@ -1788,6 +1794,23 @@ std::string pipeline_source(const PipelineConfig& p) {
   // The scene copy's light: the HDR copy holds the exposed linear the HDR tail writes already. LDR
   // draws never read a scene copy (draw_prims drops them), so theirs is never called.
   static constexpr std::string_view SceneLight = "fn scene_light(c: vec3f) -> vec3f { return c; }\n";
+  static constexpr std::string_view Anchor = "  var col = tone(rgb);\n";
+  if (!hdr && (p.blend & BlendAfterPost) != 0) {
+    // A visor effect after the post (RenderVisorEffectsCustom): Remastered's shader writes linear light
+    // into its sRGB output with no exposure, tone or fog; tone() with tone1.x 0 (draw_prims) is that
+    // clamp and encode. Multiply has returned already. The display EFB is 8-bit unorm, so the blend
+    // mixes encoded values where Remastered's sRGB target mixes linear ones.
+    std::string body = ShaderSource;
+    const size_t at = body.find(Anchor);
+    if (at == std::string::npos) {
+      Log.fatal("VFX after post: the shader's tone anchor is gone");
+    }
+    body.insert(at, "  if (AFTER_POST) { return vec4f(tone(rgb), alpha); }\n");
+    source += "const AFTER_POST: bool = true;\n";
+    source += body;
+    source += SceneLight;
+    return source;
+  }
   if (!hdr) {
     source += ShaderSource;
     source += SceneLight;
@@ -1795,7 +1818,6 @@ std::string pipeline_source(const PipelineConfig& p) {
   }
   source += "const HDR: bool = true;\n";
   std::string body = ShaderSource;
-  static constexpr std::string_view Anchor = "  var col = tone(rgb);\n";
   // The HDR scene holds exposed linear light: the exposure once, no tone, clamp or encode, and no
   // trade of alpha for brightness (the blend keeps what is above 1). Multiply has returned already,
   // unscaled. Fog mixes in linear, its display colour taken back through the room's curve. Only that
@@ -1894,14 +1916,20 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   std::memcpy(u.tone, &gx.pbrTone, sizeof(u.tone));
   // Per draw: the GX state keeps the room's exposure for every later draw.
   const bool hdr = scene_hdr_pass_active();
-  if (!hdr && !is_barrier_exterior(features) &&
+  const bool afterPost = g_state.afterPost && !hdr && !is_offscreen();
+  if (!hdr && !afterPost && !is_barrier_exterior(features) &&
       (features & (SceneWarp | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit | VisorRain |
                    BarrierShield | FrameBufferColorErosion)) != 0) {
     // The scene-reading effects read the HDR scene's light; outside it there is none to read. The
-    // barrier's exterior (BarrierShield | BarrierGlow) reads none.
+    // barrier's exterior (BarrierShield | BarrierGlow) reads none. Visor effects after the post read
+    // the visor copy.
     return;
   }
   u.tone[0][3] = draw_exposure(u.tone[0][3], hdr, desc.alreadyExposed, desc.exposureOverride);
+  if (afterPost) {
+    // No exposure after the post: the shader neither scales the light nor divides a copy read by it.
+    u.tone[1][0] = 0.f;
+  }
   std::memcpy(u.fogColor, &gx.fog.color, sizeof(u.fogColor));
   u.fog[0] = float(gx.fog.type);
   u.fog[1] = gx.fog.a;
@@ -1918,8 +1946,9 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   u.misc3[0] = desc.alphaGamma;
   u.misc3[1] = desc.litPerVertex ? 1.f : 0.f;
   // The scene copy this draw may read: this frame's, taken earlier in it, of the target it draws into.
+  // After the post, the visor copy (no depth), of the display output it draws into.
   const size_t frameSlot = current_frame_slot();
-  const auto& scene = g_state.scene[frameSlot];
+  const auto& scene = afterPost ? g_state.visor[frameSlot] : g_state.scene[frameSlot];
   const auto target = get_render_target_size();
   const bool sceneValid = scene.frame == current_frame() && !is_offscreen() && scene.width == target.x &&
                           scene.height == target.y;
@@ -1931,7 +1960,8 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   }
   // SceneWarp, IceChargeCollision: the copy of this pass's scene (HDR or display), under a perspective
   // camera, whose near plane GX's projection gives as m23 / (m22 - 1).
-  if (sceneValid && scene.color && scene.hdr == hdr && gx.projType == GX_PERSPECTIVE && gx.proj.m2[2] != 1.f) {
+  if (sceneValid && scene.color && (afterPost || scene.hdr == hdr) && gx.projType == GX_PERSPECTIVE &&
+      gx.proj.m2[2] != 1.f) {
     u.scene[0] = 1.f / float(scene.width);
     u.scene[1] = 1.f / float(scene.height);
     u.scene[2] = gx.proj.m2[3] / (gx.proj.m2[2] - 1.f);
@@ -2017,7 +2047,7 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   Payload p{};
   p.features = features;
   p.slotKey = slotKey;
-  p.blend = uint32_t(desc.blend) | (hdr ? BlendSceneHdr : 0u);
+  p.blend = uint32_t(desc.blend) | (hdr ? BlendSceneHdr : 0u) | (afterPost ? BlendAfterPost : 0u);
   p.compare = uint32_t(gx.depthCompare ? to_compare(gx.depthFunc) : wgpu::CompareFunction::Always);
   p.depthWrite = gx.depthCompare && gx.depthUpdate ? 1 : 0;
   p.indexCount = uint32_t(indices.size());
@@ -2036,6 +2066,7 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     p.linear[i] = t.linear ? 1 : 0;
   }
   p.sceneSlot = sceneValid ? uint8_t(frameSlot) : NoScene;
+  p.sceneVisor = afterPost ? 1 : 0;
   p.maskSlot = maskSlot;
   push_custom_draw(g_state.drawType, &p, sizeof(p));
 }
@@ -2114,6 +2145,42 @@ void capture_scene(bool again) {
   scene.height = target.y;
   scene.depth = std::move(depth);
   scene.mips = !again;
+}
+
+bool begin_visor_effects() {
+  gx::fifo::drain();
+  g_state.afterPost = false;
+  if (is_offscreen() || scene_hdr_pass_active()) {
+    return false;
+  }
+  const auto target = get_render_target_size();
+  if (target.x == 0 || target.y == 0) {
+    return false;
+  }
+  // PreRenderVisorEffectsCustom (0xfa0b30): CopyOpaqueColorBuffer of the post output, flags 1 (half
+  // size, no mips), into an sRGB texture whose reads return linear light: RGBA16F holding the decode.
+  auto& visor = g_state.visor[current_frame_slot()];
+  const uint32_t width = std::max(target.x >> 1, 1u);
+  const uint32_t height = std::max(target.y >> 1, 1u);
+  if (!visor.color || visor.color->size.width != width || visor.color->size.height != height) {
+    visor.color = new_render_texture(width, height, GX_TF_RGBA8, "VFX Visor Copy", 1,
+                                     wgpu::TextureFormat::RGBA16Float);
+    g_state.groupsStale.store(true, std::memory_order_release);
+  }
+  if (!resolve_display_linear_copy(visor.color)) {
+    return false;
+  }
+  visor.frame = current_frame();
+  visor.width = target.x;
+  visor.height = target.y;
+  visor.mips = false;
+  g_state.afterPost = true;
+  return true;
+}
+
+void end_visor_effects() {
+  gx::fifo::drain();
+  g_state.afterPost = false;
 }
 
 wgpu::TextureView scene_copy_view(bool hdr) noexcept {

@@ -352,7 +352,8 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
                                      .dst = level(m),
                                      .sampleFilter = tex_copy_conv::SampleFilter::Linear,
                                      // A linear copy's levels stay RGBA16F; display copies are 8-bit.
-                                     .domain = domain == tex_copy_conv::CopyDomain::Linear
+                                     .domain = domain == tex_copy_conv::CopyDomain::Linear ||
+                                                       domain == tex_copy_conv::CopyDomain::DisplayLinear
                                                    ? tex_copy_conv::CopyDomain::Linear
                                                    : tex_copy_conv::CopyDomain::Display,
                                  });

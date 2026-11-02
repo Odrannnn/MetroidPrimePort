@@ -1292,6 +1292,11 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
   }
   // VMSH flag 4: the mesh's colour tints the draw, as the shader's COLOR perm does (2 x c^2.2, alpha c.a).
   const bool tint = vfx.meshStride == 16 && (vfx.meshFlags & 4) != 0;
+  // VFX_VisorRunOff (b5e12668, d85d4169) perm 000 binds the mesh's COLOR to v2 (layout comp 9 -> location 2)
+  // and reads only its w: the fade is x v2.w and the alpha sat(v2.w x the instance alpha), discarded at
+  // <= 0. So the colour's alpha scales the whole draw and fades the sheet out toward its rim.
+  const bool runOffAlpha = vfx.meshStride == 16 && (vfx.meshFlags & 2) != 0 &&
+                           (vfx.mat.features & (aurora::gfx::vfx::VisorRunOff | aurora::gfx::vfx::VisorRunOffLit)) != 0;
   for (u32 i = 0; !ice && !barrier && !glow && i < nv; ++i) {
     const float* m = &vfx.meshV[size_t(i) * vfx.meshStride];
     const CVector3f pos = model * CVector3f(m[0], m[1], m[2]);
@@ -1313,6 +1318,8 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
       v.color[k] = color[k];
       if (tint) {
         v.color[k] *= k < 3 ? 2.f * std::pow(std::abs(m[12 + k]), 2.2f) : m[15];
+      } else if (runOffAlpha) {
+        v.color[k] *= m[15];
       }
       for (int j = 0; j < 4; ++j) {
         v.extra[k][j] = p.xPortVpmt[k][j];

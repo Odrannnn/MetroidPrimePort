@@ -310,7 +310,7 @@ class BarrierExteriorWiring(WiringCase):
             self.assertIn(piece, self.vfx)
 
     def test_the_scene_gate_lets_it_through(self):
-        self.assertIn("if (!hdr && !is_barrier_exterior(features) &&", self.vfx)
+        self.assertIn("if (!hdr && !afterPost && !is_barrier_exterior(features) &&", self.vfx)
 
     def test_the_recipe_requires_mfc1(self):
         start = self.convert.index(f"{{0x{EXTERIOR_SHADER:08x}, kBarrierShield | kBarrierGlow,")

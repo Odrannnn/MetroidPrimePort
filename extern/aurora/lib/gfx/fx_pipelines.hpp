@@ -31,6 +31,10 @@ static_assert(std::has_unique_object_representations_v<PipelineConfig>);
 // Set in PipelineConfig::blend for a draw into the HDR scene (exposed linear, RGBA16F). Blend modes
 // are 0..MaxBlend, so no LDR config, cached record or in-memory key can carry it.
 constexpr uint32_t BlendSceneHdr = 1u << 31;
+// Set in PipelineConfig::blend for a visor effect drawn into the display output after the post
+// (vfx::begin_visor_effects): no exposure, tone, alpha trade or fog, a plain sRGB encode.
+constexpr uint32_t BlendAfterPost = 1u << 30;
+constexpr uint32_t BlendFlags = BlendSceneHdr | BlendAfterPost;
 
 wgpu::RenderPipeline create_pipeline(const PipelineConfig& config);
 // The blend a config's pipeline uses: its mode's, whatever the HDR bit.

@@ -345,6 +345,12 @@ void draw_indexed_triangles(const DrawDesc& desc, const Vertex* verts, uint32_t 
 // silhouettes, RenderPauseScreenElements, flags 1); draws recorded after it read the new one, its
 // top level alone.
 void capture_scene(bool again = false);
+// Remastered's RenderVisorEffects, after the post and the camera filters: copies the display output
+// (half size, no mips, decoded to linear) and makes the draws recorded until end_visor_effects visor
+// effects, which read that copy and write linear light encoded, with no exposure, tone or fog. False
+// (and draws as before) into an offscreen pass or the HDR scene. Game thread.
+bool begin_visor_effects();
+void end_visor_effects();
 // Whether draws recorded now would read this frame's copy (capture_scene ran this frame, into the
 // current target, in the same HDR state). Game thread.
 bool scene_copy_available();

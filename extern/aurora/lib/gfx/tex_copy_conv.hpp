@@ -24,6 +24,10 @@ enum class CopyDomain : uint8_t {
   // The RGBA16F HDR scene as linear light into an RGBA16F destination (GXPortCopyScene); only
   // the plain colour formats (RGB565 still writes alpha 1).
   Linear,
+  // The 8-bit display EFB (sRGB-encoded) decoded to linear light into an RGBA16F destination, each
+  // texel decoded before a bilinear filter: what sampling a copy into an sRGB texture returns
+  // (Remastered's visor copy of its sRGB post output). Always filtered; RGBA8 only.
+  DisplayLinear,
 };
 
 // The copy shaders' uniform: the source region in UV space, and opaqueAlpha for a source without alpha

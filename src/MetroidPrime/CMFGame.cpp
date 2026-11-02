@@ -393,6 +393,10 @@ void CMFGame::Draw() const {
         const CTransform4f filterView = CGraphics::GetViewMatrix();
         mStateManager->DrawCameraFilters();
         mStateManager->ResetViewAfterDraw(filterViewport, filterView);
+        // RenderVisorEffects follows the filters, in the main frame only.
+        if (mainPost) {
+          mStateManager->PortDrawVisorEffects();
+        }
       }
     };
     const auto drawWorld = [this]() {

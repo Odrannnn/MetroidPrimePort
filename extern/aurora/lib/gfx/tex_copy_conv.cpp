@@ -130,6 +130,28 @@ static constexpr std::string_view FragPassthrough = R"(
 }
 )"sv;
 
+// DisplayLinear: the four texels a bilinear tap mixes, each sRGB-decoded first, as a sampler
+// reading an sRGB texture does.
+static constexpr std::string_view FragDisplayLinear = R"(
+fn srgb_decode(c: vec4f) -> vec4f {
+    let rgb = select(pow((c.rgb + 0.055) / 1.055, vec3f(2.4)), c.rgb / 12.92, c.rgb <= vec3f(0.04045));
+    return vec4f(rgb, select(c.a, 1.0, uv_xf.opaque_alpha != 0u));
+}
+
+@fragment fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    let size = vec2i(textureDimensions(src));
+    let p = in.uv * vec2f(size) - 0.5;
+    let base = vec2i(floor(p));
+    let f = fract(p);
+    let hi = size - vec2i(1);
+    let t00 = srgb_decode(textureLoad(src, clamp(base, vec2i(0), hi), 0));
+    let t10 = srgb_decode(textureLoad(src, clamp(base + vec2i(1, 0), vec2i(0), hi), 0));
+    let t01 = srgb_decode(textureLoad(src, clamp(base + vec2i(0, 1), vec2i(0), hi), 0));
+    let t11 = srgb_decode(textureLoad(src, clamp(base + vec2i(1, 1), vec2i(0), hi), 0));
+    return mix(mix(t00, t10, f.x), mix(t01, t11, f.x), f.y);
+}
+)"sv;
+
 // GX_TF_I4: 4-bit intensity -> R8Unorm (quantized)
 static constexpr std::string_view FragI4 = R"(
 @fragment fn fs_main(in: VertexOutput) -> @location(0) vec4f {
@@ -596,7 +618,11 @@ static wgpu::RenderPipeline domain_pipeline(GXTexFmt fmt, CopyDomain domain, wgp
   if (const auto it = g_domainPipelines.find(key); it != g_domainPipelines.end()) {
     return it->second;
   }
-  std::string_view frag = FragPassthrough;
+  std::string_view frag = domain == CopyDomain::DisplayLinear ? FragDisplayLinear : FragPassthrough;
+  if (domain == CopyDomain::DisplayLinear && fmt != GX_TF_RGBA8) {
+    warn_missing_pipeline("display linear copy", fmt);
+    return {};
+  }
   if (fmt != GX_TF_RGBA8) {
     const auto it = std::ranges::find(ConvPipelines, fmt, &ConvPipeline::fmt);
     if (it == ConvPipelines.end() || (domain == CopyDomain::Linear && fmt != GX_TF_RGB565)) {
@@ -628,7 +654,9 @@ static wgpu::RenderPipeline domain_pipeline(GXTexFmt fmt, CopyDomain domain, wgp
     preamble += HdrCopyPreamble;
     layout = hdr_bind_group_layout();
   }
-  const char* label = domain == CopyDomain::Linear ? "TexCopyConv Linear" : "TexCopyConv HDR";
+  const char* label = domain == CopyDomain::Linear          ? "TexCopyConv Linear"
+                      : domain == CopyDomain::DisplayLinear ? "TexCopyConv Display Linear"
+                                                            : "TexCopyConv HDR";
   auto pipeline = create_pipeline({fmt, fragShader, outputFormat, label}, preamble, layout);
   g_domainPipelines.emplace(key, pipeline);
   return pipeline;

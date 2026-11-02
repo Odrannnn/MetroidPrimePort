@@ -1424,6 +1424,20 @@ bool resolve_scene_copy(TextureHandle color, const ResolveHdr* hdr, wgpu::Textur
   return true;
 }
 
+bool resolve_display_linear_copy(TextureHandle color) {
+  if (!color || !g_recorder.active() || g_recorder.currentRenderPass == UINT32_MAX || g_recorder.inOffscreen ||
+      scene_hdr_pass_active()) {
+    return false;
+  }
+  auto& pass = current_render_passes()[g_recorder.currentRenderPass];
+  const auto& attachment = pass.colorAttachments[SceneColorAttachmentIndex];
+  const auto width = static_cast<int32_t>(attachment.size.width);
+  const auto height = static_cast<int32_t>(attachment.size.height);
+  pass.resolveDomain = tex_copy_conv::CopyDomain::DisplayLinear;
+  resolve_pass_into(std::move(color), ClipRect{0, 0, width, height}, false, false, false, {}, 0.f);
+  return true;
+}
+
 size_t current_frame_slot() noexcept { return g_recorder.frameSlot; }
 
 bool resolve_pass(const ResolveDesc& desc, ResolvedTargets& out) {
