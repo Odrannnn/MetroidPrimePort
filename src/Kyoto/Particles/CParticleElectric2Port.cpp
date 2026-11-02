@@ -351,7 +351,7 @@ void CParticleElectric2Port::Render(int frame, const CTransform4f& view) {
     return;
   }
   const CPortVfxData& vfx = *mDesc->xPortVfx;
-  if (vfx.mat.version < 2 || vfx.mat.version > 4) {
+  if (!vfx.mat.Supported()) {
     return;
   }
   float vsmt[kPortVfxVsmtCount] = {};

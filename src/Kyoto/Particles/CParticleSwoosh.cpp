@@ -761,7 +761,7 @@ static inline float fast_cosine(float x);
 
 bool CParticleSwoosh::PortVfxSwoosh() const {
   const CPortVfxData* vfx = x1c_desc->xPortVfx.get();
-  return vfx != nullptr && (vfx->mat.version >= 2 && vfx->mat.version <= 4) && x1b8_SIDE >= 2 && !x1c_desc->x44_29_WIRE;
+  return vfx != nullptr && vfx->mat.Supported() && x1b8_SIDE >= 2 && !x1c_desc->x44_29_WIRE;
 }
 
 // RenderNSidedSpline's geometry through the swoosh's VFX material (VMAT). The base uv is

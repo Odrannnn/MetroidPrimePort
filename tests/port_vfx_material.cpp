@@ -51,8 +51,9 @@ std::vector<u8> Blob(u32 version) {
   for (int i = 0; i < 10; ++i) { Word(b, u32(-1)); } // slots, ramp rows, add row
   for (int i = 0; i < 11; ++i) { Word(b, u32(-1)); Word(b, 0); Float(b, float(i)); }
   Float(b, 1.f); Float(b, 0.f); Word(b, 4);
-  if (version == 3 || version == 4) { Float(b, 2.f); Float(b, 0.2f); }
-  if (version == 4) { Float(b, 2.2f); }
+  if (version >= 3 && version <= 5) { Float(b, 2.f); Float(b, 0.2f); }
+  if (version == 4 || version == 5) { Float(b, 2.2f); }
+  if (version == 5) { Word(b, 1); }
   return b;
 }
 void Parse(CPortVfxData& vfx, std::vector<u8> blob) {
@@ -64,9 +65,12 @@ void Parse(CPortVfxData& vfx, std::vector<u8> blob) {
 }
 void TestParsing() {
   CPortVfxData vfx;
+  Parse(vfx, Blob(5));
+  Check(vfx.mat.version == 5 && vfx.mat.alphaGamma == 2.2f && vfx.mat.litPerVertex,
+        "v5 reads the alpha gamma and the per-vertex lighting flag");
   Parse(vfx, Blob(4));
   Check(vfx.mat.version == 4 && vfx.mat.opacityGain == 2.f && vfx.mat.opacityBias == 0.2f &&
-            vfx.mat.alphaGamma == 2.2f,
+            vfx.mat.alphaGamma == 2.2f && !vfx.mat.litPerVertex,
         "v4 reads gain/bias and the alpha gamma");
   Parse(vfx, Blob(3));
   Check(vfx.mat.version == 3 && vfx.mat.opacityGain == 2.f && vfx.mat.opacityBias == 0.2f &&
@@ -76,11 +80,11 @@ void TestParsing() {
   Check(vfx.mat.version == 2 && vfx.mat.opacityGain == 1.f && vfx.mat.opacityBias == 0.f,
         "v2 resets previous gain/bias to neutral");
   Check(vfx.mat.src[10].value == 10.f && vfx.mat.spriteCenter == 4, "original sources and tail unchanged");
-  for (u32 version : {0u, 1u, 5u, 0xffffffffu}) {
+  for (u32 version : {0u, 1u, 6u, 0xffffffffu}) {
     Parse(vfx, Blob(version));
     Check(vfx.mat.version == 0, "unknown version leaves retail fallback");
   }
-  for (u32 version : {2u, 3u, 4u}) {
+  for (u32 version : {2u, 3u, 4u, 5u}) {
     for (int delta : {-8, -4, 4, 8}) {
       auto b = Blob(version);
       b.resize(b.size() + delta);
@@ -288,7 +292,11 @@ void TestDynamic() {
   Check(desc.alphaGamma == 0.f, "v3 draws without an alpha gamma");
   CPortVfxData v4;
   Parse(v4, Blob(4));
-  Check(PortVfxBuildDesc(v4, values, 0, desc) && desc.alphaGamma == 2.2f, "v4 passes its alpha gamma to the draw");
+  Check(PortVfxBuildDesc(v4, values, 0, desc) && desc.alphaGamma == 2.2f && !desc.litPerVertex,
+        "v4 passes its alpha gamma to the draw");
+  CPortVfxData v5;
+  Parse(v5, Blob(5));
+  Check(PortVfxBuildDesc(v5, values, 0, desc) && desc.litPerVertex, "v5 passes per-vertex lighting to the draw");
 }
 } // namespace
 

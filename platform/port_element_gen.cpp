@@ -215,7 +215,7 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
   const CGenDescription& desc = *x28_loadedGenDesc;
   char buf[64];
   if (const CPortVfxData* vfx = desc.xPortVfx.get()) {
-    out.vfx = (vfx->mat.version >= 2 && vfx->mat.version <= 4) ? "VMAT" : "VMAT(unsupported)";
+    out.vfx = vfx->mat.Supported() ? "VMAT" : "VMAT(unsupported)";
     if (vfx->vtmtCount != 0) {
       std::snprintf(buf, sizeof(buf), " VTMT*%u", vfx->vtmtCount);
       out.vfx += buf;
@@ -224,7 +224,9 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
       out.vfx += " VTRS";
     }
     if (!vfx->atexRects.empty()) {
-      std::snprintf(buf, sizeof(buf), " %s*%zu", vfx->atexCycleElem != nullptr ? "VAT2" : "VATX",
+      std::snprintf(buf, sizeof(buf), " %s*%zu", vfx->txp2Index != nullptr       ? "VTP2"
+                                                    : vfx->atexCycleElem != nullptr ? "VAT2"
+                                                                                    : "VATX",
                     vfx->atexRects.size() / 4);
       out.vfx += buf;
     }

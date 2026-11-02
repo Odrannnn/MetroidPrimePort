@@ -1243,7 +1243,7 @@ int VmatSummary(const std::string& genpPath, const std::string& matiDir) {
       } else if (name == "VORN" || name == "XFMD" || name == "PIRN") {
         std::cout << "  " << name << " " << be32(b + 4) << "\n";
       } else if (name == "SSZE" || name == "ITEN" || name == "VTRS" || name == "VATX" || name == "VAT2" ||
-                 name == "VATF") {
+                 name == "VATF" || name == "VTP2") {
         std::cout << "  " << name << " " << property.value.size() << " bytes\n";
       }
     }

@@ -169,8 +169,13 @@ TEST(VfxCluster, ParticleLitScalesTheRecipeColourByTheLight) {
   PipelineConfig config{};
   config.features = ColorTex | OpacityTex | DepthSoften | ParticleLit;
   const std::string source = pipeline_source(config);
-  EXPECT_NE(source.find("if ((FEAT & 67108864u) != 0u) {"), std::string::npos);
+  EXPECT_NE(source.find("if ((FEAT & 67108864u) != 0u && u.misc3.y < 0.5) {"), std::string::npos);
   EXPECT_NE(source.find("rgb = rgb * lighting * u.lit6.rgb * 0.3183098862;"), std::string::npos);
+  // 52d26efe's per-vertex form (VS 040_1, misc3.y): the vertex colour x [(probe midpoint + AMBS) x
+  // BLCM + the group-0 lights without N.L] / pi.
+  EXPECT_NE(source.find("if ((FEAT & 67108864u) != 0u && u.misc3.y > 0.5) {"), std::string::npos);
+  EXPECT_NE(source.find("let lighting = (u.lit0.xyz + u.lit1.xyz) * u.lit6.rgb + cluster_sum("), std::string::npos);
+  EXPECT_NE(source.find("out.color = vec4f(in.color.rgb * lighting * 0.3183098862, in.color.w);"), std::string::npos);
   EXPECT_NE(source.find("let i = 3u + bit * 5u;"), std::string::npos);
   EXPECT_NE(source.find("@binding(12) var clusterMask: texture_2d<u32>"), std::string::npos);
   // Not a shader-side exposure policy: the feature word's AlreadyExposed stays off the pipeline key.

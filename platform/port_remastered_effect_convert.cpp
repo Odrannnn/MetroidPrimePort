@@ -711,6 +711,8 @@ struct Recipe {
   bool noRefractionFlags = false;
   // > 0: the colour map's alpha is read as pow(|a|, alphaGamma) (VMAT v4).
   float alphaGamma = 0.0f;
+  // ParticleLit lights the vertices (a header's uber perm 040_1), not the fragments (VMAT v5 flag).
+  bool litPerVertex = false;
 };
 
 // RECIPES.md "(b) Per shader" and RECIPES-all.md. Derived from each shader's
@@ -1148,6 +1150,9 @@ struct HeaderShader {
   // The TEXR is an ATFB on a texture array, its layer the flipbook entry's (9d1a1432: 048_0 on a
   // sampler2DArray, layer roundEven(v.z)).
   bool flipbook = false;
+  // 52d26efe: perm 048's FS with an AERO erosion (o2.x), its TEXR a TXP2, drawn under LIT_ 1 by the
+  // uber perm 040, which lights the vertices (kb topic/header-mtrl-perm048.md).
+  bool litPalette = false;
 };
 
 const HeaderShader* HeaderShaderOf(uint32_t shader) {
@@ -1156,6 +1161,7 @@ const HeaderShader* HeaderShaderOf(uint32_t shader) {
       {0xb42cacf5, true, HeaderQuad::RotatedSprite},
       {0x29f35b3a, true, HeaderQuad::RotatedSprite},
       {0x4d6746f4, false, HeaderQuad::RotatedSprite},
+      {0x52d26efe, true, HeaderQuad::RotatedSprite, false, true},
       // Unrotated camera-facing quads: a VORN 0 sprite without ROTA.
       {0xe2bfbf91, true, HeaderQuad::Sprite},
       {0x9d1a1432, true, HeaderQuad::Sprite, true},
@@ -3610,16 +3616,28 @@ public:
     }
     const EffectProperty* texr = nullptr;
     const EffectProperty* rota = nullptr;
+    const EffectProperty* aero = nullptr;
     uint32_t orient = 0;
+    uint32_t lit = 0;
+    uint32_t blit = 0;
     for (const EffectProperty& property : node.properties) {
       uint32_t word = 0;
       if (property.fourcc == F("PMDL")) {
         return refuse("on a model particle");
       }
-      // A lit draw (LIT_ 1 or BLIT 1) is another perm.
-      if ((property.fourcc == F("LIT_") || property.fourcc == F("BLIT")) &&
-          (!SmallInteger(property, word) || word != 0)) {
-        return refuse("is lit (" + EffectFourCCString(property.fourcc) + ")");
+      // A lit draw (LIT_ 1 or BLIT 1) is another perm: 52d26efe's is ported, its uber perm 040 (BLIT
+      // gives it the probe, PBLT), and only under LIT_ 1.
+      if (property.fourcc == F("LIT_") || property.fourcc == F("BLIT")) {
+        if (!SmallInteger(property, word)) {
+          return refuse("has a " + EffectFourCCString(property.fourcc) + " that is not a constant");
+        }
+        (property.fourcc == F("LIT_") ? lit : blit) = word;
+        if (word != 0 && !header->litPalette) {
+          return refuse("is lit (" + EffectFourCCString(property.fourcc) + ")");
+        }
+      }
+      if (property.fourcc == F("AERO")) {
+        aero = &property;
       }
       // Perm 048's UV transform (0.5 + R(E) (diag(C, D) q + (A, B) - 0.5)) is not the port's VTMT.
       if (header->textured && property.fourcc == F("TMTR")) {
@@ -3635,6 +3653,10 @@ public:
         texr = &property;
       }
     }
+    // AERO is 52d26efe's erosion (VPMT); a header perm that takes none would lose it unreported.
+    if (aero != nullptr && !header->litPalette) {
+      return refuse("has an erosion (AERO)");
+    }
     if (header->quad == HeaderQuad::Axis ? orient == 0 : orient != 0) {
       return refuse("draws a different quad from ORNT " + std::to_string(orient));
     }
@@ -3647,6 +3669,7 @@ public:
     Recipe recipe{shader, 0, {}, {}};
     std::vector<uint8_t> vtrs;
     std::vector<uint8_t> vatx;
+    std::vector<uint8_t> vpmt;
     // TRST(x, y, sx, sy, rot, wrap): CopyPerSpriteDataToSpriteRenderData 0x2477cc evaluates it per sprite
     // and SetupInstancingComponents_SpriteCustom passes rot in radians (x pi/180, 0x2b4a04). The wrap
     // (GetDiffuseTextureWrapMode 0x291434) is the sampler's when -1.
@@ -3786,6 +3809,72 @@ public:
       recipe.features = kColorTex;
       recipe.textures = {{"TEXR", Role::Color, -1, -1}};
       recipe.alphaGamma = 2.2f;
+    } else if (header->litPalette) {
+      // TXP2(id, cols, rows, index): CUVETexturePalette (ctor 0x2cd940) cuts the texture into a
+      // cols x rows grid (ints evaluated at load, at least 1) and GetValue (0x2cda3c) picks tile
+      // clamp(index x count, 0, count - 1), the index a real element with no time term.
+      if (texr == nullptr || texr->value.size() != 1 || !IsElement(texr->value[0], F("TXP2"))) {
+        return refuse("has no TXP2 TEXR");
+      }
+      const EffectValue& txp2 = texr->value[0];
+      if (txp2.args.size() != 4 || txp2.args[0].kind != EffectValue::Kind::Guid) {
+        return refuse("has a TXP2 TEXR the port can't read");
+      }
+      uint32_t grid[2];
+      for (size_t i = 0; i < 2; ++i) {
+        const EffectValue& arg = txp2.args[i + 1];
+        if (!IsElement(arg, F("CNST")) || arg.args.size() != 1 ||
+            (arg.args[0].kind != EffectValue::Kind::Word && arg.args[0].kind != EffectValue::Kind::Byte)) {
+          return refuse("has a TXP2 TEXR whose grid is not constant");
+        }
+        grid[i] = std::max<int32_t>(1, int32_t(arg.args[0].word));
+      }
+      std::string why;
+      std::vector<uint8_t> index;
+      m_lifetimeOffset = LifetimeOffset(true, false, false, *texr);
+      if (!Element(txp2.args[3], Type::Real, index, why)) {
+        return refuse("has a TXP2 index the port can't evaluate: " + why);
+      }
+      AppendBE32(vatx, F("VTP2"));
+      AppendBE32(vatx, grid[0]);
+      AppendBE32(vatx, grid[1]);
+      vatx.insert(vatx.end(), index.begin(), index.end());
+      mati.textures["TEXR"] = MatiTexture{txp2.args[0].guid, 0, 1, -1, -1};
+      recipe.features = kColorTex;
+      recipe.textures = {{"TEXR", Role::Color, -1, -1}};
+      recipe.alphaGamma = 2.2f;
+      // VS 040_1 (the uber perm every interior room selects) lights the colour per vertex: (the probe +
+      // AMBS) x BLCM + the group-0 cluster sum, x 1/pi. BLIT without LIT_ is an unread perm.
+      if (blit != 0 && lit == 0) {
+        return refuse("is BLIT without LIT_");
+      }
+      recipe.litPerVertex = lit != 0;
+      // AERO (CGenDescription+0x4e0, var 0x12; VS v6.z -> o2.x): a = max(0, pow(|t.a|, 2.2) - AERO),
+      // the port's erosion on per-particle row 0.
+      if (aero != nullptr) {
+        if (aero->value.size() != 1) {
+          return refuse("has an AERO the port can't read");
+        }
+        for (const EffectProperty& property : node.properties) {
+          if (property.fourcc != F("PMTR")) {
+            continue;
+          }
+          for (const EffectValue& item : property.value) {
+            if ((item.word & 0xffff) == 0) {  // row 0, component 0
+              return refuse("has an AERO and a PMTR on the same component");
+            }
+          }
+        }
+        m_lifetimeOffset = LifetimeOffset(true, false, false, *aero);
+        AppendBE32(vpmt, 0);  // a real, row 0, component 0
+        AppendBE32(vpmt, 0);
+        AppendBE32(vpmt, 0);
+        if (!Element(aero->value[0], Type::Real, vpmt, why)) {
+          return refuse("has an AERO the port can't evaluate: " + why);
+        }
+        recipe.features |= kErosion;
+        recipe.sources = {{kSrcErosion, 0, 0}};
+      }
     } else if (header->textured) {
       // Remastered's TEXR `CNST(id), NONE` or `CNST(id), TRST`; an atlas is not this perm's
       // single map.
@@ -3810,6 +3899,10 @@ public:
       result.part.insert(result.part.end(), vtrs.begin(), vtrs.end());
     }
     result.part.insert(result.part.end(), vatx.begin(), vatx.end());
+    // After MaterialFrom's VPMT, if any: a second list appends to it.
+    if (!vpmt.empty()) {
+      PutList(result.part, F("VPMT"), 1, vpmt);
+    }
     return true;
   }
 
@@ -4047,7 +4140,7 @@ public:
         }
       }
     }
-    if (lit != 0) {
+    if (lit != 0 || recipe->litPerVertex) {
       features = (features | kParticleLit) & ~kAlreadyExposed;
     }
     if (recipe->frameBuffer) {
@@ -4097,8 +4190,8 @@ public:
     // The blob.
     std::vector<uint8_t> blob;
     const bool opacityGainBias = mati.shader == kPowerBallShader;
-    const bool alphaGamma = recipe->alphaGamma > 0.0f;
-    AppendBE32(blob, alphaGamma ? 4 : opacityGainBias ? 3 : 2);
+    const bool alphaGamma = recipe->alphaGamma > 0.0f || recipe->litPerVertex;
+    AppendBE32(blob, recipe->litPerVertex ? 5 : alphaGamma ? 4 : opacityGainBias ? 3 : 2);
     AppendBE32(blob, features);
     AppendBE32(blob, blend);
     AppendBE32(blob, uint32_t(slots.size()));
@@ -4172,6 +4265,9 @@ public:
     }
     if (alphaGamma) {
       AppendBE32(blob, FloatBits(recipe->alphaGamma));
+    }
+    if (recipe->litPerVertex) {
+      AppendBE32(blob, 1);  // v5 flags: bit 0 per-vertex light
     }
 
     AppendBE32(result.part, F("VMAT"));
@@ -5103,7 +5199,7 @@ public:
       return true;
     }
     if (s.part && (fourcc == F("TMTR") || fourcc == F("PMTR") || fourcc == F("SMTR") || fourcc == F("SSZE") ||
-                 fourcc == F("ITEN") || fourcc == F("SCTR") || fourcc == F("SFTD"))) {
+                 fourcc == F("ITEN") || fourcc == F("SCTR") || fourcc == F("SFTD") || fourcc == F("AERO"))) {
       s.portOnly.push_back(fourcc);
       return true;
     }
@@ -6593,6 +6689,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.Skip(5 * 4) && reader.Element(Type::Int);  // five words, the cycle
     } else if (part && fourcc == F("VATF")) {
       ok = reader.Skip(2 * 4) && reader.Element(Type::Int);  // layers, loop, the duration
+    } else if (part && fourcc == F("VTP2")) {
+      ok = reader.Skip(2 * 4) && reader.Element(Type::Real);  // columns, rows, the index
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||

@@ -111,7 +111,14 @@ HeaderTexr EvalHeaderTexr(const CPortVfxData& vfx, int partFrame, int systemLife
   }
   // VATX, TEXR ATEX. VAT2's cycle (an ATX2's, TEXR tag 1) reads the time context's slot 0, the
   // system's PSLT (CElementGen ctor 0x244cfc), so it runs on the system's lifetime as PortEvalSys does.
-  if (!vfx.atexRects.empty()) {
+  // VTP2, TEXR TXP2 (CUVETexturePalette::GetValue 0x2cda3c): the index alone picks the tile;
+  // fcvtzs takes a NaN to tile 0.
+  if (vfx.txp2Index != nullptr && !vfx.atexRects.empty()) {
+    const int count = int(vfx.atexRects.size() / 4);
+    const float v = EvalReal(vfx.txp2Index, partFrame, 0.f) * float(count);
+    const int tile = v >= float(count - 1) ? count - 1 : v > 0.f ? int(v) : 0;
+    h.rect = &vfx.atexRects[tile * 4];
+  } else if (!vfx.atexRects.empty()) {
     float cycle = vfx.atexCycle;
     if (vfx.atexCycleElem != nullptr) {
       CParticleGlobals::SetParticleLifetime(systemLifetime);
@@ -309,6 +316,7 @@ CPortVfxData::~CPortVfxData() {
     delete e;
   }
   delete atexCycleElem;
+  delete txp2Index;
   delete atfbCycle;
   delete ssze;
   delete iten;
@@ -481,6 +489,7 @@ bool PortVfxBuildDesc(const CPortVfxData& vfx, const float* vsmt, uint vsmtMask,
   desc.opacityGain = (vsmtMask & (1u << kPortVfxOpacityGainTarget)) ? vsmt[kPortVfxOpacityGainTarget] : mat.opacityGain;
   desc.opacityBias = (vsmtMask & (1u << kPortVfxOpacityBiasTarget)) ? vsmt[kPortVfxOpacityBiasTarget] : mat.opacityBias;
   desc.alphaGamma = mat.alphaGamma;
+  desc.litPerVertex = mat.litPerVertex;
   desc.rampRow[0] = static_cast< int8_t >(mat.rampRow[0]);
   desc.rampRow[1] = static_cast< int8_t >(mat.rampRow[1]);
   desc.addRow = static_cast< int8_t >(mat.addRow);
@@ -738,7 +747,8 @@ void CElementGen::PortRenderParticlesVfx() {
     const HeaderTexr header = EvalHeaderTexr(vfx, partFrame, x268_PSLT, p.x0_endFrame - p.x28_startFrame);
 
     // A lit perm (ParticleLit) reads no ITEN: Remastered's 080_1 passes the colour through without it.
-    const float iten = lit ? 1.f : p.xPortIten * inverseExposure;
+    // 52d26efe's per-vertex lighting (040_1) still scales its texel by v1.x, the ITEN.
+    const float iten = lit && !desc.litPerVertex ? 1.f : p.xPortIten * inverseExposure;
     float color[4] = {p.xPortColor[0] * iten, p.xPortColor[1] * iten, p.xPortColor[2] * iten, p.xPortColor[3]};
     if (hasModu) {
       for (int i = 0; i < 4; ++i) {

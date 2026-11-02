@@ -6065,6 +6065,79 @@ void TestHeaderMaterial() {
                 parts[0].approximated[0] == "VMAT: header shader b42cacf5 has an ATFB TEXR on a single-texture shader",
             "a single-texture shader with an ATFB is refused");
 
+  // 52d26efe picks a TXP2 palette tile (VTP2: columns, rows, the real index), lights per vertex under
+  // LIT_ 1 (VMAT v5, flags 1) and erodes by AERO, a VPMT real on row 0 that the erosion source reads.
+  const auto txp2 = [](int lit, bool aero) {
+    return [lit, aero](std::vector<uint8_t>& o) {
+      PutProperty(o, "TEXR", 3);
+      PutFourCC(o, "TXP2");
+      PutGuid(o, Legacy(0x1234ABCD));
+      PutConstant(o, 4);
+      PutConstant(o, 2);
+      PutConstant(o, Bits(0.5f));
+      if (lit >= 0) {
+        PutProperty(o, "LIT_", 0);
+        o.push_back(uint8_t(lit));
+      }
+      if (aero) {
+        PutProperty(o, "AERO", 3);
+        PutConstant(o, Bits(0.25f));
+      }
+    };
+  };
+  const auto valueOf = [](const ConvertedPart& part, const char (&fourcc)[5]) {
+    std::vector<RetailPartProperty> props;
+    std::string error;
+    std::vector<uint8_t> value;
+    if (SplitRetailPart(part.part.data(), part.part.size(), props, error)) {
+      for (const auto& prop : props) {
+        if (prop.fourcc == EffectFourCC(fourcc)) {
+          value.insert(value.end(), prop.value.begin(), prop.value.end());
+        }
+      }
+    }
+    return value;
+  };
+  constexpr uint32_t kErosionFeature = 4, kParticleLitFeature = 1u << 26;
+  parts = ConvertOne(withShader(OneGenerator(txp2(1, true)), 0x52d26efe), io);
+  vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+  const std::vector<uint8_t> vtp2 = parts.size() == 1 ? valueOf(parts[0], "VTP2") : std::vector<uint8_t>{};
+  const std::vector<uint8_t> vpmt = parts.size() == 1 ? valueOf(parts[0], "VPMT") : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmat, 8) == 5 &&
+                (VmatWord(vmat, 12) & kParticleLitFeature) != 0 && (VmatWord(vmat, 12) & kErosionFeature) != 0 &&
+                VmatWord(vmat, 24) == 0x5EED0009 && VmatWord(vmat, vmat.size() - 8) == Bits(2.2f) &&
+                VmatWord(vmat, vmat.size() - 4) == 1,
+            "52d26efe under LIT_ 1 gets a lit VMAT v5 with erosion");
+  CHECK_MSG(vtp2.size() == 16 && VmatWord(vtp2, 0) == 4 && VmatWord(vtp2, 4) == 2 &&
+                VmatWord(vtp2, 8) == EffectFourCC("CNST") && VmatWord(vtp2, 12) == Bits(0.5f),
+            "a TXP2 TEXR is written as VTP2");
+  CHECK_MSG(vpmt.size() == 28 && VmatWord(vpmt, 4) == 1 && VmatWord(vpmt, 8) == 0 && VmatWord(vpmt, 12) == 0 &&
+                VmatWord(vpmt, 16) == 0 && VmatWord(vpmt, 24) == Bits(0.25f),
+            "AERO is a VPMT real on row 0");
+  parts = ConvertOne(withShader(OneGenerator(txp2(-1, false)), 0x52d26efe), io);
+  vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmat, 8) == 4 &&
+                (VmatWord(vmat, 12) & (kParticleLitFeature | kErosionFeature)) == 0 &&
+                (parts.size() == 1 ? valueOf(parts[0], "VPMT") : std::vector<uint8_t>{}).empty(),
+            "an unlit 52d26efe without AERO is a plain v4");
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x52d26efe), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader 52d26efe has no TXP2 TEXR",
+            "52d26efe without a TXP2 is refused");
+  parts = ConvertOne(withShader(OneGenerator(txp2(1, false)), 0xb42cacf5), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 is lit (LIT_)",
+            "an unported lit header shader is refused");
+  parts = ConvertOne(withShader(OneGenerator(txp2(-1, true)), 0xb42cacf5), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 has an erosion (AERO)" &&
+                std::find(parts[0].dropped.begin(), parts[0].dropped.end(), "AERO: no VMAT") != parts[0].dropped.end(),
+            "an AERO on a header shader with no erosion is refused and reported dropped");
+  parts = ConvertOne(withShader(OneGenerator(txp2(1, true)), 0x52d26efe), io);
+  CHECK_MSG(parts.size() == 1 && std::none_of(parts[0].dropped.begin(), parts[0].dropped.end(),
+                                              [](const std::string& d) { return d.rfind("AERO", 0) == 0; }),
+            "52d26efe's AERO is not reported dropped");
+
   parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x1e245375), io);
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
   CHECK_MSG(VmatWord(vmat, 8) == 2 && VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,

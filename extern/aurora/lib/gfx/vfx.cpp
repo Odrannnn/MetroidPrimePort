@@ -84,6 +84,7 @@ struct Uniform {
   // already had before the cluster block, so nothing above or below moves.
   float lit[7][4];
   // ColorTex: x = the map's alpha exponent (ParticleSprite-style header materials raise it to 2.2), 0 = none.
+  // ParticleLit: y = 1 lights the vertex colour in the vertex stage (DrawDesc::litPerVertex).
   float misc3[4];
   float pad[24];
   // IceChargeCollisionLit: Remastered's clustered light block, c5[0..2] then 32 records of 20 floats, at
@@ -311,6 +312,13 @@ fn vs_main(in: VIn) -> VOut {
     // IceChargeCollision: the refraction's perspective scale, min(|INDP.w / -viewZ|, 0.2) (VS o5.x / o6.x).
     out.sw = min(abs(u.scene.z / -mv.z), 0.2);
   }
+  if ((FEAT & 67108864u) != 0u && u.misc3.y > 0.5) {
+    // ParticleLit per vertex (header shader 52d26efe, VS perm 040_1, the uber lighting with no directional
+    // and no shadowed light): o0.rgb = v3.rgb x [(probe + AMBS) x BLCM + the group-0 lights, no N.L] / pi,
+    // with the probe's layer 0 (its midpoint) at the vertex. The fragment stage then takes vc as is.
+    let lighting = (u.lit0.xyz + u.lit1.xyz) * u.lit6.rgb + cluster_sum(cluster_mask_vertex(mv, out.pos), mv, vec3f(0.0), false);
+    out.color = vec4f(in.color.rgb * lighting * 0.3183098862, in.color.w);
+  }
   return out;
 }
 
@@ -412,6 +420,22 @@ fn cluster_mask_word(in: VOut) -> u32 {
   return textureLoad(clusterMask, vec2i(row + col, slice), 0).x;
 }
 
+// The same word from the vertex stage (52d26efe's VS 040_1): tile = trunc(sat(ndc * 0.5 + 0.5) x (tiles - 1)),
+// slice = trunc(exp2(log2(clamp(-vz - c4[1].z, 0, c4[1].w)) x c4[1].x) x c4[1].y). The shader counts rows
+// from ndc y = -1; the port's mask counts them from the top, so the row is mirrored.
+fn cluster_mask_vertex(vp: vec3f, clip: vec4f) -> u32 {
+  let h0 = u.cluster[0];
+  let h1 = u.cluster[1];
+  let h2 = u.cluster[2];
+  if (h0.z < 1.0 || h0.w < 1.0 || clip.w <= 0.0) { return 0u; }
+  let ndc = clip.xy / clip.w;
+  let f = clamp(ndc * 0.5 + vec2f(0.5), vec2f(0.0), vec2f(1.0));
+  let col = clamp(i32(trunc(f.x * (h0.z - 1.0))), 0, i32(h0.z) - 1);
+  let row = i32(h0.w) - 1 - clamp(i32(trunc(f.y * (h0.w - 1.0))), 0, i32(h0.w) - 1);
+  let slice = clamp(i32(trunc(exp2(log2(clamp(-vp.z - h1.z, 0.0, h1.w)) * h1.x) * h1.y)), 0, 31);
+  return textureLoad(clusterMask, vec2i(row * bitcast<i32>(h2.y) + col, slice), 0).x;
+}
+
 // One colour channel of Remastered's baked probe (BLPD, REPORT.md section 4): the record's mean and range
 // with its own lobe direction. `sharp` is the record's lane w, 1 + 2 * s, so 0.5 * w + 0.5 is 1 + s.
 fn ambient_lobe(mean: f32, lobe: f32, sharp: f32, dir: vec3f, n: vec3f) -> f32 {
@@ -432,7 +456,11 @@ fn probe_ambient(ngeo: vec3f) -> vec3f {
 // colour x intensity x sat(dot(N, L)) x the cone x the falloff cubic at t = sat(d * A + B), with L from
 // the view position and no shadow and no specular term. Record 0 is c5[3], record i at c5[3 + 5i].
 fn cluster_lights(in: VOut, ngeo: vec3f) -> vec3f {
-  var mask = cluster_mask_word(in);
+  return cluster_sum(cluster_mask_word(in), in.vp, ngeo, true);
+}
+// The records `mask0` names, lit at view position vp; without `lambert` (the vertex-lit 040 perm) no N.L.
+fn cluster_sum(mask0: u32, vp: vec3f, ngeo: vec3f, lambert: bool) -> vec3f {
+  var mask = mask0;
   var sum = vec3f(0.0);
   loop {
     if (mask == 0u) { break; }
@@ -444,13 +472,13 @@ fn cluster_lights(in: VOut, ngeo: vec3f) -> vec3f {
     let r2 = u.cluster[i + 2u]; // +0x20 unit direction surface -> light, +0x2c cone bias
     let r3 = u.cluster[i + 3u]; // +0x30 A, +0x34 B
     let r4 = u.cluster[i + 4u]; // +0x40 a3, a2, a1, a0
-    let dv = r1.xyz - in.vp;
+    let dv = r1.xyz - vp;
     let d = length(dv);
     let l = dv / max(d, 1e-8);
     let cone = sat(dot(l, r2.xyz) * r1.w + r2.w);
     let t = sat(fma(d, r3.x, r3.y));
     let poly = ((r4.x * t + r4.y) * t + r4.z) * t + r4.w;
-    sum = sum + r0.rgb * (sat(dot(ngeo, l)) * cone * poly);
+    sum = sum + r0.rgb * (select(1.0, sat(dot(ngeo, l)), lambert) * cone * poly);
   }
   return sum;
 }
@@ -932,10 +960,11 @@ R"(  } else if ((FEAT & 524288u) != 0u) {
     if (u.tone1.x > 0.0 && u.tone0.w > 0.0) { ie = 1.0 / u.tone0.w; }
     rgb = scene_light(textureSampleLevel(sceneColor, sceneSampler, fbuv, 0.0).rgb) * rgb * ie;
   }
-  if ((FEAT & 67108864u) != 0u) {
-    // ParticleLit: a VFX_*_Lit shader's lit perm (20e149b2 080_0..091_0) is its unlit colour x (AMBS +
-    // the probe + the clustered lights) x BLCM x PCMD / pi; PCMD (M) is already in rgb. vec is camera-
-    // local (x, z, y); Remastered's view normal is (x, y, -z) of it.
+  if ((FEAT & 67108864u) != 0u && u.misc3.y < 0.5) {
+    // ParticleLit per fragment (the per-vertex form lit vc in vs_main): a VFX_*_Lit shader's lit perm
+    // (20e149b2 080_0..091_0) is its unlit colour x (AMBS + the probe + the clustered lights) x BLCM x
+    // PCMD / pi; PCMD (M) is already in rgb. vec is camera-local (x, z, y); Remastered's view normal
+    // is (x, y, -z) of it.
     let N = normalize(vec3f(in.nrm.x, in.nrm.y, -in.nrm.z) + vec3f(0.0, 0.0, 1e-6));
     let lighting = u.lit0.xyz + probe_ambient(N) + cluster_lights(in, N);
     rgb = rgb * lighting * u.lit6.rgb * 0.3183098862;
@@ -1145,7 +1174,7 @@ void ensure_static(const wgpu::Device& device) {
   };
   entries[ClusterMaskBinding] = {
       .binding = ClusterMaskBinding,
-      .visibility = wgpu::ShaderStage::Fragment,
+      .visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
       .texture = {.sampleType = wgpu::TextureSampleType::Uint, .viewDimension = wgpu::TextureViewDimension::e2D},
   };
   const wgpu::BindGroupLayoutDescriptor layoutDescriptor{
@@ -1838,6 +1867,7 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   u.misc2[2] = desc.opacityBias;
   u.misc2[3] = desc.depthSoften;
   u.misc3[0] = desc.alphaGamma;
+  u.misc3[1] = desc.litPerVertex ? 1.f : 0.f;
   // The scene copy this draw may read: this frame's, taken earlier in it, of the target it draws into.
   const size_t frameSlot = current_frame_slot();
   const auto& scene = g_state.scene[frameSlot];

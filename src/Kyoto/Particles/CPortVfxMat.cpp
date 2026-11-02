@@ -8,8 +8,9 @@
 
 CTexture* CreateTexture(int value);
 
-// VMAT v2, v3 (v2 followed by opacity gain/bias) and v4 (v3 followed by the colour map's
-// alpha exponent). An unknown version is skipped
+// VMAT v2, v3 (v2 followed by opacity gain/bias), v4 (v3 followed by the colour map's
+// alpha exponent) and v5 (v4 followed by a flags word, bit 0 per-vertex lighting). An unknown
+// version is skipped
 // (the material stays absent, so the PART draws as retail).
 bool PortReadVfxMat(CPortVfxData& vfx, CInputStream& in, u32 nbytes, CSimplePool* pool) {
   CPortVfxMat& m = vfx.mat;
@@ -33,11 +34,12 @@ bool PortReadVfxMat(CPortVfxData& vfx, CInputStream& in, u32 nbytes, CSimplePool
   const u32 ntex = in.ReadLong();
   consumed = 16;
   // Eleven words per texture; seven slots, two ramp rows, add row, eleven original
-  // three-word sources, modulate/depthSoften/spriteCenter. v3 adds two floats, v4 one more.
+  // three-word sources, modulate/depthSoften/spriteCenter. v3 adds two floats, v4 one more, v5 a
+  // flags word.
   constexpr u32 kTexWords = 11;
   constexpr u32 kTailWords = 7 + 2 + 1 + 3 * 11 + 3;
-  const u32 extraWords = version == 3 ? 2 : version == 4 ? 3 : 0;
-  if (version < 2 || version > 4 || ntex > 4 || blend > aurora::gfx::vfx::MaxBlend ||
+  const u32 extraWords = version == 3 ? 2 : version == 4 ? 3 : version == 5 ? 4 : 0;
+  if (version < 2 || version > 5 /* CPortVfxMat::Supported */ || ntex > 4 || blend > aurora::gfx::vfx::MaxBlend ||
       nbytes != (kTexWords * ntex + kTailWords + extraWords) * 4 + 16) {
     skipRest();
     return true;
@@ -86,8 +88,11 @@ bool PortReadVfxMat(CPortVfxData& vfx, CInputStream& in, u32 nbytes, CSimplePool
     m.opacityGain = in.ReadFloat();
     m.opacityBias = in.ReadFloat();
   }
-  if (version == 4) {
+  if (version >= 4) {
     m.alphaGamma = in.ReadFloat();
+  }
+  if (version >= 5) {
+    m.litPerVertex = (in.ReadLong() & 1) != 0;
   }
   return true;
 }

@@ -255,6 +255,8 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
     vfx.atexLoop = w[7] != 0;
     delete vfx.atexCycleElem;
     vfx.atexCycleElem = nullptr;
+    delete vfx.txp2Index;
+    vfx.txp2Index = nullptr;
   } break;
   case SBIG('VAT2'): {
     // The header sprite's TEXR ATX2: the texture's full width and height, columns, rows, loop,
@@ -267,6 +269,8 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
     }
     delete vfx.atexCycleElem;
     vfx.atexCycleElem = GetIntElement(in);
+    delete vfx.txp2Index;
+    vfx.txp2Index = nullptr;
     vfx.atexCycle = 0.f;
     vfx.atexLoop = w[4] != 0;
     vfx.atexRects.clear();
@@ -286,6 +290,30 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
         vfx.atexRects.push_back(invH * y);
         vfx.atexRects.push_back(invW * (tileW + x0));
         vfx.atexRects.push_back(invH * (tileH + y));
+      }
+    }
+  } break;
+  case SBIG('VTP2'): {
+    // The header sprite's TEXR TXP2: columns, rows, then the index as a real element. The tiles
+    // are CUVETexturePalette's (ctor 0x2cd940, the ATX2 builder 0x2cd510): rows bottom up, each
+    // left to right.
+    CPortVfxData& vfx = PortVfxData(vfxPtr);
+    const s32 cols = std::max(1, s32(in.ReadLong()));
+    const s32 rows = std::max(1, s32(in.ReadLong()));
+    delete vfx.txp2Index;
+    vfx.txp2Index = GetRealElement(in);
+    delete vfx.atexCycleElem;
+    vfx.atexCycleElem = nullptr;
+    vfx.atexRects.clear();
+    if (s64(cols) * rows > 65536) {
+      break;
+    }
+    for (s32 row = rows - 1; row >= 0; --row) {
+      for (s32 x = 0; x < cols; ++x) {
+        vfx.atexRects.push_back(float(x) / float(cols));
+        vfx.atexRects.push_back(float(row) / float(rows));
+        vfx.atexRects.push_back(float(x + 1) / float(cols));
+        vfx.atexRects.push_back(float(row + 1) / float(rows));
       }
     }
   } break;

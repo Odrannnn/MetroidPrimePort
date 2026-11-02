@@ -280,6 +280,9 @@ struct DrawDesc {
   float depthSoften = 0.f; // DepthSoften's softness (SFTD): the view-space distance the fade spans; <= 0: none
   float opacityGain = 1.f, opacityBias = 0.f; // gain * clamp(smooth3(f) - bias, 0, 1)
   float alphaGamma = 0.f; // ColorTex: the map's alpha is pow(|a|, alphaGamma); <= 0: as sampled
+  // ParticleLit lit per vertex, no N.L (header shader 52d26efe's VS 040_1): the vertex colour x ((AMBS + the
+  // probe's midpoint) x BLCM + the clustered lights at the vertex) / pi; the fragment takes it unchanged.
+  bool litPerVertex = false;
   int8_t rampRow[2] = {0, 1}; // extra[] rows read whole as the ramp colours c0, c1
   int8_t addRow = 0;          // AddColor: the extra[] row (add.rgb, scale)
   Src erosion;

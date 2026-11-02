@@ -17,7 +17,7 @@
 
 // True when the description carries a VMAT this runtime understands (version 2 or 3).
 inline bool PortVfxActive(const CGenDescription& desc) {
-  return desc.xPortVfx != nullptr && (desc.xPortVfx->mat.version >= 2 && desc.xPortVfx->mat.version <= 4);
+  return desc.xPortVfx != nullptr && desc.xPortVfx->mat.Supported();
 }
 
 // Evaluates SSZE (default: the particle's SIZE), ITEN (default 1) and the VPMT rows into the

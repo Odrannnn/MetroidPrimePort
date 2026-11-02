@@ -61,7 +61,9 @@ struct CPortVfxMat {
   float modulate = 1.f, depthSoften = 0.f;
   float opacityGain = 1.f, opacityBias = 0.f; // v3 tail; v2 keeps the identity
   float alphaGamma = 0.f; // v4 tail: the colour map's alpha is |a|^alphaGamma; 0 = as sampled
+  bool litPerVertex = false; // v5 flags bit 0: ParticleLit lights the vertices, not the pixels
   u32 spriteCenter = 0; // 0..8, a row of the sprite pivot table
+  bool Supported() const { return version >= 2 && version <= 5; } // a VMAT the port draws
 };
 
 // XFMD (build/mpr/vfx/RESOLVED-xfmd.md): how the emitter's transform reaches the particles.
@@ -82,6 +84,9 @@ struct CPortVfxData {
   bool atexLoop = false;
   // VAT2: an ATX2's cycle, evaluated per particle frame in place of atexCycle; null for VATX.
   CIntElement* atexCycleElem = nullptr;
+  // VTP2: a header sprite's TEXR TXP2 as CUVETexturePalette, its cols x rows tiles in atexRects
+  // and the index, a real picking tile clamp(index·count, 0, count - 1) with no time term.
+  CRealElement* txp2Index = nullptr;
   // VATF: a header sprite's TEXR ATFB as Remastered's CUVEAnimFlipBookTexture, a texture array's
   // layer count (0 without one), loop, and the duration in frames, an int element read as a real.
   u32 atfbLayers = 0;

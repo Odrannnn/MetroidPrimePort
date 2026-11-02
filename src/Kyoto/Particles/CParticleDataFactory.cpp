@@ -1021,6 +1021,7 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('VTRS'):
     case SBIG('VATX'):
     case SBIG('VAT2'):
+    case SBIG('VTP2'):
     case SBIG('VATF'):
     case SBIG('VPMT'):
     case SBIG('VSMT'):
