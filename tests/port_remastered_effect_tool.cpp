@@ -212,7 +212,7 @@ int Kssm(const std::string& path) {
 }
 
 // One line per generator with a material instance: file, form, the MTIN's
-// MATI (pak order), whether it has a TEXR, PBDM, then PMTR's items as
+// MATI (pak order; else "mtrl:" and the GPSM header's base material), whether it has a TEXR, PBDM, then PMTR's items as
 // group/slot=value (a constant vec4 as its four reals, else the element's
 // FourCC) and SMTR's item count. For joining with `re.sh mtrls`.
 void MaterialLines(const std::string& file, const PortRemastered::EffectNode& node, const uint8_t* data,
@@ -264,6 +264,10 @@ void MaterialLines(const std::string& file, const PortRemastered::EffectNode& no
         pmtr += (pmtr.empty() ? "" : " ") + text.str();
       }
     }
+  }
+  // No MTIN: the GPSM header's base material (ctor 0x28bfc4), marked "mtrl:".
+  if (mati.empty() && node.form == EffectFourCC("GPSM") && node.baseMaterial != EffectGuid{}) {
+    mati = "mtrl:" + EffectGuidString(node.baseMaterial);
   }
   if (!mati.empty()) {
     std::cout << file << "\t" << EffectFourCCString(node.form) << "\t" << mati << "\t" << (texr ? "TEXR" : "-") << "\t"

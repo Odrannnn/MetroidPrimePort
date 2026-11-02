@@ -5373,7 +5373,8 @@ public:
     }
     const bool vmat = (s.part || s.swoosh || s.electric) && s.material != nullptr &&
                       Material(*s.material, s.node, s.result, s.swoosh || s.electric, s.electric);
-    if (!vmat) {
+    // A node that draws nothing (no primitive, or no material at all) loses no shading.
+    if (!vmat && !s.drawsNothing) {
       if (s.part && s.inverseExposed) {
         s.result.dropped.push_back("IEXP: no VMAT");
       }
