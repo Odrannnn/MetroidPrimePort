@@ -591,6 +591,7 @@ fs::path HeldFolder(const fs::path& staging) {
 // (the mod loader skips it) at once and deleted on a thread; one a quit interrupted
 // is picked up by the next sweep.
 std::mutex sTrashMutex;
+std::condition_variable sTrashDone;  // signalled when a sweep ends
 bool sTrashSweeping = false;
 bool sTrashAgain = false;
 
@@ -625,11 +626,19 @@ void SweepTrash(const fs::path& mods) {
       std::lock_guard<std::mutex> lock(sTrashMutex);
       if (!sTrashAgain) {
         sTrashSweeping = false;
+        sTrashDone.notify_all();
         return;
       }
       sTrashAgain = false;
     }
   }).detach();
+}
+
+// Waits for a running sweep: a process that exits mid-sweep leaves the rest of an old
+// import (gigabytes) until the next import sweeps again.
+void WaitForTrashSweep() {
+  std::unique_lock<std::mutex> lock(sTrashMutex);
+  sTrashDone.wait(lock, [] { return !sTrashSweeping; });
 }
 
 // Takes `dir` out of the way now and deletes it later. Deletes it here only when
@@ -4481,7 +4490,7 @@ void RemoveLegacyImport() {
 #endif
 }
 
-int RunImportFromCommandLine(const std::string& nspPath, const std::string& keysPath, bool moviesOnly) {
+static int RunImport(const std::string& nspPath, const std::string& keysPath, bool moviesOnly) {
   std::string keys = keysPath.empty() ? DefaultKeysPath() : keysPath;
   if (keys.empty()) {
     std::fprintf(stderr, "no key file given and no ~/.switch/prod.keys\n");
@@ -4530,6 +4539,12 @@ int RunImportFromCommandLine(const std::string& nspPath, const std::string& keys
   }
   std::printf("installed as %s%s\n", root.c_str(), kImportModName);
   return 0;
+}
+
+int RunImportFromCommandLine(const std::string& nspPath, const std::string& keysPath, bool moviesOnly) {
+  const int result = RunImport(nspPath, keysPath, moviesOnly);
+  WaitForTrashSweep();
+  return result;
 }
 
 }  // namespace PortRemastered
