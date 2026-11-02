@@ -150,6 +150,10 @@
   stays on whatever is bound to A; remap it in Controls > Remap.
 - `MP_FLICK_STICK=1` (Controls > Options "Flick stick" under twin stick, persisted
   as `flick_stick`, off by default): the twin-stick right stick as Flick Stick.
+  Its tilt runs from the C-stick deadzone to an outer deadzone ("Flick outer
+  deadzone" under it, `flick_stick_outer_deadzone`, 0-50% of travel, 10 by
+  default; the touch overlay's flick stick uses it too), with the deadzones
+  round, so circling the stick turns evenly.
   Tilting it past 90% turns the view to face that direction relative to the
   current view (right 90 degrees, down 180) over 0.1 s; rotating the held stick
   turns the view by the same angle, small rotations smoothed (fully below

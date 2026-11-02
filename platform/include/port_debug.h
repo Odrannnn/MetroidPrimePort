@@ -715,6 +715,8 @@ void SetStickAimRate(float pixelsPerSecond);
 bool FlickStick();
 void SetFlickStick(bool enabled);
 void SetTouchFlickStick(bool enabled);
+// Flick stick's outer deadzone as a fraction of travel (flick_stick_outer_deadzone).
+float FlickOuterDeadZone();
 // Gyro aiming. Mode: 0 off, 1 aim while the Gyro aim button is held, 2 always
 // aim, 3 aim except while it is held, 4 press to toggle aim (initially off).
 // Source: 0 auto (a pad's gyro if it has

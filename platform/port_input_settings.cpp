@@ -83,6 +83,11 @@ bool ApplySetting(std::string_view keyView, std::string_view valueView) {
     s.stickAimSplit = ParseBool(value);
   } else if (key == "flick_stick") {
     s.flickStick = ParseBool(value);
+  } else if (key == "flick_stick_outer_deadzone") {
+    const float f = ParseFloat(value);
+    if (std::isfinite(f) && f >= 0.f && f <= kFlickOuterDeadZoneMax) {
+      s.flickOuterDeadZone = f;
+    }
   } else if (key == "stick_aim_rate_y") {
     const float f = ParseFloat(value);
     if (std::isfinite(f) && f >= 50.f && f <= 10000.f) {
@@ -380,6 +385,7 @@ void WriteAimSettings(std::ostream& out) {
   out << "stick_aim_split=" << (s.stickAimSplit ? 1 : 0) << '\n';
   out << "stick_aim_rate_y=" << s.stickAimRateY << '\n';
   out << "flick_stick=" << (s.flickStick ? 1 : 0) << '\n';
+  out << "flick_stick_outer_deadzone=" << s.flickOuterDeadZone << '\n';
   out << "gyro_mode=" << s.gyroMode << '\n';
   out << "gyro_source=" << s.gyroSource << '\n';
   out << "gyro_sensitivity=" << s.gyroSensitivity << '\n';

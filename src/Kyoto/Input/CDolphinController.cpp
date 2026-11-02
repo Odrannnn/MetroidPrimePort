@@ -167,10 +167,17 @@ void CDolphinController::ReadDevices() {
       }
       // Flick stick turns by the stick's angle, which PADClamp's dead zone per
       // axis pulls onto the nearest axis (a snap every 90 degrees while
-      // circling): it reads the stick from before it.
+      // circling): it reads the stick from before it. Its tilt runs from the
+      // inner deadzone to the outer one, so a pad that doesn't reach its edge
+      // still flicks.
       const float rawLength = std::sqrt(devices.cStickX * devices.cStickX + devices.cStickY * devices.cStickY);
       if (PortDebug::FlickStick() && (cx != 0.f || cy != 0.f) && rawLength > 0.f) {
-        const float scale = std::min(rawLength, 1.f) / rawLength;
+        const PADDeadZones* zones = PADGetDeadZones(0);
+        const float inner = zones != nullptr && zones->useDeadzones
+                                ? static_cast< float >(zones->substickDeadZone) / 32767.f
+                                : 0.f;
+        const float span = std::max(1.f - PortDebug::FlickOuterDeadZone() - inner, 0.05f);
+        const float scale = std::clamp((rawLength - inner) / span, 0.f, 1.f) / rawLength;
         sx = devices.cStickX * scale;
         sy = devices.cStickY * scale;
       }

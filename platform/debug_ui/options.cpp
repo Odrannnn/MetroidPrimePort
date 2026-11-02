@@ -1028,6 +1028,8 @@ bool FlickStick() {
 
 void SetFlickStick(bool enabled) { StoreSetting(sInput.flickStick, enabled); }
 
+float FlickOuterDeadZone() { return Loaded(sInput.flickOuterDeadZone) / 100.f; }
+
 void SetTouchFlickStick(bool enabled) { StoreSetting(sInput.touchFlickStick, enabled); }
 
 int PadPreset() { return Loaded(sInput.padPreset); }

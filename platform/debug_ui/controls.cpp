@@ -340,6 +340,13 @@ void DrawControlsController() {
              "gyro aim.");
     if (sInput.flickStick) {
       DrawFlickStickWarning();
+      float outer = sInput.flickOuterDeadZone;
+      if (ImGui::SliderFloat("Flick outer deadzone", &outer, 0.f, PortInput::kFlickOuterDeadZoneMax, "%.0f%%")) {
+        sInput.flickOuterDeadZone = std::clamp(outer, 0.f, PortInput::kFlickOuterDeadZoneMax);
+        MarkDirty();
+      }
+      ItemHelp("How far from its edge the right stick counts as fully tilted. Raise it if flicks need "
+               "the stick pushed hard into its rim, or don't fire on the diagonals.");
     }
   }
   // Shown only with twin stick on, as the pause menu's Stick Aim Speed row; flick stick has no speed.
