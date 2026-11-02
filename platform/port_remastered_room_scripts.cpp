@@ -1597,8 +1597,10 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
             }
             // An effect's drive waits as one restarting delay per link: exact only for a timer
             // that ResetAndStart alone drives (SLdrTimerMP1::Load 0xf36d14), once, with no random
-            // add (35c8fdd3), no loop (+0x12) and no autostart (+0x11). Its reset-on-expiry
-            // (+0x10) changes nothing then, as each start resets it anyway.
+            // add (35c8fdd3), no loop (+0x12) and no autostart (+0x11), that starts active: its
+            // actions become retail messages (0xf36b10), and an inactive CScriptTimer drops
+            // ResetAndStart. Its reset-on-expiry (+0x10) changes nothing then, as each start
+            // resets it anyway.
             if (effect) {
               const auto flag = [&](uint32_t id) {
                 const auto it = f.find(id);
@@ -1611,7 +1613,8 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
               const bool onlyResetAndStart =
                   feeds != incoming.end() && feeds->second.size() == 1 &&
                   feeds->second[0]->action == kActionTimerStart[0];
-              if (flag(kPropTimerAutostart) || flag(kPropTimerLoop) || randomAdd || !onlyResetAndStart) {
+              if (!room.Active(sender) || flag(kPropTimerAutostart) || flag(kPropTimerLoop) || randomAdd ||
+                  !onlyResetAndStart) {
                 miss(sender, *c, first, depth);
                 continue;
               }
