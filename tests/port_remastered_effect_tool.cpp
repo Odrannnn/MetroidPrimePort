@@ -1167,7 +1167,12 @@ int VmatSummary(const std::string& genpPath, const std::string& matiDir) {
   for (const ConvertedPart& part : ConvertEffect(effect, data.data(), io)) {
     ++index;
     std::vector<RetailPartProperty> properties;
-    std::cout << "generator " << index << (part.root ? " (root)" : "") << " " << EffectFourCCString(part.type) << "\n";
+    std::cout << "generator " << index << (part.root ? " (root)" : "") << " " << EffectFourCCString(part.type);
+    if (index <= nodes.size()) {
+      std::cout << " primitive " << nodes[index - 1]->primitiveType << " header MTRL "
+                << (nodes[index - 1]->baseMaterial == EffectGuid{} ? "nil" : "set");
+    }
+    std::cout << "\n";
     if (!SplitRetailEffect(part.type, part.part.data(), part.part.size(), properties, error)) {
       std::cout << "  does not read: " << error << "\n";
       continue;

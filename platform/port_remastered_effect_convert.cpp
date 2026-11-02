@@ -5608,8 +5608,13 @@ public:
                        Material(*s.material, s.node, s.result, s.swoosh || s.electric, s.electric)) ||
                       (s.part && !s.customMaterial && !s.drawsNothing && HeaderMaterial(s.node, s.result));
     // A node that draws nothing (no primitive, or no material at all) loses no shading.
+    // A model generator with no MTIN draws its CMDL's own materials (UpdateModelReadiness
+    // 0x2bba34: no custom material -> SetupInstancingRegistrations), which take no particle
+    // colour, so IEXP has nothing to scale there (gib shader d2d3acca's perms read none).
+    const bool ownModelMaterials =
+        s.part && s.material == nullptr && s.node.primitiveType == 3 && s.Has(F("PMDL"));
     if (!vmat && !s.drawsNothing) {
-      if (s.part && s.inverseExposed) {
+      if (s.part && s.inverseExposed && !ownModelMaterials) {
         s.result.dropped.push_back("IEXP: no VMAT");
       }
       for (const uint32_t fourcc : s.portOnly) {

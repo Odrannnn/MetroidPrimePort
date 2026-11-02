@@ -2312,6 +2312,32 @@ void TestDrawsNothing() {
       }
     }
   }
+  // A model with no MTIN draws its CMDL's own materials, which take no particle colour:
+  // its IEXP is kept and not reported. A sprite's IEXP with no VMAT still is.
+  for (int primitive : {1, 3}) {
+    auto data = OneGenerator([&](auto& out) {
+      PutProperty(out, "IEXP", 1);
+      PutConstant(out, 1);
+      if (primitive == 3) {
+        PutProperty(out, "PMDL", 0);
+        PutFourCC(out, "CNST");
+        PutGuid(out, Legacy(0x98765432));
+      } else {
+        PutTexr(out, 0x1234ABCD);
+      }
+    });
+    data[0x3c + 21] = uint8_t(primitive + 1);
+    if (primitive == 3) {
+      std::fill(data.begin() + 0x41, data.begin() + 0x51, 0);  // nil header MTRL
+    }
+    const auto converted = ConvertOne(data, {});
+    CHECK_MSG(converted.size() == 1, "IEXP generator converts");
+    if (converted.empty()) continue;
+    const bool reported = std::find(converted[0].dropped.begin(), converted[0].dropped.end(), "IEXP: no VMAT") !=
+                          converted[0].dropped.end();
+    CHECK_MSG(!converted[0].drawsNothing && reported == (primitive == 1),
+              "IEXP without a VMAT is reported only where a VMAT would carry it");
+  }
 }
 
 // PBDM is Remastered's blend mode: 2 is retail's additive AAPH, 1 (premultiplied) and
