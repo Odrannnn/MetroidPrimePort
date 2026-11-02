@@ -91,7 +91,9 @@ const PropertyTable& Elc2Properties() {
     AddProperties(t, "SIDE LWQD NFOM TSPN BDEP BNDI", Type::Int);
     AddProperties(t, "RADS LRAD RRAD SLVF BLNC BCFF BLEN BANG BIDF BLDF AMDF", Type::Real);
     AddProperties(t, "NCLR", Type::Color);
-    AddProperties(t, "LLRD FPLB", Type::Bool);
+    // IEXP: CreateELC2 0xb716f4 reads a raw byte into desc+0x26a (ctor default 1), which gates the
+    // vertex writer's inverse exposure. ELC2's DVVN only sets desc+0x6a, which nothing known reads.
+    AddProperties(t, "LLRD FPLB IEXP", Type::Bool);
     return t;
   }();
   return table;
@@ -5561,20 +5563,6 @@ public:
       }
       return true;
     }
-    // Port-only: an ELC2's IEXP (CreateELC2 0xb716f4 -> desc+0x26a, default 1) gates the vertex
-    // writer's inverse exposure (CElectricDescription xPortInverseExposure). Its DVVN only sets
-    // desc+0x6a, which nothing known reads, so it stays dropped.
-    if (s.electric && fourcc == F("IEXP")) {
-      uint32_t value = 0;
-      if (SmallConst(property, value) && value <= 1) {
-        AppendBE32(s.out, fourcc);
-        AppendBE32(s.out, F("CNST"));
-        AppendBE32(s.out, value);
-      } else {
-        s.result.dropped.push_back("IEXP: invalid constant");
-      }
-      return true;
-    }
     // Port-only ELC2 fields, written as the retail encoding under their own tags.
     if (s.electric && Elc2Properties().count(fourcc) != 0) {
       std::vector<uint8_t> bytes;
@@ -7195,7 +7183,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.Element(Type::Vector);
     } else if (!part && vfx && fourcc == F("PROZ")) {
       ok = reader.PortWord() && reader.Element(Type::Real);
-    } else if (electric && (fourcc == F("PEL2") || fourcc == F("IEXP"))) {
+    } else if (electric && fourcc == F("PEL2")) {
       ok = reader.PortWord();
     } else if (electric && Elc2Properties().count(fourcc) != 0) {
       const Type elcType = Elc2Properties().at(fourcc).type;
