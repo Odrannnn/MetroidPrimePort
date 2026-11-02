@@ -298,7 +298,9 @@ std::set<int> DrivableEntities(const Room& room) {
     }
     const int entity = comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity;
     connected.insert(entity);
-    if (comps[c.sender].type == kSpecialFunction) {
+    // An ObjectFollowLocator's Play names what it follows and moves (a follow), never sent.
+    if (comps[c.sender].type == kSpecialFunction &&
+        !(c.event == kEventSpecialFunctionPlay && IsFollowLocator(room, comps[c.sender]))) {
       refused.insert(entity);
     }
   }
@@ -959,7 +961,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   if (effects.empty() && enemies.empty() && !slotted) {
     return {};
   }
-  char line[768];
+  char line[1024];
   const std::vector<ScriptObject>& objects = area.objects;
   if (objects.empty()) {
     return "  " + name + ": no retail objects, its effect actors left out";
@@ -1101,6 +1103,104 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                 std::isfinite(plan.record.offset[2]);
     }
   }
+  // The unmatched ObjectFollowLocators that move effects, as retail SpecialFunctions where exact:
+  // exactly two Play connections, Activate to an actor a retail object matched, Deactivate to the
+  // effect (the messages their targets' GOCs translate the actions to), nothing connected to the
+  // function itself (it never changes), on a known layer, with a locator name.
+  struct FollowPlan {
+    bool ok = false;
+    int follower = -1;      // the effect's entity
+    uint32_t followerId = 0;  // its retail or add-on id, once known
+    PortRoomEffects::Follow record;
+    uint32_t layer = 0;
+    const char* why = "not a follow locator";  // why it is left out, for the log
+  };
+  std::map<int, FollowPlan> followPlans;  // by SpecialFunctionMP1 entity
+  if (!scripts.followedBy.empty()) {
+    const std::vector<Component>& comps = room.Components();
+    const std::vector<Connection> conns = ReadConnections(room);
+    const auto entityOf = [&](int t) { return comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity; };
+    for (const auto& [effect, by] : scripts.followedBy) {
+      for (int sf : by) {
+        followPlans[sf];
+      }
+    }
+    for (auto& [sf, plan] : followPlans) {
+      const Component* comp = nullptr;
+      for (const Component* c : room.Of(kSpecialFunction)) {
+        if (c->entity == sf && IsFollowLocator(room, *c)) {
+          comp = c;
+        }
+      }
+      if (comp == nullptr || scripts.retail.count(sf) != 0) {
+        plan.why = comp == nullptr ? "not a follow locator" : "a retail object";
+        continue;
+      }
+      int followed = -1, follower = -1;
+      size_t activates = 0, deactivates = 0;
+      bool exact = true;
+      for (const Connection& c : conns) {
+        const int t = room.ByGuid(c.target);
+        if (t >= 0 && entityOf(t) == sf) {
+          exact = false;  // something drives the function
+        }
+        if (comps[c.sender].entity != sf) {
+          continue;
+        }
+        const uint32_t message = t < 0 ? 0 : FollowMessage(comps[size_t(t)].type, c.action);
+        if (c.event != kEventSpecialFunctionPlay || message == 0) {
+          exact = false;
+          continue;
+        }
+        (message == 1 ? followed : follower) = entityOf(t);
+        ++(message == 1 ? activates : deactivates);
+        if (message == 4 && comps[size_t(t)].type != kEffectMP1) {
+          exact = false;
+        }
+      }
+      const auto matched = scripts.retail.find(followed);
+      const auto layer = scripts.layer.find(sf);
+      const auto f = room.Flat(*comp);
+      const auto locator = f.find(kPropSpecialFunctionLocator);
+      std::string name;
+      if (!exact || activates != 1 || deactivates != 1 || matched == scripts.retail.end() ||
+          (!comp->baseLayer && layer == scripts.layer.end()) || locator == f.end() || locator->second.size != 8 ||
+          !room.String(ReadLE32(room.Bytes(locator->second)), ReadLE32(room.Bytes(locator->second) + 4), name)) {
+        plan.why = !exact || activates != 1 || deactivates != 1          ? "other connections"
+                   : matched == scripts.retail.end()                     ? "unmatched followed actor"
+                   : !comp->baseLayer && layer == scripts.layer.end() ? "unknown layer"
+                                                                       : "no locator name";
+        continue;
+      }
+      // The pool's strings may carry their NUL.
+      name = name.substr(0, name.find('\0'));
+      const auto by = scripts.followedBy.find(follower);
+      if (name.empty() || name.size() > PortRoomEffects::kMaxLocatorName ||
+          std::any_of(name.begin(), name.end(), [](char ch) { return ch < 0x21 || ch > 0x7e; }) ||
+          by == scripts.followedBy.end() || std::find(by->second.begin(), by->second.end(), sf) == by->second.end()) {
+        plan.why = "bad locator name or follower";
+        continue;
+      }
+      plan.ok = true;
+      plan.follower = follower;
+      plan.layer = comp->baseLayer ? 0 : layer->second;
+      plan.record.followed = objects[matched->second].id;
+      plan.record.flags = room.Active(*comp) ? PortRoomEffects::kFollowActive : 0u;
+      plan.record.locator = std::move(name);
+    }
+  }
+  const auto followsOk = [&](int effect) {
+    const auto by = scripts.followedBy.find(effect);
+    return by == scripts.followedBy.end() ||
+           std::all_of(by->second.begin(), by->second.end(), [&](int sf) { return followPlans.at(sf).ok; });
+  };
+  const auto followerIs = [&](int effect, uint32_t id) {
+    for (auto& [sf, plan] : followPlans) {
+      if (plan.ok && plan.follower == effect) {
+        plan.followerId = id;
+      }
+    }
+  };
   std::vector<PortRoomEffects::Generator> generators;
   size_t generatedCount = 0;  // effects added that a generator copies
   size_t reserved = 0;  // the barrier's actors, left to it
@@ -1133,6 +1233,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     const auto matched = scripts.retail.find(c->entity);
     if (matched != scripts.retail.end()) {
       const ScriptObject& o = objects[matched->second];
+      followerIs(c->entity, o.id);
       if (o.type != kRetailEffect) {
         ++kept;
         continue;
@@ -1191,10 +1292,12 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
     std::vector<PortRoomEffects::Drive> drives;
     const auto generatedBy = scripts.generatedBy.find(c->entity);
     const bool generated = generatedBy != scripts.generatedBy.end();
+    const bool followed = scripts.followedBy.count(c->entity) != 0;
     if (connected.count(c->entity) != 0) {
       const auto links = scripts.links.find(c->entity);
       const bool traced =
-          drivable.count(c->entity) != 0 && (links != scripts.links.end() || generated) &&
+          drivable.count(c->entity) != 0 && (links != scripts.links.end() || generated || followed) &&
+          followsOk(c->entity) &&
           scripts.unresolved.count(c->entity) == 0 &&
           (links == scripts.links.end() ||
            std::all_of(links->second.begin(), links->second.end(), [&](const PortRoomGeo::Link& l) {
@@ -1241,6 +1344,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       continue;
     }
     e.id = PortRoomEffects::AddOnId(retailLayer, areaBits, uint32_t(added.size()));
+    followerIs(c->entity, e.id);
     for (PortRoomEffects::Drive& d : drives) {
       d.target = e.id;
       allDrives.push_back(d);
@@ -1341,6 +1445,26 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
       if (IsTimerSender(d.sender)) {
         d.sender = timerIds.at(int(d.sender & ~kSenderTimer));
       }
+    }
+  }
+  // The follow locators whose effect was written (or is a retail object): their ids follow the
+  // timers'.
+  std::vector<PortRoomEffects::Follow> follows;
+  std::string followsLeftOut;  // "; <reason>" per locator left out
+  {
+    const size_t first = added.size() + (group ? barrier.effects.size() : 0) + timers.size();
+    for (auto& [sf, plan] : followPlans) {
+      if (!plan.ok || plan.followerId == 0) {
+        followsLeftOut += plan.ok ? "; its effect not written" : std::string("; ") + plan.why;
+        continue;
+      }
+      if (first + follows.size() >= PortRoomEffects::kMaxAddOns) {
+        ++full;
+        break;
+      }
+      plan.record.id = PortRoomEffects::AddOnId(plan.layer, areaBits, uint32_t(first + follows.size()));
+      plan.record.follower = plan.followerId;
+      follows.push_back(plan.record);
     }
   }
   // A retail effect no Remastered entity matched, that nothing sends a message to, next to an
@@ -1603,7 +1727,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                   "PART), %zu Remastered-only effect slot(s) (%zu without an asset)",
                   patterned.size(), patternedNoPart, patches.size(), patchNoPart, actorSlots.size(), actorSlotNoPart);
   }
-  char generatorNote[128] = "";
+  char generatorNote[384] = "";
   if (!generators.empty()) {
     std::snprintf(generatorNote, sizeof generatorNote, ", %zu of them copied by %zu generator(s)", generatedCount,
                   generators.size());
@@ -1611,6 +1735,14 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   if (!timers.empty()) {
     const size_t at = std::strlen(generatorNote);
     std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu timer(s)", timers.size());
+  }
+  if (!follows.empty()) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu follow(s)", follows.size());
+  }
+  if (!followsLeftOut.empty()) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at, ", follows left out: %s", followsLeftOut.c_str() + 2);
   }
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
@@ -1620,7 +1752,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
                 keptOwn, noPart, noLayer, full != 0 ? ", the id range is full" : "",
                 badVars != 0 ? ", unreadable particle variables" : "", barrierNote, patternedNote, steamNote);
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
-      steams.empty() && actorSlots.empty()) {
+      steams.empty() && actorSlots.empty() && follows.empty()) {
     return line;
   }
   PortRoomEffects::File file;
@@ -1637,6 +1769,7 @@ std::string WriteRoomEffects(const std::string& name, const Room& room, uint32_t
   file.drives = std::move(allDrives);
   file.generators = std::move(generators);
   file.timers = std::move(timers);
+  file.follows = std::move(follows);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;

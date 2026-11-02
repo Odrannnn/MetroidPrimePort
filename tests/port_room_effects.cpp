@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 12);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 13);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -555,6 +555,58 @@ void TestFileTimers() {
   CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "ResetAndStart to an effect");
 }
 
+// Version 13 adds ObjectFollowLocators: a retail SpecialFunction that moves one of this file's
+// effects (or a retail object) to a retail actor's locator.
+void TestFileFollows() {
+  File in;
+  PortRoomEffects::Layer layer;
+  layer.layer = 1;
+  PortRoomEffects::AppendEffect(MakeEffect(1, 0), layer.objects);
+  layer.count = 1;
+  in.layers.push_back(layer);
+  const uint32_t a = MakeEffect(1, 0).id, s = PortRoomEffects::AddOnId(1, 0x1A, 1);
+  in.follows.push_back({s, 0x041A0020, a, PortRoomEffects::kFollowActive, "lockon_target_LCTR"});
+  const auto data = PortRoomEffects::Write(in);
+  File out;
+  std::string error;
+  REQUIRE(data[4] == 13);
+  REQUIRE_MSG(PortRoomEffects::Parse(data, out, error), error.c_str());
+  REQUIRE(out.follows.size() == 1);
+  CHECK(out.follows[0].id == s && out.follows[0].followed == 0x041A0020 && out.follows[0].follower == a &&
+        out.follows[0].flags == PortRoomEffects::kFollowActive && out.follows[0].locator == "lockon_target_LCTR");
+  for (size_t cut = 1; cut <= 20; ++cut) {
+    auto bad = data;
+    bad.resize(bad.size() - cut);
+    CHECK(!PortRoomEffects::Parse(bad, out, error));
+  }
+  const auto refused = [&](PortRoomEffects::Follow bad, const char* what) {
+    File f = in;
+    f.follows = {bad};
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), what);
+  };
+  refused({0x00000005, 0x041A0020, a, 0, "L"}, "a retail id");
+  refused({a, 0x041A0020, a, 0, "L"}, "an effect's id");
+  refused({s, a, 0x041A0021, 0, "L"}, "following an add-on");
+  refused({s, 0x041A0020, 0x041A0020, 0, "L"}, "following itself");
+  refused({s, 0x041A0020, PortRoomEffects::AddOnId(1, 0x1A, 7), 0, "L"}, "moving an unknown add-on");
+  refused({s, 0x041A0020, a, 0, ""}, "no locator");
+  refused({s, 0x041A0020, a, 0, "a b"}, "a space in the locator");
+  refused({s, 0x041A0020, a, 0, std::string(PortRoomEffects::kMaxLocatorName + 1, 'x')}, "too long a locator");
+  refused({s, 0x041A0020, a, 2, "L"}, "an unknown flag");
+  File f = in;
+  f.follows.push_back(in.follows[0]);
+  CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "two follows, one id");
+  // A retail follower, inactive, is fine.
+  f = in;
+  f.follows[0].follower = 0x041A0021;
+  f.follows[0].flags = 0;
+  CHECK(PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error));
+  // Without follows it stays version 12 or older.
+  f = in;
+  f.follows.clear();
+  CHECK(PortRoomEffects::Write(f)[4] < 13);
+}
+
 // Version 4 carries a room's barrier: a controller retail Effect object, its duration, and five
 // rings, each a platform (another retail object) and the two effects this file adds, with the
 // three particle guids that drive the breakup. The codec checks what the file itself must hold
@@ -891,6 +943,7 @@ int main() {
   TestFileDrives();
   TestFileGenerators();
   TestFileTimers();
+  TestFileFollows();
   TestFileBarriers();
   TestExternalVariables();
   uint32_t id = 0;

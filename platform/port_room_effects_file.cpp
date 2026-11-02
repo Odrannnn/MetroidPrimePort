@@ -341,7 +341,8 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool timers = !file.timers.empty();
+  const bool follows = !file.follows.empty();
+  const bool timers = follows || !file.timers.empty();
   const bool generators = timers || !file.generators.empty() ||
                           std::any_of(file.drives.begin(), file.drives.end(), [](const Drive& d) { return d.flags != 0; });
   const bool drives = generators || !file.drives.empty();
@@ -349,7 +350,7 @@ std::vector<uint8_t> Write(const File& file) {
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -486,6 +487,17 @@ std::vector<uint8_t> Write(const File& file) {
       PutLEFloat(out, t.startTime);
       PutLEFloat(out, t.maxRandDelay);
       PutLE32(out, t.flags);
+    }
+  }
+  if (follows) {
+    PutLE32(out, uint32_t(file.follows.size()));
+    for (const Follow& f : file.follows) {
+      PutLE32(out, f.id);
+      PutLE32(out, f.followed);
+      PutLE32(out, f.follower);
+      PutLE32(out, f.flags);
+      PutLE32(out, uint32_t(f.locator.size()));
+      out.insert(out.end(), f.locator.begin(), f.locator.end());
     }
   }
   return out;
@@ -882,6 +894,45 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         return false;
       }
       file.timers.push_back(t);
+    }
+  }
+  if (version >= 13) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 20) {
+      error = "truncated follow list";
+      return false;
+    }
+    if (total + file.timers.size() + count > kMaxAddOns) {
+      error = "too many objects";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      Follow f;
+      uint32_t length = 0;
+      ReadLE32(data, at, f.id);
+      ReadLE32(data, at, f.followed);
+      ReadLE32(data, at, f.follower);
+      ReadLE32(data, at, f.flags);
+      ReadLE32(data, at, length);
+      const bool named = length != 0 && length <= kMaxLocatorName && length <= data.size() - at;
+      if (named) {
+        f.locator.assign(reinterpret_cast<const char*>(data.data()) + at, length);
+        at += length;
+      }
+      const auto same = [&](uint32_t id) { return NormalizedId(id) == NormalizedId(f.id); };
+      // It follows a retail actor (an add-on has no animation); what it moves is a retail
+      // object or one of this file's effects.
+      if (!named || std::any_of(f.locator.begin(), f.locator.end(), [](char c) { return c < 0x21 || c > 0x7e; }) ||
+          !IsAddOnId(f.id) || IsAddOnId(f.followed) || f.followed == f.follower ||
+          (IsAddOnId(f.follower) && !isObject(f.follower)) ||
+          std::any_of(objects.begin(), objects.end(), [&](const LayerObject& o) { return same(o.id); }) ||
+          std::any_of(file.timers.begin(), file.timers.end(), [&](const Timer& o) { return same(o.id); }) ||
+          std::any_of(file.follows.begin(), file.follows.end(), [&](const Follow& o) { return same(o.id); }) ||
+          (f.flags & ~kFollowActive) != 0) {
+        error = "invalid follow " + std::to_string(i);
+        return false;
+      }
+      file.follows.push_back(std::move(f));
     }
   }
   // Only the add-ons, timers and generators this file has, and only what CScriptEffect, the

@@ -72,10 +72,13 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   version 12 then has u32 timers, then per timer: u32 add-on editor id, f32 start time, f32
 //   max random delay, u32 flags (see Timer). Files without timers are still written as version
 //   11 or older.
+//   version 13 then has u32 follows, then per follow: u32 add-on editor id, u32 followed editor
+//   id, u32 follower editor id, u32 flags (see Follow), u32 locator length and that many bytes.
+//   Files without follows are still written as version 12 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 12;
+constexpr uint32_t kFileVersion = 13;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -304,6 +307,23 @@ struct Timer {
   uint32_t flags = kTimerActive;
 };
 
+// A Remastered SpecialFunctionMP1 of function 3 (ObjectFollowLocator) retail has no object for,
+// created as a retail SpecialFunction of that function (ScriptLoader::LoadSpecialFunction,
+// CScriptSpecialFunction::ThinkObjectFollowLocator), which Remastered's (0xd951a8) is: its
+// Play -> Activate connection names the actor it follows, Play -> Deactivate the one it moves
+// to that actor's locator. Remastered's turret explosions follow their gun this way.
+constexpr uint8_t kSpecialFunctionType = 0x3A;
+constexpr uint32_t kFollowLocatorFunction = 3;
+constexpr uint32_t kFollowActive = 1;
+constexpr uint32_t kMaxLocatorName = 64;
+struct Follow {
+  uint32_t id = 0;
+  uint32_t followed = 0;  // a retail object
+  uint32_t follower = 0;  // a retail object or an add-on
+  uint32_t flags = kFollowActive;
+  std::string locator;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -317,6 +337,7 @@ struct File {
   std::vector<Drive> drives;
   std::vector<Generator> generators;
   std::vector<Timer> timers;
+  std::vector<Follow> follows;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common

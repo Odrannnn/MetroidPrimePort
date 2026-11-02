@@ -1212,7 +1212,7 @@ void CmdFxQuery() {
       const bool alive = ent != nullptr && ent->GetEditorId().Value() == (s.eid & 0x3FFFFFF);
       const char* const state = !alive ? "gone" : ent->GetActive() ? "active" : "inactive";
       if (s.part == 0xFFFFFFFF) {
-        Out("  %08X u%u %s %s", s.eid, unsigned(s.uid), state, s.name.c_str());  // a timer
+        Out("  %08X u%u %s %s", s.eid, unsigned(s.uid), state, s.name.c_str());  // a timer or follow locator
       } else {
         Out("  %08X u%u PART %08X %s %s, %zu variable(s) set", s.eid, unsigned(s.uid), s.part, state, s.name.c_str(),
             s.vars);

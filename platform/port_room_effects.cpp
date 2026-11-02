@@ -318,6 +318,48 @@ void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_
       sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, 0xFFFFFFFF, "Remastered timer", 0});
     }
   }
+  // The follows, as the SCLY SpecialFunction ScriptLoader::LoadSpecialFunction reads: Play ->
+  // Activate to the followed actor and Play -> Deactivate to the follower (never sent: the
+  // function reads them), then its 15 properties, the unused ones as retail's FogVolume has them.
+  for (const Follow& f : sFile.follows) {
+    if ((f.id >> 26) != layer) continue;
+    std::vector<uint8_t> object;
+    auto be32 = [&](uint32_t v) {
+      for (int s = 24; s >= 0; s -= 8) object.push_back(uint8_t(v >> s));
+    };
+    auto text = [&](const std::string& s) {
+      object.insert(object.end(), s.begin(), s.end());
+      object.push_back(0);
+    };
+    be32(f.id);
+    be32(2);
+    be32(kSS_Play);
+    be32(kSM_Activate);
+    be32(f.followed);
+    be32(kSS_Play);
+    be32(kSM_Deactivate);
+    be32(f.follower);
+    be32(15);
+    text("follow locator");
+    for (int i = 0; i < 6; ++i) be32(0);  // position, rotation: the function moves the follower only
+    be32(kFollowLocatorFunction);
+    text(f.locator);
+    for (int i = 0; i < 3; ++i) be32(0);  // f1-f3
+    be32(0xFFFFFFFF);                     // w2
+    be32(0xFFFFFFFF);                     // w3
+    be32(0xFFFFFFFF);                     // item: kIT_Invalid
+    object.push_back((f.flags & kFollowActive) != 0);
+    be32(0);  // f4
+    for (int i = 0; i < 3; ++i) be32(0xFFFF);  // sfx: kInternalInvalidSfxId
+    CMemoryInStream in(object.data(), int(object.size()));
+    const rstl::pair<TEditorId, TUniqueId> made = mgr.LoadScriptObject(
+        TAreaId(area), static_cast<EScriptObjectType>(kSpecialFunctionType), uint(object.size()), in);
+    if (made.first != kInvalidEditorId) {
+      ids.push_back(made.first.value);
+      sSpawned[sMrea].push_back({sMrea, made.first.value, made.second.value, 0xFFFFFFFF,
+                                 "Remastered follow " + f.locator, 0});
+    }
+  }
   for (const BarrierGroup& group : sFile.barriers) {
     if ((group.controller >> 26) != layer) continue;
     const TUniqueId uid = mgr.GetIdForScript(TEditorId(group.controller));

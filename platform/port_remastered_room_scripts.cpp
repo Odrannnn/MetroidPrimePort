@@ -145,6 +145,40 @@ uint8_t LinkAct(uint32_t action) {
                                          : 0;
 }
 
+bool IsFollowLocator(const Room& room, const Component& c) {
+  if (c.type != kSpecialFunction) {
+    return false;
+  }
+  const auto f = room.Flat(c);
+  const auto type = f.find(kPropSpecialFunctionType);
+  return type != f.end() && type->second.size == 4 && ReadLE32(room.Bytes(type->second)) == kSpecialFunctionFollowLocator;
+}
+
+uint32_t FollowMessage(uint32_t target, uint32_t action) {
+  // The targets' TranslateScriptActionToMessage, for the actions ObjectFollowLocators send.
+  constexpr uint32_t kGunTurretMP1 = 0x1704c1f0, kPlatformMP1 = 0xa12967fb, kOmegaPirateMP1 = 0x7f2845c7;
+  if (action == kActionEntityActivate) {
+    return 1;
+  }
+  if (action == kActionEntityDeactivate) {
+    return 4;
+  }
+  switch (target) {
+  case kGunTurretMP1:
+    return action == 0x30986885 ? 1 : 0;
+  case kPlatformMP1:
+    return action == 0x2302215c ? 1 : 0;
+  case kActorMP1:
+    return action == kActionActivate ? 1 : action == kActionDeactivate ? 4 : 0;
+  case kOmegaPirateMP1:
+    return action == 0xfdc33da7 ? 1 : 0;
+  case kEffectMP1:
+    return action == kActionEffectDeactivate ? 4 : 0;
+  default:
+    return 0;
+  }
+}
+
 // The retail message a TimerMP1's action is (CScriptTimerMP1's 0xf36b10, and IMP1EntityBaseGOC's
 // 'ACTV' and 'ICTV'), as kLinkMessage | message; 0 for one with no retail message.
 uint8_t TimerAct(uint32_t action) {
@@ -1125,6 +1159,8 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
   // this both the retail object and Remastered's copy of it drew (38 effects).
   {
     constexpr uint8_t kRetailEffectType = 7;
+    constexpr uint8_t kRetailGeneratorType = 0x0A;
+    constexpr uint32_t kRetailZeroState = 9;
     using Sig = std::vector<std::pair<uint32_t, uint32_t>>;  // (sender editor id, state)
     std::map<uint32_t, Sig> retailIn;                         // by target editor id, layer bits off
     for (const ScriptObject& o : objects) {
@@ -1147,6 +1183,13 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         continue;
       }
       const int s = entityOf(int(c.sender));
+      // An unmatched ObjectFollowLocator's Play only names the effect it moves and sends it
+      // nothing (0xd951a8): the effects import writes it as a follow.
+      if ((s < 0 || match[size_t(s)] < 0) && c.event == kEventSpecialFunctionPlay &&
+          IsFollowLocator(room, comps[c.sender])) {
+        remasteredIn[t];
+        continue;
+      }
       const int state = RetailState(comps[c.sender].type, c.event);
       if (s < 0 || match[size_t(s)] < 0 || state < 0) {
         untraced.insert(t);
@@ -1169,9 +1212,54 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
     for (auto& [t, s] : remasteredIn) {
       std::sort(s.begin(), s.end());
       s.erase(std::unique(s.begin(), s.end()), s.end());
+      if (untraced.count(t) != 0 || s.empty()) {
+        continue;
+      }
       const auto it = bySig.find(s);
-      if (untraced.count(t) == 0 && it != bySig.end() && it->second.size() == 1) {
-        claims[it->second[0]].push_back(t);
+      if (it != bySig.end()) {
+        if (it->second.size() == 1) {
+          claims[it->second[0]].push_back(t);
+        }
+        continue;
+      }
+      // Remastered dropped some links into it: Mines turrets' explosions lost the parts
+      // generator's Zero -> Activate and keep the turret's Dead. Then the one unused retail
+      // Effect whose links include all of its own.
+      std::vector<size_t> wider;
+      for (const auto& [rs, js] : bySig) {
+        if (std::includes(rs.begin(), rs.end(), s.begin(), s.end())) {
+          wider.insert(wider.end(), js.begin(), js.end());
+        }
+      }
+      if (wider.size() == 1) {
+        claims[wider[0]].push_back(t);
+        continue;
+      }
+      // Or Remastered linked the generator's sender straight to it: a Frigate turret's
+      // (05_Zoo) Dead activates the explosion that retail's parts Generator, on that
+      // Dead, activated on Zero. Then the one unused retail Effect whose links, a Generator
+      // with one link into it read as that link, are its own.
+      std::vector<size_t> through;
+      for (const auto& [rs, js] : bySig) {
+        Sig c;
+        for (const auto& [sender, state] : rs) {
+          const auto gi = objIndex.find(sender);
+          const auto gin = retailIn.find(sender & 0x03FFFFFF);
+          if (gi != objIndex.end() && objects[gi->second].type == kRetailGeneratorType &&
+              state == kRetailZeroState && gin != retailIn.end() && gin->second.size() == 1) {
+            c.push_back(gin->second[0]);
+          } else {
+            c.push_back({sender, state});
+          }
+        }
+        std::sort(c.begin(), c.end());
+        c.erase(std::unique(c.begin(), c.end()), c.end());
+        if (c == s) {
+          through.insert(through.end(), js.begin(), js.end());
+        }
+      }
+      if (through.size() == 1) {
+        claims[through[0]].push_back(t);
       }
     }
     for (const auto& [j, ks] : claims) {
@@ -1618,6 +1706,22 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
         if (isEffect && depth == 0 && sender.type == kGeneratorMP1 && c->event == kEventGeneratorZero &&
             c->action == kActionGenerate && sender.entity >= 0) {
           auto& by = result.generatedBy[e.entity];
+          if (std::find(by.begin(), by.end(), sender.entity) == by.end()) {
+            by.push_back(sender.entity);
+          }
+          continue;
+        }
+        // An unmatched ObjectFollowLocator's Play names the effect as the actor it moves; the
+        // function reads it and never sends it (0xd951a8). The effects import writes it as a follow.
+        // A matched one is retail's, which moves the retail object only: the effect is left out.
+        if (isEffect && depth == 0 && c->event == kEventSpecialFunctionPlay && sender.entity >= 0 &&
+            IsFollowLocator(room, sender)) {
+          const int fs = entityOf(int(c->sender));
+          if (fs >= 0 && match[size_t(fs)] >= 0) {
+            miss(sender, *c, c->action, depth);
+            continue;
+          }
+          auto& by = result.followedBy[e.entity];
           if (std::find(by.begin(), by.end(), sender.entity) == by.end()) {
             by.push_back(sender.entity);
           }

@@ -569,7 +569,7 @@ struct ScriptObject {
   uint32_t propCount = 0;
   std::vector<uint32_t> targets;  // of its connections
   std::vector<Link> links;        // the same connections, with their state and message
-  bool hasPos = false;            // the three floats after its name, for any type
+  bool hasPos = false;            // the three floats after its name (and PositionLead), for any type
   Vec3 pos{};
   // The six floats after those: an editor transform's rotation (degrees) and scale for the
   // types that start with one, anything for the others.
@@ -728,6 +728,16 @@ constexpr uint32_t kPropSpecialFunctionItem = 0x04fc7524;
 constexpr uint32_t kSpecialFunctionInventoryActivator = 5;
 constexpr uint32_t kEventSpecialFunctionZero = 0x58951d90;
 constexpr uint32_t kEventSpecialFunctionMaxReached = 0x52583665;
+// Function 3 (ObjectFollowLocator, 0xd951a8): its Play connections are references it reads (the
+// actor it follows, the one it moves to that actor's locator, property kPropSpecialFunctionLocator),
+// never sent.
+constexpr uint32_t kSpecialFunctionFollowLocator = 3;
+constexpr uint32_t kEventSpecialFunctionPlay = 0x6b565a4c;
+constexpr uint32_t kPropSpecialFunctionLocator = 0x1f300597;  // a string: STRP offset, size
+bool IsFollowLocator(const Room& room, const Component& c);
+// The retail message (1 Activate, 4 Deactivate) a follow locator's Play action is to a target
+// of this GOC type; 0 for one it does not translate or that is not known.
+uint32_t FollowMessage(uint32_t target, uint32_t action);
 constexpr double kMatchTolerance = 0.02;
 constexpr double kMatchNear = 2.0;
 // A model carried over from retail, in a room's byte order (EffectRetailId); the last
@@ -848,6 +858,9 @@ struct SceneryScripts {
   std::map<int, size_t> unresolved;                      // by entity: connections not traced
   // By EffectMP1 entity: the GeneratorMP1 entities whose Zero -> Generate copies it (each once).
   std::map<int, std::vector<int>> generatedBy;
+  // By EffectMP1 entity: the SpecialFunctionMP1 entities no retail object matched whose
+  // ObjectFollowLocator moves it (IsFollowLocator); the effects import writes them as follows.
+  std::map<int, std::vector<int>> followedBy;
   std::map<int, std::string> unresolvedHow;              // a grade hint's: sender type/event/action
   std::map<std::string, std::pair<size_t, std::set<int>>> missStats;  // MP_REMASTERED_MISS: class -> connections, entities
   std::map<int, const ScriptObject*> platform;           // by entity: the platform carrying it

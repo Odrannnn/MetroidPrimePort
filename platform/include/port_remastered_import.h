@@ -228,8 +228,9 @@ inline constexpr int kModels = 30;
 // 139: Queen barrier shield/glow models back-cull (MATI cull byte).
 // 141: effect generators, strict timers (roomfx v11). 142: strict timers start active.
 // 143: event states from the GOCs' TranslateScriptEventToState. 144: moved effects match by senders.
-// 145: TimerMP1s retail lacks become retail Timers (roomfx v12).
-inline constexpr int kEffects = 146;   // WSTP becomes the port-only PWST
+// 145: TimerMP1s retail lacks become retail Timers (roomfx v12). 146: WSTP becomes the port-only PWST.
+// 147: ObjectFollowLocators retail lacks become follows (roomfx v13).
+inline constexpr int kEffects = 148;   // retail positions after a type's leading field (GunTurret, flavors, Dock)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
@@ -281,7 +282,10 @@ inline constexpr int kEffects = 146;   // WSTP becomes the port-only PWST
 // 75: the grid is the LTPB the ROOM's BLIT names, found in the master pak too (25 rooms had none).
 // 76: script event -> state rows of MP1 types from their GOCs' TranslateScriptEventToState.
 // 77: an effect Remastered moved over 2 units matches its retail one by senders and states.
-inline constexpr int kRooms = 77;
+// 78: retail objects whose position follows a component, flavor or active field match (turrets);
+// an effect Remastered dropped links into matches the one retail Effect with all of its links,
+// or whose parts Generator's one incoming link Remastered sends it directly.
+inline constexpr int kRooms = 78;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).
