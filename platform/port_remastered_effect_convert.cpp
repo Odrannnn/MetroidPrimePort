@@ -1127,15 +1127,16 @@ const Recipe* RecipeOf(uint32_t shader) {
       {0xb32b6148, kRamp | kIndirect | kDepthSoften | kDualMod,
        {{"TCH0", Role::Ramp, 0, 1}, {"TCH1", Role::Ramp2, 2, 3}, {"TCH2", Role::Indirect, -1, -1}},
        {}},
-      // VFX_Pyro (perm 060_0, SPEC-pyro.md): TCH0 the Pyro map, TCH2 the gradient LUT, PMTR row 1;
-      // 7498e54a is 8278c22d with the scene-depth soften. TCH1 (Light) feeds only the lit term,
-      // which the zero flat ambient (AMBS) removes, so it is not read.
+      // VFX_Pyro (perms 038/039 sprite, 040/041 oriented; SPEC-pyro.md): TCH0 the Pyro map, TCH1
+      // the Light map, TCH2 the gradient LUT, PMTR rows 0 (lit tint) and 1 (emission); CCH0 is the
+      // light direction (xyz) and the Light map's weight (w). 7498e54a is 8278c22d with the
+      // scene-depth soften.
       {0x8278c22d, kPyro,
-       {{"TCH0", Role::Color, -1, -1}, {"TCH2", Role::Ramp, -1, -1}},
-       {}},
+       {{"TCH0", Role::Color, -1, -1}, {"TCH1", Role::Normal, -1, -1}, {"TCH2", Role::Ramp, -1, -1}},
+       {}, -1, false, false, 1, true},
       {0x7498e54a, kPyro | kDepthSoften,
-       {{"TCH0", Role::Color, -1, -1}, {"TCH2", Role::Ramp, -1, -1}},
-       {}},
+       {{"TCH0", Role::Color, -1, -1}, {"TCH1", Role::Normal, -1, -1}, {"TCH2", Role::Ramp, -1, -1}},
+       {}, -1, false, false, 1, true},
       // VFX_Disintegration (perm 000_0, SPEC-disint-ice.md): TCH0 the mask, PMTR rows 0..3 (the VS
       // passes them as v2..v5). Perm 000 does no depth soften, so SFTD is not read.
       {0xd749057f, kDisintegration, {{"TCH0", Role::Color, -1, -1}}, {}},

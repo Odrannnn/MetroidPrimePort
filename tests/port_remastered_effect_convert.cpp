@@ -5818,7 +5818,8 @@ void TestVmatBatch4Recipes() {
 void TestVmatPyroRecipes() {
   auto features = [](uint32_t shader, uint32_t& count) {
     const EffectGuid t = Fresh(8);
-    auto result = ConvertVmat(Mati(shader, {{"TCH0", t}, {"TCH1", t}, {"TCH2", t}}));
+    // CCH0: the light direction and the Light map's weight (VPRM row 0).
+    auto result = ConvertVmat(MatiCchN(shader, {{"TCH0", t}, {"TCH1", t}, {"TCH2", t}}, {{0.f, 0.f, 1.f, 0.5f}}));
     count = VmatWord(result.second, 20);
     CHECK_MSG(result.first.size() == 1 && !result.second.empty() && result.first[0].approximated.empty(),
               "the VFX_Pyro shader writes an exact VMAT");
@@ -5827,8 +5828,8 @@ void TestVmatPyroRecipes() {
   // aurora::gfx::vfx::Feature bits.
   constexpr uint32_t kDepthSoften = 32, kPyro = 8192;
   uint32_t count = 0;
-  CHECK_MSG(features(0x8278c22d, count) == kPyro && count == 2, "8278c22d is VFX_Pyro on TCH0 and TCH2");
-  CHECK_MSG(features(0x7498e54a, count) == (kPyro | kDepthSoften) && count == 2,
+  CHECK_MSG(features(0x8278c22d, count) == kPyro && count == 3, "8278c22d is VFX_Pyro on TCH0, TCH1 and TCH2");
+  CHECK_MSG(features(0x7498e54a, count) == (kPyro | kDepthSoften) && count == 3,
             "7498e54a is VFX_Pyro with DepthSoften");
 }
 

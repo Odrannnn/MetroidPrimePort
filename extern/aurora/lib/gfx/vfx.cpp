@@ -319,6 +319,12 @@ fn vs_main(in: VIn) -> VOut {
     let lighting = (u.lit0.xyz + u.lit1.xyz) * u.lit6.rgb + cluster_sum(cluster_mask_vertex(mv, out.pos), mv, vec3f(0.0), false);
     out.color = vec4f(in.color.rgb * lighting * 0.3183098862, in.color.w);
   }
+  if ((FEAT & 8192u) != 0u) {
+    // VFX_Pyro (VS perms 038_1 sprite, 040_1 oriented): o0.rgb = v3.rgb x (AMBS + the group-0 lights, no
+    // N.L) / pi; no probe, no BLCM, no directional record in the port. The fragment stage's lit term reads it.
+    let lighting = u.lit0.xyz + cluster_sum(cluster_mask_vertex(mv, out.pos), mv, vec3f(0.0), false);
+    out.color = vec4f(in.color.rgb * lighting * 0.3183098862, in.color.w);
+  }
   return out;
 }
 
@@ -884,21 +890,31 @@ R"(  } else if ((FEAT & 524288u) != 0u) {
     x = sat(m * fma(p.w - p.z, ceil(e), p.z));
     rgb = fma(fma(vec3f(s), in.e1.rgb - in.e0.rgb, in.e0.rgb), vc.rgb, e * in.e2.rgb) * M;
   } else if ((FEAT & 8192u) != 0u) {
-    // VFX_Pyro (8278c22d, and 7498e54a with DepthSoften; perm 060_0): the Pyro map P at the frame's
-    // layer, the gradient LUT read at (P.r, 0) and (P.g, 0) in the same layer, PMTR row 1 as
-    // (scale r, scale g, opacity, threshold). The shader's lit term (Light map weighted by the
-    // normal, x vc.rgb) is dropped: its vertex colour is the scene's flat ambient (AMBS), zero here.
+    // VFX_Pyro (8278c22d, and 7498e54a with DepthSoften; FS perms 038/040): the Pyro map P at the
+    // frame's layer, the gradient LUT read at (P.r, 0) and (P.g, 0) in the same layer, PMTR row 1 as
+    // (scale r, scale g, opacity, threshold). The lit term: vc (the VS's lighting) x PMTR row 0, the
+    // Light map L at P's texel weighted by the squared normal n (CCH0's light direction in the quad's
+    // basis, from the vertex), blended in by CCH0.w. The quad's own z face reads L's mean.
     // max(.., 0): a constant index of -1 fails to compile even in a branch FEAT never takes.
     let uvp = uv_of(in, u.uvSets[max(S_COLOR, 0)]);
     let P = sample_raw(S_COLOR, uvp.xy, layer(uvp.z, u.layers[max(S_COLOR, 0)]));
     let gl = layer(uvp.z, u.layers[max(S_RAMP, 0)]);
     let G0 = sample_raw(S_RAMP, vec2f(P.x, 0.0), gl).rgb;
     let G1 = sample_raw(S_RAMP, vec2f(P.y, 0.0), gl).rgb;
+    let L = sample_raw(S_NORMAL, uvp.xy, layer(uvp.z, u.layers[max(S_NORMAL, 0)]));
+    // A zero vector (no CCH0 direction, or a degenerate quad) would normalise to NaN, which survives x 0.
+    let n = select(vec3f(0.0), normalize(in.nrm), dot(in.nrm, in.nrm) > 0.0);
+    let la = L.w * L.w;
+    let pz = pow(abs((L.x + L.y + L.z + la) * 0.25), 0.625);
+    var zt = pz;
+    if (n.z < 0.0) { zt = 0.33 * pow(abs(1.0 - pz), 4.0); }
+    let D = n.x * n.x * select(L.y, L.x, n.x < 0.0) + n.y * n.y * select(la, L.z, n.y < 0.0) + n.z * n.z * zt;
     let e1 = in.e1;
     // x the inverse exposure (GlobalSystemValues.z): the light is unexposed, the tone's exposure cancels it.
     var ie = 1.0;
     if (u.tone1.x > 0.0 && u.tone0.w > 0.0) { ie = 1.0 / u.tone0.w; }
-    rgb = P.z * (P.x * e1.x * G0 + P.y * e1.y * G1) * ie * M;
+    let lt = fma(vec3f(u.ice0.w * D - u.ice0.w), in.e0.rgb, in.e0.rgb) * vc.rgb;
+    rgb = (lt + P.z * (P.x * e1.x * G0 + P.y * e1.y * G1) * ie) * M;
     x = smooth3(sat((P.w - e1.w) / (1.0 - e1.w))) * e1.z;
   } else if ((FEAT & 8u) != 0u) {
     // ramp (DualMod: the product of two ramp maps picks the colour)
@@ -1922,15 +1938,15 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     u.scene[3] = 1.f;
   }
   if ((features & (IceChargeBeam | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit |
-                   VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion | VisorSteam)) != 0) {
+                   VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion | VisorSteam | Pyro)) != 0) {
     // The recipe's CCH rows: IceChargeCollision 0..6, VisorRunOff and VisorSteam 0..4, IceChargeBeam 0..2,
-    // VisorRain, BarrierShield, BarrierGlow and FrameBufferColorErosion 0 only.
+    // VisorRain, BarrierShield, BarrierGlow, FrameBufferColorErosion and Pyro 0 only.
     uint32_t rows = 3;
     if ((features & (IceChargeCollision | IceChargeCollisionLit)) != 0) {
       rows = 7;
     } else if ((features & (VisorRunOff | VisorRunOffLit | VisorSteam)) != 0) {
       rows = 5;
-    } else if ((features & (VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion)) != 0) {
+    } else if ((features & (VisorRain | BarrierShield | BarrierGlow | FrameBufferColorErosion | Pyro)) != 0) {
       rows = 1;
     }
     for (uint32_t i = 0; i < rows; ++i) {
@@ -1938,9 +1954,9 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     }
     u.ice[7][0] = desc.time;
   }
-  // IceChargeCollisionLit: AMBS, the probe record's mean/lobe/three lobes and BLCM into the padding before
-  // the cluster block (u.lit0..u.lit6).
-  if ((features & (IceChargeCollisionLit | ParticleLit)) != 0) {
+  // IceChargeCollisionLit, ParticleLit, Pyro: AMBS, the probe record's mean/lobe/three lobes and BLCM into
+  // the padding before the cluster block (u.lit0..u.lit6).
+  if ((features & (IceChargeCollisionLit | ParticleLit | Pyro)) != 0) {
     const LitAmbient& lit = desc.lit;
     std::memcpy(u.lit[0], lit.ambient, sizeof(lit.ambient));
     std::memcpy(u.lit[1], lit.mean, sizeof(lit.mean));
@@ -1950,11 +1966,11 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
     }
     std::memcpy(u.lit[6], lit.modulate, sizeof(lit.modulate));
   }
-  // IceChargeCollisionLit: the gather's block into the uniform (c5[0] at ClusterBlockOffset) and its mask
-  // into this frame slot's texture. Validated once here; an unusable view leaves the block zeroed and the
-  // draw on the dummy mask.
+  // IceChargeCollisionLit, ParticleLit, Pyro: the gather's block into the uniform (c5[0] at ClusterBlockOffset)
+  // and its mask into this frame slot's texture. Validated once here; an unusable view leaves the block zeroed
+  // and the draw on the dummy mask.
   uint8_t maskSlot = NoMask;
-  if ((features & (IceChargeCollisionLit | ParticleLit)) != 0 && valid_cluster_view(desc.cluster)) {
+  if ((features & (IceChargeCollisionLit | ParticleLit | Pyro)) != 0 && valid_cluster_view(desc.cluster)) {
     write_cluster_block(desc.cluster, reinterpret_cast<float*>(&u));
     if (upload_cluster_mask(desc.cluster)) {
       maskSlot = uint8_t(frameSlot);

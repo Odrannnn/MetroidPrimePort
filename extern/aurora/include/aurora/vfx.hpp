@@ -31,7 +31,9 @@ enum Feature : uint32_t {
   OpacityFade = 2048,   // a *= S(sat(-p.x / (p.y - p.x))), p = fadeX/fadeY
   ColorRgbOnly = 4096,  // with ColorTex: the map's alpha is not opacity (a stays 1)
   Pyro = 8192,          // VFX_Pyro: colorSlot = P, rampSlot = gradient LUT read at (P.r, 0), (P.g, 0); e = extra[1]:
-                        // rgb = P.b * (P.r*e.x*G(P.r) + P.g*e.y*G(P.g)) / exposure, a = S(sat((P.a - e.w)/(1 - e.w))) * e.z
+                        // rgb = P.b * (P.r*e.x*G(P.r) + P.g*e.y*G(P.g)) / exposure, a = S(sat((P.a - e.w)/(1 - e.w))) * e.z;
+                        // plus the lit term vc (lit per vertex by lit + cluster) * extra[0] * (1 + params[0].w * (D - 1)),
+                        // D the normalSlot Light map weighted by the squared normal vec (CCH0 in the quad's basis)
   Disintegration = 16384, // VFX_Disintegration: colorSlot = mask, s = t.x^2, extra[0..2] = A, B, edge E, extra[3] = (thr,
                           // edge width, alpha lo, alpha hi): m = sat(s - thr), q = sat(1 - m - width), e = q - q^2,
                           // rgb = mix(A, B, s) * vc.rgb + e * E, a = sat(m * (e > 0 ? hi : lo))

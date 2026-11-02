@@ -694,10 +694,11 @@ void CElementGen::PortRenderParticlesVfx() {
   // VisorRunOff is a PMDL model particle (the mesh path below), but a sprite generator sharing its
   // material still reads CCH0..4: evaluate them rather than draw from zeroed uniforms. VisorRain is a
   // sprite whose CCH0 is the drop mask's scale (SMTR-animated), so it needs the same rows, as does
-  // FrameBufferColorErosion's (the warp scale and lod).
+  // FrameBufferColorErosion's (the warp scale and lod). Pyro's CCH0 is its light direction and Light map weight.
+  const bool pyro = (desc.features & aurora::gfx::vfx::Pyro) != 0;
   if ((desc.features & (aurora::gfx::vfx::VisorRunOff | aurora::gfx::vfx::VisorRunOffLit |
                         aurora::gfx::vfx::VisorRain | aurora::gfx::vfx::FrameBufferColorErosion |
-                        aurora::gfx::vfx::VisorSteam)) != 0) {
+                        aurora::gfx::vfx::VisorSteam | aurora::gfx::vfx::Pyro)) != 0) {
     PortVfxEvalParams(vfx, x74_curFrame, desc.params);
   }
   // A VFX_*_Lit shader under LIT_ 1 (ParticleLit): AMBS and the clustered gather, and with BLIT 1 (PBLT)
@@ -716,6 +717,12 @@ void CElementGen::PortRenderParticlesVfx() {
     if (x28_loadedGenDesc->xPortBakedLighting) {
       PortRoomEnv::BakedLightModulation(desc.lit.modulate);
     }
+  }
+  // VFX_Pyro lights every vertex with AMBS and the clustered gather (VS 038_1/040_1: no probe, whatever
+  // BLIT says) and reads its Light map (TCH1) per fragment.
+  if (pyro) {
+    PortVfxClusterView(nullptr, desc);
+    desc.normalSlot = static_cast< int8_t >(vfx.normalSlot);
   }
 
   // The retail frame: the same model matrix as the non-ORNT path. Particles are placed in a
@@ -903,6 +910,23 @@ void CElementGen::PortRenderParticlesVfx() {
       for (int j = 0; j < 4; ++j) {
         tmpl.extra[3][j] = splatInv[j];
       }
+    }
+    if (pyro) {
+      // VS 038_1/040_1's o7: CCH0.xyz in the quad's basis, inv(M3 [A, B, C]) CCH0, with M3 the model
+      // matrix's 3x3, A and B the corner extents' axes and C toward the eye: frame -y for a sprite, the
+      // unnormalised eye - p (040_1's d) for an oriented quad. The FS normalises it.
+      const CVector3f a = systemModelMatrix.Rotate((axisU * cosT + axisW * sinT) * sx);
+      const CVector3f b = systemModelMatrix.Rotate((axisW * cosT - axisU * sinT) * sy);
+      const CVector3f c = systemModelMatrix.Rotate(oriented ? camFrame - vp : CVector3f(0.f, -1.f, 0.f));
+      const CVector3f bc = CVector3f::Cross(b, c);
+      const CVector3f ca = CVector3f::Cross(c, a);
+      const CVector3f ab = CVector3f::Cross(a, b);
+      const float det = CVector3f::Dot(a, bc);
+      const CVector3f l(desc.params[0][0], desc.params[0][1], desc.params[0][2]);
+      const float inv = det != 0.f ? 1.f / det : 0.f;
+      vec[0] = CVector3f::Dot(bc, l) * inv;
+      vec[1] = CVector3f::Dot(ca, l) * inv;
+      vec[2] = CVector3f::Dot(ab, l) * inv;
     }
     tmpl.vec[0] = vec[0];
     tmpl.vec[1] = vec[1];
