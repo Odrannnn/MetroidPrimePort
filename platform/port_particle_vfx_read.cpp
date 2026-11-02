@@ -289,6 +289,18 @@ bool CParticleDataFactory::PortReadVfxProperty(FourCC clsId, std::unique_ptr< CP
       }
     }
   } break;
+  case SBIG('VATF'): {
+    // The header sprite's TEXR ATFB: the texture array's layer count, loop, then the duration as a
+    // int element read as a real (GetTextureElement 0x266ba4). CUVEAnimFlipBookTexture (ctor
+    // 0x2cdb78) keeps one entry per layer, the index.
+    CPortVfxData& vfx = PortVfxData(vfxPtr);
+    const u32 layers = in.ReadLong();
+    const u32 loop = in.ReadLong();
+    delete vfx.atfbCycle;
+    vfx.atfbCycle = GetIntElement(in);
+    vfx.atfbLayers = layers <= 2048 ? layers : 0;
+    vfx.atfbLoop = loop != 0;
+  } break;
   case SBIG('VPMT'):
   case SBIG('VSMT'): {
     // VPMT: {kind row comp element}; VSMT: {target kind element}

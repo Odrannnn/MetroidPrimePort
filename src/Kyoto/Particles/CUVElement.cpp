@@ -6,6 +6,7 @@
 
 #ifdef TARGET_PC
 #include "Kyoto/Particles/CParticleGlobals.hpp"
+#include "port_anim_tile.h"
 #endif
 
 CUVEConstant::CUVEConstant(TToken< CTexture > tex) : x4_tex(tex) {}
@@ -118,9 +119,27 @@ CUVEAtlasTexture::CUVEAtlasTexture(TToken< CTexture > tex, CIntElement* cols, CI
   x20_flipX = PortEvalInt(flipX, 0) != 0;
 }
 
-CUVEAtlasTexture::~CUVEAtlasTexture() {}
+CUVEAtlasTexture::CUVEAtlasTexture(TToken< CTexture > tex, CIntElement* cols, CIntElement* rows,
+                                   CIntElement* count, CIntElement* loop, CIntElement* flipX,
+                                   CIntElement* cycle)
+: x4_tex(tex), x1c_mode(2), x24_cycle(cycle) {
+  x10_cols = rstl::max_val(1, PortEvalInt(cols, 1));
+  x14_rows = rstl::max_val(1, PortEvalInt(rows, 1));
+  x18_count = rstl::max_val(1, PortEvalInt(count, 1));
+  x21_loop = PortEvalInt(loop, 0) != 0;
+  x20_flipX = PortEvalInt(flipX, 0) != 0;
+}
+
+CUVEAtlasTexture::~CUVEAtlasTexture() { delete x24_cycle; }
 
 int CUVEAtlasTexture::SelectTile(uint seed, int frame, int lifeFrames) const {
+  if (x1c_mode == 2) {
+    int cycle = 1;
+    if (x24_cycle != nullptr) {
+      x24_cycle->GetValue(frame, cycle);
+    }
+    return PortAnimTile(rstl::min_val(x18_count, x10_cols * x14_rows), x21_loop, float(cycle), frame);
+  }
   if (x1c_mode == 1) {
     float life = static_cast< float >(frame) / static_cast< float >(rstl::max_val(1, lifeFrames));
     life = rstl::min_val(1.f, rstl::max_val(0.f, life));

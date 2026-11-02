@@ -1,3 +1,4 @@
+#include "port_anim_tile.h"
 #include "port_fx_debug.h"
 #include "port_room_env.h"
 #include "port_vfx_opacity.h"
@@ -66,52 +67,15 @@ float EvalReal(CRealElement* e, int frame, float def) {
   return v;
 }
 
-// AArch64 FRECPE on a float (FPRecipEstimate): 8 bits of the reciprocal from the top 8 of the
-// mantissa. Outside normal inputs whose reciprocal is normal it falls back to the true one.
-float RecipEstimate(float x) {
-  u32 bits;
-  std::memcpy(&bits, &x, sizeof(bits));
-  const u32 exp = bits >> 23 & 0xff;
-  if (exp == 0 || exp >= 253) {
-    return 1.f / x;
-  }
-  const u32 a = (0x100 | (bits >> 15 & 0xff)) * 2 + 1;
-  const u32 r = ((1u << 19) / a + 1) / 2;
-  const u32 out = (bits & 0x80000000u) | (253 - exp) << 23 | (r & 0xff) << 15;
-  float result;
-  std::memcpy(&result, &out, sizeof(result));
-  return result;
-}
-
-// CUVEAnimTexture::GetValue 0x2cd750's tile: frame x count over the cycle, the reciprocal FRECPE
-// with two fused FRECPS steps; looping wraps, else it holds the last tile.
-u32 AtexTile(const CPortVfxData& vfx, float cycle, int frame) {
-  const s32 count = s32(vfx.atexRects.size() / 4);
-  if (cycle == 0.f) {
-    return 0;
-  }
-  float e = RecipEstimate(cycle);
-  e *= std::fma(-e, cycle, 2.f);
-  e *= std::fma(-e, cycle, 2.f);
-  s32 tile = s32(float(count) * float(frame) * e);
-  if (vfx.atexLoop) {
-    tile = std::max(tile, 0);
-    if (tile >= count) {
-      tile %= count;
-    }
-  } else if (tile >= count) {
-    tile = count - 1;
-  }
-  // Remastered reads before its table for a negative one; nothing shipped reaches it.
-  return u32(std::max(tile, 0));
-}
-
 // The header MTRL's TEXR as perm 048's VS places it (sprites and planar squares alike): the corner
 // q goes into the ATEX tile rect, q = mix(rect.xy, rect.zw, corner), then through TRST,
-// uv = 0.5 + R(rot) (diag(sx, sy) q + (x, y) - 0.5).
+// uv = 0.5 + R(rot) (diag(sx, sy) q + (x, y) - 0.5). An ATFB (shader 9d1a1432) leaves the UV
+// alone and picks the array layer instead.
 struct HeaderTexr {
   const float* rect = nullptr;
   bool trs = false;
+  bool hasLayer = false;
+  float layer = 0.f;
   float x = 0.f, y = 0.f, sx = 1.f, sy = 1.f, cosR = 1.f, sinR = 0.f;
 
   void Apply(float qx, float qy, float& tu, float& tv) const {
@@ -158,7 +122,18 @@ HeaderTexr EvalHeaderTexr(const CPortVfxData& vfx, int partFrame, int systemLife
       CParticleGlobals::SetParticleLifetime(particleLifetime);
       CParticleGlobals::UpdateParticleLifetimeTweenValues(partFrame);
     }
-    h.rect = &vfx.atexRects[AtexTile(vfx, cycle, partFrame) * 4];
+    const int count = int(vfx.atexRects.size() / 4);
+    h.rect = &vfx.atexRects[PortAnimTile(count, vfx.atexLoop, cycle, partFrame) * 4];
+  }
+  // VATF, TEXR ATFB (CUVEAnimFlipBookTexture::GetValue 0x2cde08): the duration element runs on
+  // the particle's frame like the TRST terms; its entries hold only the layer index.
+  if (vfx.atfbLayers > 0) {
+    h.hasLayer = true;
+    int cycle = 1;
+    if (vfx.atfbCycle != nullptr) {
+      vfx.atfbCycle->GetValue(partFrame, cycle);
+    }
+    h.layer = float(PortAnimTile(vfx.atfbLayers, vfx.atfbLoop, float(cycle), partFrame));
   }
   return h;
 }
@@ -334,6 +309,7 @@ CPortVfxData::~CPortVfxData() {
     delete e;
   }
   delete atexCycleElem;
+  delete atfbCycle;
   delete ssze;
   delete iten;
 }
@@ -611,6 +587,9 @@ void CElementGen::PortRenderPlanarVfx(const CParticle& particle, int frame) {
     float tu, tv;
     header.Apply(u, v, tu, tv);
     uv.Apply(tu, tv, vertex.uv);
+    if (header.hasLayer) {
+      vertex.uv[0][2] = header.layer;
+    }
     for (int c = 0; c < 4; ++c) {
       vertex.color[c] = particle.xPortColor[c] * modulation[c] * (c == 3 ? 1.f : gain);
       for (int j = 0; j < 4; ++j) vertex.extra[c][j] = particle.xPortVpmt[c][j];
@@ -886,6 +865,9 @@ void CElementGen::PortRenderParticlesVfx() {
         v.uv[s][0] = t.a + 0.5f + t.cosE * dx + t.sinE * dy;
         v.uv[s][1] = t.b + 0.5f - t.sinE * dx + t.cosE * dy;
         v.uv[s][2] = t.f;
+      }
+      if (header.hasLayer) {
+        v.uv[0][2] = header.layer; // the header TEXR is the colour slot; it has no VTMT
       }
       if (visorSplat) {
         // The shader reads PMTR rows 0 and 1 only; rows 2 and 3 carry the world position and the axes.

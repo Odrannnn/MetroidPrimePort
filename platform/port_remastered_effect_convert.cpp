@@ -547,9 +547,15 @@ bool RangeFromZero(const EffectValue& value, uint32_t fourcc, uint32_t& high) {
          ConstWord(value.args[1], high);
 }
 
-// TRST's x scale of a particle that is mirrored half the time: KPIN(CREL(LTHN(RAND(0, 1), 0.5), 1, -1)).
+// TRST's x scale of a particle that is mirrored half the time: KPIN(CREL(LTHN(RAND(0, 1), 0.5), 1, -1)),
+// or SLCT(IRND(0, 1), ARRY(-1, 1)).
 bool RandomMirror(const EffectValue& value) {
   uint32_t high;
+  if (IsElement(value, F("SLCT")) && value.args.size() == 2 && IsElement(value.args[1], F("ARRY"))) {
+    const std::vector<EffectValue>& array = value.args[1].args;
+    return RangeFromZero(value.args[0], F("IRND"), high) && high == 1 && array.size() == 3 &&
+           ConstIs(array[1], FloatBits(-1.0f)) && ConstIs(array[2], FloatBits(1.0f));
+  }
   if (!IsElement(value, F("KPIN")) || value.args.size() != 1 || !IsElement(value.args[0], F("CREL"))) {
     return false;
   }
@@ -1139,6 +1145,9 @@ struct HeaderShader {
   uint32_t shader;
   bool textured;
   HeaderQuad quad;
+  // The TEXR is an ATFB on a texture array, its layer the flipbook entry's (9d1a1432: 048_0 on a
+  // sampler2DArray, layer roundEven(v.z)).
+  bool flipbook = false;
 };
 
 const HeaderShader* HeaderShaderOf(uint32_t shader) {
@@ -1149,6 +1158,7 @@ const HeaderShader* HeaderShaderOf(uint32_t shader) {
       {0x4d6746f4, false, HeaderQuad::RotatedSprite},
       // Unrotated camera-facing quads: a VORN 0 sprite without ROTA.
       {0xe2bfbf91, true, HeaderQuad::Sprite},
+      {0x9d1a1432, true, HeaderQuad::Sprite, true},
       {0x1e245375, false, HeaderQuad::Sprite},
       {0xd16ade09, false, HeaderQuad::Sprite},
       // B = cross(toCam, axis), C = cross(toCam, B): the port's VORN 1/2 quad.
@@ -2637,7 +2647,8 @@ public:
 
   // PATL: TXP2 (an atlas, a random tile), TXFB (an array texture over the
   // particle's life, with TRST's optional random mirror) or ATX2 (an atlas over
-  // the particle's life). Only those patterns.
+  // the particle's life); PAFB: ATFB (an array texture over a cycle, mirrored as
+  // TXFB). Only those patterns.
   bool Atlas(const std::vector<EffectValue>& value, std::vector<uint8_t>& out, std::string& why) const {
     const EffectValue& head = value[0];
     const std::string name = EffectFourCCString(head.fourcc);
@@ -2647,6 +2658,40 @@ public:
     }
     uint32_t id = 0;
     int32_t cols = 0, rows = 0, count = 0, mode = 0, flip = 0;
+    if (head.fourcc == F("ATFB")) {
+      // PAFB: ATFB(id, duration, loop) on an array texture, as the packed flipbook, its tile picked
+      // as CUVEAnimFlipBookTexture::GetValue 0x2cde08 picks the layer; TRST as TXFB's.
+      bool mirror = false;
+      std::vector<uint8_t> cycle;
+      if (value.size() > 2 || head.args.size() != 3 || (value.size() == 2 && !FlipbookTransform(value[1], mirror))) {
+        why = "ATFB that is not a flipbook with an optional mirror";
+        return false;
+      }
+      const EffectValue& loop = head.args[2];
+      if (!IsElement(loop, F("CNST")) || loop.args.size() != 1 ||
+          (loop.args[0].kind != EffectValue::Kind::Word && loop.args[0].kind != EffectValue::Kind::Byte)) {
+        why = "ATFB whose loop is not constant";
+        return false;
+      }
+      if (!Element(head.args[1], Type::Int, cycle, why)) {
+        why = "ATFB duration: " + why;
+        return false;
+      }
+      const FlipbookAtlas atlas = m_io.flipbook ? m_io.flipbook(head.args[0].guid) : FlipbookAtlas{};
+      if (atlas.id == 0) {
+        why = "TXTR " + EffectGuidString(head.args[0].guid) + " has no flipbook atlas";
+        return false;
+      }
+      AppendBE32(out, F("PAFB"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, atlas.id);
+      for (const int32_t v : {atlas.cols, atlas.rows, atlas.frames, loop.args[0].word != 0 ? 1 : 0, mirror ? 1 : 0}) {
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, uint32_t(v));
+      }
+      out.insert(out.end(), cycle.begin(), cycle.end());
+      return true;
+    }
     if (head.fourcc == F("TXP2")) {
       uint32_t c, r, high;
       if (value.size() != 1 || head.args.size() != 4 || !ConstWord(head.args[1], c) || !ConstWord(head.args[2], r) ||
@@ -2790,7 +2835,7 @@ public:
       AppendBE32(out, F("NONE"));
       return true;
     }
-    if (head.fourcc == F("TXP2") || head.fourcc == F("TXFB") || head.fourcc == F("ATX2")) {
+    if (head.fourcc == F("TXP2") || head.fourcc == F("TXFB") || head.fourcc == F("ATX2") || head.fourcc == F("ATFB")) {
       return Atlas(value, out, why);
     }
     const bool animated = head.fourcc == F("ATEX");
@@ -3602,7 +3647,67 @@ public:
     Recipe recipe{shader, 0, {}, {}};
     std::vector<uint8_t> vtrs;
     std::vector<uint8_t> vatx;
-    if (header->textured && texr != nullptr && texr->value.size() == 1 && IsElement(texr->value[0], F("ATEX"))) {
+    // TRST(x, y, sx, sy, rot, wrap): CopyPerSpriteDataToSpriteRenderData 0x2477cc evaluates it per sprite
+    // and SetupInstancingComponents_SpriteCustom passes rot in radians (x pi/180, 0x2b4a04). The wrap
+    // (GetDiffuseTextureWrapMode 0x291434) is the sampler's when -1.
+    const auto transform = [&](const EffectValue& value, std::string& why) {
+      if (IsElement(value, F("NONE"))) {
+        return true;
+      }
+      if (!IsElement(value, F("TRST"))) {
+        why = "has no constant TEXR";
+        return false;
+      }
+      if (value.args.size() != 6 || value.args[5].kind != EffectValue::Kind::Word || value.args[5].word != 0xffffffffu) {
+        why = "has a TEXR TRST with a wrap mode";
+        return false;
+      }
+      for (size_t i = 0; i < 5; ++i) {
+        if (!Element(value.args[i], Type::Real, vtrs, why)) {
+          why = "has a TEXR TRST the port can't evaluate: " + why;
+          return false;
+        }
+      }
+      return true;
+    };
+    const bool atfb = texr != nullptr && !texr->value.empty() && IsElement(texr->value[0], F("ATFB"));
+    if (header->flipbook != atfb) {
+      return refuse(header->flipbook ? "has no ATFB TEXR" : "has an ATFB TEXR on a single-texture shader");
+    }
+    if (atfb) {
+      // ATFB(id, duration, loop) on a texture array: CUVEAnimFlipBookTexture (ctor 0x2cdb78) keeps
+      // one entry per layer, GetValue (0x2cde08) picks it from the particle's frame like ATEX's tile.
+      const EffectValue& head = texr->value[0];
+      if (texr->value.size() != 2 || head.args.size() != 3 || head.args[0].kind != EffectValue::Kind::Guid) {
+        return refuse("has an ATFB TEXR the port can't read");
+      }
+      const EffectValue& loopArg = head.args[2];
+      if (!IsElement(loopArg, F("CNST")) || loopArg.args.size() != 1 ||
+          (loopArg.args[0].kind != EffectValue::Kind::Word && loopArg.args[0].kind != EffectValue::Kind::Byte)) {
+        return refuse("has an ATFB TEXR whose loop is not constant");
+      }
+      const uint32_t loop = loopArg.args[0].word;
+      const FlipbookAtlas layers = m_io.vfxTexture(head.args[0].guid);
+      if (layers.id == 0 || layers.frames < 1) {
+        return refuse("has an ATFB TEXR whose texture can't be read");
+      }
+      std::string why;
+      std::vector<uint8_t> duration;
+      if (!Element(head.args[1], Type::Int, duration, why)) {
+        return refuse("has an ATFB duration the port can't evaluate: " + why);
+      }
+      if (!transform(texr->value[1], why)) {
+        return refuse(why);
+      }
+      AppendBE32(vatx, F("VATF"));
+      AppendBE32(vatx, uint32_t(layers.frames));
+      AppendBE32(vatx, loop != 0 ? 1 : 0);
+      vatx.insert(vatx.end(), duration.begin(), duration.end());
+      mati.textures["TEXR"] = MatiTexture{head.args[0].guid, 0, 1, -1, -1};
+      recipe.features = kColorTex;
+      recipe.textures = {{"TEXR", Role::Color, -1, -1}};
+      recipe.alphaGamma = 2.2f;
+    } else if (header->textured && texr != nullptr && texr->value.size() == 1 && IsElement(texr->value[0], F("ATEX"))) {
       // ATEX(id, tileW, tileH, strideW, strideH, cycle, loop), all constants: CUVEAnimTexture (ctor
       // 0x2cd0f4) cuts the texture's full size into tiles, GetValue (0x2cd750) picks one per frame.
       const EffectValue& atex = texr->value[0];
@@ -3688,23 +3793,9 @@ public:
           texr->value[0].args.size() != 1 || texr->value[0].args[0].kind != EffectValue::Kind::Guid) {
         return refuse("has no constant TEXR");
       }
-      // TRST(x, y, sx, sy, rot, wrap): CopyPerSpriteDataToSpriteRenderData 0x2477cc evaluates it per sprite
-      // and SetupInstancingComponents_SpriteCustom passes rot in radians (x pi/180, 0x2b4a04). The wrap
-      // (GetDiffuseTextureWrapMode 0x291434) is the sampler's when -1.
-      const EffectValue& transform = texr->value[1];
-      if (IsElement(transform, F("TRST"))) {
-        if (transform.args.size() != 6 || transform.args[5].kind != EffectValue::Kind::Word ||
-            transform.args[5].word != 0xffffffffu) {
-          return refuse("has a TEXR TRST with a wrap mode");
-        }
-        std::string why;
-        for (size_t i = 0; i < 5; ++i) {
-          if (!Element(transform.args[i], Type::Real, vtrs, why)) {
-            return refuse("has a TEXR TRST the port can't evaluate: " + why);
-          }
-        }
-      } else if (!IsElement(transform, F("NONE"))) {
-        return refuse("has no constant TEXR");
+      std::string why;
+      if (!transform(texr->value[1], why)) {
+        return refuse(why);
       }
       mati.textures["TEXR"] = MatiTexture{texr->value[0].args[0].guid, 0, 1, -1, -1};
       recipe.features = kColorTex;
@@ -6104,8 +6195,9 @@ public:
     if (fourcc == F("NONE")) {
       return true;
     }
-    // PATL: CNST id, then cols, rows, count, mode and flipX as CNST ints.
-    if (fourcc == F("PATL")) {
+    // PATL: CNST id, then cols, rows, count, mode and flipX as CNST ints. PAFB: the same with loop
+    // for mode, then the cycle as an int element.
+    if (fourcc == F("PATL") || fourcc == F("PAFB")) {
       uint32_t sub;
       if (!Word(sub) || sub != F("CNST") || !Skip(4)) {
         return false;
@@ -6115,7 +6207,7 @@ public:
           return false;
         }
       }
-      return true;
+      return fourcc == F("PATL") || Element(Type::Int);
     }
     uint32_t sub;
     if ((fourcc != F("CNST") && fourcc != F("ATEX")) || !Word(sub) || (sub != F("NONE") && !Skip(4))) {
@@ -6499,6 +6591,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.Skip(8 * 4);  // eight words
     } else if (part && fourcc == F("VAT2")) {
       ok = reader.Skip(5 * 4) && reader.Element(Type::Int);  // five words, the cycle
+    } else if (part && fourcc == F("VATF")) {
+      ok = reader.Skip(2 * 4) && reader.Element(Type::Int);  // layers, loop, the duration
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||

@@ -1,3 +1,4 @@
+#include "port_anim_tile.h"
 #include "port_remastered_effect_convert.h"
 #include "port_vfx_opacity.h"
 #include "Kyoto/Particles/CPortVfxConstants.hpp"
@@ -1982,6 +1983,17 @@ void TestPortMover() {
   CHECK_MSG(parts.size() == 1 && parts[0].part == identity.bytes, "the identity SMVR writes no PSMV");
 }
 
+// The tile pick of ATEX, ATX2 and ATFB: frame x count over the cycle, wrapping or holding the last.
+void TestAnimTile() {
+  CHECK_MSG(PortAnimTile(8, true, 120.f, 14) == 0 && PortAnimTile(8, true, 120.f, 16) == 1 &&
+                PortAnimTile(8, true, 120.f, 119) == 7,
+            "a tile per cycle / count frames");
+  CHECK_MSG(PortAnimTile(8, true, 120.f, 136) == 1 && PortAnimTile(8, false, 120.f, 136) == 7,
+            "past the cycle a loop wraps and a one-shot holds the last tile");
+  CHECK_MSG(PortAnimTile(8, true, 0.f, 50) == 0 && PortAnimTile(0, true, 120.f, 50) == 0,
+            "no cycle or no tiles is tile 0");
+}
+
 Retail Patl(uint32_t id, int cols, int rows, int count, int mode, int flip) {
   Retail want;
   want.f("GPSM").f("TEXR").f("PATL").f("CNST").w(id);
@@ -2037,6 +2049,53 @@ void TestAtlasTexture() {
   bare.flipbook = nullptr;
   parts = ConvertOne(OneGenerator([](auto& o) { PutTxfb(o, false, 1.0f, false); }), bare);
   CHECK_MSG(parts.size() == 1 && parts[0].droppedRetail == 1, "no atlas, no flipbook");
+
+  // ATFB(id, duration, loop) is PAFB: the atlas with the loop for mode, then the duration, an int
+  // element; faee17b6's SLCT(IRND(0, 1), ARRY(-1f, 1f)) is TXFB's random mirror.
+  const auto atfb = [](bool slctMirror) {
+    return [slctMirror](std::vector<uint8_t>& o) {
+      PutProperty(o, "TEXR", 0);
+      PutFourCC(o, "ATFB");
+      PutGuid(o, Fresh(5));
+      PutConstant(o, 120);
+      PutConstant(o, 1);
+      PutFourCC(o, "TRST");
+      PutConstant(o, 0);
+      PutConstant(o, 0);
+      if (slctMirror) {
+        PutFourCC(o, "SLCT");
+        PutFourCC(o, "IRND");
+        PutConstant(o, 0);
+        PutConstant(o, 1);
+        PutFourCC(o, "ARRY");
+        Put32(o, 2);
+        PutConstant(o, Bits(-1.0f));
+        PutConstant(o, Bits(1.0f));
+      } else {
+        PutConstant(o, Bits(1.0f));
+      }
+      PutConstant(o, Bits(1.0f));
+      PutConstant(o, 0);
+      Put32(o, 0xFFFFFFFFu);
+    };
+  };
+  const auto pafb = [](bool mirror) {
+    Retail want;
+    want.f("GPSM").f("TEXR").f("PAFB").f("CNST").w(0xF11B0001u);
+    for (const uint32_t v : {8u, 4u, 32u, 1u, mirror ? 1u : 0u, 120u}) {
+      want.f("CNST").w(v);
+    }
+    want.end();
+    return want.bytes;
+  };
+  parts = ConvertOne(OneGenerator(atfb(true)), io);
+  CHECK_MSG(parts.size() == 1 && parts[0].part == pafb(true), "ATFB with an SLCT mirror is a flipped PAFB");
+  CHECK_MSG(!parts.empty() && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+            "a PAFB reads as retail");
+  parts = ConvertOne(OneGenerator(atfb(false)), io);
+  CHECK_MSG(parts.size() == 1 && parts[0].part == pafb(false), "ATFB with an identity TRST is not flipped");
+  parts = ConvertOne(OneGenerator(atfb(true)), bare);
+  CHECK_MSG(parts.size() == 1 && parts[0].droppedRetail == 1, "no atlas, no ATFB");
 
   Retail badCount;
   badCount.f("GPSM").f("TEXR").f("PATL").f("CNST").w(1).f("CNST").w(4).f("CNST").w(4).f("_END");
@@ -5957,6 +6016,55 @@ void TestHeaderMaterial() {
                 parts[0].approximated[0] == "VMAT: header shader b42cacf5 has an ATX2 TEXR of tag 3",
             "a header ATX2 off tag 1 is refused");
 
+  // 9d1a1432 samples a texture array by an ATFB's layer: VATF carries the layer count, the loop
+  // and the duration, an int element; either shader with the other kind of TEXR is refused.
+  const auto atfbTexr = [](std::vector<uint8_t>& o) {
+    PutProperty(o, "TEXR", 0);
+    PutFourCC(o, "ATFB");
+    PutGuid(o, Legacy(0x1234ABCD));
+    PutConstant(o, 120);
+    PutConstant(o, 1);
+    PutFourCC(o, "NONE");
+  };
+  const auto vatfOf = [](const ConvertedPart& part) {
+    std::vector<RetailPartProperty> props;
+    std::string error;
+    if (SplitRetailPart(part.part.data(), part.part.size(), props, error)) {
+      for (const auto& prop : props) {
+        if (prop.fourcc == EffectFourCC("VATF")) {
+          return prop.value;
+        }
+      }
+    }
+    return std::vector<uint8_t>{};
+  };
+  EffectConvertIO layered = io;
+  layered.vfxTexture = [](const EffectGuid&) {
+    FlipbookAtlas a;
+    a.id = 0x5EED0009;
+    a.frames = 6;
+    return a;
+  };
+  parts = ConvertOne(withShader(OneGenerator(atfbTexr), 0x9d1a1432), layered);
+  const std::vector<uint8_t> vatf = parts.size() == 1 ? vatfOf(parts[0]) : std::vector<uint8_t>{};
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmatOf(parts[0]), 24) == 0x5EED0009 &&
+                vatf.size() == 16 && VmatWord(vatf, 0) == 6 && VmatWord(vatf, 4) == 1 &&
+                VmatWord(vatf, 8) == EffectFourCC("CNST") && VmatWord(vatf, 12) == 120,
+            "a header sprite's TEXR ATFB is written as VATF");
+  parts = ConvertOne(withShader(OneGenerator(atfbTexr), 0x9d1a1432), io);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader 9d1a1432 has an ATFB TEXR whose texture can't be read",
+            "an ATFB on a texture of no layers is refused");
+  parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x9d1a1432), layered);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader 9d1a1432 has no ATFB TEXR",
+            "the array shader without an ATFB is refused");
+  parts = ConvertOne(withShader(OneGenerator(atfbTexr), 0xb42cacf5), layered);
+  CHECK_MSG(parts.size() == 1 && vmatOf(parts[0]).empty() && vatfOf(parts[0]).empty() &&
+                parts[0].approximated.size() == 1 &&
+                parts[0].approximated[0] == "VMAT: header shader b42cacf5 has an ATFB TEXR on a single-texture shader",
+            "a single-texture shader with an ATFB is refused");
+
   parts = ConvertOne(withShader(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), 0x1e245375), io);
   vmat = parts.size() == 1 ? vmatOf(parts[0]) : std::vector<uint8_t>{};
   CHECK_MSG(VmatWord(vmat, 8) == 2 && VmatWord(vmat, 12) == 0 && VmatWord(vmat, 20) == 0,
@@ -6025,6 +6133,7 @@ int main() {
   TestVmat();
   TestVmsh();
   TestSftdReport();
+  TestAnimTile();
   TestAtlasTexture();
   TestModelChoice();
   TestColourChoice();

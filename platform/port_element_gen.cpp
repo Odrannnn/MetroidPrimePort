@@ -228,6 +228,10 @@ void CElementGen::PortFxDescribe(PortFxInfo& out) const {
                     vfx->atexRects.size() / 4);
       out.vfx += buf;
     }
+    if (vfx->atfbLayers > 0) {
+      std::snprintf(buf, sizeof(buf), " VATF*%u", vfx->atfbLayers);
+      out.vfx += buf;
+    }
     if (!vfx->vpmt.empty()) {
       std::snprintf(buf, sizeof(buf), " VPMT*%zu", vfx->vpmt.size());
       out.vfx += buf;

@@ -45,6 +45,8 @@ public:
 // Port-only 'PATL': an atlas of cols x rows equal tiles, tile k in column k % cols and row
 // k / cols counted from texel row 0. Mode 0 picks a tile per particle from its seed, mode 1
 // flips through `count` tiles over the particle's life. flipX mirrors half the particles.
+// Port-only 'PAFB' (mode 2): Remastered's ATFB, `count` tiles over a cycle of frames, an int
+// element read as a real, looping or holding the last (CUVEAnimFlipBookTexture::GetValue 0x2cde08).
 class CUVEAtlasTexture : public CUVElement {
   TLockedToken< CTexture > x4_tex;
   int x10_cols;
@@ -52,10 +54,14 @@ class CUVEAtlasTexture : public CUVElement {
   int x18_count;
   int x1c_mode;
   bool x20_flipX;
+  bool x21_loop = false;
+  CIntElement* x24_cycle = nullptr;
 
 public:
   CUVEAtlasTexture(TToken< CTexture > tex, CIntElement* cols, CIntElement* rows, CIntElement* count,
                    CIntElement* mode, CIntElement* flipX);
+  CUVEAtlasTexture(TToken< CTexture > tex, CIntElement* cols, CIntElement* rows, CIntElement* count,
+                   CIntElement* loop, CIntElement* flipX, CIntElement* cycle);
   ~CUVEAtlasTexture() override;
   TLockedToken< CTexture > GetValueTexture(int frame) const override;
   void GetValueUV(int frame, SUVElementSet& valOut) const override;

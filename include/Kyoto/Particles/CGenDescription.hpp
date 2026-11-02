@@ -82,6 +82,11 @@ struct CPortVfxData {
   bool atexLoop = false;
   // VAT2: an ATX2's cycle, evaluated per particle frame in place of atexCycle; null for VATX.
   CIntElement* atexCycleElem = nullptr;
+  // VATF: a header sprite's TEXR ATFB as Remastered's CUVEAnimFlipBookTexture, a texture array's
+  // layer count (0 without one), loop, and the duration in frames, an int element read as a real.
+  u32 atfbLayers = 0;
+  bool atfbLoop = false;
+  CIntElement* atfbCycle = nullptr;
   std::vector< CPortVfxElem > vpmt;
   std::vector< CPortVfxElem > vsmt;
   CRealElement* ssze = nullptr;

@@ -1021,6 +1021,7 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('VTRS'):
     case SBIG('VATX'):
     case SBIG('VAT2'):
+    case SBIG('VATF'):
     case SBIG('VPMT'):
     case SBIG('VSMT'):
     case SBIG('SSZE'):
@@ -2471,6 +2472,24 @@ CUVElement* CParticleDataFactory::GetTextureElement(CInputStream& in, CSimplePoo
     TToken< CTexture > tex = id == 0 ? TToken< CTexture >(CreateTexture(-1))
                                      : TToken< CTexture >(resPool->GetObj(SObjectTag(SBIG('TXTR'), id)));
     ret = rs_new CUVEAtlasTexture(tex, cols, rows, count, mode, flipX);
+    break;
+  }
+  case SBIG('PAFB'): {
+    // 'CNST' <TXTR id>, then cols, rows, count, loop, flipX and the cycle as int elements
+    CAssetId id = 0;
+    FourCC subId = GetClassID(in);
+    if (subId != SBIG('NONE')) {
+      id = in.ReadLong();
+    }
+    CIntElement* cols = GetIntElement(in);
+    CIntElement* rows = GetIntElement(in);
+    CIntElement* count = GetIntElement(in);
+    CIntElement* loop = GetIntElement(in);
+    CIntElement* flipX = GetIntElement(in);
+    CIntElement* cycle = GetIntElement(in);
+    TToken< CTexture > tex = id == 0 ? TToken< CTexture >(CreateTexture(-1))
+                                     : TToken< CTexture >(resPool->GetObj(SObjectTag(SBIG('TXTR'), id)));
+    ret = rs_new CUVEAtlasTexture(tex, cols, rows, count, loop, flipX, cycle);
     break;
   }
 #endif
