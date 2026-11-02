@@ -667,13 +667,15 @@ void CPlayerGun::PortShotFromThirdPersonCannon(const CStateManager& mgr, CTransf
   // there) and heads for the point under the camera's centre ray, or the assisted aim point of
   // the locked target, as retail's does under a lock.
   const CPlayer& player = *mgr.GetPlayer();
+  if (aim) {
+    PortThirdPersonBody::NoteShot(mgr); // a fired shot (the aux beams' per-frame call passes !aim)
+  }
   CVector3f origin = xf.GetTranslation();
   PortThirdPersonBody::CannonPosition(player, origin);
   if (!aim) {
     xf.SetTranslation(origin);
     return;
   }
-  PortThirdPersonBody::NoteShot(); // a fired shot (the aux beams' per-frame call passes !aim)
   CVector3f aimPoint;
   const CVector3f camFwd = mgr.GetCameraManager()->GetFirstPersonCamera()->GetTransform().GetForward();
   bool have = false;

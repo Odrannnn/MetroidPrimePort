@@ -331,8 +331,9 @@ inline float StepWiden(float across, float half, float gap, float minGap) {
   return std::max(std::fabs(across) * half - 0.5f * (gap - minGap), 0.f);
 }
 
-// A shot left the cannon (CPlayerGun): the body raises it for kGunUpSeconds.
-void NoteShot();
+// A shot is leaving the cannon (CPlayerGun): the body raises it for kGunUpSeconds, a lowered arm
+// at once (posed now, before CannonPosition), so the shot starts at the cannon as it is drawn.
+void NoteShot(const CStateManager& mgr);
 // Once per game tick while the third-person camera is active (PortThirdPerson::Update).
 void Update(CStateManager& mgr, float dt);
 // The body is built and animated, and stands in for the frozen one.

@@ -434,8 +434,23 @@ void TurnSeg(CHierarchyPoseBuilder& pb, const CCharLayoutInfo& layout, CSegId se
   pb.Insert(seg, parentRot.BuildInverted() * turn * parentRot * pose);
 }
 
-// Turns the shoulder so the cannon's axis (GUN_LCTR to Charge_LCTR) runs through the aim point,
-// by s.aimWeight, over the clip's pose. All in the body's unscaled model space.
+// The cannon's muzzle for GUN_LCTR at `gun` and Charge_LCTR at `charge` (one space; `scale` turns
+// the cannon box's metres into it): its bore is GUN_LCTR toward the result. The cinematic beam,
+// drawn at GUN_LCTR, has its barrel along its own +X through its origin, the muzzle at the box's
+// far end; Charge_LCTR sits off that line, above the barrel, so its line would aim and fire from
+// beside the cannon. The dread-samus body's own cannon: Charge_LCTR.
+CVector3f BoreTip(const CTransform4f& gun, const CVector3f& charge, float scale) {
+  if (PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(s.loadedChar))) {
+    return charge;
+  }
+  // Until the beam's model loads, as far out as Charge_LCTR.
+  const float reach =
+      s.beamData ? s.beamData->GetBounds().GetMaxPoint().GetX() * scale : gun.TransposeMultiply(charge).GetX();
+  return gun * CVector3f(reach, 0.f, 0.f);
+}
+
+// Turns the shoulder so the cannon's bore (BoreTip) runs through the aim point, by s.aimWeight,
+// over the clip's pose. All in the body's unscaled model space.
 void AimArm(const CStateManager& mgr, CAnimData& data) {
   if (s.shoulder == CSegId::Invalid()) {
     return;
@@ -463,9 +478,14 @@ void AimArm(const CStateManager& mgr, CAnimData& data) {
     pb.BuildTransform(seg, xf);
     return xf.GetTranslation();
   };
+  const auto tip = [&pb, &position] {
+    CTransform4f xf = CTransform4f::Identity();
+    pb.BuildTransform(s.gunSeg, xf);
+    return BoreTip(xf, position(s.muzzleSeg), 1.f / kBodyScale);
+  };
   const CVector3f pivot = position(s.shoulder);
   const CVector3f gun = position(s.gunSeg) - pivot;
-  const CVector3f muzzle = position(s.muzzleSeg) - pivot;
+  const CVector3f muzzle = tip() - pivot;
   if (!(muzzle - gun).CanBeNormalized() || (target - pivot).Magnitude() < 1.f) {
     return;
   }
@@ -495,8 +515,8 @@ void AimArm(const CStateManager& mgr, CAnimData& data) {
     parentRot = pb.GetSegRotation(seg) * parentRot;
   }
   pb.Insert(s.shoulder, parentRot.BuildInverted() * turn * parentRot * s.shoulderPose);
-  const CVector3f line = position(s.muzzleSeg) - position(s.gunSeg);
-  const CVector3f rest = target - position(s.muzzleSeg);
+  const CVector3f line = tip() - position(s.gunSeg);
+  const CVector3f rest = target - tip();
   s.armMiss = line.CanBeNormalized() && rest.CanBeNormalized()
                   ? std::acos(std::clamp(CVector3f::Dot(line.AsNormalized(), rest.AsNormalized()), -1.f, 1.f))
                   : 0.f;
@@ -765,9 +785,12 @@ CVector3f SegPosition(const CAnimData& data, CSegId seg) {
   return xf.GetTranslation();
 }
 
-// Pose (built last) as the cannon's yaw and pitch: the axis from GUN_LCTR to Charge_LCTR.
+// Pose (built last) as the cannon's yaw and pitch: its bore (BoreTip).
 void CannonAngles(const CAnimData& data, float& yaw, float& pitch) {
-  const CVector3f d = SegPosition(data, s.muzzleSeg) - SegPosition(data, s.gunSeg);
+  CTransform4f gun = CTransform4f::Identity();
+  data.GetPoseBuilder().BuildTransform(s.gunSeg, gun);
+  const CVector3f d =
+      BoreTip(gun, SegPosition(data, s.muzzleSeg), 1.f / kBodyScale) - gun.GetTranslation();
   yaw = std::atan2(d.GetX(), d.GetY());
   pitch = std::atan2(d.GetZ(), std::sqrt(d.GetX() * d.GetX() + d.GetY() * d.GetY()));
 }
@@ -1509,6 +1532,46 @@ CVector3f GroundVelocity(const CStateManager& mgr, const CPlayer& player, float 
   return v;
 }
 
+// The aim point (the one the shots head for, CPlayerGun::PortShotFromThirdPersonCannon) while
+// the gun is up, and its place on the aim grid, eased toward over `dt` once the arm is up.
+void Aim(const CStateManager& mgr, bool gunUp, float dt) {
+  const CPlayer& player = *mgr.GetPlayer();
+  s.haveAim = false;
+  if (gunUp) {
+    if (player.GetOrbitTargetId() != kInvalidUniqueId &&
+        TCastToConstPtr< CActor >(mgr.GetObjectById(player.GetOrbitTargetId())) != nullptr) {
+      s.aimPoint = player.GetAssistedTargetAim();
+      s.haveAim = true;
+    } else {
+      s.haveAim = PortThirdPerson::AimPoint(s.aimPoint);
+    }
+  }
+  if (s.haveAim && s.aimLayer) {
+    // Where the aim point is from the shoulder, as a place on the aim grid.
+    CTransform4f bodyXf = player.GetTransform();
+    CVector3f origin = bodyXf.GetTranslation();
+    origin.SetZ(player.GetBoundingBox().GetMinPoint().GetZ());
+    bodyXf.SetTranslation(origin);
+    const CVector3f d = bodyXf.TransposeMultiply(s.aimPoint) * (1.f / kBodyScale) - s.pivot;
+    s.aimYawNow = std::atan2(d.GetX(), d.GetY());
+    s.aimPitchNow = std::atan2(d.GetZ(), std::sqrt(d.GetX() * d.GetX() + d.GetY() * d.GetY()));
+    const float yaw = std::atan2(d.GetX(), d.GetY()) - s.aimYaw[4];
+    const float pitch =
+        std::atan2(d.GetZ(), std::sqrt(d.GetX() * d.GetX() + d.GetY() * d.GetY())) - s.aimPitch[4];
+    const float u = std::clamp(yaw >= 0.f ? yaw / s.gridRight : yaw / s.gridLeft, -1.f, 1.f);
+    const float v = std::clamp(pitch >= 0.f ? pitch / s.gridUp : pitch / s.gridDown, -1.f, 1.f);
+    if (s.aimWeight <= 0.f) {
+      // Raised from the side: straight to the aim.
+      s.gridU = u;
+      s.gridV = v;
+      s.gridSpeedU = s.gridSpeedV = 0.f;
+    } else {
+      SmoothToward(s.gridU, s.gridSpeedU, u, dt);
+      SmoothToward(s.gridV, s.gridSpeedV, v, dt);
+    }
+  }
+}
+
 } // namespace
 
 void Update(CStateManager& mgr, float dt) {
@@ -1682,41 +1745,7 @@ void Update(CStateManager& mgr, float dt) {
     s.stride = Wrap(s.stride + dt * (s.legsBack ? -speed : speed) / stride);
   }
 
-  // The aim point is the one the shots head for (CPlayerGun::PortShotFromThirdPersonCannon).
-  s.haveAim = false;
-  if (gunUp) {
-    if (player.GetOrbitTargetId() != kInvalidUniqueId &&
-        TCastToConstPtr< CActor >(mgr.GetObjectById(player.GetOrbitTargetId())) != nullptr) {
-      s.aimPoint = player.GetAssistedTargetAim();
-      s.haveAim = true;
-    } else {
-      s.haveAim = PortThirdPerson::AimPoint(s.aimPoint);
-    }
-  }
-  if (s.haveAim && s.aimLayer) {
-    // Where the aim point is from the shoulder, as a place on the aim grid.
-    CTransform4f bodyXf = xf;
-    CVector3f origin = bodyXf.GetTranslation();
-    origin.SetZ(player.GetBoundingBox().GetMinPoint().GetZ());
-    bodyXf.SetTranslation(origin);
-    const CVector3f d = bodyXf.TransposeMultiply(s.aimPoint) * (1.f / kBodyScale) - s.pivot;
-    s.aimYawNow = std::atan2(d.GetX(), d.GetY());
-    s.aimPitchNow = std::atan2(d.GetZ(), std::sqrt(d.GetX() * d.GetX() + d.GetY() * d.GetY()));
-    const float yaw = std::atan2(d.GetX(), d.GetY()) - s.aimYaw[4];
-    const float pitch =
-        std::atan2(d.GetZ(), std::sqrt(d.GetX() * d.GetX() + d.GetY() * d.GetY())) - s.aimPitch[4];
-    const float u = std::clamp(yaw >= 0.f ? yaw / s.gridRight : yaw / s.gridLeft, -1.f, 1.f);
-    const float v = std::clamp(pitch >= 0.f ? pitch / s.gridUp : pitch / s.gridDown, -1.f, 1.f);
-    if (s.aimWeight <= 0.f) {
-      // Raised from the side: straight to the aim.
-      s.gridU = u;
-      s.gridV = v;
-      s.gridSpeedU = s.gridSpeedV = 0.f;
-    } else {
-      SmoothToward(s.gridU, s.gridSpeedU, u, dt);
-      SmoothToward(s.gridV, s.gridSpeedV, v, dt);
-    }
-  }
+  Aim(mgr, gunUp, dt);
   s.aimWeight = s.haveAim ? std::min(s.aimWeight + dt / kAimInSeconds, 1.f)
                           : std::max(s.aimWeight - dt / kAimOutSeconds, 0.f);
 
@@ -1736,7 +1765,25 @@ void Update(CStateManager& mgr, float dt) {
 
 bool Ready() { return s.body && s.animating; }
 
-void NoteShot() { s.gunUp = kGunUpSeconds; }
+void NoteShot(const CStateManager& mgr) {
+  s.gunUp = kGunUpSeconds;
+  if (!Ready() || s.pinned.Valid() || s.aimWeight >= 1.f) {
+    return;
+  }
+  // Fired from the lowered (or still rising) arm: up at once, posed now, so the shot leaves the
+  // cannon where the next frame draws it, not from the hanging arm the cannon then swings off.
+  const float weight = s.aimWeight;
+  s.aimWeight = 0.f; // the grid straight to the aim (Aim)
+  Aim(mgr, true, 0.f);
+  if (!s.haveAim) {
+    s.aimWeight = weight;
+    return;
+  }
+  s.aimWeight = 1.f;
+  CAnimData& data = *s.body->AnimationData();
+  PoseBody(data);
+  AimArm(mgr, data);
+}
 
 void PreRender(const CStateManager& mgr) {
   if (Ready()) {
@@ -1759,27 +1806,14 @@ void PreRender(const CStateManager& mgr) {
   }
 }
 
-// The cannon's muzzle for the body at `xf`, facing down the barrel: from the wrist (GUN_LCTR)
-// toward Charge_LCTR, at the far end of the drawn cannon (Charge_LCTR sits mid-barrel on it), or
-// at Charge_LCTR with no cannon drawn.
+// The cannon's muzzle for the body at `xf`, facing down the bore (BoreTip).
 CTransform4f Muzzle(const CTransform4f& xf) {
   const CTransform4f gun = xf * s.body->GetScaledLocatorTransform("GUN_LCTR");
   const CVector3f charge = (xf * s.body->GetScaledLocatorTransform("Charge_LCTR")).GetTranslation();
-  CVector3f dir = charge - gun.GetTranslation();
+  const CVector3f tip = BoreTip(gun, charge, 1.f);
+  const CVector3f dir = tip - gun.GetTranslation();
   if (dir.Magnitude() < 0.01f) {
-    return CTransform4f::Translate(charge);
-  }
-  dir = dir.AsNormalized();
-  CVector3f tip = charge;
-  if (s.beamData && !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(s.loadedChar))) {
-    // The farthest the cannon's box reaches along the barrel, in the cannon's own frame.
-    const CVector3f d = gun.TransposeRotate(dir);
-    const CAABox box = s.beamData->GetBounds();
-    float reach = 0.f;
-    for (int i = 0; i < 3; ++i) {
-      reach += std::max(box.GetMinPoint()[i] * d[i], box.GetMaxPoint()[i] * d[i]);
-    }
-    tip = gun.GetTranslation() + dir * reach;
+    return CTransform4f::Translate(tip);
   }
   return CTransform4f::LookAt(tip, tip + dir);
 }
