@@ -1005,6 +1005,10 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortChildShutdownByMode = in.ReadLong() != 0;
       break;
+    case SBIG('POSD'):
+      GetClassID(in);
+      desc->xPortChildInheritsShutdownMode = in.ReadLong() != 0;
+      break;
     case SBIG('PBOR'):
       GetClassID(in);
       desc->xPortBirthOrientation = in.ReadLong() != 0;

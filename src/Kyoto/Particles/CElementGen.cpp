@@ -1535,6 +1535,7 @@ void CElementGen::PortAddChild(CParticleGen* child) {
   child->SetOrientation(x1d8_orientation);
   child->SetParticleEmission(x88_particleEmission);
   child->SetModulationColor(x338_moduColor);
+  PortInheritShutdownMode(child);
   x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
   x290_activePartChildren.push_back(child);
 }
@@ -2041,6 +2042,7 @@ void CElementGen::PortSpawnChildSystems() {
     swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
     swoosh->SetOrientation(x1d8_orientation);
     swoosh->SetParticleEmission(x88_particleEmission);
+    PortInheritShutdownMode(swoosh);
     x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
     x290_activePartChildren.push_back(swoosh);
   }
@@ -2055,6 +2057,7 @@ void CElementGen::PortSpawnChildSystems() {
     swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
     swoosh->SetOrientation(x1d8_orientation);
     swoosh->SetParticleEmission(x88_particleEmission);
+    PortInheritShutdownMode(swoosh);
     x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
     x290_activePartChildren.push_back(swoosh);
   }
@@ -2066,6 +2069,7 @@ void CElementGen::PortSpawnChildSystems() {
     electric->SetTranslation(xdc_translation + x2c0_SEPO);
     electric->SetOrientation(x1d8_orientation);
     electric->SetParticleEmission(x88_particleEmission);
+    PortInheritShutdownMode(electric);
     x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
     x290_activePartChildren.push_back(electric);
   }
@@ -2105,6 +2109,9 @@ CElementGen* CElementGen::ConstructChildParticleSystem(TToken< CGenDescription >
   child->SetOrientation(x1d8_orientation);
   child->SetParticleEmission(x88_particleEmission);
   child->SetModulationColor(x338_moduColor);
+#ifdef TARGET_PC
+  PortInheritShutdownMode(child);
+#endif
   return child;
 }
 
@@ -2197,6 +2204,9 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
     swoosh->SetOrientation(x1d8_orientation);
     const bool emission = x88_particleEmission;
     swoosh->SetParticleEmission(emission);
+#ifdef TARGET_PC
+    PortInheritShutdownMode(swoosh);
+#endif
     x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
     x290_activePartChildren.push_back(swoosh);
   }
@@ -2215,6 +2225,7 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
       swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
       swoosh->SetOrientation(x1d8_orientation);
       swoosh->SetParticleEmission(x88_particleEmission);
+      PortInheritShutdownMode(swoosh);
       x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
       x290_activePartChildren.push_back(swoosh);
     }
@@ -2230,6 +2241,9 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
     electric->SetTranslation(xdc_translation + x2c0_SEPO);
     electric->SetOrientation(x1d8_orientation);
     electric->SetParticleEmission(x88_particleEmission);
+#ifdef TARGET_PC
+    PortInheritShutdownMode(electric);
+#endif
     x290_activePartChildren.reserve(x290_activePartChildren.size() + 1);
     x290_activePartChildren.push_back(electric);
   }
@@ -2299,7 +2313,7 @@ void CElementGen::ShutdownEffect() {
 // children get the same call with the same mode, so 0xff acts at once on each one's own SHTM
 // (CElementGen's override 0x2499b8 does the same); without it they get their own ShutdownEffect.
 void CElementGen::PortDoShutdownBehavior(u32 mode) {
-  const u32 use = mode == 0xff ? x28_loadedGenDesc->xPortShutdownMode : (mode & 0xff);
+  const u32 use = mode == 0xff ? PortShutdownMode() : (mode & 0xff);
   if (use < 2) {
     SetParticleEmission(false);
     if (use == 1) {
@@ -2313,6 +2327,14 @@ void CElementGen::PortDoShutdownBehavior(u32 mode) {
     } else {
       (*it)->ShutdownEffect();
     }
+  }
+}
+
+u32 CElementGen::PortOwnShutdownMode() const { return x28_loadedGenDesc->xPortShutdownMode; }
+
+void CElementGen::PortInheritShutdownMode(CParticleGen* child) const {
+  if (x28_loadedGenDesc->xPortChildInheritsShutdownMode) {
+    child->xPortInheritedShutdownMode = int(PortShutdownMode());
   }
 }
 

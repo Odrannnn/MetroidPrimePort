@@ -4591,7 +4591,9 @@ public:
           }
         }
         if (targets.empty()) {
-          result.dropped.push_back("SMTR: CCH0 component " + std::to_string(comp) + " is unused by the shader");
+          char shader[9];
+          std::snprintf(shader, sizeof(shader), "%08x", recipe->shader);
+          result.dropped.push_back("SMTR: CCH0 component " + std::to_string(comp) + " is unused by shader " + shader);
           continue;
         }
         std::vector<uint8_t> element;
@@ -5874,6 +5876,26 @@ public:
       }
       return true;
     }
+    // OSDM (desc+0x6c bit 0, on by default from the CParticleDescription ctor 0x288314): a child
+    // the system constructs gets the system's live shutdown mode (gen+0x98) in place of its own
+    // SHTM (ConstructChildParticleSystem 0x27b1c0, the CParticleGen ctor 0x279784). 0 leaves each
+    // child its own: the port-only POSD 0. 1 is the port's default.
+    if (s.part && fourcc == F("OSDM")) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value) || value > 1) {
+        s.result.dropped.push_back("OSDM: not a constant 0 or 1");
+      } else if (value == 0) {
+        AppendBE32(s.out, F("POSD"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, 0);
+      }
+      return true;
+    }
+    // An electric's own OSDM is never read: only CElementGen calls ConstructChildParticleSystem
+    // (vtable +0x1c0); CParticleElectric and CParticleElectric2 have no call site.
+    if (s.type == F("ELSC") && fourcc == F("OSDM")) {
+      return true;
+    }
     // ORTC (CreateGPSM 0x2595dc, desc+0x3f0 bit 4): CreateNewParticles 0x24a8d8 keeps the system
     // orientation (var +0xbc) at each particle's birth (gen+0x190), and SolveParticleTransform
     // 0x247150 uses it as the model's base rotation in place of the current one when there is no
@@ -7123,7 +7145,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
                          fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
-                         fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
+                         fourcc == F("PITP") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("POSD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||
                          (fourcc >= F("VGD1") && fourcc <= F("VGD4")) ||
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||

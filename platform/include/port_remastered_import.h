@@ -234,7 +234,7 @@ inline constexpr int kModels = 30;
 // 152: ambient particle spawners (roomfx v16).
 // 153: ambients into matched retail effects. 157: recipes 90ce7873, 03ac7d53, d47ffcc3; a swoosh VMAT's PMTR life.
 // 163: header planar squares (shaders 4ba0aadc, c38294d2). 164: VMAT slots bind Remastered's sRGB textures.
-inline constexpr int kEffects = 176;   // fixed particle bounds (PFXB/PFXC)
+inline constexpr int kEffects = 177;   // children's inherited shutdown mode (POSD)
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

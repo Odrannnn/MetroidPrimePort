@@ -298,6 +298,10 @@ public:
   // port-only PISD 0: Remastered's ISDT (desc+0x6c bit 1), on by default. On, a shutdown reaches the
   // children as DoShutdownBehavior(mode) (their own SHTM at once, no SHTT); off, as ShutdownEffect.
   bool xPortChildShutdownByMode = true;
+  // port-only POSD 0: Remastered's OSDM (desc+0x6c bit 0), on by default. On, each child the system
+  // constructs takes the system's live shutdown mode in place of its own SHTM
+  // (ConstructChildParticleSystem 0x27b1c0, CParticleGen ctor 0x279784); off, each keeps its own.
+  bool xPortChildInheritsShutdownMode = true;
   // port-only PBOR: Remastered's ORTC; a model particle turns with the system orientation it was
   // born under (CreateNewParticles 0x24a8d8), not the current one, unless PMOV or a PMRQ base applies.
   bool xPortBirthOrientation = false;

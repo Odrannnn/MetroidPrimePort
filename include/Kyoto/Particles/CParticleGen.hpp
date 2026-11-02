@@ -29,7 +29,10 @@ public:
   // Debug registry (port_fx_debug.cpp): every generator is in one intrusive list.
   CParticleGen() { PortFx::Register(this); }
   // A copy is a new generator with its own registry slot; assignment leaves the links alone.
-  CParticleGen(const CParticleGen& o) : x4_modifiersList(o.x4_modifiersList) { PortFx::Register(this); }
+  CParticleGen(const CParticleGen& o)
+  : x4_modifiersList(o.x4_modifiersList), xPortInheritedShutdownMode(o.xPortInheritedShutdownMode) {
+    PortFx::Register(this);
+  }
   CParticleGen& operator=(const CParticleGen& o) {
     x4_modifiersList = o.x4_modifiersList;
     return *this;
@@ -39,6 +42,14 @@ public:
   CParticleGen* xPortFxPrev = nullptr;
   CParticleGen* xPortFxNext = nullptr;
   uint xPortFxId = 0;
+  // Remastered's live shutdown mode (gen+0x98): a parent with OSDM hands its own to each child it
+  // constructs (ConstructChildParticleSystem 0x27b1c0); -1 = none handed, the generator's own SHTM.
+  int xPortInheritedShutdownMode = -1;
+  // The generator's own SHTM (CParticleGen ctor 0x279784 reads desc+0xcc).
+  virtual u32 PortOwnShutdownMode() const { return 0; }
+  u32 PortShutdownMode() const {
+    return xPortInheritedShutdownMode >= 0 ? u32(xPortInheritedShutdownMode) : PortOwnShutdownMode();
+  }
 #endif
   virtual ~CParticleGen() = 0;
   virtual const bool Update(double) = 0;
@@ -79,7 +90,7 @@ public:
   // Remastered's DoShutdownBehavior (vtable +0x1e8), which a parent with ISDT calls on its children:
   // mode 0xff is the generator's own SHTM, acting at once (no SHTT countdown); 0 and 1 stop emitting.
   virtual void PortDoShutdownBehavior(u32 mode) {
-    if (mode == 0xff || (mode & 0xff) < 2) {
+    if ((mode == 0xff ? PortShutdownMode() : (mode & 0xff)) < 2) {
       SetParticleEmission(false);
     }
   }

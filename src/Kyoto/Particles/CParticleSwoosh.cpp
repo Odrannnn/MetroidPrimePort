@@ -1757,8 +1757,10 @@ bool CParticleSwoosh::GetParticleEmission() const { return x1d0_24_emitting; }
 // The retail DestroyParticles stays empty.
 void CParticleSwoosh::ShutdownEffect() { PortDoShutdownBehavior(0xff); }
 
+u32 CParticleSwoosh::PortOwnShutdownMode() const { return x1c_desc->xPortShutdownMode; }
+
 void CParticleSwoosh::PortDoShutdownBehavior(u32 mode) {
-  const u32 use = mode == 0xff ? x1c_desc->xPortShutdownMode : (mode & 0xff);
+  const u32 use = mode == 0xff ? PortShutdownMode() : (mode & 0xff);
   if (use >= 2) {
     return;
   }

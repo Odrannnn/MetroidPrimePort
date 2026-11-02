@@ -96,6 +96,7 @@ public:
 #ifdef TARGET_PC
   void ShutdownEffect() override;
   void PortDoShutdownBehavior(u32 mode) override;
+  u32 PortOwnShutdownMode() const override;
   void PortSetSpawnSpread(const CVector3f& spread, const CVector3f& origin) override;
   uint PortFxAsset() const override;
   bool PortIsRemastered() const;

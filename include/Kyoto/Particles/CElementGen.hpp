@@ -125,9 +125,12 @@ public:
   virtual void SetParticleEmission(const bool emission) override;
 #ifdef TARGET_PC
   // SHTM/SHTT (PSHM/PSHT). ShutdownEffect starts the countdown if the description has one, else
-  // acts at once; PortDoShutdownBehavior(0xff) uses the description's mode.
+  // acts at once; PortDoShutdownBehavior(0xff) uses the live mode (PortShutdownMode).
   void ShutdownEffect() override;
   void PortDoShutdownBehavior(u32 mode) override;
+  u32 PortOwnShutdownMode() const override;
+  // OSDM: a child this system constructs takes its live shutdown mode.
+  void PortInheritShutdownMode(CParticleGen* child) const;
   void PortSetSpawnSpread(const CVector3f& spread, const CVector3f& origin) override;
   // SDTR: the countdown's remaining over its total, 1 when none is running.
   float PortShutdownTimeRemaining() const;
