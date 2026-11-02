@@ -681,7 +681,7 @@ TEST(SceneHdrVfx, HdrSourcesWriteExposedLinear) {
       }
       return out;
     };
-    EXPECT_NE(squeezed(body).find("if ((BLEND == 0u || BLEND == 3u || (FEAT & 134217728u) != 0u) && (FEAT & 1048576u) == 0u && (FEAT & 4194304u) == 0u && (FEAT & 536870912u) == 0u && (FEAT & 1073741824u) == 0u) {"), std::string::npos);
+    EXPECT_NE(squeezed(body).find("if ((BLEND == 0u || BLEND == 3u || (FEAT & 134217728u) != 0u) && (FEAT & 1048576u) == 0u && (FEAT & 4194304u) == 0u && (shieldBits == 0u || shieldBits == 1610612736u)) {"), std::string::npos);
     EXPECT_NE(body.find("hdr_exposed(u.fogColor.rgb, u.tone0, u.tone1, u.tone2)"), std::string::npos);
     EXPECT_NE(body.find("return vec4f(lin, alpha);"), std::string::npos);
     EXPECT_EQ(body.find("tone("), std::string::npos);

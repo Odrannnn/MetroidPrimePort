@@ -127,15 +127,19 @@ inline bool PortVfxIceReady(const CPortVfxData& vfx) {
 // apart from the instance colour), both pattern maps (TCH0 through the colour slot, TCH1 through the
 // indirect slot) and CCH0. Without them the PART keeps the retail model path rather than draw the
 // recipe with a mesh colour or a map it does not have.
+// The exterior shield (both bits, is_barrier_exterior) reads its one map through the colour slot, as
+// the glow does.
 inline bool PortVfxBarrierReady(const CPortVfxData& vfx) {
   return (vfx.mat.features & aurora::gfx::vfx::BarrierShield) == 0 ||
          (vfx.meshStride == 16 && (vfx.meshFlags & 2) == 2 && vfx.mat.colorSlot >= 0 &&
-          vfx.mat.indirectSlot >= 0 && vfx.paramCount >= 1);
+          (vfx.mat.indirectSlot >= 0 || aurora::gfx::vfx::is_barrier_exterior(vfx.mat.features)) &&
+          vfx.paramCount >= 1);
 }
 
 // VFX_BarrierGlow's feed is BarrierShield's without the second map (this perm reads TCH0 alone, three
 // times) and without the scene copy: it needs the mesh's own vertex colour (VMSH v2, flags bit 1), the
 // pattern map through the colour slot and CCH0. Without them the PART keeps the retail model path.
+// The exterior shield's needs are the same.
 inline bool PortVfxBarrierGlowReady(const CPortVfxData& vfx) {
   return (vfx.mat.features & aurora::gfx::vfx::BarrierGlow) == 0 ||
          (vfx.meshStride == 16 && (vfx.meshFlags & 2) == 2 && vfx.mat.colorSlot >= 0 && vfx.paramCount >= 1);

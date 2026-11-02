@@ -90,8 +90,10 @@ class BarrierShieldWiring(WiringCase):
             self.assertIn(piece, self.vfx)
 
     def test_both_fog_exclusions_carry_the_bit(self):
-        # The tone path and the HDR tail each mix the fog: perm 002 is unfogged, so both skip it.
-        self.assertEqual(count(self.vfx, "(FEAT & 536870912u) == 0u"), 2)
+        # The tone path and the HDR tail each mix the fog: perm 002 is unfogged, so both skip it, and only
+        # the exterior (both barrier bits, b46bb66d's fog perm 001) is fogged.
+        self.assertEqual(count(self.vfx, "(shieldBits == 0u || shieldBits == 1610612736u)"), 2)
+        self.assertEqual(count(self.vfx, "let shieldBits = FEAT & 1610612736u;"), 2)
 
     def test_the_two_slots_and_the_scene_gate_are_read(self):
         self.assertIn("VisorRain | BarrierShield | BarrierGlow |\n           FrameBufferColorErosion | VisorSteam,", self.vfx)  # the colour row
@@ -114,7 +116,7 @@ class BarrierShieldWiring(WiringCase):
 
     def test_the_recipe_is_f197ec38_and_requires_mfc0(self):
         rows = [m.start() for m in re.finditer(re.escape("kBarrierShield"), self.convert)]
-        self.assertEqual(len(rows), 2, "the feature constant and one recipe row")
+        self.assertEqual(len(rows), 3, "the feature constant, its row and the exterior's")
         start = self.convert.index(f"{{0x{SHADER:08x}, kBarrierShield,")
         row = self.convert[start:start + 400]
         self.assertIn('{"TCH0", Role::Color, -1, -1}', row)
@@ -208,7 +210,7 @@ class BarrierGlowWiring(WiringCase):
             self.assertIn(piece, self.vfx)
 
     def test_both_fog_exclusions_carry_the_bit(self):
-        self.assertEqual(count(self.vfx, "(FEAT & 1073741824u) == 0u"), 2)
+        self.assertEqual(count(self.vfx, "(shieldBits == 0u || shieldBits == 1610612736u)"), 2)
 
     def test_the_colour_slot_and_cch_rows_are_shared_but_not_the_scene(self):
         # The colour row, the CCH-row block and the row-count selection name the bit...
@@ -223,7 +225,7 @@ class BarrierGlowWiring(WiringCase):
 
     def test_the_recipe_is_b1eb2b67_and_needs_no_shield_flag(self):
         rows = [m.start() for m in re.finditer(re.escape("kBarrierGlow"), self.convert)]
-        self.assertEqual(len(rows), 2, "the feature constant and one recipe row")
+        self.assertEqual(len(rows), 3, "the feature constant, its row and the exterior's")
         start = self.convert.index(f"{{0x{GLOW_SHADER:08x}, kBarrierGlow,")
         row = self.convert[start:start + 500]
         self.assertIn('{"TCH0", Role::Color, -1, -1}', row)
@@ -271,6 +273,60 @@ class BarrierGlowWiring(WiringCase):
             "aurora::gfx::vfx::BarrierGlow | aurora::gfx::vfx::VisorSteam)) != 0",
             draw)
         self.assertIn("PortVfxEvalParams(vfx, x74_curFrame, desc.params);", draw)
+
+
+EXTERIOR_SHADER = 0xB46BB66D
+
+
+class BarrierExteriorWiring(WiringCase):
+    """VFX_BarrierShield's exterior (b46bb66d, MFC1): both barrier bits. Its fragment branch must come
+    before either bit's own branch, its fog perm keeps the tail's fog, the scene gate lets it through
+    (it reads no copy), and the CPU feed adds the VS's band sweep. vfx/b46bb66d.md in the kb is the
+    contract.
+    """
+
+    def setUp(self):
+        self.aurora = AURORA.read_text()
+        self.vfx = VFX.read_text()
+        self.convert = CONVERT.read_text()
+        self.header = PARTICLES_H.read_text()
+        self.particles = PARTICLES.read_text()
+
+    def test_the_helper_is_both_bits(self):
+        self.assertIn("return (features & (BarrierShield | BarrierGlow)) == (BarrierShield | BarrierGlow);",
+                      self.aurora)
+
+    def test_the_fragment_branch_precedes_the_single_bits(self):
+        both = self.vfx.index("} else if ((FEAT & 1610612736u) == 1610612736u) {")
+        self.assertLess(both, self.vfx.index("} else if ((FEAT & 536870912u) != 0u) {"))
+        self.assertLess(both, self.vfx.index("} else if ((FEAT & 1073741824u) != 0u) {"))
+        for piece in [
+            "let t = sample_raw(S_COLOR, vec2f(-uvs.x, uvs.y), lay).x;",
+            "let m = sample_raw(S_COLOR, vec2f(-uvs.x, uvs.y + tm * 0.5 + t + t), lay).w;",
+            "let e = (f - nk * high) * (k * (w + 0.0125000002)) + nk * high;",
+            "let fade = sat(m - 2.0 * c.x + 1.0);",
+            "x = sat(e * fade) * shown;",
+        ]:
+            self.assertIn(piece, self.vfx)
+
+    def test_the_scene_gate_lets_it_through(self):
+        self.assertIn("if (!hdr && !is_barrier_exterior(features) &&", self.vfx)
+
+    def test_the_recipe_requires_mfc1(self):
+        start = self.convert.index(f"{{0x{EXTERIOR_SHADER:08x}, kBarrierShield | kBarrierGlow,")
+        row = self.convert[start:start + 200]
+        self.assertIn('{{"TCH1", Role::Color, -1, -1}}', row)
+        self.assertIn("1,\n       true, false, false, false, true},", row)  # params 1, fog perm, MFC1 only
+        self.assertIn('if (recipe->mfc1Exterior && (!HasMatiFlag(mati, "MFC1") || HasMatiFlag(mati, "MFC0")))',
+                      self.convert)
+
+    def test_the_feed_adds_the_band(self):
+        feed = braced(self.particles, "static void AddBarrierExterior(", "the exterior feed")
+        self.assertIn("AddBarrierShield(vfx, model, p, tm, color, world);", feed)
+        self.assertIn("std::floor(t75 * 0.0166666675f) * 60.f", feed)
+        self.assertIn("std::fabs(m[13] * 255.f + sweep - 44.f), 5.f)", feed)
+        self.assertIn("v.mesh[3] = band;", feed)
+        self.assertIn("} else if (barrier && glow) {", self.particles)
 
 
 if __name__ == "__main__":

@@ -709,6 +709,9 @@ struct Recipe {
   // row is a shader's non-refraction perm (000). A material carrying either flag is a different perm's
   // maths (and, for MFC1, another shader), so it is refused rather than drawn with perm 000's.
   bool noRefractionFlags = false;
+  // MFC1 (IS_SHIELD_EXTERIOR) set and MFC0 not: the b46bb66d row is the material the exterior shield's
+  // MATI (602b16e3) carries; any other flag set is not the material its folds were read from.
+  bool mfc1Exterior = false;
   // > 0: the colour map's alpha is read as pow(|a|, alphaGamma) (VMAT v4).
   float alphaGamma = 0.0f;
   // ParticleLit lights the vertices (a header's uber perm 040_1), not the fragments (VMAT v5 flag).
@@ -816,6 +819,13 @@ const Recipe* RecipeOf(uint32_t shader) {
       // CCH0 whole in VPRM v1, animated by SMTR. TCH1 is in the MATI but this perm never reads it.
       {0xb1eb2b67, kBarrierGlow, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, false, 1, false, false,
        false, true},
+      // VFX_BarrierShield's exterior (b46bb66d, MATI 602b16e3 with MFC1 IS_SHIELD_EXTERIOR: Intro_Reactor's
+      // and the Phendrana caves' shields; vfx/b46bb66d.md): both barrier bits. TCH1 read twice at (-u, v)
+      // (its .r scrolls the second read, whose .a is the breakup); no scene copy. The VS's band sweep and
+      // normal push are in the CPU feed (AddBarrierExterior); the mesh colour needs VMSH v2. CCH0 whole in
+      // VPRM v1. Its fog perm (001) is decoded: fogged without DFOG 1, unfogged with.
+      {0xb46bb66d, kBarrierShield | kBarrierGlow, {{"TCH1", Role::Color, -1, -1}}, {}, -1, false, false, 1,
+       true, false, false, false, true},
       {0x84e0fe6c, kOpacityTex,
        {{"TCH0", Role::Opacity, -1, -1}},
        {}},
@@ -4047,6 +4057,10 @@ public:
                                " carries a shield flag, so it is not its non-refraction perm");
       return false;
     }
+    if (recipe->mfc1Exterior && (!HasMatiFlag(mati, "MFC1") || HasMatiFlag(mati, "MFC0"))) {
+      m_approximated.push_back(std::string("VMAT: shader ") + shaderText + " is not its MFC1 exterior material");
+      return false;
+    }
 
     // Textures, in the recipe's slot order.
     struct Slot {
@@ -4141,11 +4155,12 @@ public:
     if (model && matiGuid == kIceWedgeMati && mati.shader == 0x84e0fe6c && mati.headerBlend == 2) {
       features |= kModelBackCull;
     }
-    // The Queen barrier's shield (f197ec38) and glow (b1eb2b67) models: MATI cull byte 2 (0xff
-    // resolves to 2 at 0x2bd7fc..0x2bd810) takes SetCullMode at 0x2bda88 from 0x2bd904, Back
-    // (NRenderUtil::SetBackCullState 0xf32c0). Drawn cull none, their back faces give 1 + n.v ~ 2 and
-    // flood the wall cyan. Cull 0/1 take an undecoded two-pass path; not inferred here.
-    if (model && (mati.shader == 0xf197ec38 || mati.shader == 0xb1eb2b67) &&
+    // The Queen barrier's shield (f197ec38) and glow (b1eb2b67) models, and the exterior shield
+    // (b46bb66d): MATI cull byte 2 (0xff resolves to 2 at 0x2bd7fc..0x2bd810) takes SetCullMode at
+    // 0x2bda88 from 0x2bd904, Back (NRenderUtil::SetBackCullState 0xf32c0). Drawn cull none, their back
+    // faces give 1 + n.v ~ 2 and flood the wall cyan. Cull 0/1 take an undecoded two-pass path; not
+    // inferred here.
+    if (model && (mati.shader == 0xf197ec38 || mati.shader == 0xb1eb2b67 || mati.shader == 0xb46bb66d) &&
         (mati.cull == 0xff || mati.cull >= 2)) {
       features |= kModelBackCull;
     }

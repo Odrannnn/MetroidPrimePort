@@ -128,10 +128,20 @@ enum Feature : uint32_t {
   // modular simulation time. rgb = rim x gain x vec3(k 1.125, k 7.5 - .5 mc.r + 1.4 p + .5,
   // k 30 - .9 mc.r + 3 p + .9) x vc.rgb x PCMD, alpha vc.a. Unfogged: perm 000 has DFOG 1 and no fog code.
   BarrierGlow = 1u << 30,
+  // BarrierShield | BarrierGlow together (no bit is left) is VFX_BarrierShield's exterior shader
+  // (b46bb66d, MATI flag MFC1 IS_SHIELD_EXTERIOR: Intro_Reactor's and the Phendrana cave's shields; FS
+  // perm 000, fog perm 001; kb vfx/b46bb66d.md): a model particle with no scene copy whose CPU feed
+  // (AddBarrierExterior) is BarrierShield's plus the VS's band w = 1 - .2 min(|255 mc.g + mod(75 time,
+  // 60) - 44|, 5), which pushes the vertex out along its normal (by .4 w, .02 w more on Remastered +Y)
+  // unless 0 < mc.r < .5, and rides in Vertex::mesh.w. colorSlot = TCH1 (read at (-u, v) twice),
+  // params = CCH0 (.x breakup), time = the modular simulation time. Fogged unless DFOG 1, by the tail.
   // Not a shader feature: a VMAT blob's exposure policy, carried in its features word. The loader moves
   // it to DrawDesc::alreadyExposed; a draw ignores it in `features` (no shader or pipeline key sees it).
   AlreadyExposed = 1u << 31
 };
+inline constexpr bool is_barrier_exterior(uint32_t features) {
+  return (features & (BarrierShield | BarrierGlow)) == (BarrierShield | BarrierGlow);
+}
 // Multiply is port-only: the stand-in for the FrameBuffer_* shaders without a SceneWarp recipe
 // (3db95827). The warp is dropped and the target is multiplied by mix(1, rgb, a) instead.
 // AdditiveOne is the wave orb's model blend: RGB One/One, alpha Zero/One, drawn with depth write off.

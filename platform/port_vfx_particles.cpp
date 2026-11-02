@@ -1167,6 +1167,32 @@ static void AddBarrierGlow(const CPortVfxData& vfx, const CTransform4f& model, c
   }
 }
 
+// VFX_BarrierShield's exterior shader (b46bb66d, MATI flag MFC1)'s vertices into `world`: BarrierShield's
+// feed plus the 000_1 VS's band, in the model coordinates. With mc the mesh's own vertex colour, the band
+// w = 1 - .2 min(|255 mc.g + mod(75 time, 60) - 44|, 5) sweeps the mesh by its green; it pushes the
+// vertex out along the (unnormalised, undisplaced) normal by s = .4 w, and on Remastered +Y (the port's
+// model Z: R2G) by .05 s, except where 0 < mc.r < .5, which stays put. The fragment reads w in place
+// of the mesh alpha (the VS's o4.w; the raw alpha is never read). The literals are the folded VS's
+// (vp_c1[0].x = -.2 from the pool before the 000_1 header).
+static void AddBarrierExterior(const CPortVfxData& vfx, const CTransform4f& model, const CElementGen::CParticle& p,
+                               const Tm (&tm)[3], const float (&color)[4],
+                               std::vector< aurora::gfx::vfx::Vertex >& world) {
+  AddBarrierShield(vfx, model, p, tm, color, world);
+  const float t75 = CGraphics::GetSimTime() * 75.f;
+  const float sweep = t75 - std::floor(t75 * 0.0166666675f) * 60.f;
+  for (u32 i = 0; i < vfx.meshVerts; ++i) {
+    const float* m = &vfx.meshV[size_t(i) * vfx.meshStride];
+    const float band = 1.f - 0.2f * std::min(std::fabs(m[13] * 255.f + sweep - 44.f), 5.f);
+    const float s = m[12] > 0.f && m[12] < 0.5f ? 0.f : band * 0.400000006f;
+    const CVector3f pos = model * CVector3f(m[0] + m[3] * s, m[1] + m[4] * s, m[2] + m[5] * s + s * 0.0500000007f);
+    aurora::gfx::vfx::Vertex& v = world[i];
+    v.pos[0] = pos.GetX();
+    v.pos[1] = pos.GetY();
+    v.pos[2] = pos.GetZ();
+    v.mesh[3] = band;
+  }
+}
+
 void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
                             const CElementGen::CParticle& p, int partFrame,
                             const CColor& modulate, float inverseExposure) {
@@ -1206,6 +1232,8 @@ void CPortVfxMeshBatch::Add(const CPortVfxData& vfx, const CTransform4f& model,
     AddIceCollision(vfx, model, p, tm, color, world);
   } else if (ice) {
     AddIce(vfx, model, p, tm, color, world);
+  } else if (barrier && glow) {
+    AddBarrierExterior(vfx, model, p, tm, color, world);
   } else if (barrier) {
     AddBarrierShield(vfx, model, p, tm, color, world);
   } else if (glow) {

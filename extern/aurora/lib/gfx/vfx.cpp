@@ -710,6 +710,35 @@ R"(    let nm = sample_raw(S_NORMAL, uv2, 0).xy;
     rgb = f * fb * vc.rgb * M;
     x = select(0.0, 1.0, Z > 0.0);
 )"
+R"(  } else if ((FEAT & 1610612736u) == 1610612736u) {
+    // VFX_BarrierShield's exterior (b46bb66d, FS perm 000/001, MFC1; vfx/b46bb66d.md): BarrierShield |
+    // BarrierGlow. No scene copy. TCH1 at (-u, v): its .r t scrolls the second read's v (+ .5 time + 2t),
+    // whose .a m is the breakup (fade against CCH0.x). The fresnel e follows the band w (in.mesh.w, the
+    // VS's sweep, computed on the CPU) where mesh.r is set, else its 8th power alone; mesh.b fades the
+    // whole shield out. c1[0].x = .05 is nk's weight in G and B.
+    let c = u.ice0;
+    let tm = u.ice7.x;
+    let uvs = uv_of(in, u.uvSets[max(S_COLOR, 0)]);
+    let lay = layer(uvs.z, u.layers[max(S_COLOR, 0)]);
+    let t = sample_raw(S_COLOR, vec2f(-uvs.x, uvs.y), lay).x;
+    let m = sample_raw(S_COLOR, vec2f(-uvs.x, uvs.y + tm * 0.5 + t + t), lay).w;
+    let N = normalize(vec3f(in.nrm.x, in.nrm.y, -in.nrm.z) + vec3f(0.0, 0.0, 1e-6));
+    let V = normalize(in.vp + vec3f(0.0, 0.0, 1e-6));
+    let f = 1.0 - dot(V, -N);
+    let high = pow(abs(f), 8.0);
+    let w = in.mesh.w;
+    let k = ceil(in.mesh.x);
+    let nk = 1.0 - k;
+    let e = (f - nk * high) * (k * (w + 0.0125000002)) + nk * high;
+    let fade = sat(m - 2.0 * c.x + 1.0);
+    let shown = 1.0 - in.mesh.z;
+    let gain = (10.0 - 9.0 * fade) * 7.5 * shown;
+    rgb = vec3f((7.5 * m + 1.5 * w + nk) * gain, (3.75 * m + 0.05 * nk + 0.300000012 * w) * gain,
+                (0.375 * m + 0.05 * nk + 0.150000006 * w) * gain) *
+          vc.rgb * M;
+    // The tail multiplies vc.w in and discards the fragment at alpha 0, as the shader's <= 0 does.
+    x = sat(e * fade) * shown;
+)"
 R"(  } else if ((FEAT & 536870912u) != 0u) {
     // VFX_BarrierShield (f197ec38, FS perm 002; SHADER-IMPLEMENTATION.md). TCH0 at (-2u, 2v) is the
     // pattern a: its .b scrolls the four fract() noise reads of TCH1 (s, r, q, p) that make the breakup
@@ -1004,9 +1033,11 @@ R"(  // The tone map runs before this blend, so an alpha blend brighter than 1 t
   // IceChargeBeam: DFOG 1 (perm 000), so unfogged in either blend; IceChargeCollision too where Unfogged.
   // BarrierShield: DFOG 1 on its refraction perm (002), which has no fog code, and its fogged sibling
   // (003) is not ported (the recipe rejects a draw without DFOG 1). BarrierGlow: likewise DFOG 1 on its
-  // non-refraction perm (000), whose VS/FS carry no fog.
+  // non-refraction perm (000), whose VS/FS carry no fog. Their exterior (both bits) has a fog perm (001:
+  // rgb x fog.w + fog.rgb before PCMD), drawn where DFOG is not 1 (Unfogged otherwise).
+  let shieldBits = FEAT & 1610612736u;
   if ((BLEND == 0u || BLEND == 3u || (FEAT & 134217728u) != 0u) && (FEAT & 1048576u) == 0u &&
-      (FEAT & 4194304u) == 0u && (FEAT & 536870912u) == 0u && (FEAT & 1073741824u) == 0u) {
+      (FEAT & 4194304u) == 0u && (shieldBits == 0u || shieldBits == 1610612736u)) {
     col = mix(col, u.fogColor.rgb, fog_factor(in.pos.z));
   }
   return vec4f(col, alpha);
@@ -1757,8 +1788,9 @@ std::string pipeline_source(const PipelineConfig& p) {
   static constexpr std::string_view HdrTail = R"(  if (HDR) {
     var lin = max(rgb, vec3f(0.0));
     if (u.tone1.x > 0.0 && u.tone0.w > 0.0) { lin = lin * u.tone0.w; }
+    let shieldBits = FEAT & 1610612736u;
     if ((BLEND == 0u || BLEND == 3u || (FEAT & 134217728u) != 0u) && (FEAT & 1048576u) == 0u &&
-        (FEAT & 4194304u) == 0u && (FEAT & 536870912u) == 0u && (FEAT & 1073741824u) == 0u) {
+        (FEAT & 4194304u) == 0u && (shieldBits == 0u || shieldBits == 1610612736u)) {
       lin = mix(lin, hdr_exposed(u.fogColor.rgb, u.tone0, u.tone1, u.tone2), fog_factor(in.pos.z));
     }
     return vec4f(lin, alpha);
@@ -1846,10 +1878,11 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   std::memcpy(u.tone, &gx.pbrTone, sizeof(u.tone));
   // Per draw: the GX state keeps the room's exposure for every later draw.
   const bool hdr = scene_hdr_pass_active();
-  if (!hdr &&
+  if (!hdr && !is_barrier_exterior(features) &&
       (features & (SceneWarp | IceChargeCollision | IceChargeCollisionLit | VisorRunOff | VisorRunOffLit | VisorRain |
                    BarrierShield | FrameBufferColorErosion)) != 0) {
-    // The scene-reading effects read the HDR scene's light; outside it there is none to read.
+    // The scene-reading effects read the HDR scene's light; outside it there is none to read. The
+    // barrier's exterior (BarrierShield | BarrierGlow) reads none.
     return;
   }
   u.tone[0][3] = draw_exposure(u.tone[0][3], hdr, desc.alreadyExposed, desc.exposureOverride);

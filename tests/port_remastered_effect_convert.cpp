@@ -5423,6 +5423,87 @@ void TestVmatBarrierGlowRecipe() {
             "b1eb2b67 without DFOG 1 writes no VMAT");
 }
 
+// b46bb66d, the barrier shield's exterior: both barrier bits, TCH1 through the colour slot, MFC1 only,
+// and a fog perm (fogged without DFOG 1, Unfogged with).
+void TestVmatBarrierExteriorRecipe() {
+  constexpr uint32_t kExterior = (1u << 29) | (1u << 30);
+  constexpr uint32_t kUnfogged = 1u << 22;
+  const std::vector<std::array<float, 4>> cch = {{0.1f, 0.f, 0.f, 0.f}};
+  const std::vector<uint8_t> plain = MatiCchN(0xb46bb66d, {{"TCH1", Fresh(8)}}, cch);
+  const std::vector<uint8_t> mati = MatiFlags(plain, {"MFC1"});
+  const std::vector<uint8_t> matiBoth = MatiFlags(plain, {"MFC0", "MFC1"});
+  const std::vector<uint8_t> matiNoPattern = MatiFlags(MatiCchN(0xb46bb66d, {}, cch), {"MFC1"});
+  const auto effect = [](bool dfog) {
+    std::vector<uint8_t> out = VmatEffect(true);
+    if (dfog) {
+      std::vector<uint8_t> extra;
+      PutProperty(extra, "DFOG", 1);
+      PutConstant(extra, 1);
+      out.insert(out.end() - 13, extra.begin(), extra.end());
+    }
+    return out;
+  };
+  const auto convert = [](const std::vector<uint8_t>& data, const std::vector<uint8_t>& material,
+                          std::vector<RetailPartProperty>& properties) {
+    EffectNode node;
+    std::string error;
+    CHECK_MSG(ParseEffect(data.data(), data.size(), node, error), "the exterior effect parses");
+    EffectConvertIO io;
+    io.materialTexture = [](const EffectGuid&) { return 0x5EED0007u; };
+    io.materialData = [&material](const EffectGuid&) { return material; };
+    io.vfxTexture = [](const EffectGuid& texture) {
+      FlipbookAtlas atlas;
+      if (texture == Fresh(8)) {
+        atlas.id = 0x5EED0008;
+      }
+      return atlas;
+    };
+    io.modelMesh = [](uint32_t) { return std::vector<uint8_t>{0, 0, 0, 2}; };
+    std::vector<ConvertedPart> parts = ConvertEffect(node, data.data(), io);
+    if (parts.size() == 1) {
+      SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error);
+    }
+    return parts;
+  };
+  const auto vmatOf = [](const std::vector<RetailPartProperty>& properties) {
+    for (const RetailPartProperty& property : properties) {
+      if (property.fourcc == EffectFourCC("VMAT")) {
+        return property.value;
+      }
+    }
+    return std::vector<uint8_t>();
+  };
+  const auto mentions = [](const std::vector<ConvertedPart>& parts, const char* what) {
+    const std::vector<std::string> notes = parts.size() == 1 ? parts[0].approximated : std::vector<std::string>{};
+    return std::any_of(notes.begin(), notes.end(),
+                       [what](const std::string& line) { return line.find(what) != std::string::npos; });
+  };
+
+  std::vector<RetailPartProperty> properties;
+  std::vector<ConvertedPart> parts = convert(effect(true), mati, properties);
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty(), "b46bb66d with MFC1 writes an exact VMAT");
+  std::vector<uint8_t> vmat = vmatOf(properties);
+  CHECK_MSG(VmatWord(vmat, 12) == (kExterior | kUnfogged) && VmatWord(vmat, 20) == 1,
+            "b46bb66d with DFOG 1: both barrier bits, Unfogged, one texture");
+  CHECK_MSG(VmatWord(vmat, 68) == 0 && VmatWord(vmat, 72) == ~0u, "b46bb66d: TCH1 is the colour slot, no indirect");
+  // No DFOG: its fog perm (001), drawn fogged.
+  properties.clear();
+  parts = convert(effect(false), mati, properties);
+  vmat = vmatOf(properties);
+  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty() && VmatWord(vmat, 12) == kExterior,
+            "b46bb66d without DFOG 1 is drawn fogged");
+  // Only the MFC1 material without MFC0.
+  for (const std::vector<uint8_t>* other : {&plain, &matiBoth}) {
+    properties.clear();
+    parts = convert(effect(true), *other, properties);
+    CHECK_MSG(vmatOf(properties).empty() && mentions(parts, "MFC1 exterior"),
+              "b46bb66d without MFC1, or with MFC0 too, writes no VMAT");
+  }
+  properties.clear();
+  parts = convert(effect(true), matiNoPattern, properties);
+  CHECK_MSG(vmatOf(properties).empty() && mentions(parts, "TCH1"), "b46bb66d without TCH1 writes no VMAT");
+}
+
 bool Contains(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& what) {
   return std::search(bytes.begin(), bytes.end(), what.begin(), what.end()) != bytes.end();
 }
@@ -6343,6 +6424,7 @@ int main() {
   TestVmatVisorSteamRecipe();
   TestVmatBarrierShieldRecipe();
   TestVmatBarrierGlowRecipe();
+  TestVmatBarrierExteriorRecipe();
   TestVmatVisorSplatRecipe();
   TestVmatSceneWarpRecipes();
   TestVmatIceChargeBeamRecipe();
