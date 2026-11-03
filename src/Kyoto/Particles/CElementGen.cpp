@@ -865,6 +865,16 @@ const bool CElementGen::Update(double dt) {
   CParticleGlobals::SParticleSystem thisSystem('PART', this);
 #ifdef TARGET_PC
   CPortVarScope portVarScope(&xPortVars);
+  // SLDS (desc+0x520 = SLDS², Update 0x24616c): the first update (+0xa0 bit 0x1000) never sleeps;
+  // later ones test the previous frame's bounds against the camera first and, asleep, run nothing.
+  // (CParticleSystemParms byte0 bit 4 turns sleep off; only CFlameThrowerMP1 sets it, and its
+  // systems have no SLDS.)
+  if (xPortMoverInit && x28_loadedGenDesc->xPortSleepDistanceSq > 0.f) {
+    xPortAsleep = !(PortSleepDistanceSq() < x28_loadedGenDesc->xPortSleepDistanceSq);
+    if (xPortAsleep) {
+      return false;
+    }
+  }
   if (!xPortMoverInit) {
     // CAddVarSystem::Init 0x278438: every system variable once, on the generator's random.
     CGlobalRandom gr(x27c_randState);
@@ -892,6 +902,31 @@ const bool CElementGen::Update(double dt) {
 
   return InternalUpdate(dt);
 }
+
+#ifdef TARGET_PC
+// GetDistanceSquaredToCamera: from the camera (CParticleGen's camera transform) to the system
+// bounds (CAABox::DistanceSquaredToPoint 0x98ba8: per axis past the half extent), or with no bounds
+// to the system origin T_g + Q_g·(S_g∘T_l).
+float CElementGen::PortSleepDistanceSq() const {
+  const CVector3f camera = CParticleGlobals::PortCameraTransform().GetTranslation();
+  const CVector3f& min = x2f0_systemBounds.GetMinPoint();
+  const CVector3f& max = x2f0_systemBounds.GetMaxPoint();
+  if (min.GetX() <= max.GetX() && min.GetY() <= max.GetY() && min.GetZ() <= max.GetZ()) {
+    const CVector3f center = x2f0_systemBounds.GetCenterPoint();
+    const CVector3f half = x2f0_systemBounds.GetHalfExtent();
+    float d2 = 0.f;
+    for (int i = 0; i < 3; ++i) {
+      const float d = std::max(0.f, std::fabs(camera[i] - center[i]) - half[i]);
+      d2 += d * d;
+    }
+    return d2;
+  }
+  const CVector3f origin =
+      xe8_globalTranslation +
+      x22c_globalOrientation.Rotate(CVector3f::ByElementMultiply(x100_globalScale, GetTranslation()));
+  return (camera - origin).MagSquared();
+}
+#endif
 
 bool CElementGen::InternalUpdate(double dt) {
   CStopwatch sw;
@@ -2785,6 +2820,10 @@ bool CElementGen::IsSystemDeletable() const {
 void CElementGen::Render() {
   CStopwatch timer;
 #ifdef TARGET_PC
+  // Asleep (SLDS): GetSystemEnabled is enabled && awake, and the scene proxy goes inactive.
+  if (xPortAsleep) {
+    return;
+  }
   PortFx::RenderScope fxScope(x28_loadedGenDesc->xPortUnfogged);
   CPortParticleDepthBias portDepthBias(*this, x28_loadedGenDesc->xPortDepthBias,
                                        x28_loadedGenDesc->xPortDepthBiasUsesDepthRange);

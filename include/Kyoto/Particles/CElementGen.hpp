@@ -570,6 +570,12 @@ private:
   // Update, stepped at the start of each tick. Its pos/rot are T_g/Q_g.
   PortKssmChild xPortMover;
   bool xPortMoverInit = false;
+  // SLDS sleep (+0x208 bit 0x40 clear): the camera was at or past the sleep distance at the last
+  // Update, which then ran nothing; Render draws nothing. Remastered also turns off the light and
+  // sleeps the children; no shipped SLDS system has either (and a port child updates and renders
+  // through its parent).
+  bool xPortAsleep = false;
+  float PortSleepDistanceSq() const;
   // XFMD 4's EMVR (CGenDescription::xPortEmvr), initialised and stepped with the mover. Its pos/rot
   // are vec 0x12 and Q_l, baked into each particle at spawn (PortSpawnFrame), and the system
   // translation and rotation.

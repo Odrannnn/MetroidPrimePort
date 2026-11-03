@@ -1129,6 +1129,13 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortSortBias = in.ReadFloat();
       break;
+    // Port-only: Remastered's SLDS, a constant real; stored squared (xPortSleepDistanceSq).
+    case SBIG('PSLD'): {
+      GetClassID(in);
+      const float distance = in.ReadFloat();
+      desc->xPortSleepDistanceSq = distance * distance;
+      break;
+    }
     // Port-only Remastered particle material (build/mpr/vfx/DESIGN.md section 1).
     case SBIG('VMAT'):
     case SBIG('VMSH'):

@@ -4976,6 +4976,7 @@ public:
     uint32_t depthBias = 0;  // DBIS as float bits (nonzero), port-only PDBS
     bool depthBiasUsesDepthRange = true;  // DBSO (desc+0x6b bit 2), port-only PDBO when false
     uint32_t sortBias = 0;   // SBIS as float bits (nonzero), port-only PSBS
+    uint32_t sleepDistance = 0;  // a nonzero constant SLDS as float bits, port-only PSLD
     const EffectProperty* mover = nullptr;
     const EffectProperty* emitterMover = nullptr;  // EMVR, written as PEMR after the loop
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
@@ -5543,6 +5544,17 @@ public:
         s.result.dropped.push_back("SBIS: not a constant");
       } else if ((bits & 0x7fffffffu) != 0) {
         s.sortBias = bits;
+      }
+      return true;
+    }
+    // SLDS ("SleepDistance", CreateGPSM 0x258a08) is evaluated only when it is a constant; any other
+    // element stores 0. desc+0x520 holds its square, and the CElementGen ctor 0x244cfc turns sleep on
+    // only when that square is positive (CElementGen::Update). Retail has no such property: the
+    // port-only PSLD, the raw distance (any sign; the factory squares it).
+    if (s.part && fourcc == F("SLDS")) {
+      uint32_t bits = 0;
+      if (property.value.size() == 1 && ConstWord(property.value[0], bits) && (bits & 0x7fffffffu) != 0) {
+        s.sleepDistance = bits;
       }
       return true;
     }
@@ -6820,6 +6832,11 @@ public:
       AppendBE32(s.out, F("CNST"));
       AppendBE32(s.out, s.sortBias);
     }
+    if (s.sleepDistance != 0) {
+      AppendBE32(s.out, F("PSLD"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, s.sleepDistance);
+    }
     if ((s.part || s.swoosh) && !m_vars.empty()) {
       // Port-only: the effect's PVAR table (names, kinds, defaults) for VARF/VARI/VARV/VARC.
       AppendBE32(s.out, F("PVRT"));
@@ -7610,7 +7627,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||
-                         fourcc == F("PVBS") || fourcc == F("PITN") || fourcc == F("PSBS"))) ||
+                         fourcc == F("PVBS") || fourcc == F("PITN") || fourcc == F("PSBS") ||
+                         fourcc == F("PSLD"))) ||
                (vfx && (fourcc == F("ITEN") || fourcc == F("PDBS")))) {
       ok = reader.Element(Type::Real);
     } else if (part && (fourcc == F("PINS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||

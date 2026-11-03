@@ -304,6 +304,9 @@ public:
   // port-only PSBS: Remastered's SBIS (desc+0xd8, GetSortBias 0x288248), world units added to the
   // translucent sort depth (SortFarToNear 0x1f3000); positive sorts farther. 0 = none.
   float xPortSortBias = 0.f;
+  // port-only PSLD: Remastered's SLDS, squared as at desc+0x520 (CreateGPSM 0x258aa0). Above 0 the
+  // system sleeps (frozen, hidden) while the camera is that far or farther (CElementGen::Update).
+  float xPortSleepDistanceSq = 0.f;
   // port-only PSHM: Remastered's SHTM, what a shutdown does (CParticleGen::DoShutdownBehavior
   // 0x27b88c): 0 stops emission, 1 also destroys the live particles. Other values do neither.
   u8 xPortShutdownMode = 0;

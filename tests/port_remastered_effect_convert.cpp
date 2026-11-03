@@ -3179,6 +3179,35 @@ void TestDepthBias() {
     CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "SBIS becomes PSBS, 0 nothing");
     CHECK_MSG(!parts.empty() && parts[0].dropped.empty() && parts[0].approximated.empty(), "SBIS is exact");
   }
+  // SLDS (the sleep distance, CreateGPSM): a nonzero constant, negative too (desc+0x520 = v²),
+  // becomes PSLD after PSBS; 0 and any other element (read as 0) give Remastered no sleep, so
+  // nothing, and nothing dropped.
+  for (int c = 0; c < 4; ++c) {
+    const float distance = c == 0 ? 30.0f : c == 1 ? 0.0f : -4.0f;
+    const auto parts = ConvertOne(OneGenerator([c, distance](auto& o) {
+                                    PutProperty(o, "SLDS", 3);
+                                    if (c == 3) {
+                                      PutFourCC(o, "MULT");
+                                      PutConstant(o, Bits(20.f));
+                                      PutRealKey(o, 0.f, 1.f);
+                                    } else {
+                                      PutConstant(o, Bits(distance));
+                                    }
+                                    PutProperty(o, "SBIS", 3);
+                                    PutConstant(o, Bits(2.0f));
+                                    PutTexr(o, 0x1234ABCD);
+                                  }),
+                                  {});
+    Retail want;
+    want.f("GPSM").f("TEXR").f("CNST").f("CNST").w(0x1234ABCD);
+    want.f("PSBS").f("CNST").w(Bits(2.0f));
+    if (c == 0 || c == 2) {
+      want.f("PSLD").f("CNST").w(Bits(distance));
+    }
+    want.end();
+    CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "a nonzero constant SLDS becomes PSLD, else nothing");
+    CHECK_MSG(!parts.empty() && parts[0].dropped.empty() && parts[0].approximated.empty(), "SLDS is exact");
+  }
   const ConvertedPart swoosh = ConvertSwoosh([](auto& o) {
     PutProperty(o, "DBIS", 3);
     PutConstant(o, Bits(-2.0f));
