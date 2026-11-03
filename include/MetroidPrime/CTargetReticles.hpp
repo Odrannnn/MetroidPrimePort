@@ -142,8 +142,9 @@ private:
   // Trilogy fn_80234EA8/80236A98/8023AC48/8023B228: new combat group state.
   // This HUD class is not a CEntity; it is not part of the entity save-state schema.
   void PortTriUpdateCombat(float dt, const CStateManager& mgr);
-  void PortTriDrawNext(const CMatrix3f& rot) const;
-  void PortTriDrawLocked(const CMatrix3f& rot) const;
+  void PortTriDrawNext(const CMatrix3f& rot, const CTransform4f& camXf,
+                       const CStateManager& mgr) const;
+  void PortTriDrawLocked(const CMatrix3f& rot, const CTransform4f& camXf) const;
   void PortTriDrawAiming(const CMatrix3f& rot, const CStateManager& mgr) const;
   void PortTriDrawOffScreen(const CMatrix3f& rot, const CStateManager& mgr) const;
   void PortTriDrawCrosshairs(const CMatrix3f& rot, const CStateManager& mgr) const;
@@ -155,12 +156,10 @@ private:
   CColor x254_aimArmColor, x25c_aimCenterColor;
   float x258_aimArmAlpha = 0.f, x260_aimCenterAlpha = 0.f;
   TUniqueId x27c_triNext = kInvalidUniqueId, x2f0_triLocked = kInvalidUniqueId;
-  CVector3f x280_triNextPos = CVector3f::Zero();
   float x28c_triNextAngle = 0.f, x2a0_triNextAlpha = 0.f;
   CVector3f x2c0_triNextWorld = CVector3f::Zero(), x2e4_triNextFrom = CVector3f::Zero();
   bool x2cc_triNextMoving = false;
   float x2d4_triNextTime = 0.f;
-  CVector3f x2f4_triLockPos = CVector3f::Zero();
   CColor x300_triLockColor;
   float x304_triLockAlpha = 0.f, x324_triLockTime = 0.f, x328_triBaseScale = 3.f;
   float x334_triBracketAlpha = 0.f, x338_triBracketAngle = 0.f, x33c_triPrevYaw = 0.f;
