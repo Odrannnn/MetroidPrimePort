@@ -1,0 +1,383 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Metroid Prime Unbound",
+  "repo": "Odrannnn/MetroidPrimePort",
+  "game": {
+    "kind": "iso",
+    "label": "Your Metroid Prime GameCube disc (GM8E01 USA 1.00/1.01/1.02 or GM8P01 PAL), or Trilogy Wii disc (R3ME01 USA or R3MP01 PAL): .iso, .gcm, .rvz, .wbfs, .ciso or .nkit."
+  },
+  "start": {
+    "program": [
+      "metroid_prime_port.exe"
+    ],
+    "env": {
+      "MP_DISC": "{game}"
+    }
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "ini",
+      "file": [
+        {
+          "path": "{install}/user/port_settings.ini",
+          "if": "{install}/user/port_settings.ini"
+        },
+        {
+          "path": "{install}/port_settings.ini",
+          "if": "{install}/port_settings.ini"
+        },
+        {
+          "path": "{config}/Metroid Prime/port_settings.ini",
+          "if": "{config}/Metroid Prime/port_settings.ini"
+        },
+        {
+          "path": "{install}/user/port_settings.ini"
+        }
+      ],
+      "game_path": "disc_path"
+    }
+  ],
+  "settings": [
+    {
+      "id": "window",
+      "label": "Full screen",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "fullscreen": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "fullscreen": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "fullscreen": "0"
+      }
+    },
+    {
+      "id": "original",
+      "label": "Original experience",
+      "help": "Uses the original graphics settings and 60 fps cap; turning it off restores your saved options.",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "original_experience": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "original_experience": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "original_experience": "0"
+      }
+    },
+    {
+      "id": "resolution",
+      "label": "Render scale",
+      "help": "A multiplier of the original resolution, or the window resolution; with dynamic resolution it sets the maximum.",
+      "choices": [
+        {
+          "label": "Match the window",
+          "set": {
+            "render_scale": "0"
+          }
+        },
+        {
+          "label": "1x (original)",
+          "set": {
+            "render_scale": "1"
+          }
+        },
+        {
+          "label": "2x",
+          "set": {
+            "render_scale": "2"
+          }
+        },
+        {
+          "label": "3x",
+          "set": {
+            "render_scale": "3"
+          }
+        },
+        {
+          "label": "4x",
+          "set": {
+            "render_scale": "4"
+          }
+        },
+        {
+          "label": "Custom (in-game)",
+          "set": {}
+        }
+      ],
+      "defaults": {
+        "render_scale": "1"
+      },
+      "when": {
+        "original_experience": "0"
+      }
+    },
+    {
+      "id": "aspect",
+      "label": "Screen shape",
+      "choices": [
+        {
+          "label": "Match the window",
+          "set": {
+            "aspect": "window"
+          }
+        },
+        {
+          "label": "16:9",
+          "set": {
+            "aspect": "16:9"
+          }
+        },
+        {
+          "label": "Original (4:3)",
+          "set": {
+            "aspect": "4:3"
+          }
+        }
+      ],
+      "defaults": {
+        "aspect": "window"
+      },
+      "when": {
+        "original_experience": "0"
+      }
+    },
+    {
+      "id": "msaa",
+      "label": "Anti-aliasing",
+      "help": "Smooths polygon edges.",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "msaa": "1"
+          }
+        },
+        {
+          "label": "4x",
+          "set": {
+            "msaa": "4"
+          }
+        }
+      ],
+      "defaults": {
+        "msaa": "1"
+      },
+      "when": {
+        "original_experience": "0"
+      }
+    },
+    {
+      "id": "vsync",
+      "label": "V-Sync",
+      "help": "Synchronizes frames with the display to prevent tearing.",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "vsync": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "vsync": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "vsync": "0"
+      }
+    },
+    {
+      "id": "fps",
+      "label": "Original 60 fps cap",
+      "help": "Turn off to use the custom frame cap below; the saved custom cap is preserved.",
+      "when": {
+        "original_experience": "0"
+      },
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "frame_limit": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "frame_limit": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "frame_limit": "1"
+      }
+    },
+    {
+      "id": "fps_cap",
+      "label": "Custom frame cap",
+      "help": "Used with the original cap off. V-Sync can still limit frames; other saved values show as Custom (in-game).",
+      "when": {
+        "original_experience": "0",
+        "frame_limit": "0"
+      },
+      "choices": [
+        {
+          "label": "Unlimited",
+          "set": {
+            "fps_cap": "0"
+          }
+        },
+        {
+          "label": "30 fps",
+          "set": {
+            "fps_cap": "30"
+          }
+        },
+        {
+          "label": "60 fps",
+          "set": {
+            "fps_cap": "60"
+          }
+        },
+        {
+          "label": "90 fps",
+          "set": {
+            "fps_cap": "90"
+          }
+        },
+        {
+          "label": "120 fps",
+          "set": {
+            "fps_cap": "120"
+          }
+        },
+        {
+          "label": "144 fps",
+          "set": {
+            "fps_cap": "144"
+          }
+        },
+        {
+          "label": "165 fps",
+          "set": {
+            "fps_cap": "165"
+          }
+        },
+        {
+          "label": "180 fps",
+          "set": {
+            "fps_cap": "180"
+          }
+        },
+        {
+          "label": "240 fps",
+          "set": {
+            "fps_cap": "240"
+          }
+        },
+        {
+          "label": "360 fps",
+          "set": {
+            "fps_cap": "360"
+          }
+        },
+        {
+          "label": "500 fps",
+          "set": {
+            "fps_cap": "500"
+          }
+        },
+        {
+          "label": "Custom (in-game)",
+          "set": {}
+        }
+      ],
+      "defaults": {
+        "fps_cap": "0"
+      }
+    }
+  ],
+  "folders": {
+    "data": [
+      {
+        "path": "{install}/user",
+        "if": "{install}/user/port_settings.ini"
+      },
+      {
+        "path": "{install}",
+        "if": "{install}/port_settings.ini"
+      },
+      {
+        "path": "{config}/Metroid Prime",
+        "if": "{config}/Metroid Prime/port_settings.ini"
+      },
+      {
+        "path": "{install}/user"
+      }
+    ],
+    "logs": [
+      {
+        "path": "{install}/user",
+        "if": "{install}/user/port_settings.ini"
+      },
+      {
+        "path": "{install}",
+        "if": "{install}/port_settings.ini"
+      },
+      {
+        "path": "{config}/Metroid Prime",
+        "if": "{config}/Metroid Prime/port_settings.ini"
+      },
+      {
+        "path": "{install}/user"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "id": "data",
+      "label": "Open data folder",
+      "open": "data"
+    }
+  ],
+  "saves": [
+    "{install}/user/USA",
+    "{install}/user/EUR",
+    "{install}/user/JAP",
+    "{install}/user/MemoryCard*.raw",
+    "{install}/user/savestates",
+    "{install}/user/archipelago_games",
+    "{install}/USA",
+    "{install}/EUR",
+    "{install}/JAP",
+    "{install}/MemoryCard*.raw",
+    "{install}/savestates",
+    "{install}/archipelago_games",
+    "{config}/Metroid Prime/USA",
+    "{config}/Metroid Prime/EUR",
+    "{config}/Metroid Prime/JAP",
+    "{config}/Metroid Prime/MemoryCard*.raw",
+    "{config}/Metroid Prime/savestates",
+    "{config}/Metroid Prime/archipelago_games"
+  ]
+}
