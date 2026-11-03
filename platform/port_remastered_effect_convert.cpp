@@ -441,7 +441,7 @@ bool ConstantLeaves(const EffectValue& value) {
   return true;
 }
 
-// PSA0..PSA9: the system's own additional real n, or -1.
+// PSA0..PSA9: the system's own additional variable n (real, int or vector by context), or -1.
 int SystemRealRead(uint32_t fourcc) {
   return fourcc >= F("PSA0") && fourcc <= F("PSA9") ? int(fourcc - F("PSA0")) : -1;
 }
@@ -1676,6 +1676,13 @@ public:
     // AddRefVar(ctx 0, vector, n)), which its SVVn sets. The port-only PSYV and n.
     if (type == Type::Vector && value.args.empty() && SystemRealRead(value.fourcc) >= 0) {
       AppendBE32(out, F("PSYV"));
+      AppendBE32(out, uint32_t(SystemRealRead(value.fourcc)));
+      return true;
+    }
+    // An int PSAn is the system's own additional int n (GetIntElement 0x26a910:
+    // AddRefVar(ctx 0, int, n)), which its SVIn sets. The port-only PSYI and n.
+    if (type == Type::Int && value.args.empty() && SystemRealRead(value.fourcc) >= 0) {
+      AppendBE32(out, F("PSYI"));
       AppendBE32(out, uint32_t(SystemRealRead(value.fourcc)));
       return true;
     }

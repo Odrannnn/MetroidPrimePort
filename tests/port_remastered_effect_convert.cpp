@@ -3569,6 +3569,25 @@ void TestSystemVectorVar() {
   CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped");
 }
 
+// An int PSAn reads the system's SVIn (GetIntElement 0x26a910): the port-only PSYI.
+void TestSystemIntVar() {
+  auto parts = ConvertOne(OneGenerator([](auto& o) {
+                  PutProperty(o, "SVI1", 1);
+                  PutConstant(o, 4);
+                  PutProperty(o, "MAXP", 1);
+                  PutFourCC(o, "PSA1");
+                  PutTexr(o, 0x1234ABCD);
+                }),
+                {});
+  Retail maxp;
+  maxp.f("MAXP").f("PSYI").w(1);
+  Retail sys;
+  sys.f("PSYS").f("CNST").w(1).w(1).w(1).w(0);
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, maxp.bytes), "MAXP(PSA1) reads PSYI slot 1");
+  CHECK_MSG(!parts.empty() && Contains(parts[0].part, sys.bytes), "SVI1 is PSYS int slot 1");
+  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped");
+}
+
 // An order-0 PMRQ REUL is one PMRT Euler vector. Preserve its angle expressions,
 // including IRND, which PIRN evaluates once per particle and expression.
 void TestModelRotation() {
@@ -7603,6 +7622,7 @@ int main() {
   TestParentRead();
   TestSystemVars();
   TestSystemVectorVar();
+  TestSystemIntVar();
   TestSystemVarGradLifetime();
   TestModelRotation();
   TestComposedModelRotation();
