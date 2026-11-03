@@ -240,7 +240,17 @@ private:
   int xPortCreated = 0;
   // CAddVarSystem::Init has run in the first Update (the CParticleGen +0xa0 0x1000 flag).
   bool xPortSysInit = false;
+  // An ELC2's per-bolt swoosh (Remastered's +0x188 bit 5, HACK_InitForElectric 0x27ebfc): each
+  // point keeps the age it was created with (the live count less one), points never die, and
+  // with emission off a step neither advances the ring nor retires a point.
+  bool xPortElectric = false;
   void PortEvalSys(bool init);
+
+public:
+  void PortInitForElectric();
+  void PortReInitForElectric();
+
+private:
   // The per-point variables' values (the buffer at Remastered's this+0x158), kPortPartValues a
   // point in ring order; empty without a PPVR.
   static constexpr int kPortPartValues = 13;

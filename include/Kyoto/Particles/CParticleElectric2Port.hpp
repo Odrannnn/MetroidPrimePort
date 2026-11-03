@@ -65,6 +65,10 @@ public:
     PortElectric2::V3 last{};
     int gpsm = -1;
     int epsm = -1;
+    // The whole primary line before the bake, which fills the bolt's SSWH swoosh, and the swoosh
+    // taken (the owner's slot; -1 without an SSWH).
+    std::vector< PortElectric2::V3 > primary;
+    int swoosh = -1;
   };
   const std::vector< Bolt >& Bolts() const { return mBolts; }
   std::vector< Bolt >& Bolts() { return mBolts; }

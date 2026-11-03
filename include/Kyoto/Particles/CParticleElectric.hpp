@@ -191,6 +191,7 @@ private:
   std::unique_ptr< CParticleElectric2Port > xPortElc2;
   void PortElc2Step(bool emitting);
   void PortElc2PlaceChildren();
+  void PortElc2Swooshes();
   CVector3f xPortSpawnSpread{1.f, 1.f, 1.f};
   CVector3f xPortSpawnOrigin{0.f, 0.f, 0.f};
   // x38_translation with its offset from the parent's translation spread.

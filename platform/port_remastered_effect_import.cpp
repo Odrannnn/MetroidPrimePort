@@ -1413,7 +1413,8 @@ public:
   bool ExternalSwooshes(const EffectNode& parent, const EffectGuid& parentId, uint32_t retail,
                         const std::map<EffectGuid, Child>& children,
                         std::map<EffectGuid, ExternalSwoosh>& out, std::string& error) {
-    if (parent.form != kElsm) {
+    // ELC2 names its swoosh the same way (CreateELC2 0xb70854, GetSwooshGeneratorDesc).
+    if (parent.form != kElsm && parent.form != EffectFourCC("ELC2")) {
       return true;
     }
     std::set<EffectGuid> resolving;

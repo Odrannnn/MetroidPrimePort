@@ -273,6 +273,9 @@ void CParticleElectric2Port::CreateBolt(int frame, const Ctx& ctx) {
                      ctx.globalScale.GetZ() * ctx.localScale.GetZ());
   bolt.first = lines[0].front();
   bolt.last = lines[0].back();
+  if (mDesc->x40_SSWH) {
+    bolt.primary = lines[0];
+  }
   if (!mDesc->xPortXfmdFollow) {
     for (auto& line : lines) {
       for (V3& p : line) {

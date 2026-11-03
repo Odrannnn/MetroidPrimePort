@@ -253,6 +253,10 @@ const bool CParticleSwoosh::Update(double dt) {
 #ifdef TARGET_PC
     // CAddVarSystem::Update at the start of each tick (InternalUpdate 0x27d308).
     PortEvalSys(false);
+    // Remastered advances the ring only in CreateNewParticle 0x27cdc8; an electric swoosh's
+    // points are never retired by a step without one.
+    const bool portEmit = x1d0_24_emitting && x28_curFrame < x2c_PSLT;
+    if (!xPortElectric || portEmit)
 #endif
     if (++x158_curParticle >= x15c_swooshes.capacity()) {
       x158_curParticle = 0;
@@ -280,13 +284,18 @@ const bool CParticleSwoosh::Update(double dt) {
       // CreateNewParticle 0x27cdc8: the new point's time context (age 0, life LENG - 1), then
       // _Init_Particle (0x27ced0) runs every per-point variable at time 0 into its slice, which
       // stays bound for the point's create-time elements.
+      // An electric point is born at the age it keeps: the live count, itself included, less one.
+      const int spawnAge =
+          xPortElectric
+              ? x1ac_particleCount - (x15c_swooshes[x158_curParticle].mActive ? 1 : 0)
+              : 0;
       float* const spawnValues = PortPartValues(x158_curParticle);
       PortAccessScope spawnAccess(spawnValues);
       if (spawnValues != nullptr) {
         CParticleGlobals::SetParticleLifetime(rstl::max_val(x1b4_LENG - 1, 1));
-        CParticleGlobals::UpdateParticleLifetimeTweenValues(0);
+        CParticleGlobals::UpdateParticleLifetimeTweenValues(spawnAge);
         static CRealElement* const kNoAdvs[8] = {};
-        x1c_desc->xPortPartVars->Eval(kNoAdvs, true, 0, spawnValues);
+        x1c_desc->xPortPartVars->Eval(kNoAdvs, true, spawnAge, spawnValues);
       }
 #endif
       if (x1c_desc->x1c_IROT) {
@@ -300,6 +309,11 @@ const bool CParticleSwoosh::Update(double dt) {
         ++x1ac_particleCount;
         x15c_swooshes[x158_curParticle].mActive = true;
       }
+#ifdef TARGET_PC
+      if (xPortElectric) {
+        x15c_swooshes[x158_curParticle].mFrame = spawnAge;
+      }
+#endif
       x15c_swooshes[x158_curParticle].mOrientation = x44_orientation;
 #ifdef TARGET_PC
       if (x1c_desc->xPortRazyAxis) {
@@ -338,7 +352,12 @@ const bool CParticleSwoosh::Update(double dt) {
 #ifdef TARGET_PC
       ++xPortCreated; // CreateNewParticle 0x27d128
 #endif
-    } else if (x15c_swooshes[x158_curParticle].mActive) {
+    }
+#ifdef TARGET_PC
+    else if (xPortElectric) {
+    }
+#endif
+    else if (x15c_swooshes[x158_curParticle].mActive) {
       x1ac_particleCount = rstl::max_val(0, x1ac_particleCount - 1);
       x15c_swooshes[x158_curParticle].mActive = false;
     }
@@ -395,6 +414,32 @@ void CParticleSwoosh::SetOrientation(const CTransform4f& orientation) {
 }
 
 #ifdef TARGET_PC
+// HACK_InitForElectric 0x27ebfc: one forced step per ring slot creates every point (ages 0 to
+// capacity - 1, frozen), then emission stops and a last forced step runs from frame 0.
+void CParticleSwoosh::PortInitForElectric() {
+  xPortElectric = true;
+  for (int i = 0; i < x15c_swooshes.capacity(); ++i) {
+    SetWarmUp();
+    Update(0.0);
+  }
+  SetParticleEmission(false);
+  x28_curFrame = 0;
+  SetWarmUp();
+  Update(0.0);
+  x28_curFrame = 0;
+}
+
+// HACK_ReInitForElectric 0x27ed0c: a forced step from frame 0 for a new bolt. Remastered keeps
+// +0x30's time and steps once per frame unit of dt; the port's Update would catch up every frame
+// since that time instead, so its time restarts too (the same steps at a fixed frame dt).
+void CParticleSwoosh::PortReInitForElectric() {
+  x28_curFrame = 0;
+  x30_curTime = 0.0;
+  SetWarmUp();
+  Update(0.0);
+  x28_curFrame = 0;
+}
+
 // The system variables in PSYS order, as CElementGen::PortEvalSys: all of them (CAddVarSystem::Init
 // 0x278438) or those that are not init-only (Update 0x278638), on the swoosh's own time context:
 // its frame and +0x140, the PSLT capped at 0x1000000 or that without one (ctor 0x27c6e8).
@@ -531,7 +576,8 @@ void CParticleSwoosh::UpdateTranslationAndOrientation() {
   CParticleGlobals::SetParticleLifetime(portRemastered ? rstl::max_val(x1b4_LENG - 1, 1) : x1b4_LENG);
   const int nodeCount = x1ac_particleCount;
   int nodeBase = 0;
-  if (portRemastered && !(x1d0_24_emitting && x28_curFrame < x2c_PSLT)) {
+  // An electric swoosh's frozen ages run from 0.
+  if (portRemastered && !xPortElectric && !(x1d0_24_emitting && x28_curFrame < x2c_PSLT)) {
     nodeBase = INT_MAX;
     for (int k = 0; k < x15c_swooshes.capacity(); ++k) {
       if (x15c_swooshes.data()[k].mActive) {
@@ -556,6 +602,10 @@ void CParticleSwoosh::UpdateTranslationAndOrientation() {
     if (!swoosh.mActive) {
       continue;
     }
+#ifdef TARGET_PC
+    // UpdateExisting 0x27d590 leaves an electric point's age as it was born (+0x188 bit 5).
+    if (!xPortElectric)
+#endif
     swoosh.mFrame = x28_curFrame - swoosh.mStartFrame;
     CParticleGlobals::UpdateParticleLifetimeTweenValues(swoosh.mFrame);
 #ifdef TARGET_PC
@@ -581,7 +631,11 @@ void CParticleSwoosh::UpdateTranslationAndOrientation() {
     // the tick that created it (CreateNewParticle comes after UpdateExisting).
     float* const pointValues = PortPartValues(i);
     PortAccessScope pointAccess(pointValues);
-    if (pointValues != nullptr && swoosh.mFrame > 0) {
+    const bool bornThisStep = xPortElectric
+                                  ? x1d0_24_emitting && x28_curFrame < x2c_PSLT &&
+                                        i == x158_curParticle
+                                  : swoosh.mFrame <= 0;
+    if (pointValues != nullptr && !bornThisStep) {
       static CRealElement* const kNoAdvs[8] = {};
       x1c_desc->xPortPartVars->Eval(kNoAdvs, false, swoosh.mFrame, pointValues);
     }
