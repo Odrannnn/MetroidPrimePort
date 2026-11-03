@@ -228,6 +228,9 @@ public:
   // port-only PLON: Remastered builds this generator's light once (CParticleLight::Create
   // 0x2def58, from the ctor) and never updates it, as every tick mode but TickSystem_Light does.
   bool xPortLightOnce = false;
+  // port-only PKIL: Remastered's KILL (desc+0x160) is a constant true. After each Update the system
+  // is deletable whatever it still holds and is never updated again (CElementGen::Update 0x2460e0).
+  bool xPortKill = false;
   // port-only PFXB: Remastered's fixed system bounds (CBoundsFixedEval), a box in the system's
   // space that replaces the particles' bounds; PFXC: children's bounds are left out (FXBI).
   bool xPortFixedBounds = false;

@@ -866,6 +866,10 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortLightOnce = in.ReadLong() != 0;
       break;
+    case SBIG('PKIL'):
+      GetClassID(in);
+      desc->xPortKill = in.ReadLong() != 0;
+      break;
     // Port-only: Remastered's fixed system bounds (FXBR/FXBM/FXBO), min then max.
     case SBIG('PFXB'): {
       GetClassID(in);

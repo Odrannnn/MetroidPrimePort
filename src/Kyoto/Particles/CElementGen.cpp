@@ -919,6 +919,10 @@ void CElementGen::SetGlobalOrientAndTrans(const CTransform4f& xf) {
 
 const bool CElementGen::Update(double dt) {
 #ifdef TARGET_PC
+  // +0xa0 bit 1: Update 0x2460e0 returns at once.
+  if (xPortFrozen) {
+    return false;
+  }
   PortFx::UpdateScope fxScope(dt);
   if (fxScope.skip) {
     return false;
@@ -964,7 +968,18 @@ const bool CElementGen::Update(double dt) {
     x26d_25_warmedUp = true;
   }
 
+#ifdef TARGET_PC
+  const bool ret = InternalUpdate(dt);
+  // KILL (0x24620c), after the tick: true sets +0xa0 bit 0 (deletable) and clears +0x208 bit 3, so
+  // the deletable check that follows sets bit 1 too.
+  if (x28_loadedGenDesc->xPortKill) {
+    xPortKilled = true;
+    xPortFrozen = true;
+  }
+  return ret;
+#else
   return InternalUpdate(dt);
+#endif
 }
 
 #ifdef TARGET_PC
@@ -2763,6 +2778,9 @@ void CElementGen::ForceParticleCreation(int amount) {
   CParticleGlobals::SParticleSystem thisSystem('PART', this);
 #ifdef TARGET_PC
   CPortVarScope portVarScope(&xPortVars);
+  // The MP1 callers' wrapper (elementgen_force_particle_creation_after_external_transform_data_was_set
+  // 0xca65c0) clears +0xa0 bit 1, so a killed system updates again.
+  xPortFrozen = false;
 #endif
   CParticleGlobals::SetEmitterTime(x74_curFrame);
 #ifdef TARGET_PC
@@ -2930,6 +2948,12 @@ void CElementGen::DestroyParticles() {
 }
 
 bool CElementGen::IsSystemDeletable() const {
+#ifdef TARGET_PC
+  // +0xa0 bit 0 (KILL): IsSystemDeletable_MP1 0x24cd78 returns true before anything else.
+  if (xPortKilled) {
+    return true;
+  }
+#endif
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
     if (!(*it)->IsSystemDeletable()) {
       return false;

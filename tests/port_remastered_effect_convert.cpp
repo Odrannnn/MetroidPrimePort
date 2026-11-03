@@ -4162,6 +4162,38 @@ void TestShutdownAndPivot() {
   });
   CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
             "ISTR is consumed and writes nothing");
+  const auto kill = [&](bool flag, bool constant) {
+    return convert([&](auto& o) {
+      PutProperty(o, "KILL", 1);
+      if (!constant) {
+        PutFourCC(o, "LTHN");
+        PutConstant(o, Bits(0.f));
+        PutConstant(o, Bits(1.f));
+        return;
+      }
+      PutFourCC(o, "CNST");
+      o.push_back(flag ? 1 : 0);
+    });
+  };
+  parts = kill(false, true);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
+            "KILL false is consumed and writes nothing");
+  parts = kill(true, true);
+  Retail pkil;
+  pkil.f("PKIL").f("CNST").w(1);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() &&
+                std::search(parts[0].part.begin(), parts[0].part.end(), pkil.bytes.begin(), pkil.bytes.end()) !=
+                    parts[0].part.end(),
+            "KILL true is PKIL");
+  if (!parts.empty()) {
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "a PART with PKIL passes the retail element reader");
+  }
+  parts = kill(true, false);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.size() == 1 && parts[0].dropped[0] == "KILL: Remastered only",
+            "a KILL that is not a constant stays a drop");
 }
 
 // SPWS is the scale a generator hands its children (SetupSpawn 0x28d8ac +0x2a0): the port-only

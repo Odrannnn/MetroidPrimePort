@@ -5092,6 +5092,8 @@ public:
     uint32_t nestedLightOuterAngle = 0;
     // The light is built once and never updated (port-only PLON); see NestedLight.
     bool lightOnce = false;
+    // KILL is a constant true (port-only PKIL); see the KILL consume.
+    bool kill = false;
     // FXBR/FXBM/FXBO/FXBI, the system's own bounds (FixedBounds): the constant box in the port's
     // space (min then max), written as PFXB, and whether children's bounds are left out (PFXC).
     std::optional<std::array<float, 6>> fixedBounds;
@@ -5228,6 +5230,11 @@ public:
       AppendBE32(s.out, guidWord);
     }
     NestedLightWrites(s);
+    if (s.kill) {
+      AppendBE32(s.out, F("PKIL"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, 1);
+    }
     if (s.fixedBounds) {
       AppendBE32(s.out, F("PFXB"));
       AppendBE32(s.out, F("CNST"));
@@ -6598,6 +6605,17 @@ public:
     // ctor 0x28f4cc starts the flags at 0x3e0). Even when evaluated, its one sink,
     // CParticleDynamicRenderState+0xd8, has no reader.
     if (s.part && fourcc == F("ISTR")) {
+      return true;
+    }
+    // KILL (desc+0x160, a bool element) is evaluated at the current frame after every
+    // CElementGen::Update 0x2460e0 tick. True sets +0xa0 bit 0, which makes every IsSystemDeletable
+    // (0x24cb6c, 0x24cd78) return true at once, and clears +0x208 bit 3 so the same update also sets
+    // +0xa0 bit 1, after which Update returns at its first instruction. Only a constant is carried:
+    // false never fires, true is PKIL.
+    if (s.part && fourcc == F("KILL") && property.value.size() == 1 && IsElement(property.value[0], F("CNST")) &&
+        property.value[0].args.size() == 1 &&
+        (property.value[0].args[0].kind == EffectValue::Kind::Byte || property.value[0].args[0].kind == EffectValue::Kind::Word)) {
+      s.kill = property.value[0].args[0].word != 0;
       return true;
     }
     // DPRE (0x6b bit 11, GetRenderInDepthPass 0x288250) is read once, by the proxy ctor 0xfbf3b0
@@ -8017,7 +8035,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && fourcc == F("PSPS")) {
       ok = reader.Asset();
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
-                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PLIA") || fourcc == F("PLOA") || fourcc == F("PLON") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
+                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PLIA") || fourcc == F("PLOA") || fourcc == F("PLON") || fourcc == F("PKIL") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
                          fourcc == F("PITP") || fourcc == F("PDBO") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("POSD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||

@@ -257,7 +257,8 @@ inline constexpr int kModels = 30;
 // 217: TRSS is six reals, so a SLCT in a TMTR keeps its ARRY (VTMT written).
 // 218: an int PSAn is the system's SVIn, the port-only PSYI (LTM2/TMTR PSA0).
 // 219: an int KPIN is a PKPR latch; SELT is GEMT (8dad9f3d TMTR).
-inline constexpr int kEffects = 219;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
+// 220: a constant true KILL is the port-only PKIL (7f71e94b light); a false one is consumed.
+inline constexpr int kEffects = 220;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

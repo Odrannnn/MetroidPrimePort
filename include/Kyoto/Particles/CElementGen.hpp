@@ -577,6 +577,10 @@ private:
   // sleeps the children; no shipped SLDS system has either (and a port child updates and renders
   // through its parent).
   bool xPortAsleep = false;
+  // PKIL (Remastered KILL) fired: +0xa0 bit 0, deletable whatever the system still holds.
+  bool xPortKilled = false;
+  // +0xa0 bit 1, set with bit 0 here: Update does nothing until a forced creation clears it.
+  bool xPortFrozen = false;
   float PortSleepDistanceSq() const;
   // XFMD 4's EMVR (CGenDescription::xPortEmvr), initialised and stepped with the mover. Its pos/rot
   // are vec 0x12 and Q_l, baked into each particle at spawn (PortSpawnFrame), and the system
