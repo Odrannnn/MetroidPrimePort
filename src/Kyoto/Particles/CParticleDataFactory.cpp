@@ -1023,6 +1023,13 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       desc->xPortInheritVel = GetRealElement(in);
       break;
     }
+    // Port-only: Remastered's IEVM (xPortInheritVelMax), the float bits.
+    case SBIG('PIEV'): {
+      GetClassID(in);
+      const u32 bits = in.ReadLong();
+      std::memcpy(&desc->xPortInheritVelMax, &bits, sizeof(bits));
+      break;
+    }
     // Port-only: an own-material model generator's ITEN (xPortModelIten).
     case SBIG('PITN'):
       delete desc->xPortModelIten;

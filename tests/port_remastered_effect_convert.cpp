@@ -1670,6 +1670,30 @@ void TestSwooshIntr() {
             "a varying INTR is dropped");
 }
 
+// A swoosh's INTT of EXTT plus ROTV(zero, EXTR) is the external translation and writes nothing;
+// a nonzero offset is dropped.
+void TestSwooshIntt() {
+  const auto intt = [](float y) {
+    return ConvertSwoosh([=](auto& o) {
+      PutProperty(o, "XFMD", 0);
+      PutConstant(o, 2);
+      PutProperty(o, "INTT", 1);
+      PutFourCC(o, "ADD_");
+      PutFourCC(o, "EXTT");
+      PutFourCC(o, "ROTV");
+      PutFourCC(o, "CNST");
+      PutConstant(o, 0);
+      PutConstant(o, Bits(y));
+      PutConstant(o, 0);
+      PutFourCC(o, "EXTR");
+    });
+  };
+  CHECK_MSG(intt(0.f).dropped.empty(), "INTT ADD_(EXTT, ROTV(0, EXTR)) writes nothing");
+  const ConvertedPart part = intt(1.f);
+  CHECK_MSG(part.dropped.size() == 1 && part.dropped[0] == "INTT: a swoosh's other than EXTT",
+            "an INTT with an offset is dropped");
+}
+
 // A swoosh's SYSR forces SetupTransformMode 0x2887d8 into mode 1, where the setters move no
 // point: a zero REUL under XFMD 2 becomes the port-only XFMD 1; XFMD 5 deletes SYSR.
 void TestSwooshSystemRotation() {
@@ -3033,6 +3057,26 @@ void TestInheritedMotion() {
                 parts[0].dropped[0].find("ISVF under XFMD 4") != std::string::npos &&
                 parts[0].dropped[1].find("ITPE under XFMD 4") != std::string::npos,
             "ISVF and ITPE under XFMD 4 are dropped, naming it");
+  // IEVM: a constant above zero is the port-only PIEV (its float bits); zero or less is inert
+  const auto ievm = [](float max) {
+    return ConvertOne(OneGenerator([=](auto& o) {
+                        PutProperty(o, "IEVM", 1);
+                        PutConstant(o, Bits(max));
+                        PutTexr(o, 0x1234ABCD);
+                      }),
+                      {});
+  };
+  parts = ievm(0.2f);
+  Retail capped;
+  capped.f("PIEV").f("CNST").w(Bits(0.2f)).f("TEXR");
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() &&
+                std::search(parts[0].part.begin(), parts[0].part.end(), capped.bytes.begin(), capped.bytes.end()) !=
+                    parts[0].part.end(),
+            "IEVM 0.2 becomes PIEV");
+  for (float max : {0.f, -1.f}) {
+    parts = ievm(max);
+    CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && !has(parts[0], "PIEV"), "IEVM <= 0 writes nothing");
+  }
   const auto swoosh = [](uint8_t ztes) {
     return ConvertSwoosh([=](auto& o) {
       PutProperty(o, "ZTES", 0);
@@ -7365,6 +7409,7 @@ int main() {
   TestSwooshLwqd();
   TestSwooshSplineRates();
   TestSwooshIntr();
+  TestSwooshIntt();
   TestSwooshSystemRotation();
   TestConvert();
   TestRejects();

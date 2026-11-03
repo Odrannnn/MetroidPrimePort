@@ -1385,15 +1385,21 @@ void CElementGen::CreateNewParticles(int count) {
 
 #ifdef TARGET_PC
   // CreateNewParticles 0x24a4cc: the system's change of translation since the last tick (EMRV, 0 on
-  // the first) scaled by ISVF joins each new velocity (the element is read once, with no clamp
-  // variable: the shipped ones are constants), and ITPE spreads the `count` particles of a tick
-  // back along it when it is above 2^-23 (0x24a630: step = delta / (count + 1), the i-th of count
-  // is put (count - i) steps back, so the last is one step behind the system).
+  // the first), clamped to IEVM's length (0x24a540) and scaled by ISVF, joins each new velocity
+  // (the element is read once), and ITPE spreads the `count` particles of a tick back along the
+  // unclamped delta when it is above 2^-23 (0x24a630: step = delta / (count + 1), the i-th of
+  // count is put (count - i) steps back, so the last is one step behind the system).
   CVector3f inheritVel = CVector3f::Zero();
   if (const CRealElement* isvf = x28_loadedGenDesc->xPortInheritVel) {
     float factor = 0.f;
     isvf->GetValue(x74_curFrame, factor);
-    inheritVel = PortEmitterVelocity() * factor;
+    inheritVel = PortEmitterVelocity();
+    const float maxLen = x28_loadedGenDesc->xPortInheritVelMax;
+    const float magSq = inheritVel.MagSquared();
+    if (maxLen > 0.f && magSq > maxLen * maxLen) {
+      inheritVel = inheritVel * (maxLen * CMath::InvSqrtF(magSq));
+    }
+    inheritVel = inheritVel * factor;
   }
   CVector3f spreadStep = CVector3f::Zero();
   if (x28_loadedGenDesc->xPortSpread && count >= 2 && PortEmitterVelocity().Magnitude() > 1.1920929e-7f) {

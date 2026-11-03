@@ -5555,6 +5555,18 @@ public:
       s.out.insert(s.out.end(), inner.begin(), inner.end());
       return true;
     }
+    // IEVM caps the length of the delta ISVF scales (CreateNewParticles 0x24a540; ITPE's spread
+    // reads it unclamped). CreateGPSM 0x258438 keeps only a constant above zero: anything else is
+    // inert. The port-only PIEV carries the float bits.
+    if (s.part && fourcc == F("IEVM")) {
+      uint32_t bits = 0;
+      if (property.value.size() == 1 && ConstWord(property.value[0], bits) && FloatFromBits(bits) > 0.f) {
+        AppendBE32(s.out, F("PIEV"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, bits);
+      }
+      return true;
+    }
     // DBIS is the particle depth bias (desc+0xd4 of CreateGPSM, the SWSH one too; constant only),
     // a world-unit shift along the view depth that CParticleSceneNode::ConstructDepthBias 0x2b1004
     // turns into a projection m22 offset (CScopedGraphicsDepthBias::CalculateProjMatrixDepthBias
@@ -5999,6 +6011,35 @@ public:
         return true;
       }
       s.result.dropped.push_back("INTR: " + why);
+      return true;
+    }
+    // A swoosh's INTT, the system translation var in place of the external one (Compile 0x289af0).
+    // EXTT, or EXTT plus a constant zero vector (ROTV of one, the shipped ADD_(EXTT, ROTV(0, EXTR))),
+    // is the external translation itself and writes nothing; anything else is not ported.
+    if (s.swoosh && fourcc == F("INTT")) {
+      const auto isExtt = [](const EffectValue& value) { return IsElement(value, F("EXTT")) && value.args.empty(); };
+      const auto zeroVector = [](const EffectValue& value) {
+        const EffectValue* v = &value;
+        if (IsElement(*v, F("ROTV")) && v->args.size() == 2) {
+          v = &v->args[0];
+        }
+        if (!IsElement(*v, F("CNST")) || v->args.size() != 3) {
+          return false;
+        }
+        for (const EffectValue& c : v->args) {
+          uint32_t word = 0;
+          if (!ConstWord(c, word) || (word & 0x7fffffffu) != 0) {
+            return false;
+          }
+        }
+        return true;
+      };
+      const EffectValue* t = property.value.size() == 1 ? &property.value[0] : nullptr;
+      if (t != nullptr && (isExtt(*t) || (IsElement(*t, F("ADD_")) && t->args.size() == 2 &&
+                                          isExtt(t->args[0]) && zeroVector(t->args[1])))) {
+        return true;
+      }
+      s.result.dropped.push_back("INTT: a swoosh's other than EXTT");
       return true;
     }
     // Port-only PRAZ/PRAF: a swoosh's PROT of KPIN(RAZY(EMRV, ROTV(v, RLCL), fallback)), the ring
@@ -7808,6 +7849,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                           fourcc == F("PZTS") || fourcc == F("PSHM"))) {
       ok = reader.PortWord();
     } else if (type == F("SWHC") && (fourcc == F("DVVN") || fourcc == F("IEXP"))) {
+      ok = reader.PortWord();
+    } else if (part && fourcc == F("PIEV")) {
       ok = reader.PortWord();
     } else if (part && fourcc == F("PISV")) {
       ok = reader.PortWord() && reader.Element(Type::Real);

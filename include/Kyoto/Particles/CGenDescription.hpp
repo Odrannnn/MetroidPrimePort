@@ -286,6 +286,9 @@ public:
   // port-only PISV: Remastered's ISVF, the factor of the system's per-tick translation change
   // (PEMV's delta, no time step) added to a new particle's velocity. Owned here; null = none.
   CRealElement* xPortInheritVel = nullptr;
+  // port-only PIEV: Remastered's IEVM, the length that delta is clamped to before ISVF scales it
+  // (CreateNewParticles 0x24a540). Zero = none (CreateGPSM keeps only a constant above zero).
+  float xPortInheritVelMax = 0.f;
   // port-only PITN: the ITEN of a model generator drawn by its CMDL's own materials (no VMAT),
   // evaluated into CParticle::xPortIten; part of that draw's DIFC (CElementGen::RenderModels).
   // Owned here; null = not such a generator (retail draws, no DIFC).
