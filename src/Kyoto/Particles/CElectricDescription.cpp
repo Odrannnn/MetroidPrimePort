@@ -55,5 +55,9 @@ CElectricDescription::~CElectricDescription() {
   delete xPortBLDF;
   delete xPortAMDF;
   delete xPortNCLR;
+  delete xPortVisorStartColor;
+  delete xPortVisorMidColor;
+  delete xPortVisorEndColor;
+  delete xPortVisorBlend;
 #endif
 }

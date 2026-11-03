@@ -71,6 +71,15 @@ public:
   // IEXP (CreateELC2 0xb716f4 -> desc+0x26a, ctor 0xb71bb8 defaults it to 1): the vertex writer
   // 0x2b9868 scales the AddVar by resolve_inverse_exposure only while this is set.
   bool xPortInverseExposure = true;
+  // Port-only visor effect data (desc +0x218, enabled +0x250 bit 0), as CGenDescription's.
+  bool xPortVisorData = false;
+  float xPortVisorMinScale = 1.4f;
+  float xPortVisorMaxScale = 2.1f;
+  CColorElement* xPortVisorStartColor = nullptr;
+  CColorElement* xPortVisorMidColor = nullptr;
+  CColorElement* xPortVisorEndColor = nullptr;
+  CRealElement* xPortVisorBlend = nullptr;
+  int xPortVisorTicks = -1;
   // port-only Remastered material (VMAT etc.; see CGenDescription::xPortVfx)
   std::unique_ptr< CPortVfxData > xPortVfx;
 #endif

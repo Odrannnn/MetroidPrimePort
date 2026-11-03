@@ -6044,8 +6044,11 @@ public:
   // taken.
   bool PortOnlyProperty(GeneratorState& s, const EffectProperty& property,
                         uint32_t fourcc) const {
-    if (s.part && (fourcc == F("VESC") || fourcc == F("VEMC") || fourcc == F("VETC") || fourcc == F("VEBS") ||
-                 fourcc == F("VESN") || fourcc == F("VESM") || fourcc == F("VEDT"))) {
+    // An ELC2 holds the same SVisorEffectDataDescription (CreateELC2 0xb70734, desc +0x218),
+    // read the same way for a billboard root (CParticleElectric2::MPT_GetVisorEffectData 0xb78d5c).
+    if ((s.part || s.electric) &&
+        (fourcc == F("VESC") || fourcc == F("VEMC") || fourcc == F("VETC") || fourcc == F("VEBS") ||
+         fourcc == F("VESN") || fourcc == F("VESM") || fourcc == F("VEDT"))) {
       s.visorData = true;
       uint32_t bits = 0;
       if ((fourcc == F("VESN") || fourcc == F("VESM")) && property.value.size() == 1 &&
@@ -6961,7 +6964,7 @@ public:
   }
 
   void VisorWrites(GeneratorState& s) const {
-    if (s.part && s.visorData) {
+    if ((s.part || s.electric) && s.visorData) {
       // Port-only: the visor effect data is present (PVSD), with its size range as float bits.
       AppendBE32(s.out, F("PVSD"));
       AppendBE32(s.out, F("CNST"));
@@ -7628,8 +7631,12 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.Skip(2 * 4) && reader.Element(Type::Real);  // columns, rows, the index
     } else if (part && fourcc == F("VTFB")) {
       ok = reader.Skip(4) && reader.Element(Type::Real);  // layers, the index
-    } else if (part && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
+    } else if ((part || electric) && (fourcc == F("PVSC") || fourcc == F("PVMC") || fourcc == F("PVTC"))) {
       ok = reader.Element(Type::Color);
+    } else if (electric && fourcc == F("PVBS")) {
+      ok = reader.Element(Type::Real);
+    } else if (electric && (fourcc == F("PVSD") || fourcc == F("PVSN") || fourcc == F("PVSM") || fourcc == F("PVDT"))) {
+      ok = reader.PortWord();
     } else if ((part && (fourcc == F("SSZE") || fourcc == F("PIR0") || fourcc == F("POR0") ||
                          fourcc == F("PVBS") || fourcc == F("PITN") || fourcc == F("PSBS") ||
                          fourcc == F("PSLD"))) ||

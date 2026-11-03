@@ -16,6 +16,7 @@
 #ifdef TARGET_PC
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Math/CMath.hpp"
+#include "Kyoto/Particles/CElectricDescription.hpp"
 #include "Kyoto/Particles/CGenDescription.hpp"
 #include "MetroidPrime/TCastTo.hpp"
 
@@ -237,6 +238,18 @@ void CHUDBillboardEffect::Think(float dt, CStateManager& mgr) {
 }
 
 #ifdef TARGET_PC
+static bool PortHasVisorData(const CParticleGen& gen) {
+  if (gen.Get4CharId() == 'PART') {
+    const CGenDescription* desc = static_cast< const CElementGen& >(gen).PortDesc();
+    return desc != nullptr && desc->xPortVisorData;
+  }
+  if (gen.Get4CharId() == 'ELSC') {
+    const CElectricDescription* desc = static_cast< const CParticleElectric& >(gen).PortDesc();
+    return desc != nullptr && desc->xPortVisorData;
+  }
+  return false;
+}
+
 void CHUDBillboardEffect::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid,
                                           CStateManager& mgr) {
   // CHUDBillboardEffectMP1: a managed effect going away resets its manager.
@@ -244,14 +257,11 @@ void CHUDBillboardEffect::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId ui
       mgr.PortVisorGooManager().effect == GetUniqueId()) {
     PortSetVisorGoo(mgr, kInvalidUniqueId, 0.f);
   }
-  // A billboard whose PART has visor effect data is added to the override list
+  // A billboard whose PART or ELC2 has visor effect data is added to the override list
   // (AddBillboardEffect); Remastered adds it from the ctor, the port on registration (unverified).
-  if (msg == kSM_Registered && x104_26_isElementGen) {
-    const CGenDescription* desc = static_cast< CElementGen& >(*xe8_generator).PortDesc();
-    if (desc != nullptr && desc->xPortVisorData) {
-      PortVisorOverrides::Add(mgr.PortVisorOverrideManager(), GetUniqueId());
-      xPortVisorOverride = true;
-    }
+  if (msg == kSM_Registered && PortHasVisorData(*xe8_generator)) {
+    PortVisorOverrides::Add(mgr.PortVisorOverrideManager(), GetUniqueId());
+    xPortVisorOverride = true;
   } else if (msg == kSM_Deleted && xPortVisorOverride) {
     PortVisorOverrides::Remove(mgr.PortVisorOverrideManager(), GetUniqueId());
     xPortVisorOverride = false;
@@ -277,8 +287,10 @@ void CHUDBillboardEffect::PortRemoveFromFaceReflection(CStateManager& mgr) {
 
 // ExtractCurrentData: the generator's VE* values at its current frame (unverified: the frame the
 // KEYE/PULS elements are evaluated at). A missing element keeps white / 1.
-static void PortExtractVisorData(const CElementGen& gen, PortVisorOverrides::Data& d) {
-  const CGenDescription* desc = gen.PortDesc();
+// CParticleElectric2::MPT_GetVisorEffectData 0xb78d5c reads its ELC2's the same way.
+template < class Gen >
+static void PortExtractVisorData(const Gen& gen, PortVisorOverrides::Data& d) {
+  const auto* desc = gen.PortDesc();
   d.valid = desc != nullptr && desc->xPortVisorData;
   if (!d.valid) {
     return;
@@ -305,14 +317,23 @@ void CHUDBillboardEffect::PortUpdateVisorOverrides(CStateManager& mgr, float dt)
       mgr.PortVisorOverrideManager(), dt, unmorphed,
       [&mgr](TUniqueId id, PortVisorOverrides::Data& d, bool& active) {
         const CHUDBillboardEffect* fx = TCastToPtr< CHUDBillboardEffect >(mgr.ObjectById(id));
-        if (!fx || !fx->x104_26_isElementGen) {
+        if (!fx) {
           return false;
         }
-        const CElementGen& gen = static_cast< const CElementGen& >(*fx->xe8_generator);
-        PortExtractVisorData(gen, d);
-        // The generator's vtable+0x40 check, read as "has live particles" (unverified).
-        active = gen.GetParticleCountAll() > 0;
-        return true;
+        // The generator's vtable+0x40 check: HasAnyParticlesRecursive (0x24d42c, 0xb77b08).
+        if (fx->x104_26_isElementGen) {
+          const CElementGen& gen = static_cast< const CElementGen& >(*fx->xe8_generator);
+          PortExtractVisorData(gen, d);
+          active = gen.GetParticleCountAll() > 0;
+          return true;
+        }
+        if (fx->xe8_generator->Get4CharId() == 'ELSC') {
+          const CParticleElectric& gen = static_cast< const CParticleElectric& >(*fx->xe8_generator);
+          PortExtractVisorData(gen, d);
+          active = gen.PortHasAnyParticlesRecursive();
+          return true;
+        }
+        return false;
       });
 }
 

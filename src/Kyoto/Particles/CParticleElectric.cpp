@@ -900,6 +900,25 @@ bool CParticleElectric::IsSystemDeletable() const {
   return true;
 }
 
+#ifdef TARGET_PC
+bool CParticleElectric::PortHasAnyParticlesRecursive() const {
+  if (xPortElc2 ? xPortElc2->BoltCount() != 0 : !x3e8_electricManagers.empty()) {
+    return true;
+  }
+  for (int i = 0; i < x400_gpsmGenerators.size(); ++i) {
+    if (x400_gpsmGenerators[i]->GetParticleCountAll() > 0) {
+      return true;
+    }
+  }
+  for (int i = 0; i < x410_epsmGenerators.size(); ++i) {
+    if (x410_epsmGenerators[i]->GetParticleCountAll() > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+
 int CParticleElectric::GetParticleCount() const {
 #ifdef TARGET_PC
   if (xPortElc2) {

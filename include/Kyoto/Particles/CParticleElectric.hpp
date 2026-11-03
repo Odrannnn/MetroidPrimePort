@@ -57,6 +57,11 @@ public:
   uint PortFxAsset() const override;
   void PortFxDescribe(PortFxInfo& out) const override;
   bool PortIsRemastered() const { return xPortElc2.get() != nullptr; }
+  const CElectricDescription* PortDesc() const { return *x1c_elecDesc; }
+  int PortCurFrame() const { return x28_currentFrame; }
+  // CParticleElectric2::HasAnyParticlesRecursive 0xb77b08: a live bolt, else any GPSM or EPSM
+  // child with particles.
+  bool PortHasAnyParticlesRecursive() const;
   void PortSetSpawnSpread(const CVector3f& spread, const CVector3f& origin) override;
   // Remastered CParticleElectric2's beam API (an ELC2 only): Beam_AllowEmission 0xb78704,
   // Beam_SetStartAndEndLocationAndUpdateExistingParticle 0xb782fc, Beam_Reset 0xb784ec.

@@ -6523,6 +6523,57 @@ void TestElc2BlendAndLifetime() {
   }
 }
 
+// An ELC2 holds a PART's visor effect data (CreateELC2 0xb70734, desc +0x218): VESC..VEDT are
+// written as the port-only PVSD..PVDT, which CParticleElectricDataFactory reads.
+void TestElc2VisorData() {
+  auto parts = ConvertElc2([](auto& o) {
+    PutProperty(o, "VESC", 3);
+    PutFourCC(o, "GRAD");
+    o.push_back(2);
+    for (uint16_t half : {0x3c00, 0x0000, 0x0000, 0x3c00}) {
+      o.push_back(uint8_t(half));
+      o.push_back(uint8_t(half >> 8));
+    }
+    Put32(o, Bits(0.0f));
+    for (uint16_t half : {0x0000, 0x0000, 0x3c00, 0x0000}) {
+      o.push_back(uint8_t(half));
+      o.push_back(uint8_t(half >> 8));
+    }
+    Put32(o, Bits(1.0f));
+    PutFourCC(o, "ILPT");
+    PutConstant(o, 100);
+    o.push_back(1);
+    PutProperty(o, "VEBS", 3);
+    PutConstant(o, Bits(0.5f));
+    PutProperty(o, "VESN", 1);
+    PutConstant(o, Bits(1.5f));
+    PutProperty(o, "VEDT", 1);
+    PutConstant(o, 30);
+  });
+  CHECK_MSG(parts.size() == 1, "ELC2 with visor effect data converts");
+  if (parts.size() == 1) {
+    CHECK_MSG(parts[0].dropped.empty(), "ELC2 visor effect data drops nothing");
+    Retail present, blend, scale, ticks;
+    present.f("PVSD").f("CNST").w(1);
+    blend.f("PVBS").f("CNST").w(Bits(0.5f));
+    scale.f("PVSN").f("CNST").w(Bits(1.5f));
+    ticks.f("PVDT").f("CNST").w(30);
+    CHECK_MSG(Contains(parts[0].part, present.bytes), "ELC2 writes PVSD");
+    CHECK_MSG(Contains(parts[0].part, blend.bytes), "ELC2 VEBS is PVBS");
+    CHECK_MSG(Contains(parts[0].part, scale.bytes), "ELC2 VESN is PVSN");
+    CHECK_MSG(Contains(parts[0].part, ticks.bytes), "ELC2 VEDT is PVDT");
+    std::string error;
+    std::vector<RetailPartProperty> properties;
+    CHECK_MSG(SplitRetailEffect(parts[0].type, parts[0].part.data(), parts[0].part.size(), properties, error),
+              "ELC2 with PVSD..PVDT reads as retail");
+    bool color = false;
+    for (const RetailPartProperty& property : properties) {
+      color = color || property.fourcc == EffectFourCC("PVSC");
+    }
+    CHECK_MSG(color, "ELC2 VESC is PVSC");
+  }
+}
+
 // An ELC2's NCLR GRAD over ILPT reads slot 2 = nodes - 1, which CParticleElectric2Port sets as the
 // lifetime around the evaluation: PLPT offset 0. Its XFMD 3 is the port-only follow flag; 2 is not written.
 void TestElc2NclrAndXfmd() {
@@ -7267,6 +7318,7 @@ int main() {
   TestVmatParticleLit();
   TestElc2BlendAndLifetime();
   TestElc2NclrAndXfmd();
+  TestElc2VisorData();
   TestWaveOrbHeaderBlend();
   TestWaveOrbExposurePolicy();
   TestIceWedgeCullPolicy();

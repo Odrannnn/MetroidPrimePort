@@ -8,6 +8,8 @@
 #include "Kyoto/Particles/CParticleDataFactory.hpp"
 #include "Kyoto/Streams/CInputStream.hpp"
 
+#include <cstring>
+
 const CFactoryFnReturn FParticleElectricDataFactory(const SObjectTag& tag, CInputStream& in,
                                               const CVParamTransfer& transfer) {
   rstl::rc_ptr< IVParamObj > obj = transfer.x0_obj;
@@ -216,6 +218,40 @@ bool CParticleElectricDataFactory::CreateELSM(CElectricDescription* desc, CInput
       break;
     case 'FPLB':
       desc->xPortFPLB = CParticleDataFactory::GetBool(in);
+      break;
+    // Port-only visor effect data, as a PART's (CreateELC2 0xb70734 fills it at desc +0x218).
+    case 'PVSD':
+      CParticleDataFactory::GetClassID(in);
+      desc->xPortVisorData = in.ReadLong() != 0;
+      break;
+    case 'PVSN':
+    case 'PVSM': {
+      CParticleDataFactory::GetClassID(in);
+      const uint bits = in.ReadLong();
+      float value;
+      std::memcpy(&value, &bits, sizeof(value));
+      (classId == 'PVSN' ? desc->xPortVisorMinScale : desc->xPortVisorMaxScale) = value;
+      break;
+    }
+    case 'PVSC':
+      delete desc->xPortVisorStartColor;
+      desc->xPortVisorStartColor = CParticleDataFactory::GetColorElement(in);
+      break;
+    case 'PVMC':
+      delete desc->xPortVisorMidColor;
+      desc->xPortVisorMidColor = CParticleDataFactory::GetColorElement(in);
+      break;
+    case 'PVTC':
+      delete desc->xPortVisorEndColor;
+      desc->xPortVisorEndColor = CParticleDataFactory::GetColorElement(in);
+      break;
+    case 'PVBS':
+      delete desc->xPortVisorBlend;
+      desc->xPortVisorBlend = CParticleDataFactory::GetRealElement(in);
+      break;
+    case 'PVDT':
+      CParticleDataFactory::GetClassID(in);
+      desc->xPortVisorTicks = static_cast< int >(in.ReadLong());
       break;
     // Port-only Remastered material, as a PART's.
     case 'VMAT':
