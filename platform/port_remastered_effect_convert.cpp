@@ -6176,11 +6176,22 @@ public:
       }
       std::vector<uint8_t> bytes;
       std::string why;
-      if (fallback == UINT32_MAX && property.value.size() == 1 && !IsElement(property.value[0], F("KPIN")) &&
+      // Under XFMD 3 EMRV is a zero constant (b8 = 0), so RAZY always takes its fallback: a zero
+      // REUL there is written as that REUL (PROZ, which also stands in for retail's IROT/ROTM).
+      uint32_t flags = 0;
+      if (fallback == 0 && xfmdMode == 3) {
+        if (!SwooshZRotation(razy->args[2], flags, bytes, why)) {
+          s.result.dropped.push_back("PROT: " + why);
+        } else {
+          AppendBE32(s.out, F("PROZ"));
+          AppendBE32(s.out, F("CNST"));
+          AppendBE32(s.out, flags);
+          s.out.insert(s.out.end(), bytes.begin(), bytes.end());
+        }
+      } else if (fallback == UINT32_MAX && property.value.size() == 1 && !IsElement(property.value[0], F("KPIN")) &&
           !IsElement(property.value[0], F("RADD")) && !IsElement(property.value[0], F("REUL"))) {
         s.result.dropped.push_back("PROT: not KPIN(RAZY(EMRV, ROTV(v, RLCL), RLCL or zero REUL))");
       } else if (fallback == UINT32_MAX) {
-        uint32_t flags = 0;
         // CreateNewParticle 0x27cdc8 sets the point's orientation from var bc and then PROT's: a
         // plain REUL is the same under XFMD 3 (bc identity, the emitter's turn drawn globally) and 5
         // (bc set by SetOrientation, as retail's), and 4 (bc the EMVR's EXTR, set by both orientation

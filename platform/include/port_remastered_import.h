@@ -250,7 +250,7 @@ inline constexpr int kModels = 30;
 // 211: SPWT/SPWR/SPWS/SPCL on a generator with no child system are inert, not a drop.
 // 212: a nested spot light (LTYP 3) is an HDR light with its LIAN/LOAN cone (PLIA/PLOA).
 // 213: IEVM, the cap on the delta ISVF scales, is the port-only PIEV.
-inline constexpr int kEffects = 214;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
+inline constexpr int kEffects = 215;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

@@ -1840,16 +1840,27 @@ void TestSwooshRazyProt() {
   }
   CHECK_MSG(!properties.empty() && !praz, "a view-oriented swoosh writes no PRAZ");
 
+  // Under XFMD 3 EMRV is always zero: a zero REUL fallback is that REUL, an RLCL one is dropped.
   part = ConvertSwoosh([](auto& o) {
     PutProperty(o, "XFMD", 0);
     PutConstant(o, 3);
     PutRazyProt(o, PutZeroReul);
   });
+  Retail follow;
+  follow.f("SWSH").f("XFMD").f("CNST").w(3).f("PROZ").f("CNST").w(0).f("CNST").w(0);
+  follow.f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == follow.bytes && part.dropped.empty(), "a RAZY PROT under XFMD 3 is its zero REUL");
+
+  part = ConvertSwoosh([](auto& o) {
+    PutProperty(o, "XFMD", 0);
+    PutConstant(o, 3);
+    PutRazyProt(o, [](auto& o) { PutFourCC(o, "RLCL"); });
+  });
   bool xfmd = false;
   for (const std::string& reason : part.dropped) {
     xfmd = xfmd || reason == "PROT: RAZY under XFMD 3";
   }
-  CHECK_MSG(xfmd, "a RAZY PROT under XFMD 3 is dropped");
+  CHECK_MSG(xfmd, "a RAZY PROT with an RLCL fallback under XFMD 3 is dropped");
 }
 
 void PutZReul(std::vector<uint8_t>& out) {
