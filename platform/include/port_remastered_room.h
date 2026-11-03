@@ -19,6 +19,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -135,6 +136,8 @@ struct RoomIO {
   std::function<void(const RetailPlacement& placement)> retailModel;
   // Optional: the rooms (by pak name) to write geometry for; all of them without.
   std::function<bool(const std::string& room)> wantsGeometry;
+  // Optional: the layer units that never load (NeverLoadedUnits); their layers are left out.
+  std::function<bool(const std::array<uint8_t, 16>& unit)> neverLoads;
   std::function<void(const std::string& line)> log;  // optional
   std::function<bool()> cancelled;                   // optional; asked before each room
 };
@@ -151,6 +154,12 @@ struct RoomWorld {
   uint32_t mlvl;
 };
 const std::vector<RoomWorld>& RoomWorlds();
+
+// The layer units (their guids as LUHD stores them) of `paks`' rooms that never load: those that
+// start unloaded (flag bit 0 clear) whose variable no other unit shares and nothing sets, no layer
+// controller's string and no property of any room (debug layers: the Reactor's skip to the
+// Queen's death, say). None of them is set in any of Remastered's QA checkpoint saves.
+std::set<std::array<uint8_t, 16>> NeverLoadedUnits(const std::vector<RoomPak>& paks);
 
 // The GENPs (in a pak's byte order) of the particle effect actors (EffectMP1) in `rooms` that
 // no connection reaches, each once, in the order first met: those a room's .roomfx may add.

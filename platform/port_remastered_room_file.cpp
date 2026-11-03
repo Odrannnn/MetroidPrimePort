@@ -58,7 +58,8 @@ bool Room::Find(size_t o, size_t end, const uint32_t* path, size_t depth, std::v
   return true;
 }
 
-bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
+bool Room::Parse(const std::vector<uint8_t>& data, std::string& error,
+                 const std::function<bool(const Id16& unit)>& neverLoads) {
   m_d = &data;
   m_comps.clear();
   m_byGuid.clear();
@@ -66,6 +67,8 @@ bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
   m_meta = {};
   m_listed.clear();
   m_blit = {};
+  m_units.clear();
+  m_sden.clear();
   const std::vector<uint8_t>& d = data;
   if (d.size() < 32 || std::memcmp(d.data(), "RFRM", 4) != 0) {
     error = "not an RFRM file";
@@ -99,6 +102,27 @@ bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
   if (!strp.empty() && strp[0].size >= 12) {
     const size_t pool = ReadLE32(&d[strp[0].start + 8]);
     m_strings = {strp[0].start + 12, std::min(pool, strp[0].size - 12)};
+  }
+  m_sden = sden;
+  // LUHD: u32, the unit's guid, its term's guid (zero for none), u16 flags (0xffff the base
+  // layer's), then 8 bytes of logic.
+  std::vector<Span> luhd;
+  const uint32_t pLuhd[] = {FourCC("HEAD"), FourCC("LUNT"), FourCC("LUHD")};
+  if (!Find(rs, re, pLuhd, 3, luhd, error)) {
+    return false;
+  }
+  for (const Span& s : luhd) {
+    if (s.size < 38 || ReadLE16(&d[s.start + 36]) == 0xffff) {
+      continue;
+    }
+    LoadUnit u;
+    std::memcpy(u.unit.data(), &d[s.start + 4], 16);
+    std::memcpy(u.var.data(), &d[s.start + 20], 16);
+    if (u.var == Id16{}) {
+      u.var = u.unit;
+    }
+    u.startsLoaded = (ReadLE16(&d[s.start + 36]) & 1) != 0;
+    m_units.push_back(u);
   }
   // LRES: u32 count, then that many 16-byte ids.
   std::vector<Span> lres;
@@ -154,6 +178,31 @@ bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
     const uint8_t* const headEnd = head + std::min<size_t>(layers[li].size, 256);
     const uint8_t* const unit = std::search(head, headEnd, kUnit, kUnit + 3);
     const bool baseLayer = unit + 3 < headEnd && unit[3] == '_';
+    // LHED: u32 n and the n-byte name, the layer's guid, u32, u16 n and the n units it loads with.
+    if (neverLoads && !baseLayer) {
+      std::vector<Span> lhed;
+      const uint32_t pLhed[] = {FourCC("LHED")};
+      if (!Find(layers[li].start, layers[li].start + layers[li].size, pLhed, 1, lhed, error)) {
+        return false;
+      }
+      bool never = false;
+      if (!lhed.empty() && lhed[0].size >= 4) {
+        const uint8_t* h = &d[lhed[0].start];
+        const size_t at = size_t(ReadLE32(h)) + 4 + 16 + 4;
+        if (at <= lhed[0].size - 2 && ReadLE16(h + at) <= (lhed[0].size - at - 2) / 16) {
+          const size_t n = ReadLE16(h + at);
+          never = n != 0;
+          for (size_t k = 0; never && k < n; ++k) {
+            Id16 g;
+            std::memcpy(g.data(), h + at + 2 + 16 * k, 16);
+            never = neverLoads(g);
+          }
+        }
+      }
+      if (never) {
+        continue;
+      }
+    }
     std::vector<Span> comps;
     const uint32_t pComp[] = {FourCC("SRIP"), FourCC("COMP")};
     if (!Find(layers[li].start, layers[li].start + layers[li].size, pComp, 2, comps, error)) {
@@ -295,4 +344,87 @@ std::map<uint32_t, Span> Room::Flat(const Component& c) const {
 }
 
 }  // namespace RoomDetail
+
+std::set<std::array<uint8_t, 16>> NeverLoadedUnits(const std::vector<RoomPak>& paks) {
+  using RoomDetail::Id16;
+  // Every room once (a room two worlds use is in both), its units and who sets which variable.
+  std::set<Id16> roomIds, setVars;
+  std::map<Id16, std::set<Id16>> unitsOfVar;
+  std::vector<RoomDetail::LoadUnit> units;
+  std::vector<std::vector<uint8_t>> properties;
+  const auto hex = [](uint8_t ch) {
+    return ch >= '0' && ch <= '9' ? ch - '0' : (ch | 0x20) >= 'a' && (ch | 0x20) <= 'f' ? (ch | 0x20) - 'a' + 10 : -1;
+  };
+  for (const RoomPak& rp : paks) {
+    if (rp.pak == nullptr) {
+      continue;
+    }
+    for (const PakAsset& asset : rp.pak->Assets()) {
+      if (asset.type != port::FourCC("ROOM")) {
+        continue;
+      }
+      std::vector<uint8_t> bytes;
+      std::string error;
+      RoomDetail::Room room;
+      if (!roomIds.insert(asset.id).second) {
+        continue;
+      }
+      if (!rp.pak->ReadAsset(asset, bytes, error) || !room.Parse(bytes, error)) {
+        return {};  // a room unread could set any variable
+      }
+      for (const RoomDetail::LoadUnit& u : room.LoadUnits()) {
+        units.push_back(u);
+        unitsOfVar[u.var].insert(u.unit);
+      }
+      // A layer controller (SpecialFunctionMP1 function 16) names its variable as text, which
+      // CSpecialFunctionMP1GOC::Create reads with CGuid::FromString (0xf2a288); an
+      // EnvironmentVarModifier as a guid property (SLdrEnvironmentVarModifier::Load 0x759314).
+      const RoomDetail::Span pool = room.StringPool();
+      const uint8_t* s = room.Bytes(pool);
+      for (size_t o = 0; o + 36 <= pool.size; ++o) {
+        Id16 printed;
+        size_t n = 0;
+        for (size_t k = 0; k < 36; ++k) {
+          const bool dash = k == 8 || k == 13 || k == 18 || k == 23;
+          if (dash ? s[o + k] != '-' : hex(s[o + k]) < 0) {
+            break;
+          }
+          if (!dash && (n++ & 1) != 0) {
+            printed[n / 2 - 1] = uint8_t(hex(s[o + k - 1]) << 4 | hex(s[o + k]));
+          }
+        }
+        if (n == 32) {
+          setVars.insert(RoomDetail::SwapUuid(printed.data()));
+          o += 35;
+        }
+      }
+      for (const RoomDetail::Span& p : room.PropertyData()) {
+        properties.emplace_back(room.Bytes(p), room.Bytes(p) + p.size);
+      }
+    }
+  }
+  // A unit that starts unloaded never loads when no other unit shares its variable (whose
+  // default would be in doubt) and nothing sets that variable.
+  std::set<Id16> unset;
+  for (const RoomDetail::LoadUnit& u : units) {
+    if (!u.startsLoaded && unitsOfVar[u.var].size() == 1 && setVars.count(u.var) == 0) {
+      unset.insert(u.var);
+    }
+  }
+  for (const std::vector<uint8_t>& p : properties) {
+    for (size_t o = 0; !unset.empty() && o + 16 <= p.size(); ++o) {
+      Id16 g;
+      std::memcpy(g.data(), p.data() + o, 16);
+      unset.erase(g);
+    }
+  }
+  std::set<Id16> out;
+  for (const RoomDetail::LoadUnit& u : units) {
+    if (unset.count(u.var) != 0) {
+      out.insert(u.unit);
+    }
+  }
+  return out;
+}
+
 }  // namespace PortRemastered

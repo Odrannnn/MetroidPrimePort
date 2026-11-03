@@ -449,10 +449,24 @@ struct Blit {
   bool HasLightmap() const { return present && (flags & 1) != 0 && lightmap != Id16{}; }
 };
 
+// One layer unit of a room (HEAD/LUNT/LUHD): a layer loads while its unit's variable is set.
+struct LoadUnit {
+  Id16 unit{};
+  Id16 var{};                 // the unit's term, the unit itself without one (EvaluateLoadUnits 0x3fb2d8)
+  bool startsLoaded = false;  // the variable's default: bit 0 of the unit's flags
+};
+
 class Room {
 public:
-  // `data` must outlive the Room.
-  bool Parse(const std::vector<uint8_t>& data, std::string& error);
+  // `data` must outlive the Room. A layer whose units all `neverLoads` (NeverLoadedUnits) is left
+  // out: Remastered never creates its components.
+  bool Parse(const std::vector<uint8_t>& data, std::string& error,
+             const std::function<bool(const Id16& unit)>& neverLoads = {});
+  // The room's layer units, the base layer's (flags 0xffff) left out.
+  const std::vector<LoadUnit>& LoadUnits() const { return m_units; }
+  // The components' property data (SDTA/SDEN), and the string pool.
+  const std::vector<Span>& PropertyData() const { return m_sden; }
+  const Span& StringPool() const { return m_strings; }
 
   const std::vector<Component>& Components() const { return m_comps; }
   const Blit& Lighting() const { return m_blit; }
@@ -547,6 +561,8 @@ private:
   Span m_meta;
   std::vector<size_t> m_listed;
   Blit m_blit;
+  std::vector<LoadUnit> m_units;
+  std::vector<Span> m_sden;
 };
 
 bool PropList(const uint8_t* b, size_t len, std::vector<Prop>* out);

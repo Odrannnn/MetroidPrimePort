@@ -166,6 +166,12 @@ int main(int argc, char** argv) {
     return bool(f);
   };
   io.log = [](const std::string& line) { std::printf("%s\n", line.c_str()); };
+  std::vector<RoomPak> all = others;
+  all.push_back(master);
+  all.insert(all.end(), rooms.begin(), rooms.end());
+  const std::set<std::array<uint8_t, 16>> neverLoaded = NeverLoadedUnits(all);
+  std::printf("%zu layer units never load\n", neverLoaded.size());
+  io.neverLoads = [&](const std::array<uint8_t, 16>& unit) { return neverLoaded.count(unit) != 0; };
 
   int written = 0;
   std::string error;

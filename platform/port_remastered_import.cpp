@@ -2669,6 +2669,8 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
   }
   fs::create_directories(staging / kGeometryFolder, ec);
   const std::vector<RoomPak> allPaks = remastered.AllPaks();
+  const std::set<EffectGuid> neverLoaded = NeverLoadedUnits(allPaks);
+  AddLine(std::to_string(neverLoaded.size()) + " layer units never load; their layers are left out");
   const std::vector<RoomWorld>& worlds = RoomWorlds();
   std::atomic<size_t> nextWorld{0};
   std::atomic<int> roomFiles{0};
@@ -2969,6 +2971,7 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         return out;
       };
       io.wantsGeometry = WantsGeometry;
+      io.neverLoads = [&](const EffectGuid& unit) { return neverLoaded.count(unit) != 0; };
       io.retailModel = [&](const RetailPlacement& placement) {
         std::lock_guard<std::mutex> lock(retailMutex);
         retailPlacements.push_back(placement);

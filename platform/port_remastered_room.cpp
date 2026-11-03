@@ -300,7 +300,7 @@ bool Writer::ReadRoomFile(const RoomPak& rp, RoomData& out, std::string& error) 
   out.name = rp.name;
   out.pak = rp.pak;
   out.id = SwapUuid(asset->id.data());
-  return out.room.Parse(out.bytes, error);
+  return out.room.Parse(out.bytes, error, m_io.neverLoads);
 }
 
 bool Writer::LoadAreas(uint32_t mlvl, std::string& error) {
