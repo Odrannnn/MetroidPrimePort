@@ -374,6 +374,13 @@ const bool CParticleSwoosh::Update(double dt) {
     UpdateTranslationAndOrientation();
     evalTime += kFrameTime;
     ++x28_curFrame;
+#ifdef TARGET_PC
+    // UpdateCountdownTimerForShutdown (0x27b864) after the tick's frame step (InternalUpdate
+    // 0x27d29c): counts down while positive, shuts down at zero.
+    if (xPortShutdownCountdown > 0 && --xPortShutdownCountdown == 0) {
+      PortDoShutdownBehavior(0xff);
+    }
+#endif
   }
   x1c4_ = timer.GetElapsedTime();
   return false;
@@ -2074,8 +2081,21 @@ bool CParticleSwoosh::GetParticleEmission() const { return x1d0_24_emitting; }
 // CParticleGen::ShutdownEffect (0x27a66c) -> DoShutdownBehavior (0x27b88c) with the description's
 // SHTM: 0 stops the emission, 1 also runs Remastered's CParticleSwoosh::DestroyParticles (0x27f744),
 // which empties the segment ring (current index, live counts to 0), so the trail vanishes at once.
-// The retail DestroyParticles stays empty.
-void CParticleSwoosh::ShutdownEffect() { PortDoShutdownBehavior(0xff); }
+// The retail DestroyParticles stays empty. With a SHTT the shutdown waits that many ticks instead,
+// armed once.
+void CParticleSwoosh::ShutdownEffect() {
+  if (!x1c_desc->xPortShutdownTime) {
+    PortDoShutdownBehavior(0xff);
+    return;
+  }
+  if (xPortShutdownCountdown == -1) {
+    CPortVarScope portVarScope(&xPortVars);
+    CParticleGlobals::SetEmitterTime(x28_curFrame);
+    int ticks = 0;
+    x1c_desc->xPortShutdownTime->GetValue(x28_curFrame, ticks);
+    xPortShutdownCountdown = ticks;
+  }
+}
 
 u32 CParticleSwoosh::PortOwnShutdownMode() const { return x1c_desc->xPortShutdownMode; }
 

@@ -102,6 +102,8 @@ public:
   // port-only PSHM: Remastered's SHTM (CParticleGen::DoShutdownBehavior 0x27b88c); 1 = a shutdown
   // also destroys the live segments (CParticleSwoosh::DestroyParticles 0x27f744)
   u8 xPortShutdownMode = 0;
+  // port-only PSHT: Remastered's SHTT (CGenDescription::xPortShutdownTime), the delayed shutdown
+  std::unique_ptr< CIntElement > xPortShutdownTime;
   // port-only DVVN/IEXP: Remastered's exposure policy (desc+0x22c bit 0x2000, CreateSWSH 0x2dceac
   // and 0x2dd1b4); DVVN defaults it to DVVN == 1, a later IEXP sets it. UpdateRenderData_Swoosh
   // 0x2b6820 then scales ITEN by the inverse exposure.

@@ -259,7 +259,8 @@ inline constexpr int kModels = 30;
 // 219: an int KPIN is a PKPR latch; SELT is GEMT (8dad9f3d TMTR).
 // 220: a constant true KILL is the port-only PKIL (7f71e94b light); a false one is consumed.
 // 221: ELC2 SSWH swooshes written standalone.
-inline constexpr int kEffects = 222;   // CRLN 2d slices are PCRS
+// 222: CRLN 2d slices are PCRS.
+inline constexpr int kEffects = 223;   // swoosh SHTT is PSHT
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

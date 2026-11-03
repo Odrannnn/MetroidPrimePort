@@ -4089,6 +4089,20 @@ void TestShutdownAndPivot() {
     CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
               "a PART with PSHT passes the retail element reader");
   }
+  {
+    // A swoosh's SHTT is the same countdown (CParticleSwoosh::InternalUpdate 0x27d29c).
+    ConvertedPart swoosh = ConvertSwoosh([](auto& o) {
+      PutProperty(o, "SHTT", 1);
+      PutConstant(o, 30);
+    });
+    Retail want;
+    want.f("SWSH").f("PSHT").f("CNST").w(30).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+    CHECK_MSG(swoosh.part == want.bytes && swoosh.dropped.empty(), "swoosh SHTT CNST(30) is PSHT");
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), swoosh.part.data(), swoosh.part.size(), properties, error),
+              "PSHT reads as a swoosh property");
+  }
 
   parts = convert([](auto& o) {
     PutProperty(o, "PMOV", 3);

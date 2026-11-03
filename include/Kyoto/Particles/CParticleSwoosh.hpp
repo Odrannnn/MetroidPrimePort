@@ -238,6 +238,7 @@ private:
   CVector3f xPortRazyPrev = CVector3f(0.f, 0.f, 0.f);
   // Remastered's +0x17c: points created since construction or the last DestroyParticles (TXUP).
   int xPortCreated = 0;
+  int xPortShutdownCountdown = -1; // SHTT: ticks to the delayed shutdown, -1 = not counting
   // CAddVarSystem::Init has run in the first Update (the CParticleGen +0xa0 0x1000 flag).
   bool xPortSysInit = false;
   // An ELC2's per-bolt swoosh (Remastered's +0x188 bit 5, HACK_InitForElectric 0x27ebfc): each

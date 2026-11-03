@@ -6556,7 +6556,9 @@ public:
     }
     // SHTT, the delayed shutdown (ShutdownEffect 0x27a66c, UpdateCountdownTimerForShutdown
     // 0x27b864): an int number of ticks, counted down once per tick after the owner's shutdown.
-    if (s.part && fourcc == F("SHTT")) {
+    // CreateSWSH reads it for a swoosh too (desc+0xd0; CParticleSwoosh::InternalUpdate 0x27d29c
+    // counts it down).
+    if ((s.part || s.swoosh) && fourcc == F("SHTT")) {
       std::vector<uint8_t> inner;
       std::string why = "not one element";
       if (property.value.size() != 1 || !Element(property.value[0], Type::Int, inner, why)) {
@@ -8065,7 +8067,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && (fourcc == F("PINS") || fourcc == F("PSWS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||
                         fourcc == F("PMPV") || fourcc == F("POVC") || fourcc == F("PSYT") || fourcc == F("PTMT"))) {
       ok = reader.Element(Type::Vector);
-    } else if (part && (fourcc == F("PSHT") || fourcc == F("PSMX"))) {
+    } else if ((part && (fourcc == F("PSHT") || fourcc == F("PSMX"))) || (type == F("SWHC") && fourcc == F("PSHT"))) {
       ok = reader.Element(Type::Int);
     } else if (part && fourcc == F("PSPS")) {
       ok = reader.Asset();
