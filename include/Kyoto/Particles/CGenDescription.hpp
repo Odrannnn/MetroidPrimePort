@@ -69,8 +69,15 @@ struct CPortVfxMat {
 
 // XFMD (build/mpr/vfx/RESOLVED-xfmd.md): how the emitter's transform reaches the particles.
 // 2 = retail (orientation and local translation baked at spawn); 3 = the particles stay in the
-// emitter's space and follow its later moves; 4 = as 3 with unit scale (an identity SMVR mover).
-enum EPortXfmd : u8 { kPortXfmdRetail = 2, kPortXfmdFollow = 3, kPortXfmdFollowUnscaled = 4 };
+// emitter's space and follow its later moves; 4 = as 3 with unit scale (an identity SMVR mover);
+// 1 = the system's own frame (SYST/TEMT, xPortSysTranslation/xPortTemTranslation) at identity
+// rotation and unit scale, which the setters do not move.
+enum EPortXfmd : u8 {
+  kPortXfmdSystem = 1,
+  kPortXfmdRetail = 2,
+  kPortXfmdFollow = 3,
+  kPortXfmdFollowUnscaled = 4
+};
 
 struct CPortVfxData {
   CPortVfxMat mat;
@@ -235,6 +242,11 @@ public:
   // the external ones; CElementGen::PortApplyIntFrame). Owned here; null = the external one.
   CVectorElement* xPortIntRotation = nullptr;
   CVectorElement* xPortIntTranslation = nullptr;
+  // port-only PSYT/PTMT: Remastered's SYST and TEMT under XFMD 1 (kPortXfmdSystem), the global
+  // translation T_g (desc+0x70 -> +0xa8) and the birth offset vec 0x12 (desc+0x90 -> +0xb8), in
+  // the port's space (SetupTransformMode 0x2887d8). Owned here; null = zero.
+  CVectorElement* xPortSysTranslation = nullptr;
+  CVectorElement* xPortTemTranslation = nullptr;
   // port-only POVC: Remastered's OVEC (desc+0x388), a sprite's vector orientation axis in the
   // port's space, evaluated per particle at birth and before each move. Owned here.
   CVectorElement* xPortOvec = nullptr;

@@ -90,10 +90,13 @@ void CElementGen::PortVisibilityQuery() {
 
   const CTransform4f& camera = CParticleGlobals::PortCameraTransform();
   // The render state's +0xa0, vec 0x12 (desc +0xb8, SetupTransformMode 0x2887d8) as is: under
-  // XFMD 2 the system translation over the system scale, under 3 and 4 (no EMVR) zero. XFMD 5
+  // XFMD 1 TEMT, under 2 the system translation over the system scale, under 3 and 4 (no EMVR)
+  // zero. XFMD 5
   // (T_l/S_g + INTT) reads as 2 here; no VISQ generator uses it.
   CVector3f center = CVector3f::Zero();
-  if (x28_loadedGenDesc->xPortXfmd == kPortXfmdRetail) {
+  if (x28_loadedGenDesc->xPortXfmd == kPortXfmdSystem) {
+    center = xPortTemTranslation; // TEMT
+  } else if (x28_loadedGenDesc->xPortXfmd == kPortXfmdRetail) {
     const CVector3f scale = PortSystemScale();
     const CVector3f t = PortSystemTranslation();
     center = CVector3f(t.GetX() / scale.GetX(), t.GetY() / scale.GetY(), t.GetZ() / scale.GetZ());

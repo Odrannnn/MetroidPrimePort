@@ -4298,6 +4298,81 @@ void TestIntFrame() {
             "INTT under XFMD 5 is the spawn offset POFS");
 }
 
+// A generator's SYST/SYSR/SYSS/TEMT/TEMR force SetupTransformMode 0x2887d8 into mode 1 under any
+// XFMD but 5, which deletes them: the port-only XFMD 1 with SYST as PSYT and TEMT as PTMT.
+void TestPartSystemFrame() {
+  const auto convert = [](int mode, const std::function<void(std::vector<uint8_t>&)>& body) {
+    auto parts = ConvertOne(OneGenerator([&](auto& o) {
+                              body(o);
+                              if (mode != 0) {
+                                PutProperty(o, "XFMD", 0);
+                                PutConstant(o, mode);
+                              }
+                              PutTexr(o, 0x1234ABCD);
+                            }),
+                            {});
+    return parts.size() == 1 ? parts[0] : ConvertedPart{};
+  };
+  const auto zeroTemr = [](auto& o) {
+    PutProperty(o, "TEMR", 1);
+    PutFourCC(o, "REUL");
+    PutConstant(o, 0);
+    PutConstant(o, 0);
+    PutConstant(o, 0);
+    o.push_back(0);
+  };
+  Retail xfmd1;
+  xfmd1.f("XFMD").f("CNST").w(1);
+  Retail psyt;
+  psyt.f("PSYT").f("EXTT");  // BSIS of BSIS(EXTT) cancels
+  Retail ptmt;
+  ptmt.f("PTMT").f("EXTT");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+
+  ConvertedPart part = convert(2, [](auto& o) {
+    PutProperty(o, "SYST", 1);
+    PutFourCC(o, "EXTT");
+  });
+  CHECK_MSG(Contains(part.part, xfmd1.bytes) && Contains(part.part, psyt.bytes) && part.dropped.empty(),
+            "SYST EXTT under XFMD 2 is XFMD 1 and PSYT");
+  CHECK_MSG(SplitRetailPart(part.part.data(), part.part.size(), properties, error),
+            "a PART with PSYT passes the retail element reader");
+
+  // No XFMD at all (2) still gets XFMD 1; a zero TEMR is the default and writes nothing.
+  part = convert(0, [&](auto& o) {
+    PutProperty(o, "TEMT", 1);
+    PutFourCC(o, "EXTT");
+    zeroTemr(o);
+  });
+  CHECK_MSG(Contains(part.part, xfmd1.bytes) && Contains(part.part, ptmt.bytes) && part.dropped.empty() &&
+                !Contains(part.part, psyt.bytes),
+            "TEMT with no XFMD is XFMD 1 and PTMT; a zero TEMR is consumed");
+  CHECK_MSG(SplitRetailPart(part.part.data(), part.part.size(), properties, error),
+            "a PART with PTMT passes the retail element reader");
+
+  part = convert(3, zeroTemr);
+  CHECK_MSG(Contains(part.part, xfmd1.bytes) && part.dropped.empty() && !Contains(part.part, {'X', 'F', 'M', 'D', 'C', 'N', 'S', 'T', 0, 0, 0, 3}),
+            "a zero TEMR alone turns XFMD 3 into 1");
+
+  part = convert(5, [](auto& o) {
+    PutProperty(o, "TEMT", 1);
+    PutFourCC(o, "EXTT");
+  });
+  CHECK_MSG(part.dropped.empty() && !Contains(part.part, xfmd1.bytes) && !Contains(part.part, ptmt.bytes),
+            "TEMT under XFMD 5 is deleted unread");
+
+  part = convert(2, [](auto& o) {
+    PutProperty(o, "SYST", 1);
+    PutFourCC(o, "EXTT");
+    PutProperty(o, "INTT", 3);
+    PutFourCC(o, "EXTT");
+  });
+  CHECK_MSG(part.dropped.size() == 1 && part.dropped[0] == "SYST: with an INTT" && !Contains(part.part, xfmd1.bytes) &&
+                !Contains(part.part, psyt.bytes),
+            "SYST beside an INTT is dropped and the XFMD kept");
+}
+
 bool HasPmrf(const ConvertedPart& part, uint32_t frame) {
   Retail pmrf;
   pmrf.f("PMRF").f("CNST").w(frame);
@@ -7478,6 +7553,7 @@ int main() {
   TestModelRotationFrames();
   TestIntScale();
   TestIntFrame();
+  TestPartSystemFrame();
   if (port_test::Failures() == 0) {
     std::printf("port_remastered_effect_convert: ok\n");
   }

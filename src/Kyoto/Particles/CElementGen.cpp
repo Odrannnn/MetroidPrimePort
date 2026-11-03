@@ -516,11 +516,21 @@ void CElementGen::ShutDown() { sStaticListInitialized = false; }
 bool CElementGen::PortIsRemastered() const { return x28_loadedGenDesc->xPortIrnd; }
 
 bool CElementGen::PortFollowsEmitter() const {
-  return x28_loadedGenDesc->xPortXfmd == kPortXfmdFollow ||
+  return x28_loadedGenDesc->xPortXfmd == kPortXfmdSystem ||
+         x28_loadedGenDesc->xPortXfmd == kPortXfmdFollow ||
          x28_loadedGenDesc->xPortXfmd == kPortXfmdFollowUnscaled;
 }
 
+bool CElementGen::PortFrameInWorld() const {
+  return PortHasMover() || x28_loadedGenDesc->xPortXfmd == kPortXfmdSystem;
+}
+
 CTransform4f CElementGen::PortEmitterFrame() const {
+  if (x28_loadedGenDesc->xPortXfmd == kPortXfmdSystem) {
+    // XFMD 1: T_g is SYST's at identity rotation and unit scale; the render adds the global
+    // translation.
+    return CTransform4f::Translate(xPortSysTranslation - xe8_globalTranslation);
+  }
   if (PortHasMover()) {
     // XFMD 4: T_g/Q_g are the mover's output (zero and identity with no SMVR) at unit scale; the
     // render adds the global translation.
@@ -594,12 +604,13 @@ void CElementGen::SetGlobalTranslation(const CVector3f& translation) {
     PortApplyIntFrame(true);
     return;
   }
-  // A mover's frame is held in world space (PortEmitterFrame), so it does not move with GT.
-  const CTransform4f portBefore = PortHasMover() ? PortEmitterFrame() : CTransform4f::Identity();
+  // A mover's or XFMD 1's frame is held in world space (PortEmitterFrame), so it does not move
+  // with GT.
+  const CTransform4f portBefore = PortFrameInWorld() ? PortEmitterFrame() : CTransform4f::Identity();
 #endif
   xe8_globalTranslation = translation;
 #ifdef TARGET_PC
-  if (PortHasMover()) {
+  if (PortFrameInWorld()) {
     PortFollowEmitter(portBefore);
   }
 #endif
@@ -680,8 +691,8 @@ void CElementGen::PortSetSystemScale(const CVector3f& scale) {
   x13c_globalScaleTransformInverse = CTransform4f::Scale(
       1.f / x100_globalScale.GetX(), 1.f / x100_globalScale.GetY(), 1.f / x100_globalScale.GetZ());
 #ifdef TARGET_PC
-  // XFMD 4 draws at unit scale; the scale is still kept for the children.
-  if (x28_loadedGenDesc->xPortXfmd == kPortXfmdFollowUnscaled) {
+  // XFMD 4 and 1 draw at unit scale (S_g is one); the scale is still kept for the children.
+  if (PortUnitScale()) {
     x10c_globalScaleTransform = CTransform4f::Identity();
     x13c_globalScaleTransformInverse = CTransform4f::Identity();
   }
@@ -702,7 +713,7 @@ void CElementGen::SetLocalScale(const CVector3f& scale) {
   x1a8_localScaleTransformInverse = CTransform4f::Scale(
       1.f / x16c_localScale.GetX(), 1.f / x16c_localScale.GetY(), 1.f / x16c_localScale.GetZ());
 #ifdef TARGET_PC
-  if (x28_loadedGenDesc->xPortXfmd == kPortXfmdFollowUnscaled) {
+  if (PortUnitScale()) {
     x178_localScaleTransform = CTransform4f::Identity();
     x1a8_localScaleTransformInverse = CTransform4f::Identity();
   }
@@ -726,7 +737,7 @@ CVector3f CElementGen::PortSpreadSpawn(const CVector3f& rel) const {
   if (xPortSpawnSpread == CVector3f(1.f, 1.f, 1.f)) {
     return rel;
   }
-  if (PortFollowsEmitter() && !PortHasMover()) {
+  if (PortFollowsEmitter() && !PortFrameInWorld()) {
     return x22c_globalOrientation.Rotate(CVector3f::ByElementMultiply(
         x22c_globalOrientation.TransposeRotate(rel), xPortSpawnSpread));
   }
@@ -847,6 +858,34 @@ void CElementGen::PortApplyIntFrame(bool force) {
     }
   }
 }
+
+// XFMD 1 (SetupTransformMode 0x2887d8): T_g is SYST's and vec 0x12 TEMT's (zero without one),
+// evaluated with the other system vars (CAddVarSystem::Init/Update) and read through EXTT as the
+// owner last set it. T_g is followed live; vec 0x12 is baked into a particle at birth
+// (CreateNewParticles 0x24a5e4), so only later ones take its change. The setters move neither,
+// and children still get the external transform (Compile 0x289af0 +0x38/+0x3c/+0x40).
+void CElementGen::PortApplySystemFrame() {
+  const CGenDescription& desc = *x28_loadedGenDesc;
+  if (desc.xPortXfmd != kPortXfmdSystem) {
+    return;
+  }
+  CVector3f sys = CVector3f::Zero();
+  CVector3f tem = CVector3f::Zero();
+  {
+    CParticleGlobals::SParticleSystem thisSystem('PART', this);
+    CPortVarScope portVarScope(&xPortVars);
+    if (desc.xPortSysTranslation != nullptr) {
+      desc.xPortSysTranslation->GetValue(x74_curFrame, sys);
+    }
+    if (desc.xPortTemTranslation != nullptr) {
+      desc.xPortTemTranslation->GetValue(x74_curFrame, tem);
+    }
+  }
+  xPortTemTranslation = tem;
+  const CTransform4f before = PortEmitterFrame();
+  xPortSysTranslation = sys;
+  PortFollowEmitter(before);
+}
 #endif
 
 void CElementGen::SetGlobalOrientAndTrans(const CTransform4f& xf) {
@@ -889,6 +928,7 @@ const bool CElementGen::Update(double dt) {
     if (xPortIntFrame) {
       PortApplyIntFrame(true);
     }
+    PortApplySystemFrame();
     PortInitMover();
   }
 #endif
@@ -1975,6 +2015,12 @@ void CElementGen::PortGlobalFrame(CVector3f& t, CQuaternion& q, CVector3f& s) co
     }
     s = CVector3f(1.f, 1.f, 1.f);
     break;
+  case kPortXfmdSystem:
+    // SYST and the SYSR/SYSS defaults (the converter drops any other).
+    t = xPortSysTranslation;
+    q = CQuaternion::NoRotation();
+    s = CVector3f(1.f, 1.f, 1.f);
+    break;
   default:
     t = CVector3f::Zero();
     q = CQuaternion::NoRotation();
@@ -2003,6 +2049,10 @@ void CElementGen::PortNestedLightFrame(CVector3f& pos, CVector3f& axis) const {
     } else {
       pos = t;
     }
+    break;
+  case kPortXfmdSystem:
+    // Q_l is TEMR's identity and vec 0x12 TEMT's.
+    pos = t + xPortTemTranslation;
     break;
   default:
     ql = PortSystemRotation();
@@ -2043,6 +2093,10 @@ void CElementGen::PortInitKssmMover(PortKssmChild& state, const CGenDescription:
 }
 
 CTransform4f CElementGen::PortSpawnFrame() const {
+  if (x28_loadedGenDesc->xPortXfmd == kPortXfmdSystem) {
+    // CreateNewParticles 0x24a5e4: pos = emtr + vec12 (Q_l identity), T_g at render.
+    return PortEmitterFrame() * CTransform4f::Translate(xPortTemTranslation);
+  }
   if (xPortEmvr.kssm == nullptr) {
     return PortEmitterFrame();
   }
@@ -2115,6 +2169,7 @@ void CElementGen::PortStepMover() {
   if (xPortIntFrame) {
     PortApplyIntFrame(false);
   }
+  PortApplySystemFrame();
   if (xPortEmvr.kssm != nullptr) {
     // Baked into the particles at spawn: the live ones stay where they are.
     ++xPortEmvr.frame;

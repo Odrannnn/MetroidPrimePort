@@ -635,10 +635,20 @@ private:
   CVector3f xPortExtTranslation{0.f, 0.f, 0.f};
   CVector3f xPortIntEuler{0.f, 0.f, 0.f};
   CVector3f xPortIntTranslation{0.f, 0.f, 0.f};
+  // XFMD 1: SYST (PSYT) and TEMT (PTMT) evaluated, T_g in world space and the birth offset.
+  void PortApplySystemFrame();
+  CVector3f xPortSysTranslation{0.f, 0.f, 0.f};
+  CVector3f xPortTemTranslation{0.f, 0.f, 0.f};
   void PortVfxUpdateSystem();
-  // XFMD 3/4: the spawn-baked part of the emitter's transform, and moving the live particles from
-  // one such frame to the next.
+  // XFMD 1/3/4: the spawn-baked part of the emitter's transform, and moving the live particles
+  // from one such frame to the next.
   bool PortFollowsEmitter() const;
+  // XFMD 1 and 4 with a mover: that frame is held in world space, not turned with the owner's.
+  bool PortFrameInWorld() const;
+  bool PortUnitScale() const {
+    return x28_loadedGenDesc->xPortXfmd == kPortXfmdFollowUnscaled ||
+           x28_loadedGenDesc->xPortXfmd == kPortXfmdSystem;
+  }
   CTransform4f PortEmitterFrame() const;
   void PortFollowEmitter(const CTransform4f& before);
   void PortRenderParticlesVfx();

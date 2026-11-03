@@ -689,7 +689,8 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('XFMD'): {
       GetClassID(in);
       const u32 mode = in.ReadLong();
-      desc->xPortXfmd = mode == kPortXfmdFollow || mode == kPortXfmdFollowUnscaled
+      desc->xPortXfmd = mode == kPortXfmdSystem || mode == kPortXfmdFollow ||
+                                mode == kPortXfmdFollowUnscaled
                             ? static_cast< u8 >(mode)
                             : static_cast< u8 >(kPortXfmdRetail);
     } break;
@@ -707,6 +708,16 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     case SBIG('PINT'):
       delete desc->xPortIntTranslation;
       desc->xPortIntTranslation = GetVectorElement(in);
+      break;
+    // Port-only Remastered SYST/TEMT under XFMD 1 (CGenDescription::xPortSysTranslation/
+    // xPortTemTranslation).
+    case SBIG('PSYT'):
+      delete desc->xPortSysTranslation;
+      desc->xPortSysTranslation = GetVectorElement(in);
+      break;
+    case SBIG('PTMT'):
+      delete desc->xPortTemTranslation;
+      desc->xPortTemTranslation = GetVectorElement(in);
       break;
     // Port-only Remastered OVEC (CGenDescription::xPortOvec).
     case SBIG('POVC'):

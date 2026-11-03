@@ -120,6 +120,8 @@ CGenDescription::~CGenDescription() {
   delete xPortSsze;
   delete xPortIntRotation;
   delete xPortIntTranslation;
+  delete xPortSysTranslation;
+  delete xPortTemTranslation;
   delete xPortOvec;
   delete xPortShutdownTime;
   delete xPortPsmx;

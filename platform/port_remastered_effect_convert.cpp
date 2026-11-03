@@ -559,19 +559,21 @@ bool ConstIs(const EffectValue& value, uint32_t word) {
 // the external translation or scale, an INTR other than a zero REUL is a rotation the points no
 // longer start from, or a RAZY's EMRV reads the frozen birth position. 1 writes it, 5 is a no-op,
 // and 0 is a drop with `why`.
-int SwooshSystemMode(const EffectNode& node, std::string& why) {
-  const auto zeroReul = [](const EffectProperty& property) {
-    if (property.value.size() != 1 || !IsElement(property.value[0], F("REUL")) || property.value[0].args.size() != 4) {
+// A property that is one REUL of three constant zeros: the identity rotation.
+bool ZeroReul(const EffectProperty& property) {
+  if (property.value.size() != 1 || !IsElement(property.value[0], F("REUL")) || property.value[0].args.size() != 4) {
+    return false;
+  }
+  for (size_t i = 0; i < 3; ++i) {
+    uint32_t word = 0;
+    if (!ConstWord(property.value[0].args[i], word) || (word & 0x7fffffffu) != 0) {
       return false;
     }
-    for (size_t i = 0; i < 3; ++i) {
-      uint32_t word = 0;
-      if (!ConstWord(property.value[0].args[i], word) || (word & 0x7fffffffu) != 0) {
-        return false;
-      }
-    }
-    return true;
-  };
+  }
+  return true;
+}
+
+int SwooshSystemMode(const EffectNode& node, std::string& why) {
   uint32_t mode = 2;
   bool zeroSysr = false;
   bool otherIntr = false;
@@ -581,8 +583,8 @@ int SwooshSystemMode(const EffectNode& node, std::string& why) {
     if (property.fourcc == F("XFMD") && (property.value.size() != 1 || !ConstWord(property.value[0], mode))) {
       mode = UINT32_MAX;
     }
-    zeroSysr = zeroSysr || (property.fourcc == F("SYSR") && zeroReul(property));
-    otherIntr = otherIntr || (property.fourcc == F("INTR") && !zeroReul(property));
+    zeroSysr = zeroSysr || (property.fourcc == F("SYSR") && ZeroReul(property));
+    otherIntr = otherIntr || (property.fourcc == F("INTR") && !ZeroReul(property));
     for (const EffectValue& value : property.value) {
       razy = razy || ContainsElement(value, F("RAZY"));
       external = external || ContainsElement(value, F("EXTT")) || ContainsElement(value, F("EXTS"));
@@ -597,6 +599,67 @@ int SwooshSystemMode(const EffectNode& node, std::string& why) {
         : otherIntr     ? "with an INTR other than a zero REUL"
         : razy          ? "with a RAZY"
                         : "";
+  return why.empty() ? 1 : 0;
+}
+
+// A generator's SYST, SYSR, SYSS, TEMT or TEMR (CreateGPSM) makes any XFMD but 5 transform mode 1
+// as a swoosh's SYSR does (SetupTransformMode 0x2887d8, which also deletes SMVR and EMVR; 5
+// deletes them instead): the render's a8 is SYST, live, ac SYSR and b0 SYSS, and b8 TEMT and bc
+// TEMR are baked into each particle at spawn (CreateNewParticles 0x24a5e4). The port-only XFMD 1
+// (CElementGen kPortXfmdSystem) carries SYST as PSYT and TEMT as PTMT, evaluated every tick, with
+// the rotations and scale at their defaults. So a SYSR or TEMR other than a zero REUL, a SYSS, an
+// IRND or KPIN (evaluated once per system) or a RAZY in SYST or TEMT, and an INTT, INTR, INTS,
+// POFS, EMVR, SMVR or ISVF beside them (mode 1 with those is not decoded) are a drop with `why`
+// (0). -1 without any of the five, 5 under XFMD 5 and 1 for XFMD 1.
+int PartSystemMode(const EffectNode& node, std::string& why) {
+  uint32_t mode = 2;
+  bool any = false;
+  why.clear();
+  for (const EffectProperty& property : node.properties) {
+    const uint32_t fourcc = property.fourcc;
+    if (fourcc == F("XFMD") && (property.value.size() != 1 || !ConstWord(property.value[0], mode))) {
+      mode = UINT32_MAX;
+    }
+    if (fourcc != F("SYST") && fourcc != F("SYSR") && fourcc != F("SYSS") && fourcc != F("TEMT") &&
+        fourcc != F("TEMR")) {
+      continue;
+    }
+    any = true;
+    if (!why.empty()) {
+      continue;
+    }
+    if ((fourcc == F("SYSR") || fourcc == F("TEMR")) && !ZeroReul(property)) {
+      why = EffectFourCCString(fourcc) + " not a zero REUL";
+    } else if (fourcc == F("SYSS")) {
+      why = "a SYSS";
+    } else if ((fourcc == F("SYST") || fourcc == F("TEMT")) && property.value.size() != 1) {
+      why = EffectFourCCString(fourcc) + " not one element";
+    } else if (fourcc == F("SYST") || fourcc == F("TEMT")) {
+      for (const uint32_t init : {F("IRND"), F("KPIN"), F("RAZY")}) {
+        if (why.empty() && ContainsElement(property.value[0], init)) {
+          why = EffectFourCCString(fourcc) + " with " + EffectFourCCString(init);
+        }
+      }
+    }
+  }
+  if (!any) {
+    return -1;
+  }
+  if (mode == 5) {
+    why.clear();
+    return 5;
+  }
+  if (mode == UINT32_MAX) {
+    why = "XFMD not a constant";
+    return 0;
+  }
+  for (const EffectProperty& property : node.properties) {
+    for (const uint32_t other : {F("INTT"), F("INTR"), F("INTS"), F("POFS"), F("EMVR"), F("SMVR"), F("ISVF")}) {
+      if (why.empty() && property.fourcc == other) {
+        why = "with an " + EffectFourCCString(other);
+      }
+    }
+  }
   return why.empty() ? 1 : 0;
 }
 
@@ -3710,7 +3773,8 @@ public:
 
   // XFMD, Remastered's transform mode (build/mpr/vfx/RESOLVED-xfmd.md): 3 keeps
   // the particles in emitter space, 4 does too at unit scale with SMVR as the
-  // mover. Written only for those two; 1, 2 and 5 draw as retail does. With 4,
+  // mover. Written only for those two; 1, 2 and 5 draw as retail does (a GPSM's
+  // forced 1 is PartSystemMode's). With 4,
   // PSMV carries the mover (none: the particles sit at the origin, unrotated),
   // except for the identity SMVR, which is the emitter's transform as it stands.
   void Transform(const EffectProperty& xfmd, const EffectProperty* mover, const EffectNode& node,
@@ -5332,6 +5396,10 @@ public:
         m_pofs = std::max(m_pofs, IsConstantValue(property.value[0]) ? 1u : 2u);
       }
     }
+    m_partSys = m_gpsm ? PartSystemMode(s.node, m_partSysWhy) : -1;
+    if (m_partSys == 1) {
+      m_xfmd = 1;
+    }
     // An INTT written as POFS (below, IntIsPofs) is the offset EMRV adds.
     for (const EffectProperty& property : s.node.properties) {
       if (property.fourcc == F("INTT") && !property.value.empty() && IntIsPofs(property)) {
@@ -5779,6 +5847,25 @@ public:
     // material data is written by Material() alongside the VMAT.
     if (s.part && fourcc == F("XFMD")) {
       s.xfmd = &property;
+      return true;
+    }
+    // A generator's SYST, SYSR, SYSS, TEMT or TEMR forces transform mode 1 (PartSystemMode): SYST
+    // as the port-only PSYT and TEMT as PTMT, in the port's space as PINT is; the zero REULs are
+    // the port's defaults. XFMD 1 is written after the loop.
+    if (s.part && (fourcc == F("SYST") || fourcc == F("SYSR") || fourcc == F("SYSS") || fourcc == F("TEMT") ||
+                   fourcc == F("TEMR"))) {
+      if (m_partSys == 0) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + ": " + m_partSysWhy);
+      } else if (m_partSys == 1 && (fourcc == F("SYST") || fourcc == F("TEMT"))) {
+        std::vector<uint8_t> inner;
+        std::string why = "not one element";
+        if (!Element(property.value[0], Type::Vector, inner, why)) {
+          s.result.dropped.push_back(EffectFourCCString(fourcc) + ": " + why);
+          return true;
+        }
+        AppendBE32(s.out, fourcc == F("SYST") ? F("PSYT") : F("PTMT"));
+        Basis(F("BSIS"), inner, s.out);
+      }
       return true;
     }
     // A swoosh's SYSR forces transform mode 1 (SwooshSystemMode).
@@ -6875,7 +6962,11 @@ public:
         }
       }
     }
-    if (s.xfmd != nullptr) {
+    if (s.part && m_partSys == 1) {
+      AppendBE32(s.out, F("XFMD"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, 1);
+    } else if (s.xfmd != nullptr) {
       Transform(*s.xfmd, s.mover, s.node, s.out);
     } else if (s.mover != nullptr) {
       s.result.dropped.push_back("SMVR: no XFMD");
@@ -7228,7 +7319,9 @@ private:
   mutable bool m_swoosh = false;                    // the node being written is a SWSH
   mutable uint32_t m_swooshVars = 0;                // its ADV0..8 and IAV0..3 (SwooshVarId), a bit each
   mutable bool m_gpsm = false;                      // the node being written is a GPSM
-  mutable uint32_t m_xfmd = 2;                      // its XFMD mode, 2 without one
+  mutable uint32_t m_xfmd = 2;                      // its XFMD mode, 2 without one, 1 forced by its SYST..
+  mutable int m_partSys = -1;                       // a GPSM's PartSystemMode
+  mutable std::string m_partSysWhy;                 // and its drop reason
   mutable const EffectValue* m_semrPos = nullptr;   // the position child of the SEMR being written
   mutable bool m_emtr = false;                      // an EMTR property is being written
   mutable int64_t m_maxp = -1;                      // its MAXP when a constant, else -1
@@ -7813,7 +7906,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                (vfx && (fourcc == F("ITEN") || fourcc == F("PDBS")))) {
       ok = reader.Element(Type::Real);
     } else if (part && (fourcc == F("PINS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||
-                        fourcc == F("PMPV") || fourcc == F("POVC"))) {
+                        fourcc == F("PMPV") || fourcc == F("POVC") || fourcc == F("PSYT") || fourcc == F("PTMT"))) {
       ok = reader.Element(Type::Vector);
     } else if (part && (fourcc == F("PSHT") || fourcc == F("PSMX"))) {
       ok = reader.Element(Type::Int);
