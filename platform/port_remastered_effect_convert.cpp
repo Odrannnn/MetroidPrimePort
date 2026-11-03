@@ -3476,6 +3476,10 @@ public:
       AppendBE32(out, fourcc);
       return ComponentRotation(value.args[0], node, out, why) && ComponentRotation(value.args[1], node, out, why);
     }
+    if (fourcc == F("KPIN") && value.args.size() == 1) {
+      AppendBE32(out, fourcc);
+      return ComponentRotation(value.args[0], node, out, why);
+    }
     if (fourcc == F("REUL") && value.args.size() == 4) {
       const EffectValue& order = value.args[3];
       if ((order.kind != EffectValue::Kind::Byte && order.kind != EffectValue::Kind::Word) || order.word != 0) {
@@ -3684,6 +3688,32 @@ public:
       return;
     }
     PutList(out, F("PSMV"), 1, items);
+  }
+
+  // EMVR, XFMD 4's emitter mover (desc+0xa0, SetupTransformMode 0x289668), as the port-only PEMR:
+  // CNST 1 and the mover as Mover() writes it. It is a system-scoped SMOV like SMVR; its position
+  // is vec 0x12 and its rotation Q_l, which CreateNewParticles bakes into each particle at spawn
+  // (pos = Q_l emtr + vec12, the velocity turned by Q_l). With no SMVR they are also the system
+  // translation and rotation (+0x3c 0x289838, +0x38 0x289a60). Only that case is written: every
+  // part EMVR has no SMVR beside it, and with one +0x3c composes the two (0x289954).
+  void EmitterMover(const EffectProperty& emvr, const EffectProperty* xfmd, bool smvr, const EffectNode& node,
+                    std::vector<uint8_t>& out, std::vector<std::string>& dropped) const {
+    uint32_t mode = 2;
+    if (xfmd == nullptr || !SmallConst(*xfmd, mode) || mode != 4) {
+      dropped.push_back("EMVR: not XFMD 4");
+      return;
+    }
+    if (smvr) {
+      dropped.push_back("EMVR with an SMVR");
+      return;
+    }
+    std::vector<uint8_t> items;
+    std::string why;
+    if (emvr.value.size() != 1 || !Mover(emvr.value[0], node, items, why)) {
+      dropped.push_back("EMVR: " + (why.empty() ? "not SMOV" : why));
+      return;
+    }
+    PutList(out, F("PEMR"), 1, items);
   }
 
   // The count-prefixed list `CNST n, items` of a port-only property.
@@ -4947,6 +4977,7 @@ public:
     bool depthBiasUsesDepthRange = true;  // DBSO (desc+0x6b bit 2), port-only PDBO when false
     uint32_t sortBias = 0;   // SBIS as float bits (nonzero), port-only PSBS
     const EffectProperty* mover = nullptr;
+    const EffectProperty* emitterMover = nullptr;  // EMVR, written as PEMR after the loop
     std::vector<uint32_t> portOnly;  // material data, written only with a VMAT
     bool drawsSsze = false;          // an SSZE that shapes the quad, which only a VMAT draws
     bool anth = false;               // an ANTH, drawn only by a header material
@@ -5699,6 +5730,10 @@ public:
     }
     if (s.part && fourcc == F("SMVR")) {
       s.mover = &property;
+      return true;
+    }
+    if (s.part && fourcc == F("EMVR")) {
+      s.emitterMover = &property;
       return true;
     }
     // A thresholding map only a header material draws (DrawWrites reports it otherwise).
@@ -6664,6 +6699,9 @@ public:
     } else if (s.mover != nullptr) {
       s.result.dropped.push_back("SMVR: no XFMD");
     }
+    if (s.emitterMover != nullptr) {
+      EmitterMover(*s.emitterMover, s.xfmd, s.mover != nullptr, s.node, s.out, s.result.dropped);
+    }
     if (vmat && s.pmdl != 0 && !s.pmdlVariants && m_io.modelMesh) {
       // VMSH: the converted PMDL as one mesh, so the model particle draws through the VMAT.
       std::vector<uint8_t> mesh = m_io.modelMesh(s.pmdl);
@@ -7390,7 +7428,7 @@ public:
     return true;
   }
 
-  // PSMV (Writer::Transform): CNST, a count of 0 or 1, then the mover.
+  // PSMV (Writer::Transform) and PEMR (Writer::EmitterMover): CNST, a count of 0 or 1, then the mover.
   bool PortMover() {
     uint32_t fourcc, count;
     return Word(fourcc) && fourcc == F("CNST") && Word(count) && count <= 1 && (count == 0 || Mover());
@@ -7471,6 +7509,9 @@ public:
     uint32_t a, b;
     if (fourcc == F("RADD")) {
       return Word(a) && ComponentRotation(a, depth + 1) && Word(b) && ComponentRotation(b, depth + 1);
+    }
+    if (fourcc == F("KPIN")) {
+      return Word(a) && ComponentRotation(a, depth + 1);
     }
     m_error = "component rotation " + EffectFourCCString(fourcc);
     return false;
@@ -7603,7 +7644,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PortExtraSwooshes();
     } else if (part && fourcc == F("PKSM")) {
       ok = reader.PortSpawnTables();
-    } else if (part && fourcc == F("PSMV")) {
+    } else if (part && (fourcc == F("PSMV") || fourcc == F("PEMR"))) {
       ok = reader.PortMover();
     } else if (!part && vfx && (fourcc == F("PSRO") || fourcc == F("PRAF") || fourcc == F("XFMD") || fourcc == F("PDFG") ||
                           fourcc == F("PZTS") || fourcc == F("PSHM"))) {

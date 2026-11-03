@@ -2321,6 +2321,44 @@ void TestPortMover() {
   Retail identity;
   identity.f("GPSM").f("XFMD").f("CNST").w(4).end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == identity.bytes, "the identity SMVR writes no PSMV");
+
+  // EMVR is baked into each particle at spawn (CreateNewParticles); with no SMVR it is
+  // also the system frame. Kept as PEMR beside the empty PSMV.
+  const auto putEmvr = [](std::vector<uint8_t>& o, float dz) {
+    PutProperty(o, "EMVR", 1);
+    PutFourCC(o, "SMOV");
+    PutFourCC(o, "EXTT");
+    PutFourCC(o, "CNST");
+    for (float each : {0.f, 0.f, dz}) {
+      PutConstant(o, Bits(each));
+    }
+    PutFourCC(o, "NONE");
+    PutFourCC(o, "NONE");
+    PutFourCC(o, "NONE");
+  };
+  parts = ConvertOne(OneGenerator([&](auto& o) {
+    xfmd4(o);
+    putEmvr(o, 0.25f);
+  }), {});
+  Retail emvr;
+  emvr.f("GPSM").f("XFMD").f("CNST").w(4).f("PSMV").f("CNST").w(0).f("PEMR").f("CNST").w(1);
+  emvr.f("EXTT").w(Bits(0.f)).w(Bits(0.f)).w(Bits(0.25f)).f("NONE").f("NONE");
+  emvr.end();
+  CHECK_MSG(parts.size() == 1 && parts[0].part == emvr.bytes, "an EMVR under XFMD 4 becomes PEMR");
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), "PEMR leaves nothing out");
+  CHECK_MSG(parts.size() == 1 && SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+            "PEMR reads back");
+
+  parts = ConvertOne(OneGenerator([&](auto& o) {
+    xfmd4(o);
+    putSmvr(o, 0.5f, false);
+    putEmvr(o, 0.25f);
+  }), {});
+  CHECK_MSG(parts.size() == 1 && std::any_of(parts[0].dropped.begin(), parts[0].dropped.end(),
+                                              [](const std::string& d) {
+                                                return d.find("EMVR with an SMVR") != std::string::npos;
+                                              }),
+            "an EMVR beside an SMVR is dropped");
 }
 
 // The tile pick of ATEX, ATX2 and ATFB: frame x count over the cycle, wrapping or holding the last.

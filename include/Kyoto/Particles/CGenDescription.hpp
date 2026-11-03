@@ -403,6 +403,9 @@ public:
   // emitter's transform unused). Absent for the identity SMOV(EXTT, 0, EXTR), which is the
   // emitter's own frame.
   std::unique_ptr< PortKssm > xPortMover;
+  // port-only PEMR: XFMD 4's EMVR emitter mover (SetupTransformMode 0x289668), one component in
+  // the same format; only with no SMVR (xPortMover without a component).
+  std::unique_ptr< PortKssm > xPortEmvr;
 #endif
   CVectorElement* x58_PMOP;
   CVectorElement* x5c_PMRT;

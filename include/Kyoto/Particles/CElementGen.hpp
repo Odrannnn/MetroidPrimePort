@@ -294,6 +294,14 @@ public:
   CQuaternion PortSystemRotation() const {
     return CQuaternion::FromMatrix(x22c_globalOrientation * x1d8_orientation);
   }
+  // The system rotation var as INTR/RLCL and OVEC read it: XFMD 4's EMVR rotation (Q_l, defined
+  // into +0x38 at 0x289a60) while it runs, else PortSystemRotation.
+  CQuaternion PortSystemRotationVar() const {
+    if (xPortEmvr.kssm != nullptr) {
+      return xPortEmvr.hasRot ? xPortEmvr.rotQuat : CQuaternion::NoRotation();
+    }
+    return PortSystemRotation();
+  }
   CVector3f PortExternalScale() const {
     return CVector3f(xPortExternalScale.GetX() * x16c_localScale.GetX(),
                      xPortExternalScale.GetY() * x16c_localScale.GetY(),
@@ -562,6 +570,13 @@ private:
   // Update, stepped at the start of each tick. Its pos/rot are T_g/Q_g.
   PortKssmChild xPortMover;
   bool xPortMoverInit = false;
+  // XFMD 4's EMVR (CGenDescription::xPortEmvr), initialised and stepped with the mover. Its pos/rot
+  // are vec 0x12 and Q_l, baked into each particle at spawn (PortSpawnFrame), and the system
+  // translation and rotation.
+  PortKssmChild xPortEmvr;
+  void PortInitKssmMover(PortKssmChild& state, const CGenDescription::PortKssm* kssm);
+  // The frame a new particle is born in: PortEmitterFrame, then the EMVR's when there is one.
+  CTransform4f PortSpawnFrame() const;
 public:
   // PLNV's index shufflers, one per element (CIndexShuffler's bitset lives in the generator's
   // variable memory); created zeroed on first use.

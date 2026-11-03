@@ -1428,7 +1428,7 @@ void CElementGen::CreateNewParticles(int count) {
 #ifdef TARGET_PC
       if (PortFollowsEmitter()) {
         // Also turned by the global orientation, which PortFollowEmitter follows.
-        const CTransform4f frame = PortEmitterFrame();
+        const CTransform4f frame = PortSpawnFrame();
         particle.x4_pos =
             frame.GetTranslation() + PortSpreadSpawn(frame.Rotate(particle.x4_pos) + xf4_POFS);
         if (!x28_loadedGenDesc->xPortNoIvse) {
@@ -1457,7 +1457,7 @@ void CElementGen::CreateNewParticles(int count) {
     } else {
 #ifdef TARGET_PC
       const CVector3f compPos =
-          PortFollowsEmitter() ? PortEmitterFrame().GetTranslation()
+          PortFollowsEmitter() ? PortSpawnFrame().GetTranslation()
                                : (x13c_globalScaleTransformInverse * x1a8_localScaleTransformInverse) *
                                      xdc_translation;
 #else
@@ -1470,7 +1470,7 @@ void CElementGen::CreateNewParticles(int count) {
       // IVSE applies to this velocity too, before inherited emitter motion is added.
       particle.x1c_vel = PortParticleMath::DefaultParticleVelocity(x28_loadedGenDesc->xPortDefaultValuesVersion);
       if (!x28_loadedGenDesc->xPortNoIvse) {
-        particle.x1c_vel = PortFollowsEmitter() ? PortEmitterFrame().Rotate(particle.x1c_vel)
+        particle.x1c_vel = PortFollowsEmitter() ? PortSpawnFrame().Rotate(particle.x1c_vel)
                                               : x1d8_orientation.Rotate(particle.x1c_vel);
       }
 #else
@@ -1485,7 +1485,7 @@ void CElementGen::CreateNewParticles(int count) {
     particle.x10_prevPos = particle.x4_pos;
 #ifdef TARGET_PC
     PortVfxSetLaunchDir(particle);
-    PortVfxInitOvec(*x28_loadedGenDesc, particle, PortSystemRotation());
+    PortVfxInitOvec(*x28_loadedGenDesc, particle, PortSystemRotationVar());
 #endif
 
     if (x26c_31_LINE) {
@@ -1870,6 +1870,17 @@ CQuaternion CElementGen::PortKssmRotation(PortKssmChild& state, u32 index) {
   switch (node.op) {
   case 'EXTR':
     return PortBasis(PortExternalRotation());
+  case 'KPIN': {
+    float* latch = &state.latches[node.slot];
+    if (state.frame == 0) {
+      const CQuaternion q = PortKssmRotation(state, node.args[0]);
+      latch[0] = q.GetScalar();
+      latch[1] = q.AxisX();
+      latch[2] = q.AxisY();
+      latch[3] = q.AxisZ();
+    }
+    return CQuaternion(latch[0], CVector3f(latch[1], latch[2], latch[3]));
+  }
   case 'REUL': {
     // Order 0 (CERotationEuler::GetValue 0x29c944).
     const float x = PortKssmReal(state, node.args[0]);
@@ -1939,17 +1950,33 @@ bool CElementGen::PortHasMover() const {
 // the mover starts at frame 0, evaluated once and moved one step.
 void CElementGen::PortInitMover() {
   xPortMoverInit = true;
-  const CGenDescription::PortKssm* mover = x28_loadedGenDesc->xPortMover.get();
-  if (!PortHasMover() || mover->components.empty()) {
+  if (!PortHasMover()) {
     return;
   }
-  const CGenDescription::PortKssmComponent& component = mover->components[0];
-  xPortMover.kssm = mover;
-  xPortMover.component = 0;
-  xPortMover.vel = CVector3f(component.delta[0], component.delta[1], component.delta[2]);
-  xPortMover.hasRot = component.rot != ~0u;
-  xPortMover.latches.assign(component.latches, 0.f);
-  PortKssmEvaluate(xPortMover);
+  PortInitKssmMover(xPortMover, x28_loadedGenDesc->xPortMover.get());
+  PortInitKssmMover(xPortEmvr, x28_loadedGenDesc->xPortEmvr.get());
+}
+
+void CElementGen::PortInitKssmMover(PortKssmChild& state, const CGenDescription::PortKssm* kssm) {
+  if (kssm == nullptr || kssm->components.empty()) {
+    return;
+  }
+  const CGenDescription::PortKssmComponent& component = kssm->components[0];
+  state.kssm = kssm;
+  state.component = 0;
+  state.vel = CVector3f(component.delta[0], component.delta[1], component.delta[2]);
+  state.hasRot = component.rot != ~0u;
+  state.latches.assign(component.latches, 0.f);
+  PortKssmEvaluate(state);
+}
+
+CTransform4f CElementGen::PortSpawnFrame() const {
+  if (xPortEmvr.kssm == nullptr) {
+    return PortEmitterFrame();
+  }
+  // CreateNewParticles 0x24a5e4: pos = Q_l emtr + vec12 and the velocity turned by Q_l, then
+  // T_g/Q_g at render as for any XFMD 4 particle.
+  return PortEmitterFrame() * CTransform4f::Translate(xPortEmvr.pos) * xPortEmvr.rot;
 }
 
 // The system variables in PSYS order, at the emitter's frame: all of them (CAddVarSystem::Init
@@ -2015,6 +2042,11 @@ void CElementGen::PortStepMover() {
   }
   if (xPortIntFrame) {
     PortApplyIntFrame(false);
+  }
+  if (xPortEmvr.kssm != nullptr) {
+    // Baked into the particles at spawn: the live ones stay where they are.
+    ++xPortEmvr.frame;
+    PortKssmEvaluate(xPortEmvr);
   }
   if (xPortMover.kssm == nullptr) {
     return;
@@ -2663,7 +2695,7 @@ void CElementGen::PortCreateParticlesAtPositions(int n, const CVector3f* pos) {
       }
     }
     PortVfxSetLaunchDir(particle);
-    PortVfxInitOvec(*x28_loadedGenDesc, particle, PortSystemRotation());
+    PortVfxInitOvec(*x28_loadedGenDesc, particle, PortSystemRotationVar());
 
     if (CRealElement* size = x28_loadedGenDesc->x38_SIZE) {
       size->GetValue(0, particle.x2c_lineLengthOrSize);

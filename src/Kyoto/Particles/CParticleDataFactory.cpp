@@ -301,6 +301,12 @@ bool PortReadKssmNode(CInputStream& in, CGenDescription::PortKssm& kssm,
       args[0] = args[1] = kPKK_Rotation;
       argCount = 2;
       break;
+    case SBIG('KPIN'):
+      node.slot = component.latches;
+      component.latches += 4;
+      args[0] = kPKK_Rotation;
+      argCount = 1;
+      break;
     default:
       return false;
     }
@@ -950,9 +956,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       desc->xPortKssm = std::move(kssm);
       break;
     }
-    // Port-only: XFMD 4's mover (xPortMover): CNST, the component count (0 or 1), then the
-    // component as in PKSM.
-    case SBIG('PSMV'): {
+    // Port-only: XFMD 4's mover (PSMV, xPortMover) or emitter mover (PEMR, xPortEmvr): CNST,
+    // the component count (0 or 1), then the component as in PKSM.
+    case SBIG('PSMV'):
+    case SBIG('PEMR'): {
+      const bool emvr = clsId == SBIG('PEMR');
       GetClassID(in);
       std::unique_ptr< CGenDescription::PortKssm > mover(new CGenDescription::PortKssm);
       const u32 components = in.ReadLong();
@@ -965,7 +973,7 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
           return false;
         }
       }
-      desc->xPortMover = std::move(mover);
+      (emvr ? desc->xPortEmvr : desc->xPortMover) = std::move(mover);
       break;
     }
     case SBIG('PPRM'):

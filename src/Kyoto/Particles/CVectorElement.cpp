@@ -989,7 +989,7 @@ bool CVEPortRotateVector::GetValue(int frame, CVector3f& valOut) const {
     // rotation, 0xb)), INTR's when authored, else the external one.
     CParticleGlobals::SParticleSystem* sys = CParticleGlobals::GetCurrentParticleSystem();
     if (CParticleGlobals::xPortSwooshEval == nullptr && sys != nullptr && sys->x4_system != nullptr) {
-      const CQuaternion r = sys->x4_system->PortSystemRotation();
+      const CQuaternion r = sys->x4_system->PortSystemRotationVar();
       q = {r.GetScalar(), -r.AxisX(), r.AxisZ(), r.AxisY()};
     }
   } break;
