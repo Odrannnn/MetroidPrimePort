@@ -1267,6 +1267,9 @@ CEntity* ScriptLoader::LoadEffect(CStateManager& mgr, CInputStream& in, int prop
   // PORT: and the actor's values for its system's particle variables (port_room_effects.h).
   if (over != nullptr && partId == over->part && !over->vars.empty())
     effect->PortSetExternalVars(PortRoomEffects::ExternalVars(over->vars));
+  // and one Remastered has no effect for stays only for its connections.
+  if (PortRoomEffects::Hidden(info.GetEditorId().value))
+    effect->PortHide();
 #endif
   return effect;
 }

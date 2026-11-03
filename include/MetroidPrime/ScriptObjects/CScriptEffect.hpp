@@ -50,6 +50,9 @@ public:
     xPortBarrierPlatform = platform;
   }
   void PortFollowBarrier(const CActor& source);
+  // An effect Remastered has none for (PortRoomEffects::Hidden): it runs and passes its
+  // messages on as retail's does, but draws nothing and makes no light. Before kSM_Registered.
+  void PortHide() { xPortHidden = true; }
 #endif
 
 private:
@@ -95,6 +98,7 @@ private:
   // point-sized particle bounds miss (and which go stale once a culled effect stops updating).
   CAABox xPortBarrierBounds = CAABox::MakeMaxInvertedBox();
   bool xPortHasBarrierBounds = false;
+  bool xPortHidden = false;
 #endif
 };
 

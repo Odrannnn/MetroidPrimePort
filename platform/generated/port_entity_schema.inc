@@ -3254,8 +3254,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CScriptEffect >()
       {"xPortBarrierPlatform", "TUniqueId", PortSchemaKind::uid, 0, kPortSchemaPrivate, sizeof(CScriptEffect::xPortBarrierPlatform), PES_ADDR(CScriptEffect, xPortBarrierPlatform), nullptr, nullptr},
       {"xPortBarrierBounds", "CAABox", PortSchemaKind::math, 0, kPortSchemaPrivate, sizeof(CScriptEffect::xPortBarrierBounds), PES_ADDR(CScriptEffect, xPortBarrierBounds), nullptr, nullptr},
       {"xPortHasBarrierBounds", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CScriptEffect::xPortHasBarrierBounds), PES_ADDR(CScriptEffect, xPortHasBarrierBounds), PES_GETI(CScriptEffect, xPortHasBarrierBounds), PES_SETI(CScriptEffect, xPortHasBarrierBounds)},
+      {"xPortHidden", "bool", PortSchemaKind::bool_, 0, kPortSchemaPrivate, sizeof(CScriptEffect::xPortHidden), PES_ADDR(CScriptEffect, xPortHidden), PES_GETI(CScriptEffect, xPortHidden), PES_SETI(CScriptEffect, xPortHidden)},
   };
-  static const PortSchemaClass desc = {"CScriptEffect", "CActor", fields, 35, 0xD737D146483CB5E1ull};
+  static const PortSchemaClass desc = {"CScriptEffect", "CActor", fields, 36, 0xE596AFB409CF5C10ull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CScriptGenerator >() {
@@ -4702,4 +4703,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3428;
+const int PortEntitySchema::kFieldCount = 3429;

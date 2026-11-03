@@ -341,7 +341,8 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool ambients = !file.ambients.empty();
+  const bool hidden = !file.hidden.empty();
+  const bool ambients = hidden || !file.ambients.empty();
   const bool relays = ambients || !file.relays.empty();
   const bool triggers = relays || !file.triggers.empty();
   const bool follows = triggers || !file.follows.empty();
@@ -353,7 +354,7 @@ std::vector<uint8_t> Write(const File& file) {
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, ambients ? 16 : relays ? 15 : triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, hidden ? 17 : ambients ? 16 : relays ? 15 : triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -543,6 +544,12 @@ std::vector<uint8_t> Write(const File& file) {
         }
         for (float v : s.half) PutLEFloat(out, v);
       }
+    }
+  }
+  if (hidden) {
+    PutLE32(out, uint32_t(file.hidden.size()));
+    for (uint32_t id : file.hidden) {
+      PutLE32(out, id);
     }
   }
   return out;
@@ -1096,6 +1103,22 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         return false;
       }
       file.ambients.push_back(std::move(a));
+    }
+  }
+  if (version >= 17) {
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / 4) {
+      error = "truncated hidden list";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      uint32_t id = 0;
+      ReadLE32(data, at, id);
+      if (IsAddOnId(id)) {
+        error = "hidden add-on " + std::to_string(i);
+        return false;
+      }
+      file.hidden.push_back(id);
     }
   }
   auto isTrigger = [&](uint32_t id) {

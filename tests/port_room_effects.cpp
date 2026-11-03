@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 16);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 17);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -720,6 +720,24 @@ void TestFileAmbients() {
   File f = in;
   f.ambients.clear();
   CHECK(PortRoomEffects::Write(f)[4] < 16);
+
+  // Version 17 adds hidden retail effects; the ambients ride along.
+  f = in;
+  f.hidden = {0x041A0020, 0x04190034};
+  const auto withHidden = PortRoomEffects::Write(f);
+  REQUIRE(withHidden[4] == 17);
+  REQUIRE_MSG(PortRoomEffects::Parse(withHidden, out, error), error.c_str());
+  CHECK(out.hidden == f.hidden && out.ambients.size() == 1);
+  auto cut = withHidden;
+  cut.resize(cut.size() - 4);
+  CHECK_MSG(!PortRoomEffects::Parse(cut, out, error), "a truncated hidden list");
+  f.hidden = {a};
+  CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), "a hidden add-on");
+  f.ambients.clear();
+  f.hidden = {0x041A0020};
+  REQUIRE(PortRoomEffects::Write(f)[4] == 17);
+  REQUIRE_MSG(PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), error.c_str());
+  CHECK(out.hidden == f.hidden && out.ambients.empty());
 }
 
 // Version 13 adds ObjectFollowLocators: a retail SpecialFunction that moves one of this file's

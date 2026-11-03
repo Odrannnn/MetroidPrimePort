@@ -293,6 +293,11 @@ bool Skips(uint32_t eid) {
   return true;
 }
 
+bool Hidden(uint32_t eid) {
+  return sLoading && std::any_of(sFile.hidden.begin(), sFile.hidden.end(),
+                                 [&](uint32_t id) { return (id & 0x3FFFFFF) == (eid & 0x3FFFFFF); });
+}
+
 const Override* FindOverride(uint32_t eid) {
   if (!sLoading) {
     return nullptr;

@@ -84,10 +84,14 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   sphere offset[3], f32 sphere radius, u32 weights and that many i32, u32 emitters and per
 //   emitter u32 index and u32 add-on editor id, u32 shapes and per shape u32 type, f32 center[3], f32 axes[9], f32 half[3]
 //   (see Ambient). Files without ambients are still written as version 15 or older.
+//   version 17 then has u32 hidden, u32 editor id[hidden] (layer bits included): retail Effect
+//   objects Remastered has no effect for that other objects still talk through. They are
+//   created, with their connections, but draw nothing and light nothing. Files without them
+//   are still written as version 16 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 16;
+constexpr uint32_t kFileVersion = 17;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -420,6 +424,7 @@ struct File {
   std::vector<Trigger> triggers;
   std::vector<Relay> relays;
   std::vector<Ambient> ambients;
+  std::vector<uint32_t> hidden;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -451,6 +456,8 @@ void BeginArea(uint32_t mrea);
 void EndArea();
 // Whether the retail object `eid` is one the area being loaded leaves out.
 bool Skips(uint32_t eid);
+// Whether the retail Effect `eid` in the area being loaded is created hidden (File::hidden).
+bool Hidden(uint32_t eid);
 // The override of the retail object `eid` in the area being loaded, or null.
 const Override* FindOverride(uint32_t eid);
 // The death particle `slot` (PatternedEffect) of the retail object `eid` in the area being

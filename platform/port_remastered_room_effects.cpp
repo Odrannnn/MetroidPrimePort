@@ -1974,6 +1974,43 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
       replacedSwitched += text;
     }
   }
+  // A retail effect no Remastered entity matched, with no Remastered effect actor of any kind
+  // (matched, added or left out) within kReplaceDistance: Remastered dropped it. It is hidden,
+  // not skipped, so the messages it relays and the ones sent to it still work: the Reactor's
+  // Explosion3 sets off AfterCore and Afterfire, whose ElectricGoRound and sparks Remastered
+  // has none of (Ryujinx, after the Queen's death). MP_REMASTERED_MISS lists them,
+  // " <id>/<PART>/<nearest m>".
+  std::vector<uint32_t> hidden;
+  std::string unpaired;
+  {
+    std::vector<Vec3> actors;
+    for (const Component* c : effects) {
+      Vec3 pos, rot, scale;
+      if (room.Xform(*c, pos, rot, scale)) {
+        actors.push_back(Apply(area.xf, MulR2G(pos)));
+      }
+    }
+    for (size_t j = 0; j < objects.size(); ++j) {
+      const ScriptObject& o = objects[j];
+      if (!unmatchedEffect(j)) {
+        continue;
+      }
+      double nearest = 1e9;
+      for (const Vec3& w : actors) {
+        nearest = std::min(nearest, Distance(w, o.pos));
+      }
+      if (nearest < kReplaceDistance) {
+        continue;
+      }
+      hidden.push_back(o.id);
+      if (port::EnvFlag("MP_REMASTERED_MISS")) {
+        char text[48];
+        std::snprintf(text, sizeof text, " %08X/%08X/%.1f", o.id, o.props.size() >= 40 ? ReadBE32(&o.props[36]) : 0u,
+                      nearest);
+        unpaired += text;
+      }
+    }
+  }
   char barrierNote[256] = "";
   if (mrea == PortQueenBarrier::kMrea) {
     if (group) {
@@ -2272,9 +2309,9 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   std::snprintf(line, sizeof line,
                 "  %s: %zu effect actor(s) added, %zu retail effect(s) replaced, %zu retail effect(s) take "
                 "Remastered's effect, %zu connected and left out (%zu more added with drives%s), %zu matched a retail object (%zu of them still on "
-                "the retail PART), %zu without a PART, %zu on an unknown layer%s%s%s%s%s",
+                "the retail PART), %zu retail effect(s) hidden, %zu without a PART, %zu on an unknown layer%s%s%s%s%s",
                 name.c_str(), added.size(), replacedNear, overridden, connectedCount, drivenCount, generatorNote, kept + keptOwn + overridden,
-                keptOwn, noPart, noLayer, full != 0 ? ", the id range is full" : "",
+                keptOwn, hidden.size(), noPart, noLayer, full != 0 ? ", the id range is full" : "",
                 badVars != 0 ? ", unreadable particle variables" : "", barrierNote, patternedNote, steamNote);
   std::string summary = line;
   for (const auto& [why, who] : connectedWho) {
@@ -2283,8 +2320,11 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   if (!replacedSwitched.empty() && port::EnvFlag("MP_REMASTERED_MISS")) {
     summary += "; replaced while switched:" + replacedSwitched;
   }
+  if (!unpaired.empty()) {
+    summary += "; hidden:" + unpaired;
+  }
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
-      steams.empty() && actorSlots.empty() && follows.empty()) {
+      steams.empty() && actorSlots.empty() && follows.empty() && hidden.empty()) {
     return summary;
   }
   PortRoomEffects::File file;
@@ -2305,6 +2345,7 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   file.relays = std::move(relays);
   file.follows = std::move(follows);
   file.ambients = std::move(ambients);
+  file.hidden = std::move(hidden);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;

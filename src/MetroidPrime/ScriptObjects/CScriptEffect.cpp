@@ -156,9 +156,11 @@ void CScriptEffect::Think(float dt, CStateManager& mgr) {
       }
     }
 #ifdef TARGET_PC
-    xPortNestedLights.Update(mgr, x104_particleSystem.get(), GetActive(), GetUniqueId(),
-                             GetCurrentAreaId(), rstl::string_l("EffectPHDR_") + GetDebugName(),
-                             x10c_partId, 1);
+    if (!xPortHidden) {
+      xPortNestedLights.Update(mgr, x104_particleSystem.get(), GetActive(), GetUniqueId(),
+                               GetCurrentAreaId(), rstl::string_l("EffectPHDR_") + GetDebugName(),
+                               x10c_partId, 1);
+    }
 #endif
     if (x111_25_dieWhenSystemsDone) {
       x140_destroyDelayTimer += dt;
@@ -208,6 +210,11 @@ void CScriptEffect::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid, CSt
     }
     break;
   case kSM_Registered:
+#ifdef TARGET_PC
+    if (xPortHidden) {
+      break;
+    }
+#endif
     if (x104_particleSystem.get() && x104_particleSystem->SystemHasLight()) {
       x108_lightId = mgr.AllocateUniqueId();
       const CAssetId sourceId = x10c_partId;
@@ -335,6 +342,9 @@ void CScriptEffect::AddToRenderer(const CFrustumPlanes& frustum, const CStateMan
       break;
     }
   }
+#ifdef TARGET_PC
+  visible = visible && !xPortHidden;
+#endif
   if (visible) {
     if (x138_actorLights.get()) {
       const CVector3f center = bounds.GetCenterPoint();
