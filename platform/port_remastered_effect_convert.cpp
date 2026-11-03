@@ -7043,8 +7043,12 @@ public:
       if (s.drawsSsze) {
         s.result.dropped.push_back("SSZE: drawn square (no VMAT)");
       }
+      // SFTD (dyn+0xdc, UpdateRenderState_Node 0x2486e8) reaches only the node's PZSO scalar
+      // (UpdateRenderDataForContext 0x2b0cec), which is looked up in the custom material's
+      // instance data (node+0x80, UpdateCustomMaterialReadyToRender 0x2b0bbc): the CMDL's own
+      // materials never read it.
       for (const uint32_t fourcc : s.portOnly) {
-        if (!(ownModelMaterials && fourcc == F("ITEN"))) {
+        if (!(ownModelMaterials && (fourcc == F("ITEN") || fourcc == F("SFTD")))) {
           s.result.dropped.push_back(EffectFourCCString(fourcc) + ": no VMAT");
         }
       }

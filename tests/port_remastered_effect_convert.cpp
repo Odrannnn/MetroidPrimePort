@@ -2903,12 +2903,15 @@ void TestDrawsNothing() {
   // A model with no MTIN draws its CMDL's own materials, tinted by the particle's DIFC
   // (COLR x ITEN x the inverse exposure): its IEXP is kept and not reported, and PITN carries
   // ITEN (CNST 1 without one). A sprite's IEXP with no VMAT still is reported; it gets no PITN.
+  // SFTD only reaches a custom material's PZSO, so an own-material model's is not reported.
   for (int variant : {0, 1, 2}) {
     const int primitive = variant == 0 ? 1 : 3;
     const bool iten = variant == 2;
     auto data = OneGenerator([&](auto& out) {
       PutProperty(out, "IEXP", 1);
       PutConstant(out, 1);
+      PutProperty(out, "SFTD", 1);
+      PutConstant(out, Bits(0.1f));
       if (iten) {
         PutProperty(out, "ITEN", 3);
         PutConstant(out, Bits(3.0f));
@@ -2939,6 +2942,9 @@ void TestDrawsNothing() {
     CHECK_MSG(std::find(converted[0].dropped.begin(), converted[0].dropped.end(), "ITEN: no VMAT") ==
                   converted[0].dropped.end(),
               "an own-material model's ITEN is not reported");
+    const bool sftdReported = std::find(converted[0].dropped.begin(), converted[0].dropped.end(),
+                                        "SFTD: no VMAT") != converted[0].dropped.end();
+    CHECK_MSG(sftdReported == (primitive == 1), "SFTD without a VMAT is reported only off an own-material model");
   }
 }
 
