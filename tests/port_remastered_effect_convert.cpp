@@ -5459,9 +5459,14 @@ void TestPowerOpacityGainBias() {
     }
   }
   CHECK_MSG(found, "dynamic gain still emits VSMT");
-  const auto guarded = ConvertVmat(MatiCch0(0x7d52bd6b, {{"TCH0", Fresh(8)}, {"TCH1", Fresh(8)}},
-                                           0.5f, 0.5f, 2.f, 0.25f));
-  CHECK_MSG(guarded.second.empty(), "other recipes retain unitCch0 guard");
+  // 7d52bd6b and 1ad75997 read CCH0.z/.w the same way (sat(S(fade) - c3[0].w) * c3[0].z): v3 too.
+  for (const uint32_t shader : {0x7d52bd6bu, 0x1ad75997u}) {
+    const auto fade = ConvertVmat(MatiCch0(shader, {{"TCH0", Fresh(8)}, {"TCH1", Fresh(8)}}, 0.5f, 0.5f, 2.f, 0.25f));
+    CHECK_MSG(!fade.second.empty() && VmatWord(fade.second, 8) == 3 &&
+                  VmatWord(fade.second, fade.second.size() - 8) == Bits(2.f) &&
+                  VmatWord(fade.second, fade.second.size() - 4) == Bits(0.25f),
+              "a fade shader's CCH0.z/w go out as v3 gain/bias");
+  }
 }
 
 struct PowerBallFields {

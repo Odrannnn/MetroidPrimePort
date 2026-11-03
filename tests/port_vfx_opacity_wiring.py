@@ -221,16 +221,16 @@ class Wiring(WiringCase):
         self.assertIn("desc.opacityGain = (vsmtMask & (1u << kPortVfxOpacityGainTarget))", runtime)
         self.assertIn("desc.opacityBias = (vsmtMask & (1u << kPortVfxOpacityBiasTarget))", runtime)
 
-    def test_v3_is_only_the_audited_shader(self):
-        self.assertIn("const bool opacityGainBias = mati.shader == kPowerBallShader;", CONVERT_TEXT)
+    def test_v3_is_only_the_audited_shaders(self):
+        self.assertIn("const bool opacityGainBias = recipe->cch0GainBias;", CONVERT_TEXT)
         # v4 (a header material's alpha gamma) carries v3's gain/bias, the identity unless audited.
         self.assertIn("AppendBE32(blob, recipe->litPerVertex ? 5 : alphaGamma ? 4 : opacityGainBias ? 3 : 2);", CONVERT_TEXT)
         self.assertIn("AppendBE32(blob, FloatBits(1.0f));  // v3's identity gain/bias", CONVERT_TEXT)
         rows = [fields(row) for row in entries(CONVERT_TEXT)]
-        pinned = next(row for row in rows if int(row[0], 16) == PINNED_SHADER)
-        guarded = next(row for row in rows if int(row[0], 16) == 0x7D52BD6B)
-        self.assertEqual(pinned[-1], "false")
-        self.assertEqual(guarded[-1], "true")
+        # cch0GainBias is the sixth field: the shaders whose fragment reads CCH0.z/.w as the fade's
+        # sat(S(fade) - c3[0].w) * c3[0].z (mtrl-tr/<id>/glsl/000_0.glsl), and no other.
+        audited = {int(row[0], 16) for row in rows if len(row) > 5 and row[5] == "true"}
+        self.assertEqual(audited, {PINNED_SHADER, 0x7D52BD6B, 0x1AD75997})
 
 
 if __name__ == "__main__":

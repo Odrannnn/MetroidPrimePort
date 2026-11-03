@@ -822,7 +822,7 @@ struct Recipe {
   std::vector<TexSpec> textures;
   std::vector<SrcSpec> sources;
   int addRow = -1;         // PMTR row of the AddColor (rgb, scale); -1: none
-  bool unitCch0 = false;   // shaders without v3 gain/bias support require identity CCH0.z/.w
+  bool cch0GainBias = false; // CCH0.z/.w are the fade's alpha gain and bias (sat(S(fade) - c3[0].w) * c3[0].z): v3
   bool frameBuffer = false; // a FrameBuffer_* shader (scene x vc.rgb, warped by CCH0.xy): drawn as a multiply
   int params = 0;           // CCH0..params-1 go out whole in VPRM (with the NMAP slot), and SMTR overrides them
   bool fogPerm = false;     // its fog perm (001) is decoded too: drawn fogged without DFOG 1, unfogged (kUnfogged) with
@@ -1133,7 +1133,7 @@ const Recipe* RecipeOf(uint32_t shader) {
        {}},
       {0xe899b1df, kRamp | kIndirect | kDepthSoften | kOpacityFade,
        {{"TCH0", Role::Ramp, 0, 1}, {"TCH1", Role::Indirect, -1, -1}},
-       {{kSrcFadeX, 2, 0}, {kSrcFadeY, 2, 1}}, -1, false},
+       {{kSrcFadeX, 2, 0}, {kSrcFadeY, 2, 1}}, -1, true},
       {0x3a867837, kRamp | kIndirect,
        {{"TCH0", Role::Ramp, 0, 1}, {"TCH1", Role::Indirect, -1, -1}},
        {}},
@@ -4369,10 +4369,6 @@ public:
       return found;
     };
     const auto cch0 = mati.vectors.count("CCH0") ? mati.vectors.at("CCH0") : std::array<float, 4>{};
-    if (recipe->unitCch0 && (cch0[2] != 1.0f || cch0[3] != 0.0f)) {
-      m_approximated.push_back(std::string("VMAT: shader ") + shaderText + " has a fade gain/bias the renderer lacks");
-      return false;
-    }
     // A recipe read against one material permutation: only the MATI whose header flags select it is
     // converted. f197ec38's refraction is the MFC0 (USE_FRAME_BUFFER_DISTORTION) perm 002; a material
     // without MFC0 draws perm 000's displacement and one with MFC1 (IS_SHIELD_EXTERIOR, its own shader
@@ -4625,7 +4621,7 @@ public:
 
     // The blob.
     std::vector<uint8_t> blob;
-    const bool opacityGainBias = mati.shader == kPowerBallShader;
+    const bool opacityGainBias = recipe->cch0GainBias;
     const bool alphaGamma = recipe->alphaGamma > 0.0f || recipe->litPerVertex;
     AppendBE32(blob, recipe->litPerVertex ? 5 : alphaGamma ? 4 : opacityGainBias ? 3 : 2);
     AppendBE32(blob, features);
