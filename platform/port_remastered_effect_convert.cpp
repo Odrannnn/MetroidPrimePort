@@ -6210,6 +6210,15 @@ public:
     if (s.part && fourcc == F("STRY")) {
       return true;
     }
+    // DPRE (0x6b bit 11, GetRenderInDepthPass 0x288250) is read once, by the proxy ctor 0xfbf3b0
+    // (+0xac). QueueRenderDefault_Unsorted 0xfbf410 then also queues the particle as a depth
+    // pre-pass command 0xfbd694, besides the unsorted command it always queues; the sorted path
+    // ignores it. That depth only feeds early-Z and the hardware occlusion queries
+    // (InitDepthBuffer 0xb328d4, RenderOcclusionQueries); the cluster light mask is built from
+    // light volumes, not depth. The unsorted draw writes the same depth, so no pixel changes.
+    if (s.part && fourcc == F("DPRE")) {
+      return true;
+    }
     // A POFS goes out with an INTT written as POFS above, added to it.
     if (s.part && fourcc == F("POFS") &&
         std::any_of(s.node.properties.begin(), s.node.properties.end(),

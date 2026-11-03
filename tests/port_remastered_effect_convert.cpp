@@ -3747,7 +3747,7 @@ void TestShutdownAndPivot() {
     o.push_back(1);
   });
   CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), "EMTU without PMOV is consumed");
-  for (const char* flag : {"PVRS", "STRY"}) {
+  for (const char* flag : {"PVRS", "STRY", "DPRE"}) {
     parts = convert([&](auto& o) {
       PutProperty(o, flag, 0);
       PutFourCC(o, "CNST");
