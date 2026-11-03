@@ -27,6 +27,9 @@
 #include "MetroidPrime/CExplosion.hpp"
 #include "MetroidPrime/Player/CPlayerState.hpp"
 #include "rstl/math.hpp"
+
+#include "port_mods.h"
+#include "port_room_env.h"
 #endif
 
 static const char* const skFaceAssetIdName = "ACS_SamusFace";
@@ -72,6 +75,36 @@ void CSamusFaceReflection::Update(float dt, const CStateManager& mgr, CRandom16&
     lights.BuildFaceLightList(mgr, area, aabb);
 
     const CMatrix3f matrix = fpCam->GetTransform().BuildMatrix3f();
+#ifdef TARGET_PC
+    if (PortRoomEnv::Enabled() && PortMods::RoomEnvLoaded()) {
+      // Remastered (Update 0xe7be44) keeps the face facing the camera and swaps between
+      // three eye anims instead of turning the head.
+      const CVector3f right = matrix.GetColumn(0);
+      const CUnitVector3f up(matrix.GetColumn(2));
+      const float lean =
+          (xPortFaceUp.GetY() * -right.GetY() - right.GetX() * xPortFaceUp.GetX()) -
+          right.GetZ() * xPortFaceUp.GetZ();
+      // 0.5f is CTweakGuiMP1+0x154 (no LDTA override).
+      const float thresh = sinf(gpTweakPlayer->GetFreeLookSpeed() * 0.5f * dt);
+      xPortFaceUp = up;
+      static const char* const skEyeAnims[] = {"B_ready_face", "B_eyesleft_face",
+                                               "B_eyesright_face"};
+      const int idx = fabsf(lean) < thresh ? 0 : (lean >= 0.f ? 2 : 1);
+      CAnimData* const anim = x0_modelData.AnimationData();
+      const int animIdx =
+          anim->GetCharacterInfo().GetAnimationIndex(rstl::string_l(skEyeAnims[idx]));
+      if (animIdx != -1 && anim->GetCurrentAnimation() != animIdx) {
+        anim->SetAnimation(CAnimPlaybackParms(animIdx, -1, 1.f, true), false);
+      }
+      x50_lookRot = CQuaternion::NoRotation();
+      x60_lookDir = matrix.GetColumn(1);
+      return;
+    }
+    // Back from Remastered: retail only ever plays the ctor's anim 0.
+    if (x0_modelData.GetAnimationData()->GetCurrentAnimation() != 0) {
+      x0_modelData.AnimationData()->SetAnimation(CAnimPlaybackParms(0, -1, 1.f, true), false);
+    }
+#endif
     const CUnitVector3f lookDir(matrix.GetColumn(1));
 
     CQuaternion xfLook1 =
