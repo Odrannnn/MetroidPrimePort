@@ -6437,6 +6437,18 @@ public:
       }
       return;
     }
+    // A swoosh's BLIT is a GetBool into desc+0x22c bit 0x1000 (CreateSWSH 0x2dc968), which the
+    // CSwooshDescription ctor 0x29ad40 leaves clear (0xa00): 0 is the default and changes nothing.
+    // Baked lighting on a swoosh (1) is not ported; no shipped swoosh sets it.
+    if (s.swoosh && fourcc == F("BLIT")) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value) || value > 1) {
+        s.result.dropped.push_back("BLIT: invalid constant");
+      } else if (value != 0) {
+        s.result.dropped.push_back("BLIT: swoosh baked lighting not ported");
+      }
+      return;
+    }
     // A swoosh's LWQD is a GetIntElementAsConst clamped to 1..10 into desc+0x228 (CreateSWSH
     // 0x2dbae0): UpdateRenderData_Swoosh 0x2b6a58 splits each side face into that many strips
     // across the trail (CParticleSwoosh::PortRenderVfx). The port-only PLWQ.

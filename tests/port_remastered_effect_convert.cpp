@@ -1478,6 +1478,24 @@ void TestSwooshTxup() {
   CHECK_MSG(part.part == off.bytes && part.dropped.empty(), "TXUP 0 writes nothing");
 }
 
+// A swoosh's BLIT (desc+0x22c bit 0x1000, CreateSWSH 0x2dc968) is clear by default: 0 writes
+// nothing and is not a drop; 1 (baked lighting) is not ported.
+void TestSwooshBlit() {
+  const auto blit = [](uint8_t value) {
+    return ConvertSwoosh([=](auto& o) {
+      PutProperty(o, "BLIT", 0);
+      PutFourCC(o, "CNST");
+      o.push_back(value);
+    });
+  };
+  ConvertedPart part = blit(0);
+  Retail off;
+  off.f("SWSH").f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == off.bytes && part.dropped.empty(), "swoosh BLIT 0 writes nothing");
+  part = blit(1);
+  CHECK_MSG(part.part == off.bytes && part.dropped.size() == 1, "swoosh BLIT 1 is a drop");
+}
+
 // A swoosh's LWQD (desc+0x228, CreateSWSH 0x2dbae0) is clamped to 1..10 and becomes the
 // port-only PLWQ unless it is 1.
 void TestSwooshLwqd() {
@@ -7261,6 +7279,7 @@ int main() {
   TestSwooshZProt();
   TestSwooshSeed();
   TestSwooshTxup();
+  TestSwooshBlit();
   TestSwooshLwqd();
   TestSwooshSplineRates();
   TestSwooshIntr();
