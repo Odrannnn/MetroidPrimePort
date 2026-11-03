@@ -59,6 +59,8 @@ public:
   std::unique_ptr< CRealElement > xPortRotZ;
   bool xPortRotKeep = false;
   bool xPortRotOriented = false;
+  // RADD(INTR, …): the system rotation (PSIR's when present), not the external one
+  bool xPortRotIntr = false;
   // port-only XFMD 3: Remastered draws the points in the emitter's frame (SetupTransformMode
   // 0x2887d8: global T/Q/S alias the system vars, local orientation identity, point position zero)
   bool xPortXfmdFollow = false;
@@ -75,6 +77,11 @@ public:
   bool xPortTexUScroll = false;
   // port-only PLWQ: Remastered's LWQD (desc+0x228, 1..10); strips per side face across the trail
   int xPortLwqd = 1;
+  // port-only PSIR: Remastered's INTR, a constant Euler vector in the port's space (PINR's), times
+  // the external orientation when xPortIntExternal; the local orientation under XFMD 2, the global
+  // one under 3 (CParticleSwoosh::PortIntOrientation)
+  std::unique_ptr< CVectorElement > xPortIntRotation;
+  bool xPortIntExternal = false;
   // port-only PDFG: Remastered's DFOG 1, drawn without volumetric fog (CGenDescription::xPortUnfogged)
   bool xPortUnfogged = false;
   // port-only PZTS: Remastered's ZTES 0, the depth test passes everywhere (compare ALWAYS)

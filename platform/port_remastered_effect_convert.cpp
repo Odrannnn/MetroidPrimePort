@@ -3472,7 +3472,8 @@ public:
   // varying part sits under KPIN is therefore kept whole. SUST evaluates on the system's frame
   // (CRESolveUsingSystemTime 0x298ef8), the frame the port evaluates swoosh elements on, so it is
   // dropped; a timed SINE outside it would run on the point's age and is left out. EXTR and INTR are
-  // both the orientation SetOrientation gives under XFMD 2.
+  // both the orientation SetOrientation gives under XFMD 2, unless the swoosh has an INTR property
+  // (PSIR): bit 2 marks INTR, which reads that system rotation and not the external one.
   bool SwooshZRotation(const EffectValue& prot, uint32_t& flags, std::vector<uint8_t>& out, std::string& why) const {
     const EffectValue* value = &prot;
     flags = 0;
@@ -3483,7 +3484,7 @@ public:
     if (IsElement(*value, F("RADD")) && value->args.size() == 2 &&
         (IsElement(value->args[0], F("EXTR")) || IsElement(value->args[0], F("INTR"))) &&
         value->args[0].args.empty()) {
-      flags |= 2;
+      flags |= IsElement(value->args[0], F("INTR")) ? 6 : 2;
       value = &value->args[1];
     }
     uint32_t word = 0;
@@ -5740,6 +5741,67 @@ public:
       }
       return true;
     }
+    // INTR, the system rotation var 0xb in place of the external one (CParticleDescription::Compile
+    // 0x289af0, which CSwooshDescription::Compile 0x29b1a0 runs): under XFMD 2 the points' local
+    // orientation (var bc: CreateNewParticle 0x27cdc8's birth orientation and IVEL's turn, RLCL),
+    // under 3 the global one (SetupTransformMode 0x2887d8); 5 deletes it and 4's mover overrides
+    // it. A constant REUL r, or RADD(EXTR, r) (the external orientation times r, RADD = a * b), is
+    // the port-only PSIR: flags (bit 0 times the external orientation), then r as PINR's Euler
+    // vector in the port's space (ModelRotation, B r B). EXTR, or RADD(EXTR, REUL(0, 0, 0)), is the
+    // default and writes nothing; so is an ELC2's EXTR.
+    if ((s.swoosh || s.electric) && fourcc == F("INTR")) {
+      const auto isExtr = [](const EffectValue& value) { return IsElement(value, F("EXTR")) && value.args.empty(); };
+      const auto zeroReal = [](const EffectValue& value) {
+        uint32_t word = 0;
+        return ConstWord(value, word) && (word & 0x7fffffffu) == 0;
+      };
+      const EffectValue* rot = property.value.size() == 1 ? &property.value[0] : nullptr;
+      if (rot != nullptr && isExtr(*rot)) {
+        return true;
+      }
+      if (s.electric) {
+        s.result.dropped.push_back("INTR: an ELC2's other than EXTR");
+        return true;
+      }
+      uint32_t mode = 2;
+      for (const EffectProperty& other : s.node.properties) {
+        if (other.fourcc == F("XFMD") && !SmallConst(other, mode)) {
+          mode = UINT32_MAX;
+        }
+      }
+      if (mode == 4 || mode == 5) {
+        return true;
+      }
+      uint32_t flags = 0;
+      if (rot != nullptr && IsElement(*rot, F("RADD")) && rot->args.size() == 2 && isExtr(rot->args[0])) {
+        flags = 1;
+        rot = &rot->args[1];
+      }
+      const bool reul = rot != nullptr && IsElement(*rot, F("REUL")) && rot->args.size() == 4;
+      bool constant = reul;
+      bool zero = reul;
+      for (size_t i = 0; reul && i < 3; ++i) {
+        constant = constant && IsElement(rot->args[i], F("CNST"));
+        zero = zero && zeroReal(rot->args[i]);
+      }
+      std::vector<uint8_t> bytes;
+      std::string why;
+      if (mode != 2 && mode != 3) {
+        why = "under XFMD " + std::to_string(int32_t(mode));
+      } else if (!constant) {
+        why = "not a constant REUL or RADD(EXTR, constant REUL)";
+      } else if (flags == 1 && zero) {
+        return true;
+      } else if (ModelRotation({*rot}, bytes, why)) {
+        AppendBE32(s.out, F("PSIR"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, flags);
+        s.out.insert(s.out.end(), bytes.begin(), bytes.end());
+        return true;
+      }
+      s.result.dropped.push_back("INTR: " + why);
+      return true;
+    }
     // Port-only PRAZ/PRAF: a swoosh's PROT of KPIN(RAZY(EMRV, ROTV(v, RLCL), fallback)), the ring
     // frozen at each point's birth facing the emitter's motion (CERotationFromAxis 0x29d298). Only
     // under XFMD 2, where EMRV is the system-space translation delta; ORNT with SIDE 2 replaces
@@ -7432,6 +7494,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PortWord() && reader.Element(Type::Real);
     } else if (!part && vfx && fourcc == F("PRAZ")) {
       ok = reader.Element(Type::Vector);
+    } else if (type == F("SWHC") && fourcc == F("PSIR")) {
+      ok = reader.PortWord() && reader.Element(Type::Vector);
     } else if (!part && vfx && fourcc == F("PROZ")) {
       ok = reader.PortWord() && reader.Element(Type::Real);
     } else if (electric && fourcc == F("PEL2")) {

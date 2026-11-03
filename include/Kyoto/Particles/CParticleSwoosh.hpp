@@ -247,6 +247,9 @@ private:
   float PortTexUScroll() const;
   CTransform4f PortRazyOrientation(const CVector3f& motion) const;
   CTransform4f PortRotZOrientation() const;
+  CTransform4f PortIntOrientation(const CTransform4f& external) const;
+  // The external orientation (Remastered's var at desc+0x28), which EXTR reads apart from INTR
+  CTransform4f xPortExtOrientation = CTransform4f::Identity();
   bool PortVfxSwoosh() const;
   void PortRenderVfx();
   int PortSplineRef(int curIdx, int j);

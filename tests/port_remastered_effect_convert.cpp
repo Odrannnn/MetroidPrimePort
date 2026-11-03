@@ -1449,6 +1449,65 @@ void TestSwooshLwqd() {
 
 bool Contains(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& what);
 
+// A swoosh's INTR of a constant REUL r, or RADD(EXTR, r), becomes the port-only PSIR: flags
+// (bit 0 times the external orientation) and B r B as an Euler vector. EXTR times identity is
+// EXTR itself and writes nothing; XFMD 5 deletes INTR.
+void TestSwooshIntr() {
+  const auto intr = [](uint32_t xfmd, bool external, float x, float z) {
+    return ConvertSwoosh([=](auto& o) {
+      PutProperty(o, "XFMD", 0);
+      PutConstant(o, xfmd);
+      PutProperty(o, "INTR", 3);
+      if (external) {
+        PutFourCC(o, "RADD");
+        PutFourCC(o, "EXTR");
+      }
+      PutFourCC(o, "REUL");
+      PutConstant(o, Bits(x));
+      PutConstant(o, 0);
+      PutConstant(o, Bits(z));
+      o.push_back(0);
+    });
+  };
+  const auto psir = [](uint32_t flags, float x, float z) {
+    Retail want;
+    const auto basis = [&want]() {
+      want.f("CNST").f("CNST").w(Bits(90.f)).f("CNST").w(Bits(0.f)).f("CNST").w(Bits(180.f));
+    };
+    want.f("PSIR").f("CNST").w(flags).f("PQAD");
+    basis();
+    want.f("PQAD").f("CNST").f("CNST").w(Bits(x)).f("CNST").w(0).f("CNST").w(Bits(z));
+    basis();
+    return want.bytes;
+  };
+  ConvertedPart part = intr(3, false, -90.f, 0.f);
+  CHECK_MSG(Contains(part.part, psir(0, -90.f, 0.f)) && part.dropped.empty(), "INTR REUL(-90, 0, 0) becomes PSIR 0");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), part.part.data(), part.part.size(), properties, error),
+            "PSIR reads as a swoosh property");
+  part = intr(2, true, 0.f, 90.f);
+  CHECK_MSG(Contains(part.part, psir(1, 0.f, 90.f)) && part.dropped.empty(),
+            "INTR RADD(EXTR, REUL(0, 0, 90)) becomes PSIR 1");
+  const auto none = [](const ConvertedPart& p) {
+    return !Contains(p.part, {'P', 'S', 'I', 'R'}) && p.dropped.empty();
+  };
+  CHECK_MSG(none(intr(2, true, 0.f, 0.f)), "INTR RADD(EXTR, REUL(0, 0, 0)) writes nothing");
+  CHECK_MSG(none(intr(5, false, -90.f, 0.f)), "INTR under XFMD 5 writes nothing");
+  part = ConvertSwoosh([](auto& o) {
+    PutProperty(o, "INTR", 3);
+    PutFourCC(o, "REUL");
+    PutConstant(o, 0);
+    PutFourCC(o, "RAND");
+    PutConstant(o, 0);
+    PutConstant(o, Bits(360.f));
+    PutConstant(o, 0);
+    o.push_back(0);
+  });
+  CHECK_MSG(part.dropped.size() == 1 && part.dropped[0].rfind("INTR: not a constant", 0) == 0,
+            "a varying INTR is dropped");
+}
+
 // A swoosh's per-point variables are ADV0..8 and IAV/VAV/CAV0..3 (CreateSWSH AddDefinedVar),
 // all in its PPVR: kinds 1 (ADVn), 2 (IAVn), 3 (VAVn) and 4 (CAVn). It has no ADV9 or PAP9.
 void TestSwooshParticleVars() {
@@ -1583,7 +1642,7 @@ void PutZReul(std::vector<uint8_t>& out) {
 }
 
 // A swoosh PROT turning about Z only becomes the port-only PROZ: flags (bit 0 kept from
-// birth, bit 1 from the orientation) and z with KPIN and SUST taken out.
+// birth, bit 1 from the orientation, bit 2 INTR's) and z with KPIN and SUST taken out.
 void TestSwooshZProt() {
   ConvertedPart part = ConvertSwoosh([](auto& o) {
     PutProperty(o, "PROT", 3);
@@ -1598,6 +1657,20 @@ void TestSwooshZProt() {
   want.f("SWSH").f("PROZ").f("CNST").w(3).f("CNST").w(Bits(90.0f)).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
   CHECK_MSG(part.part == want.bytes, "KPIN(RADD(EXTR, REUL(0, 0, 90))) becomes PROZ 3");
   CHECK_MSG(part.dropped.empty(), "a Z PROT drops nothing");
+
+  // INTR is the system rotation, which a PSIR sets apart from the external one: bit 2.
+  part = ConvertSwoosh([](auto& o) {
+    PutProperty(o, "PROT", 3);
+    PutFourCC(o, "KPIN");
+    PutFourCC(o, "RADD");
+    PutFourCC(o, "INTR");
+    PutZReul(o);
+    PutConstant(o, Bits(90.0f));
+    o.push_back(0);
+  });
+  Retail intr;
+  intr.f("SWSH").f("PROZ").f("CNST").w(7).f("CNST").w(Bits(90.0f)).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == intr.bytes, "KPIN(RADD(INTR, REUL(0, 0, 90))) becomes PROZ 7");
 
   // REUL(0, 0, MULT(ADD_(KPIN(SUST(SINE(30, 100, 0))), 0), -1)): kept, as its only varying part is.
   part = ConvertSwoosh([](auto& o) {
@@ -6893,6 +6966,7 @@ int main() {
   TestSwooshSeed();
   TestSwooshTxup();
   TestSwooshLwqd();
+  TestSwooshIntr();
   TestConvert();
   TestRejects();
   TestSingleNode();

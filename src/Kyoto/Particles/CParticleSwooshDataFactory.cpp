@@ -162,13 +162,14 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       swoosh->xPortRazyFallbackLocal = in.ReadLong() != 0;
       break;
     // Port-only: PROT of [KPIN]([RADD(EXTR, ]REUL(0, 0, z))), flags bit 0 kept from birth,
-    // bit 1 from the orientation.
+    // bit 1 from the orientation, bit 2 INTR's rather than EXTR's.
     case 'PROZ':
       CParticleDataFactory::GetClassID(in);
       {
         const int flags = in.ReadLong();
         swoosh->xPortRotKeep = (flags & 1) != 0;
         swoosh->xPortRotOriented = (flags & 2) != 0;
+        swoosh->xPortRotIntr = (flags & 4) != 0;
       }
       swoosh->xPortRotZ.reset(CParticleDataFactory::GetRealElement(in));
       break;
@@ -246,6 +247,13 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
     case 'PTXU':
       CParticleDataFactory::GetClassID(in);
       swoosh->xPortTexUScroll = in.ReadLong() != 0;
+      break;
+    // Port-only Remastered INTR (xPortIntRotation): flags (bit 0 times the external orientation),
+    // then the Euler vector.
+    case 'PSIR':
+      CParticleDataFactory::GetClassID(in);
+      swoosh->xPortIntExternal = (in.ReadLong() & 1) != 0;
+      swoosh->xPortIntRotation.reset(CParticleDataFactory::GetVectorElement(in));
       break;
     // Port-only Remastered LWQD (xPortLwqd).
     case 'PLWQ':

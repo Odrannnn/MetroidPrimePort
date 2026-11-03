@@ -94,6 +94,10 @@ CParticleSwoosh::CParticleSwoosh(const TToken< CSwooshDescription > desc, const 
     }
     x1c0_rand.SetSeed(seed);
   }
+  // INTR holds from creation, before any setter runs.
+  if (x1c_desc->xPortIntRotation) {
+    SetOrientation(CTransform4f::Identity());
+  }
 #endif
   CGlobalRandom _(x1c0_rand);
   mSwooshAliveCount++;
@@ -359,12 +363,17 @@ void CParticleSwoosh::SetOrientation(const CTransform4f& orientation) {
 #ifdef TARGET_PC
   // XFMD 3: Remastered's setters all write the one system var (MPT_SetOrientation 0x27f92c ->
   // SetExternalRotation), which the draw uses as the global orientation; the local one stays identity.
+  // INTR replaces what they set with the system rotation var (PortIntOrientation).
+  xPortExtOrientation = orientation;
+  const CTransform4f system = x1c_desc->xPortIntRotation ? PortIntOrientation(orientation) : orientation;
   if (x1c_desc->xPortXfmdFollow) {
-    xb0_globalOrientation = orientation.GetRotation();
+    xb0_globalOrientation = system.GetRotation();
     return;
   }
-#endif
+  x44_orientation = system;
+#else
   x44_orientation = orientation;
+#endif
   x74_invOrientation = x44_orientation.GetQuickInverse();
 #ifdef TARGET_PC
   // KPIN freezes a PRAZ point's rotation at its birth; PROZ sets its own.
@@ -480,10 +489,23 @@ CTransform4f CParticleSwoosh::PortRotZOrientation() const {
     const CVector3f c = q.GetColumn(i);
     columns[i] = CVector3f(-c.GetX(), c.GetZ(), c.GetY());
     if (x1c_desc->xPortRotOriented) {
-      columns[i] = x44_orientation.Rotate(columns[i]);
+      columns[i] = (x1c_desc->xPortRotIntr ? x44_orientation : xPortExtOrientation).Rotate(columns[i]);
     }
   }
   return CTransform4f::FromColumns(columns[0], -columns[2], columns[1], CVector3f(0.f, 0.f, 0.f));
+}
+
+// INTR, the system rotation var 0xb (CParticleDescription::Compile 0x289af0), which the setters do
+// not write: r, or the external orientation times r (RADD = a * b). In the port's space r is B r B
+// (the converter's PINR Euler vector, turned as CElementGen::PortApplyIntFrame turns it), and the
+// external orientation in Remastered's is B Q B, so RADD(EXTR, r) is Q * (B r B).
+CTransform4f CParticleSwoosh::PortIntOrientation(const CTransform4f& external) const {
+  CVector3f euler = CVector3f::Zero();
+  x1c_desc->xPortIntRotation->GetValue(0, euler);
+  CTransform4f rotation = CTransform4f::RotateZ(CRelAngle::FromDegrees(euler.GetZ()));
+  rotation.RotateLocalY(CRelAngle::FromDegrees(euler.GetY()));
+  rotation.RotateLocalX(CRelAngle::FromDegrees(euler.GetX()));
+  return x1c_desc->xPortIntExternal ? external.GetRotation() * rotation : rotation;
 }
 #endif
 
@@ -653,6 +675,11 @@ void CParticleSwoosh::SetGlobalOrientation(const CTransform4f& orientation) {
 #ifdef TARGET_PC
   // XFMD 4: MPT_SetGlobalOrientation 0x27fa24 writes the external rotation (EXTR, var bc).
   if (x1c_desc->xPortXfmdMover) {
+    SetOrientation(orientation);
+    return;
+  }
+  // XFMD 3: it writes the one system var (0x27fa24 -> SetExternalRotation), so INTR replaces it too.
+  if (x1c_desc->xPortXfmdFollow && x1c_desc->xPortIntRotation) {
     SetOrientation(orientation);
     return;
   }
@@ -1955,8 +1982,12 @@ void CParticleSwoosh::PortDoShutdownBehavior(u32 mode) {
     }
   }
 }
-// XFMD 3: the getters read the one system var too (MPT_GetTranslation 0x27fb54).
+// XFMD 3: the getters read the one system var too (MPT_GetTranslation 0x27fb54). MPT_GetOrientation
+// 0x27fb28 reads the external rotation (var bc only under XFMD 5), not INTR's.
 const CTransform4f& CParticleSwoosh::GetOrientation() const {
+  if (x1c_desc->xPortIntRotation) {
+    return xPortExtOrientation;
+  }
   return x1c_desc->xPortXfmdFollow ? xb0_globalOrientation : x44_orientation;
 }
 #else
