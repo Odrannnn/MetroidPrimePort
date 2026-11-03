@@ -1624,6 +1624,33 @@ public:
       out.insert(out.end(), kept.begin(), kept.end());
       return true;
     }
+    // An int KPIN (CIEKeepInitial 0x2a98f0) is the same per-particle latch. PKPR is real, so it
+    // latches ITRL(x, 1) and RTOI(.., 1) reads it back: an int's float is exact below 2^24,
+    // and the product of an integral float and 1 has nothing for RTOI's truncation to drop.
+    if (m_keeps && m_spawnSysItems == nullptr && type == Type::Int && value.fourcc == F("KPIN") &&
+        value.args.size() == 1) {
+      const uint32_t first = m_keepNext;
+      std::vector<uint8_t> kept;
+      if (!Element(value.args[0], type, kept, why)) {
+        m_keepNext = first;
+        return false;
+      }
+      if (m_keepNext == kKeepSlots) {
+        m_keepNext = first;
+        why = "more than " + std::to_string(kKeepSlots) + " per-particle KPINs";
+        return false;
+      }
+      AppendBE32(out, F("RTOI"));
+      AppendBE32(out, F("PKPR"));
+      AppendBE32(out, m_keepNext++);
+      AppendBE32(out, F("ITRL"));
+      out.insert(out.end(), kept.begin(), kept.end());
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, FloatBits(1.0f));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, FloatBits(1.0f));
+      return true;
+    }
     // IRSN(x) is CREInitialRandomSign: a sign drawn once at frame 0 and kept in the particle's
     // variable memory, which the port-only PIRS keeps in a PKPR-counter slot (never latched by
     // PKPR's birth latch: it draws at frame 0). With no per-particle slots (a system's own
@@ -1684,6 +1711,13 @@ public:
     if (type == Type::Int && value.args.empty() && SystemRealRead(value.fourcc) >= 0) {
       AppendBE32(out, F("PSYI"));
       AppendBE32(out, uint32_t(SystemRealRead(value.fourcc)));
+      return true;
+    }
+    // SELT is CIEElapsedTicks(ctx 0) 0x2a9f04, the system context's tick count: the tick sets it
+    // to the generator's frame (+0x2c, TickSystem_Complete 0x24acc0) and steps both together
+    // (0x24aee8..0x24aef8). That frame is retail's GEMT (x74_curFrame).
+    if (type == Type::Int && value.args.empty() && value.fourcc == F("SELT") && m_gpsm) {
+      AppendBE32(out, F("GEMT"));
       return true;
     }
     // Reads of the port's state, in retail's space, taken into Remastered's.

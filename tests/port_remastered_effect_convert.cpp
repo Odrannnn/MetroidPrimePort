@@ -3588,6 +3588,22 @@ void TestSystemIntVar() {
   CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped");
 }
 
+// An int KPIN in a PART is a PKPR latch read back through RTOI (the converter writes the same for
+// any of its int properties); SELT is the generator's GEMT.
+void TestIntKeepInitial() {
+  auto parts = ConvertOne(OneGenerator([](auto& o) {
+                   PutProperty(o, "MAXP", 1);
+                   PutFourCC(o, "KPIN");
+                   PutFourCC(o, "SELT");
+                   PutTexr(o, 0x1234ABCD);
+                 }),
+                 {});
+  Retail maxp;
+  maxp.f("MAXP").f("RTOI").f("PKPR").w(0).f("ITRL").f("GEMT").f("CNST").w(Bits(1.0f)).f("CNST").w(Bits(1.0f));
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, maxp.bytes), "MAXP(KPIN(SELT)) latches GEMT in PKPR 0");
+  CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped");
+}
+
 // An order-0 PMRQ REUL is one PMRT Euler vector. Preserve its angle expressions,
 // including IRND, which PIRN evaluates once per particle and expression.
 void TestModelRotation() {
@@ -7623,6 +7639,7 @@ int main() {
   TestSystemVars();
   TestSystemVectorVar();
   TestSystemIntVar();
+  TestIntKeepInitial();
   TestSystemVarGradLifetime();
   TestModelRotation();
   TestComposedModelRotation();
