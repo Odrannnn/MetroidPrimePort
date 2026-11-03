@@ -6592,6 +6592,14 @@ public:
     if (s.part && fourcc == F("STRY")) {
       return true;
     }
+    // ISTR (desc+0x528, CreateGPSM 0x259c3c) is evaluated by the three render-state updates
+    // (0x246eb4, 0x2475b8, 0x247780) only while desc+0x530 bit 4 is set. SRender::Fixup 0x28fc44
+    // is the only setter, and it returns at once unless bit 3 is set, which nothing sets (SRender
+    // ctor 0x28f4cc starts the flags at 0x3e0). Even when evaluated, its one sink,
+    // CParticleDynamicRenderState+0xd8, has no reader.
+    if (s.part && fourcc == F("ISTR")) {
+      return true;
+    }
     // DPRE (0x6b bit 11, GetRenderInDepthPass 0x288250) is read once, by the proxy ctor 0xfbf3b0
     // (+0xac). QueueRenderDefault_Unsorted 0xfbf410 then also queues the particle as a depth
     // pre-pass command 0xfbd694, besides the unsorted command it always queues; the sorted path

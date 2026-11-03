@@ -4150,6 +4150,12 @@ void TestShutdownAndPivot() {
     CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
               std::string(flag) + " is consumed and writes nothing");
   }
+  parts = convert([](auto& o) {
+    PutProperty(o, "ISTR", 1);
+    PutConstant(o, Bits(0.2f));
+  });
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
+            "ISTR is consumed and writes nothing");
 }
 
 // SPWS is the scale a generator hands its children (SetupSpawn 0x28d8ac +0x2a0): the port-only
