@@ -337,6 +337,32 @@ private:
   CRealElement* mMagnitude;
 };
 
+// Remastered ANCV (CVEAngleConeMinMaxWithVariance::GetValue 0x29f5c0), the REUL as three angles: ANCM's
+// cone cut into polar bands and azimuth sectors, the cell visited in creation order or, with a
+// shuffler, a random one, jittered within each by one draw.
+class CVEPortAngleConeMinMaxVariance : public CVectorElement {
+public:
+  CVEPortAngleConeMinMaxVariance(CRealElement* rotateX, CRealElement* rotateY, CRealElement* rotateZ,
+                                 CRealElement* minAngle, CRealElement* maxAngle, CRealElement* magnitude,
+                                 CIntElement* polarCount, CRealElement* polarVariance, CIntElement* azimuthCount,
+                                 CRealElement* azimuthVariance, u8 shuffle);
+  ~CVEPortAngleConeMinMaxVariance() override;
+
+  bool GetValue(int frame, CVector3f& valOut) const override;
+
+private:
+  CRealElement* mRotate[3];
+  CRealElement* mMinAngle;
+  CRealElement* mMaxAngle;
+  CRealElement* mMagnitude;
+  CIntElement* mPolarCount;
+  CRealElement* mPolarVariance;
+  CIntElement* mAzimuthCount;
+  CRealElement* mAzimuthVariance;
+  u8 mShuffle; // the size of Remastered's index shuffler, 0 for none
+  mutable PortParticleMath::IndexShuffler mFallbackShuffler;
+};
+
 // Remastered CRCV (CVECircleWithVariance::GetValue 0x2a0a7c), in Remastered's numbers: a point of
 // the circle around the centre in the plane of the axis (constant, read at frame 0), the ring
 // divided into n steps visited in creation order or, with a shuffler of n cells, a random one.

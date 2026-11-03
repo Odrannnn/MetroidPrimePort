@@ -204,6 +204,9 @@ const Signatures& ElementsOf(Type type) {
       // Port-only: Remastered's ANCM with its REUL as three angles, MPAC (x and y centre, x and
       // y range, magnitude) and MPCN (direction, radius).
       {F("PANM"), "rrrrrr"}, {F("PMAC"), "rrrrr"}, {F("PMCN"), "vr"},
+      // Port-only PANV: Remastered's ANCV, its REUL as three angles, then polar count and
+      // variance, azimuth count and variance, and the shuffler size.
+      {F("PANV"), "rrrrrrirird"},
       // Port-only CVEPortAbs: Remastered's CVEAbsoluteValue, in whatever space the child is in.
       {F("ABS_"), "v"},
       // Port-only PEMV: Remastered's EMRV, the mode word (0 external translation, 1 local).
@@ -2163,7 +2166,7 @@ public:
     return true;
   }
 
-  // The port-only direction elements (ANCR, ANCM, MPAC, MPCN, RNDV). std::nullopt when `value` is none of them.
+  // The port-only direction elements (ANCR, ANCM, ANCV, MPAC, MPCN, RNDV). std::nullopt when `value` is none of them.
   std::optional<bool> DirectionElement(const EffectValue& value, Type type, std::vector<uint8_t>& out,
                                      std::string& why) const {
     // ANCR(REUL(x, y, z, #00), x range, y range, magnitude): the port-only ANCR
@@ -2178,6 +2181,32 @@ public:
     if (value.fourcc == F("ANCM") && type == Type::Vector && value.args.size() == 4) {
       AppendBE32(out, F("PANM"));
       return ConeRotation(value.args[0], out, why) && ShapedArgs(F("PANM"), type, 3, &value.args[1], out, why);
+    }
+    // ANCV(REUL, A, B, magnitude, polar count, polar variance, azimuth count, azimuth variance,
+    // shuffle): the port-only PANV (CVEAngleConeMinMaxWithVariance::GetValue 0x29f5c0), the REUL as
+    // three angles like PANM's. Init 0x2a69b8 runs as for ASPV, but its Compile 0x29fa1c
+    // (Compile2d) only for a SEMR's position: elsewhere a constant 0 count stays 0 (GetValue makes
+    // it 1) and has no shuffler.
+    if (value.fourcc == F("ANCV") && type == Type::Vector && value.args.size() == 9) {
+      Sections grid;
+      uint32_t counts[2] = {1, 1};
+      const bool known[2] = {ConstWord(value.args[4], counts[0]), ConstWord(value.args[6], counts[1])};
+      if (&value != m_semrPos && ((known[0] && counts[0] == 0) || (known[1] && counts[1] == 0))) {
+        const EffectValue& flag = value.args[8];
+        if (flag.kind != EffectValue::Kind::Byte && flag.kind != EffectValue::Kind::Word) {
+          why = "ANCV with a shuffle flag that is not a byte";
+          return false;
+        }
+        if ((known[0] && counts[0] > 255) || (known[1] && counts[1] > 255)) {
+          why = "ANCV with a constant count over 255 (Remastered keeps it in a byte)";
+          return false;
+        }
+      } else if (!Sectioned2d("ANCV", value, 4, 6, 8, grid, why)) {
+        return false;
+      }
+      AppendBE32(out, F("PANV"));
+      // The arguments after the REUL sit two places on in PANV's shape (the REUL is three angles).
+      return ConeRotation(value.args[0], out, why) && SectionedArgs(F("PANV"), type, value.args, 1, 8, 2, grid, out, why);
     }
     // MPAC(x centre, y centre, x range, y range, magnitude): the port-only PMAC runs
     // MPT_CVEAngleCone-like 0x29fec0 as is, a direction in retail's space (the MPCB around it

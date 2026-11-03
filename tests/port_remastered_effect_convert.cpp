@@ -827,6 +827,69 @@ void TestPortVectors() {
   CHECK_MSG(ancm, "an ANCM on a non-REUL rotation is dropped, naming it");
 }
 
+// ANCV (with a REUL) becomes the port-only PANV: the REUL as three angles, the counts and variances
+// as given and the shuffler size last. Outside a SEMR's position a constant 0 count stays 0 and
+// sets no shuffler even with the flag on (Init 0x2a69b8; Compile 0x29fa1c is not run there).
+void TestAngleConeVariance() {
+  const auto build = [](uint32_t polarCount, uint8_t shuffle) {
+    std::vector<uint8_t> out(0x3c, 0);
+    std::memcpy(out.data(), "RFRM", 4);
+    std::memcpy(out.data() + 0x14, "GENP", 4);
+    PutGenerator(out, false);
+    PutProperty(out, "PSOV", 0);
+    PutFourCC(out, "ANCV");
+    PutFourCC(out, "REUL");
+    PutConstant(out, 0);
+    PutConstant(out, Bits(90.0f));
+    PutConstant(out, 0);
+    out.push_back(0);
+    PutConstant(out, Bits(10.0f));
+    PutConstant(out, Bits(20.0f));
+    PutConstant(out, Bits(2.0f));
+    PutConstant(out, polarCount);
+    PutConstant(out, Bits(1.0f));
+    PutConstant(out, 3);
+    PutConstant(out, Bits(0.5f));
+    out.push_back(shuffle);
+    PutTexr(out, 0x1234ABCD);
+    PutProperty(out, "_END", 4);
+    return out;
+  };
+  const auto want = [](uint32_t polarCount, uint8_t shuffle) {
+    Retail r;
+    r.f("GPSM");
+    r.f("PSOV").f("PANV").f("CNST").w(0).f("CNST").w(Bits(90.0f)).f("CNST").w(0);
+    r.f("CNST").w(Bits(10.0f)).f("CNST").w(Bits(20.0f)).f("CNST").w(Bits(2.0f));
+    r.f("CNST").w(polarCount).f("CNST").w(Bits(1.0f)).f("CNST").w(3).f("CNST").w(Bits(0.5f)).b(shuffle);
+    r.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+    return r.bytes;
+  };
+  const struct {
+    uint32_t polarCount;
+    uint8_t flag;
+    uint8_t shuffle;
+    const char* what;
+  } cases[] = {
+      {0, 0, 0, "an ANCV with a 0 count maps onto PANV"},
+      {0, 1, 0, "an ANCV's 0 count off a SEMR's position sets no shuffler"},
+      {2, 1, 6, "an ANCV's shuffler has n1 * n2 cells"},
+  };
+  for (const auto& c : cases) {
+    const std::vector<uint8_t> in = build(c.polarCount, c.flag);
+    EffectNode effect;
+    std::string error;
+    CHECK_MSG(ParseEffect(in.data(), in.size(), effect, error), "ANCV effect parses");
+    const std::vector<ConvertedPart> parts = ConvertEffect(effect, in.data(), {});
+    CHECK_MSG(parts.size() == 1 && parts[0].part == want(c.polarCount, c.shuffle) && parts[0].dropped.empty(),
+              c.what);
+    if (parts.size() == 1) {
+      for (const std::string& d : parts[0].dropped) {
+        std::fprintf(stderr, "  dropped %s\n", d.c_str());
+      }
+    }
+  }
+}
+
 // PLNE and PLNV become the port's plane emitters, EMRV the port-only PEMV (under BSIS, which the property boundary cancels) under XFMD 2 and 5,
 // a constant zero under 3, and is dropped under 4. A PLNE with a euler that is not a constant is dropped.
 void TestPlaneElements() {
@@ -7032,6 +7095,7 @@ int main() {
   TestMappedElements();
   TestScalarElements();
   TestPortVectors();
+  TestAngleConeVariance();
   TestPlaneElements();
   TestExternalValue();
   TestSplitRejects();

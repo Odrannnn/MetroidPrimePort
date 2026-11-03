@@ -1904,6 +1904,37 @@ CVectorElement* CParticleDataFactory::GetVectorElement(CInputStream& in) {
     ret = rs_new CVEPortAngleConeMinMax(rotateX, rotateY, rotateZ, minAngle, maxAngle, magnitude);
     break;
   }
+  case SBIG('PANV'): {
+    CRealElement* rotateX = GetRealElement(in);
+    CRealElement* rotateY = GetRealElement(in);
+    CRealElement* rotateZ = GetRealElement(in);
+    CRealElement* minAngle = GetRealElement(in);
+    CRealElement* maxAngle = GetRealElement(in);
+    CRealElement* magnitude = GetRealElement(in);
+    CIntElement* polarCount = GetIntElement(in);
+    CRealElement* polarVariance = GetRealElement(in);
+    CIntElement* azimuthCount = GetIntElement(in);
+    CRealElement* azimuthVariance = GetRealElement(in);
+    const u8 shuffle = u8(in.ReadChar());
+    if (rotateX == nullptr || rotateY == nullptr || rotateZ == nullptr || minAngle == nullptr || maxAngle == nullptr ||
+        magnitude == nullptr || polarCount == nullptr || polarVariance == nullptr || azimuthCount == nullptr ||
+        azimuthVariance == nullptr) {
+      delete rotateX;
+      delete rotateY;
+      delete rotateZ;
+      delete minAngle;
+      delete maxAngle;
+      delete magnitude;
+      delete polarCount;
+      delete polarVariance;
+      delete azimuthCount;
+      delete azimuthVariance;
+      return nullptr;
+    }
+    ret = rs_new CVEPortAngleConeMinMaxVariance(rotateX, rotateY, rotateZ, minAngle, maxAngle, magnitude, polarCount,
+                                                polarVariance, azimuthCount, azimuthVariance, shuffle);
+    break;
+  }
   case SBIG('PMAC'): {
     CRealElement* xCentre = GetRealElement(in);
     CRealElement* yCentre = GetRealElement(in);

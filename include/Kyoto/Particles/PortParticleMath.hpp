@@ -980,14 +980,7 @@ inline CVector3f ConePoint(const ConeFrame& frame, const CVector3f& p, float x, 
 // ANCM (CVEAngleConeMinMax::GetValue 0x29f304): the cosine c between cos(A) and cos(B) by the
 // first draw, s = x * e (x = 1 - c*c) with e one FRSQRTS step from FRSQRTE (0 when x <= 0), the
 // azimuth phi by the second, the direction (s cos phi, s sin phi, c) turned by q and scaled.
-inline CVector3f AngleConeMinMax(const Quat& q, float aDegrees, float bDegrees, float magnitude,
-                                 float u0, float u1) {
-  const float deg = BitsFloat(0x3c8efa35);
-  const float cA = FastCosR(aDegrees * deg);
-  const float cB = FastCosR(bDegrees * deg);
-  const float diff = cB - cA;
-  const float scaled = diff * u0;
-  const float c = cA + scaled;
+inline CVector3f ConeMinMaxDirection(const Quat& q, float c, float phi, float magnitude) {
   const float cc = c * c;
   const float x = 1.f - cc;
   const float e0 = ReciprocalSqrtEstimate(x);
@@ -997,13 +990,50 @@ inline CVector3f AngleConeMinMax(const Quat& q, float aDegrees, float bDegrees, 
     e1 = 0.f;
   }
   const float s = x * e1;
-  const float turn = u1 * BitsFloat(0x40c90fdb);
-  const float phi = turn + -BitsFloat(0x40490fdb);
   const float halfPi = BitsFloat(0x3fc90fdb);
   const float cosPhi = ParabolicSin(WrapAngle(phi + halfPi));
   const float sinPhi = ParabolicSin(phi);
   const CVector3f d = QuatTransform(q, CVector3f(s * cosPhi, s * sinPhi, c));
   return CVector3f(d.GetX() * magnitude, d.GetY() * magnitude, d.GetZ() * magnitude);
+}
+
+inline CVector3f AngleConeMinMax(const Quat& q, float aDegrees, float bDegrees, float magnitude,
+                                 float u0, float u1) {
+  const float deg = BitsFloat(0x3c8efa35);
+  const float cA = FastCosR(aDegrees * deg);
+  const float cB = FastCosR(bDegrees * deg);
+  const float diff = cB - cA;
+  const float scaled = diff * u0;
+  const float c = cA + scaled;
+  const float turn = u1 * BitsFloat(0x40c90fdb);
+  const float phi = turn + -BitsFloat(0x40490fdb);
+  return ConeMinMaxDirection(q, c, phi, magnitude);
+}
+
+// ANCV (CVEAngleConeMinMaxWithVariance::GetValue 0x29f5c0): ANCM's cone cut into nP polar bands
+// (between cos(A) and cos(B)) and nA azimuth sectors, both at least 1. Cell `index` (iA = index /
+// nP, iP = index % nP) is jittered within pv of its band's half width by the first draw and av of
+// its sector's by the second, in the shipped order; then ANCM's tail from 0x29f478.
+inline CVector3f AngleConeMinMaxVariance(const Quat& q, float aDegrees, float bDegrees, float magnitude,
+                                         int polarCount, float polarVariance, int azimuthCount,
+                                         float azimuthVariance, int index, float u0, float u1) {
+  const int iA = index / polarCount;
+  const int iP = index % polarCount;
+  const float deg = BitsFloat(0x3c8efa35);
+  const float cA = FastCosR(aDegrees * deg);
+  const float cB = FastCosR(bDegrees * deg);
+  const float d = (cB - cA) / float(polarCount);
+  const float halfD = d * 0.5f;
+  const float band = halfD + (cA + d * float(iP));
+  const float pv = polarVariance * halfD;
+  const float c = band + ((pv + pv) * u0 - pv);
+  const float sector = BitsFloat(0x40c90fdb) / float(azimuthCount);
+  const float halfSector = sector * 0.5f;
+  const float av = azimuthVariance * halfSector;
+  const float centre = sector * float(iA) + halfSector;
+  const float jitter = (av + av) * u1 - av;
+  const float phi = (centre + jitter) + -BitsFloat(0x40490fdb);
+  return ConeMinMaxDirection(q, c, phi, magnitude);
 }
 
 // CRCV (CVECircleWithVariance ctor 0x2a0988): the unit axis's two in-plane vectors. u is

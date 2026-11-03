@@ -1,8 +1,9 @@
-// Port vector elements from Remastered: MPAC (CVEPortMpac), MPCN (CVEPortCone) and ANCM
-// (CVEPortAngleConeMinMax), against independent double-precision values for a fixed seed. The
+// Port vector elements from Remastered: MPAC (CVEPortMpac), MPCN (CVEPortCone), ANCM
+// (CVEPortAngleConeMinMax) and ANCV (CVEPortAngleConeMinMaxVariance), against independent double-precision values for a fixed seed. The
 // parabolic sine and FRSQRTE steps differ from std:: by a few 1e-3, so the angle-based ones use
 // that tolerance; the MPCN frame is exact for an axis-aligned direction.
 #include "Kyoto/CRandom16.hpp"
+#include "Kyoto/Particles/CIntElement.hpp"
 #include "Kyoto/Particles/CRealElement.hpp"
 #include "Kyoto/Particles/CVectorElement.hpp"
 #include "port_test.h"
@@ -136,6 +137,72 @@ void TestAngleCone() {
             "ANCM turns the cone axis by the rotation");
 }
 
+class ConstInt final : public CIntElement {
+public:
+  explicit ConstInt(int v) : mValue(v) {}
+  bool GetValue(int, int& out) const override {
+    out = mValue;
+    return false;
+  }
+
+private:
+  int mValue;
+};
+
+void TestAngleConeVariance() {
+  CRandom16 rnd(77);
+  CGlobalRandom global(rnd);
+  // Outside a generator the index is 0: polar band 0 of 2 (between cos 10 and the mid cosine) and
+  // azimuth sector 0 of 4 (-pi .. -pi/2), each jittered by its variance times half its width.
+  const CVEPortAngleConeMinMaxVariance element(new ConstReal(0.f), new ConstReal(0.f), new ConstReal(0.f),
+                                               new ConstReal(10.f), new ConstReal(20.f), new ConstReal(2.f),
+                                               new ConstInt(2), new ConstReal(0.5f), new ConstInt(4),
+                                               new ConstReal(1.f), 0);
+  Lcg lcg{77};
+  for (int i = 0; i < 20; ++i) {
+    CVector3f out;
+    CHECK(!element.GetValue(i, out));
+    const double u0 = lcg.next();
+    const double u1 = lcg.next();
+    const double cA = std::cos(10.0 * kDeg);
+    const double cB = std::cos(20.0 * kDeg);
+    const double d = (cB - cA) / 2.0;
+    const double c = cA + d * 0.5 + 0.5 * d * 0.5 * (2.0 * u0 - 1.0);
+    const double sector = 2.0 * kPi / 4.0;
+    const double phi = sector * 0.5 + sector * 0.5 * (2.0 * u1 - 1.0) - kPi;
+    const double s = std::sqrt(1.0 - c * c);
+    CHECK_MSG(Near(out.GetX(), 2.0 * s * std::cos(phi), 8.e-3), "ANCV x");
+    CHECK_MSG(Near(out.GetY(), 2.0 * s * std::sin(phi), 8.e-3), "ANCV y");
+    CHECK_MSG(Near(out.GetZ(), 2.0 * c, 8.e-3), "ANCV z is mag times the band's cosine");
+  }
+  CHECK_MSG(rnd.GetSeed() == lcg.seed, "ANCV draws two numbers per evaluation");
+
+  // Counts of 0 are 1: the whole cone and turn, as ANCM's (with the variances at 1).
+  const CVEPortAngleConeMinMaxVariance whole(new ConstReal(0.f), new ConstReal(0.f), new ConstReal(0.f),
+                                             new ConstReal(10.f), new ConstReal(20.f), new ConstReal(1.f),
+                                             new ConstInt(0), new ConstReal(1.f), new ConstInt(0),
+                                             new ConstReal(1.f), 0);
+  const CVEPortAngleConeMinMax ancm(new ConstReal(0.f), new ConstReal(0.f), new ConstReal(0.f), new ConstReal(10.f),
+                                    new ConstReal(20.f), new ConstReal(1.f));
+  CRandom16 a(5);
+  CRandom16 b(5);
+  for (int i = 0; i < 10; ++i) {
+    CVector3f va;
+    CVector3f vb;
+    {
+      CGlobalRandom ga(a);
+      whole.GetValue(i, va);
+    }
+    {
+      CGlobalRandom gb(b);
+      ancm.GetValue(i, vb);
+    }
+    CHECK_MSG(Near(va.GetX(), vb.GetX(), 1.e-5) && Near(va.GetY(), vb.GetY(), 1.e-5) &&
+                  Near(va.GetZ(), vb.GetZ(), 1.e-5),
+              "ANCV with counts 0 and variances 1 is ANCM");
+  }
+}
+
 } // namespace
 
 // Heap storage for elements.
@@ -158,6 +225,7 @@ int main() {
   TestMpac();
   TestCone();
   TestAngleCone();
+  TestAngleConeVariance();
   TestEmitterVelocity();
   return PORT_TEST_RESULT();
 }
