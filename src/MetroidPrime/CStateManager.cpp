@@ -3366,6 +3366,12 @@ void CStateManager::PortCaptureProbeFace() const {
     }
   }
   PortRoomEnv::SetLoadedAreas(mreas, mreaCount);
+  for (int i = 0; i < x850_world->GetNumAreas(); ++i) {
+    const CGameArea& area = *x850_world->GetArea(TAreaId(i));
+    if (area.IsLoaded()) {
+      PortRoomEnv::SetAreaVisible(area.GetAreaAssetId(), area.GetOcclusionState() == CGameArea::kOS_Visible);
+    }
+  }
   // Their probes follow the script layers, as Remastered's ReflectionProbe entities do.
   if (const CScriptLayerManager* const layers = x8c8_worldLayerState.GetPtr()) {
     for (int i = 0; i < x850_world->GetNumAreas(); ++i) {

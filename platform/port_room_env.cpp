@@ -1714,6 +1714,10 @@ void FogRegions(std::vector<const FogRegion*>& out) {
   }
   std::sort(areas.begin(), areas.end(), [](const Area* a, const Area* b) { return a->serial < b->serial; });
   for (const Area* area : areas) {
+    // ShouldRegionBeActive's area gate: the area's scene proxy is active.
+    if (!area->visible) {
+      continue;
+    }
     for (size_t i = 0; i < area->live.size(); ++i) {
       const FogRegion& region = area->live[i];
       const bool on = i < area->regions.size() ? area->regions[i].on : region.on;
@@ -1830,6 +1834,21 @@ std::string FogInfo() {
   }
   std::snprintf(line, sizeof(line), "regions on in loaded areas: %zu\n", on.size());
   out += line;
+  for (const auto& [mrea, other] : sAreas) {
+    if (mrea == sViewArea) {
+      continue;
+    }
+    for (size_t i = 0; i < other.live.size(); ++i) {
+      const FogRegion& r = other.live[i];
+      if (std::find(on.begin(), on.end(), &r) == on.end()) {
+        continue;
+      }
+      std::snprintf(line, sizeof(line), "%08X region %zu: on layer %d fluid %d density %g box %g %g %g .. %g %g %g\n",
+                    mrea, i, int(r.layer), int(r.fluid), r.density, r.box[0], r.box[1], r.box[2], r.box[3], r.box[4],
+                    r.box[5]);
+      out += line;
+    }
+  }
   if (!sWorldVolumes.empty()) {
     std::snprintf(line, sizeof(line), "world volumes: %zu, camera %.1f %.1f %.1f\n", sWorldVolumes.size(),
                   sCameraPoint[0], sCameraPoint[1], sCameraPoint[2]);
@@ -2388,6 +2407,13 @@ void SetAreaLayers(uint32_t mrea, uint64_t active) {
   if (found != sAreas.end() && found->second.layers != active) {
     found->second.layers = active;
     Invalidate(); // the probes Locate may pick
+  }
+}
+
+void SetAreaVisible(uint32_t mrea, bool visible) {
+  const auto found = sAreas.find(mrea);
+  if (found != sAreas.end()) {
+    found->second.visible = visible;
   }
 }
 

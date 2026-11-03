@@ -773,8 +773,10 @@ void CmdAreas(CStateManager& mgr) {
   const int current = world->GetCurrentAreaId().Value();
   for (int i = 0; i < world->GetNumAreas(); ++i) {
     const CGameArea& area = world->GetAreaAlways(TAreaId(i));
-    Out("%3d %08X%s%s", i, static_cast< uint32_t >(area.GetAreaAssetId()),
-        area.IsPostConstructed() ? " loaded" : "", i == current ? "  <- current" : "");
+    const bool loaded = area.IsPostConstructed();
+    Out("%3d %08X%s%s%s", i, static_cast< uint32_t >(area.GetAreaAssetId()), loaded ? " loaded" : "",
+        loaded ? (area.GetOcclusionState() == CGameArea::kOS_Visible ? " visible" : " occluded") : "",
+        i == current ? "  <- current" : "");
   }
   if (current >= 0 && current < world->GetNumAreas()) {
     // Remastered's object positions (room files) are area-local: world = this * (-x, z, y).

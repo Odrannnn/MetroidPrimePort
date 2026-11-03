@@ -805,6 +805,10 @@ void SetLoadedAreas(const uint32_t* mreas, size_t count);
 // The script layers of an area in memory that are active (bit n: layer n); every layer
 // until it is set.
 void SetAreaLayers(uint32_t mrea, uint64_t active);
+// Whether an area in memory is visible (its occlusion state; visible until it is set). It is
+// what makes Remastered's area scene proxy active (CAreaGameLogicMP1::SetOcclusionState
+// 0xcba570, SetShouldRender 0xcbba84), and the fog regions of an inactive one stay off.
+void SetAreaVisible(uint32_t mrea, bool visible);
 
 struct Selection {
   uint32_t cube = 0;       // for GXSetPBRCube; 0 when the room has none
