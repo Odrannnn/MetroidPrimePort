@@ -3582,6 +3582,16 @@ void TestSystemVars() {
                      {});
   CHECK_MSG(parts.size() == 1 && parts[0].dropped == std::vector<std::string>{"RSV0: read by PSA0"},
             "an RSV0 with a PSA0 in the system stays dropped");
+
+  // VAVn = PWSL (744cc8aa) draws nothing and no shipped element reads it back: nothing.
+  parts = ConvertOne(OneGenerator([](auto& o) {
+                       PutProperty(o, "VAV1", 3);
+                       PutFourCC(o, "PWSL");
+                       PutTexr(o, 0x1234ABCD);
+                     }),
+                     {});
+  CHECK_MSG(parts.size() == 1 && plain.size() == 1 && parts[0].part == plain[0].part && parts[0].dropped.empty(),
+            "a VAV1 PWSL is consumed and writes nothing");
 }
 
 // A vector PSAn reads the system's SVVn (GetVectorElement 0x251a44): the port-only PSYV.

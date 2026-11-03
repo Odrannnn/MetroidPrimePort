@@ -5578,6 +5578,14 @@ public:
     // ADV9 and IAV0..3, and all of a swoosh's, have no retail property: they are written in the
     // port-only PPVR.
     if (varId >= 8 || (s.swoosh && varId >= 0)) {
+      // VAVn = PWSL (744cc8aa): CVEParticleWorldSpaceLocation (0x2a1d68, built by GetVectorElement
+      // 0x251d94) transforms the particle's position, drawing no RNG and keeping no state, and only
+      // PTVA/BSVA/SYVA (0x2520ac) read a vector variable back, which no shipped effect has: it is
+      // never observed and converts to nothing.
+      if (PartVarType(varId) == Type::Vector && property.value.size() == 1 && IsElement(property.value[0], F("PWSL")) &&
+          property.value[0].args.empty()) {
+        return;
+      }
       ParticleVariable(s, property, varId);
       return;
     }
