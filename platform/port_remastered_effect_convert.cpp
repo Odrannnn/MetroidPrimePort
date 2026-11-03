@@ -400,24 +400,6 @@ bool ContainsElement(const EffectValue& value, uint32_t fourcc) {
   return false;
 }
 
-// Whether every leaf of an element is literal data, so Remastered might fold it to a constant
-// (over-reports: a RAND of constants counts too). A keyframe never is: CIEKeyframeEmitter and
-// CIEKeyframeInput::GetConstOverride (0x2aa748, 0x2aa764) answer false.
-bool ConstantLeaves(const EffectValue& value) {
-  if (value.kind != EffectValue::Kind::Element) {
-    return true;
-  }
-  if (value.args.empty() || (value.fourcc >> 8) == (F("KEYE") >> 8)) {
-    return false;
-  }
-  for (const EffectValue& arg : value.args) {
-    if (!ConstantLeaves(arg)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 // SPAF/SPAI/SPAC/SPAV(#n, fallback): the parent system's additional variable n
 // (GetRealElement 0x260de4: CElementParentAddlVar over SAddVarAddress(ctx 0, n),
 // AddParentAddlVarRef). DPV*/TPV*(guid, fallback): the direct or topmost parent's
@@ -436,6 +418,27 @@ bool IsParentRead(uint32_t fourcc, Type type) {
   default:
     return false;
   }
+}
+
+// Whether every leaf of an element is literal data, so Remastered might fold it to a constant
+// (over-reports: a RAND of constants counts too). A keyframe never is: CIEKeyframeEmitter and
+// CIEKeyframeInput::GetConstOverride (0x2aa748, 0x2aa764) answer false. Nor is an int parent
+// read: GetIntElement 0x26a910 makes SPAI/DPVI/TPVI a CElementParentAddlVar, whose fallback is
+// read as a constant (GetIntElementAsConst), not as an input, and whose IsNodeConst is
+// IElement's (0x250d38, false), so CElementDep::Finish 0x24f9a4 leaves it non-constant.
+bool ConstantLeaves(const EffectValue& value) {
+  if (value.kind != EffectValue::Kind::Element) {
+    return true;
+  }
+  if (value.args.empty() || (value.fourcc >> 8) == (F("KEYE") >> 8) || IsParentRead(value.fourcc, Type::Int)) {
+    return false;
+  }
+  for (const EffectValue& arg : value.args) {
+    if (!ConstantLeaves(arg)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // PSA0..PSA9: the system's own additional real n, or -1.

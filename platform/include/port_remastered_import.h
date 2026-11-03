@@ -246,7 +246,8 @@ inline constexpr int kModels = 30;
 // 207: a swoosh's PSCL (PSSC).
 // 208: a swoosh's zero SYSR under XFMD 2 (XFMD 1).
 // 209: DFCP and DFCS take two reals only (an ARRY of their colours read across them).
-inline constexpr int kEffects = 209;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
+// 210: an int RAND of parent reads (SPAI/DPVI/TPVI never fold) is PRAN, not a drop.
+inline constexpr int kEffects = 210;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
