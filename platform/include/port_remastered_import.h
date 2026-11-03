@@ -241,7 +241,7 @@ inline constexpr int kModels = 30;
 // 195: a swoosh's LWQD (PLWQ).
 // 196: a swoosh's INTR (PSIR).
 // 197: FRMD (PFRM). 198: a swoosh's SNRD/SNRA (PSRD/PSRA). 199: OVEC on a planar square or model consumed. 200: ANCV (PANV).
-inline constexpr int kEffects = 202;   // ELC2 EBDM/DDLN/TEXW/ZBUF consumed
+inline constexpr int kEffects = 203;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

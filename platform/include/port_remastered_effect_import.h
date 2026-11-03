@@ -110,6 +110,10 @@ EffectImportResult ImportEffects(const EffectImportIO& io);
 // (in a pak's byte order) as it prints, 8-4-4-4-12 in lower case.
 uint32_t RoomEffectId(const EffectGuid& id);
 
+// The Remastered-only GENPs the ELSMs and ELC2s of `io.effects` name as GPSM or EPSM (not an
+// embedded child), in order and once each: the import writes them as it does roomOnly ones.
+std::vector<EffectGuid> ElectricGenps(const EffectImportIO& io);
+
 // Whether `id` (in a pak's byte order) prints as `text` (8-4-4-4-12, lower case).
 bool EffectIdIs(const EffectGuid& id, const char* text);
 

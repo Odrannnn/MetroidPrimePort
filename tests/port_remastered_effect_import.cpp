@@ -1060,6 +1060,36 @@ void TestRoomPlacementPairings() {
   }
   CHECK(MatchedRetailEffects(Fresh(0xfa)).empty());
 }
+// An ELSM's GPSM/EPSM GENPs, once each; a reference to any other type is not one.
+void TestElectricGenps() {
+  const EffectGuid electric = Fresh(0x60);
+  const EffectGuid gpsm = Fresh(0x61);   // as the ELSM stores it
+  const EffectGuid epsm = Fresh(0x62);
+  const EffectGuid other = Fresh(0x63);  // a MATI
+  std::vector<uint8_t> data = MakeChildForm("ELSM");
+  for (const auto& [name, id] : {std::pair<const char*, EffectGuid>{"GPSM", gpsm}, {"EPSM", epsm},
+                                 {"EPSM", gpsm}, {"GPSM", other}}) {
+    PutProperty(data, name, 0);
+    PutGuid(data, id);
+  }
+  PutProperty(data, "_END", 4);
+  FinishChildForm(data);
+  EffectImportIO io;
+  io.effects = {Swap(electric), Swap(gpsm)};
+  io.typeOf = [&](const EffectGuid& id) {
+    return id == Swap(electric) ? kElsm : id == Swap(other) ? kMati : kGenp;
+  };
+  io.read = [&](uint32_t type, const EffectGuid& id, std::vector<uint8_t>& out, std::string&) {
+    if (type != kElsm || id != Swap(electric)) {
+      return false;
+    }
+    out = data;
+    return true;
+  };
+  const std::vector<EffectGuid> genps = ElectricGenps(io);
+  CHECK_MSG(genps.size() == 2 && genps[0] == Swap(gpsm) && genps[1] == Swap(epsm),
+            "an ELSM's GPSM and EPSM GENPs, in order, once each");
+}
 } // namespace
 
 int main() {
@@ -1073,6 +1103,7 @@ int main() {
   TestNamedEffect();
   TestVisualInferredEffect();
   TestVectorField();
+  TestElectricGenps();
   if (port_test::Failures() == 0) {
     std::printf("port_remastered_effect_import: ok\n");
   }

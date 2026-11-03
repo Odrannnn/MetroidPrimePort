@@ -1192,7 +1192,7 @@ public:
       return Model(id);
     }
     // A Remastered-only GENP the import writes under its own id (a room's or port actor's,
-    // e.g. an ELC2's GPSM/EPSM in kActorEffectGuids).
+    // e.g. an ELSM/ELC2's GPSM/EPSM, ElectricGenps).
     if (type == kPart && m_io.typeOf(id) == kGenp &&
         std::find(m_io.roomOnly.begin(), m_io.roomOnly.end(), id) != m_io.roomOnly.end()) {
       return RoomEffectId(id);
@@ -1768,6 +1768,37 @@ private:
 bool WantsRemasteredEffects() { return port::EnvFlag("MP_REMASTERED_EFFECTS", true); }
 
 EffectImportResult ImportEffects(const EffectImportIO& io) { return Importer(io).Run(); }
+
+std::vector<EffectGuid> ElectricGenps(const EffectImportIO& io) {
+  std::vector<EffectGuid> out;
+  if (!io.typeOf || !io.read) {
+    return out;
+  }
+  for (const EffectGuid& id : io.effects) {
+    const uint32_t type = io.typeOf(id);
+    if (type != kElsm && type != EffectFourCC("ELC2")) {
+      continue;
+    }
+    std::vector<uint8_t> data;
+    std::string error;
+    EffectNode effect;
+    if (!io.read(type, id, data, error) || !ParseEffect(data.data(), data.size(), effect, error)) {
+      continue;  // Effect() reports it
+    }
+    for (const EffectProperty& property : effect.properties) {
+      EffectGuid stored{};
+      if ((property.fourcc != EffectFourCC("GPSM") && property.fourcc != EffectFourCC("EPSM")) ||
+          !AssetGuid(property.value, stored) || stored == EffectGuid{} || FindNode(effect, stored) != nullptr ||
+          io.typeOf(Swap(stored)) != kGenp) {
+        continue;
+      }
+      if (std::find(out.begin(), out.end(), Swap(stored)) == out.end()) {
+        out.push_back(Swap(stored));
+      }
+    }
+  }
+  return out;
+}
 
 uint32_t RoomEffectId(const EffectGuid& id) { return SyntheticEffectId(EffectGuidString(Swap(id)).c_str()); }
 
