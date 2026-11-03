@@ -1358,10 +1358,12 @@ LightNow EvalLight(const PointLight& l, const Area::Light& state) {
 namespace {
 // The walk both RoomLights forms take: a light that is active, on an active layer and not black, with its
 // timeline evaluated. `fn(l, n)` gets the file's light and its state now (n.color is colour x intensity).
+// A light's proxy lives in its area's scene proxy (CLightDynamicGOC::RebuildLightProxy 0x78a748,
+// NGOCUtils::get_render_scene 0x47c0e0), which is inactive while the area is occluded.
 template <typename F>
 void ForEachRoomLight(F&& fn) {
   for (const auto& [mrea, area] : sAreas) {
-    if (!area.hasFile) {
+    if (!area.hasFile || !area.visible) {
       continue;
     }
     for (size_t i = 0; i < area.lights.size() && i < area.file.lights.size(); ++i) {
