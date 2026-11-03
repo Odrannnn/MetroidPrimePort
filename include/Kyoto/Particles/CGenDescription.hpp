@@ -237,6 +237,9 @@ public:
   // port-only PINS: Remastered's INTS, the system scale in place of the external one (EXTS still
   // reads the external scale; CElementGen::PortSystemScale). Owned here; null = the external scale.
   CVectorElement* xPortIntScale = nullptr;
+  // port-only PSWS: Remastered's SPWS, the scale handed to the child systems in place of the
+  // system scale (CElementGen::PortChildScale). Owned here; null = the system scale.
+  CVectorElement* xPortSpawnScale = nullptr;
   // port-only PINR/PINT: Remastered's INTR/INTT, the system orientation (an Euler vector in the
   // port's space, as PMRT's) and translation in place of the external ones (EXTR/EXTT still read
   // the external ones; CElementGen::PortApplyIntFrame). Owned here; null = the external one.

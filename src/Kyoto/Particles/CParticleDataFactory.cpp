@@ -699,6 +699,11 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       delete desc->xPortIntScale;
       desc->xPortIntScale = GetVectorElement(in);
       break;
+    // Port-only Remastered SPWS child spawn scale (CGenDescription::xPortSpawnScale).
+    case SBIG('PSWS'):
+      delete desc->xPortSpawnScale;
+      desc->xPortSpawnScale = GetVectorElement(in);
+      break;
     // Port-only Remastered INTR/INTT system orientation and translation
     // (CGenDescription::xPortIntRotation/xPortIntTranslation).
     case SBIG('PINR'):

@@ -6648,6 +6648,18 @@ public:
       }
       return;
     }
+    // A swoosh's PSWT is GetIntElementAsConst into desc+0x20c (CreateSWSH 0x2dc8e0), the warm-up
+    // the first Update 0x27ddec runs (InternalUpdate(pswt / 60)) only when nonzero: 0 changes
+    // nothing. A swoosh warm-up is not ported.
+    if (s.swoosh && fourcc == F("PSWT")) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value)) {
+        s.result.dropped.push_back("PSWT: not a CNST");
+      } else if (value != 0) {
+        s.result.dropped.push_back("PSWT: a swoosh warm-up");
+      }
+      return;
+    }
     // A swoosh's TXUP is a GetBool into desc+0x22c bit 0x80 (CreateSWSH 0x2dc4f8), read by
     // UpdateRenderState 0x27e6b0 (CParticleSwoosh::PortTexUScroll). The port-only PTXU.
     if (s.swoosh && fourcc == F("TXUP")) {
@@ -6769,6 +6781,34 @@ public:
     if (s.part && (fourcc == F("SPWT") || fourcc == F("SPWR") || fourcc == F("SPWS") || fourcc == F("SPCL")) &&
         !s.Has(F("ICTS")) && !s.Has(F("IDTS")) && !s.Has(F("IITS")) && !s.Has(F("KSSM")) &&
         !s.Has(F("SSWH")) && !s.Has(F("SELC")) && !s.Has(F("PSPS"))) {
+      return;
+    }
+    // SPWS, the scale a generator hands its children in place of its system scale (SetupSpawn
+    // +0x2a0 = desc+0x288), evaluated in its own context at spawn and every tick: the port-only
+    // PSWS, in Remastered's scale numbers as PINS is. An IRND, KPIN or RAZY in it (drawn once per
+    // system) is not decoded, nor is a mode-5 parent's (its children get identity coords).
+    if (s.part && fourcc == F("SPWS")) {
+      std::vector<uint8_t> inner;
+      std::string why = "not one element";
+      if (m_xfmd == 5) {
+        why = "under XFMD 5";
+      } else if (property.value.size() == 1) {
+        why.clear();
+        for (const uint32_t init : {F("IRND"), F("KPIN"), F("RAZY")}) {
+          if (why.empty() && ContainsElement(property.value[0], init)) {
+            why = "with " + EffectFourCCString(init);
+          }
+        }
+        if (why.empty() && !Element(property.value[0], Type::Vector, inner, why)) {
+          why = why.empty() ? "not a vector" : why;
+        }
+      }
+      if (!why.empty()) {
+        s.result.dropped.push_back("SPWS: " + why);
+        return;
+      }
+      AppendBE32(s.out, F("PSWS"));
+      Basis(F("BSSC"), inner, s.out);
       return;
     }
     if (found == s.retail.end()) {
@@ -7916,7 +7956,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PSLD"))) ||
                (vfx && (fourcc == F("ITEN") || fourcc == F("PDBS")))) {
       ok = reader.Element(Type::Real);
-    } else if (part && (fourcc == F("PINS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||
+    } else if (part && (fourcc == F("PINS") || fourcc == F("PSWS") || fourcc == F("PINR") || fourcc == F("PINT") || fourcc == F("PMOV") ||
                         fourcc == F("PMPV") || fourcc == F("POVC") || fourcc == F("PSYT") || fourcc == F("PTMT"))) {
       ok = reader.Element(Type::Vector);
     } else if (part && (fourcc == F("PSHT") || fourcc == F("PSMX"))) {

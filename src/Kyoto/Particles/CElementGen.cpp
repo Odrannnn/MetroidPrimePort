@@ -682,6 +682,23 @@ CVector3f CElementGen::PortSystemScale() {
   return scale;
 }
 
+// SChildSystems::SetupSpawn 0x28d8ac: the children's external scale (+0x2a0) is SPWS when it is
+// authored, else the system scale; ConstructChildSystemCoords 0x24c594 hands it over at spawn
+// and UpdateChildSystemExternalDataSet 0x246508 every tick (PortStepMover).
+// const for ConstructChildParticleSystem; the evaluation scope only reads the system.
+CVector3f CElementGen::PortChildScale() const {
+  const CVectorElement* spws = x28_loadedGenDesc->xPortSpawnScale;
+  if (spws == nullptr) {
+    return x100_globalScale;
+  }
+  CElementGen* self = const_cast< CElementGen* >(this);
+  CParticleGlobals::SParticleSystem thisSystem('PART', self);
+  CPortVarScope portVarScope(&self->xPortVars);
+  CVector3f scale = x100_globalScale;
+  spws->GetValue(x74_curFrame, scale);
+  return scale;
+}
+
 void CElementGen::PortSetSystemScale(const CVector3f& scale) {
   const CTransform4f portBefore = PortFollowsEmitter() ? PortEmitterFrame() : CTransform4f::Identity();
 #endif
@@ -698,8 +715,15 @@ void CElementGen::PortSetSystemScale(const CVector3f& scale) {
   }
   PortFollowEmitter(portBefore);
 #endif
+#ifdef TARGET_PC
+  const CVector3f childScale = PortChildScale();
+#endif
   for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
+#ifdef TARGET_PC
+    (*it)->SetGlobalScale(childScale);
+#else
     (*it)->SetGlobalScale(scale);
+#endif
   }
 }
 
@@ -1777,7 +1801,7 @@ void CElementGen::PortSeedSwooshChild(TToken< CSwooshDescription > child) const 
 void CElementGen::PortAddChild(CParticleGen* child) {
   child->SetGlobalTranslation(xe8_globalTranslation);
   child->SetGlobalOrientation(x22c_globalOrientation);
-  child->SetGlobalScale(x100_globalScale);
+  child->SetGlobalScale(PortChildScale());
   child->SetLocalScale(x16c_localScale);
   child->SetTranslation(xdc_translation);
   child->SetOrientation(x1d8_orientation);
@@ -2166,6 +2190,12 @@ void CElementGen::PortStepMover() {
       PortSetSystemScale(scale);
     }
   }
+  if (x28_loadedGenDesc->xPortSpawnScale != nullptr) {
+    const CVector3f childScale = PortChildScale();
+    for (AUTO(it, x290_activePartChildren.begin()); it != x290_activePartChildren.end(); ++it) {
+      (*it)->SetGlobalScale(childScale);
+    }
+  }
   if (xPortIntFrame) {
     PortApplyIntFrame(false);
   }
@@ -2365,7 +2395,7 @@ void CElementGen::PortSpawnChildSystems() {
     PortSeedSwooshChild(*desc->xc0_SSWH);
     CParticleSwoosh* swoosh = rs_new CParticleSwoosh(*desc->xc0_SSWH, 0);
     swoosh->SetGlobalTranslation(xe8_globalTranslation);
-    swoosh->SetGlobalScale(x100_globalScale);
+    swoosh->SetGlobalScale(PortChildScale());
     swoosh->SetLocalScale(x16c_localScale);
     swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
     swoosh->SetOrientation(x1d8_orientation);
@@ -2381,7 +2411,7 @@ void CElementGen::PortSpawnChildSystems() {
     PortSeedSwooshChild(extra.swoosh);
     CParticleSwoosh* swoosh = rs_new CParticleSwoosh(extra.swoosh, 0);
     swoosh->SetGlobalTranslation(xe8_globalTranslation);
-    swoosh->SetGlobalScale(x100_globalScale);
+    swoosh->SetGlobalScale(PortChildScale());
     swoosh->SetLocalScale(x16c_localScale);
     swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
     swoosh->SetOrientation(x1d8_orientation);
@@ -2393,7 +2423,7 @@ void CElementGen::PortSpawnChildSystems() {
   if (desc->xd8_SELC && x74_curFrame == x2bc_SESD) {
     CParticleElectric* electric = rs_new CParticleElectric(*desc->xd8_SELC);
     electric->SetGlobalTranslation(xe8_globalTranslation);
-    electric->SetGlobalScale(x100_globalScale);
+    electric->SetGlobalScale(PortChildScale());
     electric->SetLocalScale(x16c_localScale);
     electric->SetTranslation(xdc_translation + x2c0_SEPO);
     electric->SetOrientation(x1d8_orientation);
@@ -2432,7 +2462,11 @@ CElementGen* CElementGen::ConstructChildParticleSystem(TToken< CGenDescription >
   child->x26d_26_modelsUseLights = x26d_26_modelsUseLights;
   child->SetGlobalTranslation(xe8_globalTranslation);
   child->SetGlobalOrientation(x22c_globalOrientation);
+#ifdef TARGET_PC
+  child->SetGlobalScale(PortChildScale());
+#else
   child->SetGlobalScale(x100_globalScale);
+#endif
   child->SetLocalScale(x16c_localScale);
   child->SetTranslation(xdc_translation);
   child->SetOrientation(x1d8_orientation);
@@ -2530,7 +2564,11 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
 #endif
     CParticleSwoosh* swoosh = rs_new CParticleSwoosh(*x28_loadedGenDesc->xc0_SSWH, 0);
     swoosh->SetGlobalTranslation(xe8_globalTranslation);
+#ifdef TARGET_PC
+    swoosh->SetGlobalScale(PortChildScale());
+#else
     swoosh->SetGlobalScale(x100_globalScale);
+#endif
     swoosh->SetLocalScale(x16c_localScale);
     swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
     swoosh->SetOrientation(x1d8_orientation);
@@ -2553,7 +2591,7 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
       PortSeedSwooshChild(extra.swoosh);
       CParticleSwoosh* swoosh = rs_new CParticleSwoosh(extra.swoosh, 0);
       swoosh->SetGlobalTranslation(xe8_globalTranslation);
-      swoosh->SetGlobalScale(x100_globalScale);
+      swoosh->SetGlobalScale(PortChildScale());
       swoosh->SetLocalScale(x16c_localScale);
       swoosh->SetTranslation(xdc_translation + x2b0_SSPO);
       swoosh->SetOrientation(x1d8_orientation);
@@ -2569,7 +2607,11 @@ void CElementGen::UpdateChildParticleSystems(double dt) {
   if (x28_loadedGenDesc->xd8_SELC && x84_prevFrame != x74_curFrame && x74_curFrame == x2bc_SESD) {
     CParticleElectric* electric = rs_new CParticleElectric(*x28_loadedGenDesc->xd8_SELC);
     electric->SetGlobalTranslation(xe8_globalTranslation);
+#ifdef TARGET_PC
+    electric->SetGlobalScale(PortChildScale());
+#else
     electric->SetGlobalScale(x100_globalScale);
+#endif
     electric->SetLocalScale(x16c_localScale);
     electric->SetTranslation(xdc_translation + x2c0_SEPO);
     electric->SetOrientation(x1d8_orientation);

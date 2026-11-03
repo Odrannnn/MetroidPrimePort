@@ -618,6 +618,7 @@ private:
   // The system scale: INTS (PINS) evaluated when authored, else the external scale.
   CVector3f PortSystemScale();
   void PortSetSystemScale(const CVector3f& scale);
+  CVector3f PortChildScale() const;
   // The scale the owner (or parent) set, which EXTS reads; x100_globalScale is the system's.
   CVector3f xPortExternalScale{1.f, 1.f, 1.f};
   // The system orientation and translation: INTR (PINR) and INTT (PINT) evaluated, applied as

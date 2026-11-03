@@ -1484,6 +1484,23 @@ void TestSwooshSeed() {
   CHECK_MSG(part.part == zero.bytes && part.dropped.empty(), "SEED 0 writes nothing");
 }
 
+// A swoosh's PSWT is its warm-up (desc+0x20c, CreateSWSH 0x2dc8e0), run only when nonzero
+// (Update 0x27ddec): 0 is consumed; a warm-up is not ported.
+void TestSwooshWarmup() {
+  const auto pswt = [](uint32_t value) {
+    return ConvertSwoosh([&](auto& o) {
+      PutProperty(o, "PSWT", 1);
+      PutConstant(o, value);
+    });
+  };
+  Retail zero;
+  zero.f("SWSH").f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  ConvertedPart part = pswt(0);
+  CHECK_MSG(part.part == zero.bytes && part.dropped.empty(), "PSWT 0 on a swoosh is consumed");
+  part = pswt(30);
+  CHECK_MSG(part.dropped.size() == 1 && part.dropped[0] == "PSWT: a swoosh warm-up", "a swoosh warm-up is a drop");
+}
+
 // A swoosh's TXUP (desc+0x22c bit 0x80, CreateSWSH 0x2dc4f8) becomes the port-only PTXU when true.
 void TestSwooshTxup() {
   const auto txup = [](uint8_t value) {
@@ -4098,6 +4115,61 @@ void TestShutdownAndPivot() {
     CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
               std::string(flag) + " is consumed and writes nothing");
   }
+}
+
+// SPWS is the scale a generator hands its children (SetupSpawn 0x28d8ac +0x2a0): the port-only
+// PSWS in the port's numbers (BSSC, folded into a constant). Without a child system it is never read; an IRND in it is
+// drawn once per system and is a drop.
+void TestSpawnScale() {
+  const auto withSpws = [](bool child, bool irnd) {
+    return ConvertOne(OneGenerator([&](auto& o) {
+      PutProperty(o, "SPWS", 3);
+      PutFourCC(o, "CNST");
+      if (irnd) {
+        PutFourCC(o, "IRND");
+        PutConstant(o, Bits(0.5f));
+        PutConstant(o, Bits(1.0f));
+      } else {
+        PutConstant(o, Bits(0.5f));
+      }
+      PutConstant(o, Bits(0.5f));
+      PutConstant(o, Bits(0.5f));
+      if (child) {
+        PutProperty(o, "ICTS", 0);
+        PutGuid(o, Legacy(0x0BADF00D));
+      }
+      PutProperty(o, "TEXR", 0);
+      PutFourCC(o, "CNST");
+      PutGuid(o, Legacy(0x1234ABCD));
+      PutFourCC(o, "NONE");
+    }), {});
+  };
+  const auto spwsDropped = [](const auto& parts) {
+    return !parts.empty() && std::any_of(parts[0].dropped.begin(), parts[0].dropped.end(),
+                                         [](const std::string& note) { return note.rfind("SPWS", 0) == 0; });
+  };
+  Retail psws;
+  psws.f("PSWS").f("CNST").f("CNST").w(Bits(0.5f)).f("CNST").w(Bits(0.5f)).f("CNST").w(Bits(0.5f));
+  auto parts = withSpws(true, false);
+  CHECK_MSG(parts.size() == 1 && !spwsDropped(parts) &&
+                std::search(parts[0].part.begin(), parts[0].part.end(), psws.bytes.begin(), psws.bytes.end()) !=
+                    parts[0].part.end(),
+            "SPWS beside a child system is PSWS");
+  if (!parts.empty()) {
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "a PART with PSWS passes the retail element reader");
+  }
+  parts = withSpws(false, false);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() &&
+                std::search(parts[0].part.begin(), parts[0].part.end(), psws.bytes.begin(), psws.bytes.begin() + 4) ==
+                    parts[0].part.end(),
+            "SPWS without a child system is consumed");
+  parts = withSpws(true, true);
+  CHECK_MSG(parts.size() == 1 &&
+                std::count(parts[0].dropped.begin(), parts[0].dropped.end(), "SPWS: with IRND") == 1,
+            "SPWS with an IRND is dropped with its reason");
 }
 
 // INTS is the system scale in place of the external one (Compile 0x289af0): the port-only PINS,
@@ -7487,8 +7559,10 @@ int main() {
   TestSwooshElectric();
   TestSwooshParticleVars();
   TestSwooshRazyProt();
+  TestSpawnScale();
   TestSwooshZProt();
   TestSwooshSeed();
+  TestSwooshWarmup();
   TestSwooshTxup();
   TestSwooshBlit();
   TestSwooshScale();
