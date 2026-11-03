@@ -715,8 +715,6 @@ constexpr uint32_t kColorTex = 1, kOpacityTex = 2, kErosion = 4, kRamp = 8, kInd
                    kIceChargeCollision = 1u << 21, kUnfogged = 1u << 22, kVisorRunOff = 1u << 23,
                    kVisorRunOffLit = 1u << 24, kIceChargeCollisionLit = 1u << 25, kParticleLit = 1u << 26,
                    kVisorRain = 1u << 28, kBarrierShield = 1u << 29, kBarrierGlow = 1u << 30;
-// aurora::gfx::vfx::Blend::Multiply, the port's stand-in for the FrameBuffer_* shaders without a SceneWarp recipe.
-constexpr uint32_t kBlendMultiply = 4;
 constexpr uint32_t kBlendAdditiveOne = 5;  // aurora::gfx::vfx::Blend::AdditiveOne (RGB One/One)
 // aurora::gfx::vfx::Fogged: fogged whatever the blend (the row's fog under a MATI EBlendMode's factors).
 constexpr uint32_t kFogged = 1u << 27;
@@ -823,7 +821,6 @@ struct Recipe {
   std::vector<SrcSpec> sources;
   int addRow = -1;         // PMTR row of the AddColor (rgb, scale); -1: none
   bool cch0GainBias = false; // CCH0.z/.w are the fade's alpha gain and bias (sat(S(fade) - c3[0].w) * c3[0].z): v3
-  bool frameBuffer = false; // a FrameBuffer_* shader (scene x vc.rgb, warped by CCH0.xy): drawn as a multiply
   int params = 0;           // CCH0..params-1 go out whole in VPRM (with the NMAP slot), and SMTR overrides them
   bool fogPerm = false;     // its fog perm (001) is decoded too: drawn fogged without DFOG 1, unfogged (kUnfogged) with
   // Always drawn unfogged, and no DFOG 1 needed: the visor composite shaders never see the room's fog,
@@ -851,8 +848,9 @@ struct Recipe {
 // maths.
 const Recipe* RecipeOf(uint32_t shader) {
   static const std::vector<Recipe> table = {
-      // FrameBuffer_Indirect_Unlit: the scene behind at the fragment, times vc.rgb. The warp is dropped.
-      {0x3db95827, 0, {}, {}, -1, false, true},
+      // FrameBuffer_Indirect_Unlit (3db95827, perm 000_0): the same scene copy, offset by the warp map
+      // TCH0, times vc.rgb x M; alpha sat(vc.a). d955396d without its opacity map.
+      {0x3db95827, kSceneWarp, {{"TCH0", Role::Indirect, 0, 1}}, {}},
       // VFX_FrameBuffer_Indirect_* (perms 000_0 and 016_0): the scene copy at the fragment, offset by the
       // warp map's (d x 0.99609375 - 0.5) x CCH0.xy x near / view distance, times the colour and vc.rgb
       // (cc155f99 = 04276ae1: BCLR, warp TCH0; alpha BCLR.a x vc.a), or times vc.rgb with alpha
@@ -880,14 +878,14 @@ const Recipe* RecipeOf(uint32_t shader) {
       // vc.a alone. The VS's hash rotation and shake run in CPortVfxMeshBatch::Add. CCH0..2 in VPRM.
       {0x9e0605cd, kIceChargeBeam,
        {{"BCLR", Role::Color, -1, -1}, {"NMAP", Role::Normal, -1, -1}},
-       {}, -1, false, false, 3},
+       {}, -1, false, 3},
       // VFX_IceChargeCollision_Unlit (perms 000_1/000_0, fog perm 001; ICECHARGE.md): the NMAP-bumped refraction
       // of the scene copy, desaturated, plus the BCLR-driven colour ramp CCH0..1, the TCH0 reflection and the
       // CCH6 rim, x (CCH5.z / exposure + vc.rgb); alpha vc.a. The VS's tangent frame runs in
       // CPortVfxMeshBatch::Add. CCH0..6 in VPRM v2 with the NMAP and TCH0 slots.
       {0x1c651f97, kIceChargeCollision,
        {{"BCLR", Role::Color, -1, -1}, {"NMAP", Role::Normal, -1, -1}, {"TCH0", Role::Env, -1, -1}},
-       {}, -1, false, false, 7, true},
+       {}, -1, false, 7, true},
       // VFX_IceChargeCollision_Lit (390fc33b, Effect_IcePop; the lit perm of IceChargeCollision, REPORT.md
       // sections 3-5): the same feed, slots and CCH0..6 as 1c651f97, and the front end it shares. The tail
       // adds Remastered's clustered light gather and baked probe, which the runtime fills: the gather from
@@ -896,14 +894,14 @@ const Recipe* RecipeOf(uint32_t shader) {
       // 1). Fogged without DFOG 1 as the unlit perm is; the blend is additive, so the port's fog never mixes.
       {0x390fc33b, kIceChargeCollision | kIceChargeCollisionLit,
        {{"BCLR", Role::Color, -1, -1}, {"NMAP", Role::Normal, -1, -1}, {"TCH0", Role::Env, -1, -1}},
-       {}, -1, false, false, 7, true},
+       {}, -1, false, 7, true},
       // VFX_VisorRunOff (b5e12668 unlit, d85d4169 lit; FS perm 000; SPEC-fb-visor.md sections 5/6): the
       // TCH0 flow map scrolled by CCH1 drives a mask m and a glow; the scene copy at the fragment,
       // offset by CCH0.x x CCH1.z x the map x 0.01, is tinted between CCH3.rgb and CCH4.rgb by m, x the
       // fade and vc.rgb. CCH0..4 in VPRM, animated by SMTR; alpha vc.a. The visor composite pass has no
       // fog, so both are Unfogged whatever the effect's DFOG says.
-      {0xb5e12668, kVisorRunOff, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, false, 5, false, true},
-      {0xd85d4169, kVisorRunOffLit, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, false, 5, false, true},
+      {0xb5e12668, kVisorRunOff, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, 5, false, true},
+      {0xd85d4169, kVisorRunOffLit, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, 5, false, true},
       // VFX_VisorRain (0ec41df0, the visor rain splash GENP 45ba782d; FS perm 000, perms 001/002 identical,
       // 003..005 the particle-debug overlay; vfx/0ec41df0.md): TCH0 a 2-channel noise map (BC5, repeat); PMTR
       // rows 0..2 (R0 = noise offset xy, PAP9 fade, PAP8 gain; R1 = PAP3, PAP5 (runner pick), PAP7, size; R2 =
@@ -911,21 +909,21 @@ const Recipe* RecipeOf(uint32_t shader) {
       // the scene copy at the fragment, offset along the mask's normal by (1 - fade) x CCH0.w x near / depth, x
       // (0.75 .. 1) x vc.rgb, alpha vc.a; elsewhere discarded. The visor composite pass has no fog, so Unfogged
       // whatever the DFOG.
-      {0x0ec41df0, kVisorRain, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, false, 1, false, true},
+      {0x0ec41df0, kVisorRain, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, 1, false, true},
       // VFX_VisorSteam (53eceaa4, the SteamMP1 HUD billboard's model particle, MATI f4970293; FS perm 000_0,
       // VS 000_1; vfx/53eceaa4.md): TCH0 Repeat_Texture (wrap repeat) read at uv x CCH0.x, offset by TCH1
       // Macro_Texture (the second raw sample slot, the Indirect role: no CCH warp) and scrolled by the VS's
       // o2.yz, which depends on CCH0/2/3/4 only (the shader computes it). CCH0..4 in VPRM, SMTR-animated by the
       // Ship1 particle variables. No scene copy; the visor composite pass has no fog, so Unfogged.
       {0x53eceaa4, kVisorSteam, {{"TCH0", Role::Color, -1, -1}, {"TCH1", Role::Indirect, -1, -1}}, {}, -1, false,
-       false, 5, false, true},
+       5, false, true},
       // VFX_FrameBuffer_Color_Erosion_Unlit (d8ece62c, the frozen-player HUD effect GENP c23f13f7, MATI
       // eaef3c6e; FS perm 000_0, fog perm 001_0, 002/004 identical to 000 and 003/005 to 001): BCLR's
       // x and y offset the scene copy at the fragment by near / HUD depth x CCH0.xy, read at lod
       // max(0, CCH0.z - 1); rgb = (BCLR.rgb + scene) x vc.rgb x PCMD, alpha max(0, BCLR.a - PMTR row
       // 0's x) x vc.a (the VS's o2 is PMTR row 0). CCH0 in VPRM, animated by SMTR.
       {0xd8ece62c, kFrameBufferColorErosion | kErosion, {{"BCLR", Role::Color, -1, -1}}, {{kSrcErosion, 0, 0}},
-       -1, false, false, 1, true},
+       -1, false, 1, true},
       // VFX_BarrierShield (f197ec38, the Parasite Queen barrier's MATI 6429c234; its refraction perm 002,
       // the material flag MFC0 USE_FRAME_BUFFER_DISTORTION with shield-exterior MFC1 off; build/
       // s-queenbarrier-20261024/SHADER-IMPLEMENTATION.md): TCH0 read at (-2u, 2v) is the pattern (its .b
@@ -937,7 +935,7 @@ const Recipe* RecipeOf(uint32_t shader) {
       // MFC0 the material is refused (no VMAT), never drawn with another perm's maths.
       {0xf197ec38, kBarrierShield,
        {{"TCH0", Role::Color, -1, -1}, {"TCH1", Role::Indirect, -1, -1}},
-       {}, -1, false, false, 1, false, false, true},
+       {}, -1, false, 1, false, false, true},
       // VFX_BarrierGlow (b1eb2b67, the same Parasite Queen barrier's one-variable MATI ba0acbd6; FS perm
       // 000, the non-refraction perm: the material carries neither MFC0 nor MFC1; build/
       // s-queenbarrier-20261024/GLOW-IMPLEMENTATION.md): TCH0 read three times at (-u, v): its .r scrolls
@@ -945,14 +943,14 @@ const Recipe* RecipeOf(uint32_t shader) {
       // No scene copy (the glow adds over the frame, so no scene gate). The VS's displacement is in the
       // CPU feed (AddBarrierGlow); the mesh's vertex colour needs VMSH v2 (PortVfxBarrierGlowReady).
       // CCH0 whole in VPRM v1, animated by SMTR. TCH1 is in the MATI but this perm never reads it.
-      {0xb1eb2b67, kBarrierGlow, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, false, 1, false, false,
+      {0xb1eb2b67, kBarrierGlow, {{"TCH0", Role::Color, -1, -1}}, {}, -1, false, 1, false, false,
        false, true},
       // VFX_BarrierShield's exterior (b46bb66d, MATI 602b16e3 with MFC1 IS_SHIELD_EXTERIOR: Intro_Reactor's
       // and the Phendrana caves' shields; vfx/b46bb66d.md): both barrier bits. TCH1 read twice at (-u, v)
       // (its .r scrolls the second read, whose .a is the breakup); no scene copy. The VS's band sweep and
       // normal push are in the CPU feed (AddBarrierExterior); the mesh colour needs VMSH v2. CCH0 whole in
       // VPRM v1. Its fog perm (001) is decoded: fogged without DFOG 1, unfogged with.
-      {0xb46bb66d, kBarrierShield | kBarrierGlow, {{"TCH1", Role::Color, -1, -1}}, {}, -1, false, false, 1,
+      {0xb46bb66d, kBarrierShield | kBarrierGlow, {{"TCH1", Role::Color, -1, -1}}, {}, -1, false, 1,
        true, false, false, false, true},
       {0x84e0fe6c, kOpacityTex,
        {{"TCH0", Role::Opacity, -1, -1}},
@@ -1258,10 +1256,10 @@ const Recipe* RecipeOf(uint32_t shader) {
       // scene-depth soften.
       {0x8278c22d, kPyro,
        {{"TCH0", Role::Color, -1, -1}, {"TCH1", Role::Normal, -1, -1}, {"TCH2", Role::Ramp, -1, -1}},
-       {}, -1, false, false, 1, true},
+       {}, -1, false, 1, true},
       {0x7498e54a, kPyro | kDepthSoften,
        {{"TCH0", Role::Color, -1, -1}, {"TCH1", Role::Normal, -1, -1}, {"TCH2", Role::Ramp, -1, -1}},
-       {}, -1, false, false, 1, true},
+       {}, -1, false, 1, true},
       // VFX_Disintegration (perm 000_0, SPEC-disint-ice.md): TCH0 the mask, PMTR rows 0..3 (the VS
       // passes them as v2..v5). Perm 000 does no depth soften, so SFTD is not read.
       {0xd749057f, kDisintegration, {{"TCH0", Role::Color, -1, -1}}, {}},
@@ -4574,12 +4572,6 @@ public:
     }
     if (lit != 0 || recipe->litPerVertex) {
       features = (features | kParticleLit) & ~kAlreadyExposed;
-    }
-    if (recipe->frameBuffer) {
-      if (cch0[0] != 0.0f || cch0[1] != 0.0f) {
-        m_approximated.push_back(std::string("VMAT: shader ") + shaderText + "'s scene warp dropped (drawn as a multiply)");
-      }
-      blend = kBlendMultiply;
     }
     uint32_t spriteCenter = 0;
     if (const EffectProperty* sctr = find(F("SCTR"))) {

@@ -5818,29 +5818,8 @@ void TestWaveOrbHeaderBlend() {
   TestWaveOrbSwoosh(orb(0x642dd72b, 1));
 }
 
-// The new recipes: 3db95827 draws as a multiply (blend 4), and
-// the ice charge beam reads its colour from BCLR alone.
+// The ice charge beam reads its colour from BCLR alone.
 void TestVmatNewRecipes() {
-  // FrameBuffer_Indirect_Unlit with no warp: features 0, blend Multiply, no textures.
-  auto [parts, blob] = ConvertVmat(Mati(0x3db95827, {}));
-  CHECK_MSG(parts.size() == 1 && !blob.empty(), "a 3db95827 material writes VMAT");
-  if (!blob.empty()) {
-    CHECK_MSG(VmatWord(blob, 8) == 2 && VmatWord(blob, 12) == 0 && VmatWord(blob, 16) == 4 && VmatWord(blob, 20) == 0,
-              "3db95827 VMAT v2, no features, blend 4, no textures");
-  }
-  CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty(), "3db95827 with no warp approximates nothing");
-
-  // The same shader with a warp: the warp is dropped (drawn as a multiply).
-  auto warped = ConvertVmat(MatiCch0(0x3db95827, {}, 0.5f, 0.0f, 0.0f, 0.0f));
-  CHECK_MSG(warped.first.size() == 1 && !warped.second.empty(), "a warped 3db95827 material still writes VMAT");
-  if (!warped.second.empty()) {
-    CHECK_MSG(VmatWord(warped.second, 16) == 4, "a warped 3db95827 VMAT still blends as a multiply");
-  }
-  CHECK_MSG(warped.first.size() == 1 && warped.first[0].approximated.size() == 1 &&
-                warped.first[0].approximated[0] ==
-                    "VMAT: shader 3db95827's scene warp dropped (drawn as a multiply)",
-            "a warped 3db95827 notes its scene warp dropped");
-
   // VFX_IceChargeBeam without its NMAP, and so without the bumped facing term, has no recipe.
   auto ice = ConvertVmat(Mati(0x9e0605cd, {{"BCLR", Fresh(8)}}));
   CHECK_MSG(ice.first.size() == 1 && ice.second.empty(), "a 9e0605cd material without NMAP writes no VMAT");
@@ -6816,6 +6795,21 @@ void TestVmatSceneWarpRecipes() {
   check(0xcc155f99, "BCLR", "TCH0", kColorTex | kSceneWarp, 0, "cc155f99 is SceneWarp on BCLR, warped by TCH0");
   check(0x04276ae1, "BCLR", "TCH0", kColorTex | kSceneWarp, 0, "04276ae1 is SceneWarp on BCLR, warped by TCH0");
   check(0xd955396d, "TCH0", "TCH1", kOpacityTex | kSceneWarp, 1, "d955396d is SceneWarp on TCH0, warped by TCH1");
+
+  // 3db95827 (FrameBuffer_Indirect_Unlit): d955396d without the opacity map, warped by its only map TCH0.
+  {
+    auto [parts, blob] = ConvertVmat(MatiCch0(0x3db95827, {{"TCH0", Fresh(8)}}, 0.25f, -0.125f, 0.0f, 0.0f));
+    CHECK_MSG(parts.size() == 1 && !blob.empty() && parts[0].approximated.empty(), "3db95827 writes VMAT exactly");
+    if (blob.size() >= 24 + 44 + 7 * 4) {
+      CHECK_MSG(VmatWord(blob, 12) == kSceneWarp && VmatWord(blob, 16) != 4 && VmatWord(blob, 20) == 1,
+                "3db95827 is SceneWarp alone, the generator's blend, one map");
+      CHECK_MSG(VmatWord(blob, 24 + 32) == 1 && VmatWord(blob, 24 + 36) == Bits(0.25f) &&
+                    VmatWord(blob, 24 + 40) == Bits(-0.125f),
+                "3db95827's map carries CCH0.xy");
+      CHECK_MSG(VmatWord(blob, 68 + 4 * 5) == 0 && VmatWord(blob, 68) == ~0u && VmatWord(blob, 68 + 4) == ~0u,
+                "3db95827's only map is the Indirect slot");
+    }
+  }
 
   // Three maps (90ce7873, 03ac7d53): only the warp map's slot carries CCH0.xy; the role slots follow the
   // three texture records.
