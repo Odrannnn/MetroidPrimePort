@@ -245,7 +245,8 @@ inline constexpr int kModels = 30;
 // 205: SLDS (PSLD), the sleep distance. 206: an ELC2's visor effect data (PVSD..PVDT).
 // 207: a swoosh's PSCL (PSSC).
 // 208: a swoosh's zero SYSR under XFMD 2 (XFMD 1).
-inline constexpr int kEffects = 208;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
+// 209: DFCP and DFCS take two reals only (an ARRY of their colours read across them).
+inline constexpr int kEffects = 209;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

@@ -88,9 +88,10 @@ constexpr ElementSig kElementSigs[] = {
     {"VMAG", "e"},     {"VXTR", "e"},          {"VYTR", "e"},       {"VZTR", "e"},
     {"WIND", "ee"},
     // Pinned down against the shipped files: MPCB wraps a vector; MPAC is five
-    // reals, MPCN a vector and a radius; CREL a bool and two reals, LTHN two reals; MPRD is 2 or 4 elements; DFCP and DFCS 1 to 3.
-    {"MPCB", "e"},     {"MPAC", "eeeee"}, {"CREL", "eee"},   {"LTHN", "ee"},   {"MPCN", "ee"},       {"MPRD", "ee eeee"}, {"DFCP", "ee eee e"},
-    {"DFCS", "ee eee e"},
+    // reals, MPCN a vector and a radius; CREL a bool and two reals, LTHN two reals; MPRD is 2
+    // or 4 elements; DFCP and DFCS read two reals (GetRealElement 0x260de4).
+    {"MPCB", "e"},     {"MPAC", "eeeee"}, {"CREL", "eee"},   {"LTHN", "ee"},   {"MPCN", "ee"},       {"MPRD", "ee eeee"}, {"DFCP", "ee"},
+    {"DFCS", "ee"},
     // EXTT, EXTR and EXTS are leaves; SMOV is CSimpleMoverElement's (position,
     // velocity, rotation, scale, modifier); ROTV a vector turned by a rotation;
     // TRST is five reals and a raw word.

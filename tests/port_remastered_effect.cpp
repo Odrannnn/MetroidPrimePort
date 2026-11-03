@@ -467,6 +467,46 @@ void TestVarianceEmitters() {
   }
 }
 
+// DFCP and DFCS read two reals (GetRealElement 0x260de4). With a third allowed, an ARRY of two
+// colours CNST(r, g, b, MULT(DFCP(a, b), c)) also read as CNST(r, g, b) and MULT(DFCP(a, b, c), CNST(...)).
+void TestDistanceBlendArity() {
+  std::vector<uint8_t> out(0x3c, 0);
+  std::memcpy(out.data(), "RFRM", 4);
+  std::memcpy(out.data() + 0x14, "GENP", 4);
+  PutGenerator(out, false);
+  PutProperty(out, "COLR", 3);
+  PutFourCC(out, "SLCT");
+  PutFourCC(out, "IRND");
+  PutIntConstant(out, 0);
+  PutIntConstant(out, 1);
+  PutFourCC(out, "ARRY");
+  Put32(out, 2);
+  for (int i = 0; i < 2; ++i) {
+    PutFourCC(out, "CNST");
+    PutConstant(out, 1.0f);
+    PutConstant(out, 0.5f);
+    PutConstant(out, 0.25f);
+    PutFourCC(out, "MULT");
+    PutFourCC(out, "DFCP");
+    PutConstant(out, 4.0f);
+    PutConstant(out, 2.0f);
+    PutConstant(out, 1.0f);
+  }
+  PutProperty(out, "_END", 4);
+  EffectNode effect;
+  std::string error;
+  CHECK_MSG(ParseEffect(out.data(), out.size(), effect, error), "ARRY of DFCP colours parses");
+  const std::string dump = DumpEffect(effect, out.data());
+  const char* want =
+      "GPSM\n"
+      "  COLR 03 SLCT(IRND(CNST(0), CNST(1)), ARRY(CNST(CNST(1f), CNST(0.5f), CNST(0.25f), MULT(DFCP(CNST(4f), "
+      "CNST(2f)), CNST(1f))), CNST(CNST(1f), CNST(0.5f), CNST(0.25f), MULT(DFCP(CNST(4f), CNST(2f)), CNST(1f)))))\n";
+  CHECK_MSG(dump == want, "DFCP takes two reals");
+  if (dump != want) {
+    std::fprintf(stderr, "%s", dump.c_str());
+  }
+}
+
 // BNPS(SLCT(RAND, ARRY(BNID(name, flag)...))) as a SEMR's position: the bone name is a string
 // constant, so the ARRY's entries are not read across it. ATFB: an id, an int as a real, a flag.
 void PutBone(std::vector<uint8_t>& out, const char* name) {
@@ -530,6 +570,7 @@ int main() {
   TestParse();
   TestFailure();
   TestTypedNesting();
+  TestDistanceBlendArity();
   TestFlaggedChild();
   TestTextureElements();
   TestGeneratorFlags();
