@@ -882,6 +882,8 @@ class CInputStream;
 // Reads a PVRT body (after the CNST class id): u32 count, then per variable 16 guid bytes, u32
 // type and 4 float bit patterns. Null on a malformed table.
 CPortVarTable* PortReadVarTable(CInputStream& in);
+// Reads a PSYS body (after the CNST class id). Null on a malformed one.
+CPortSys* PortReadSys(CInputStream& in);
 
 #endif // TARGET_PC
 #endif // _CPORTPARTICLEVARS

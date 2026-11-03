@@ -78,6 +78,7 @@ CParticleSwoosh::CParticleSwoosh(const TToken< CSwooshDescription > desc, const 
   int i = 0;
 #ifdef TARGET_PC
   xPortVars.Init(x1c_desc->xPortVars.get());
+  xPortVars.InitSys(x1c_desc->xPortSys.get());
   // The generator that builds this swoosh, for SPA*/DPV*/TPV*.
   xPortVars.SetParent(CPortVarGlobals::sCurrent);
   CPortVarScope portVarScope(&xPortVars);
@@ -118,6 +119,10 @@ CParticleSwoosh::CParticleSwoosh(const TToken< CSwooshDescription > desc, const 
     } else {
       x2c_PSLT = 0x7fffff;
     }
+#ifdef TARGET_PC
+    // CAddVarSystem::Init once LENG and SIDE are known (ctor 0x27c858).
+    PortEvalSys(true);
+#endif
 
     x1d0_25_AALP = x1c_desc->x44_31_AALP;
 
@@ -192,6 +197,13 @@ const bool CParticleSwoosh::Update(double dt) {
   CParticleGlobals::SetEmitterTime(x28_curFrame);
   CParticleGlobals::UpdateParticleLifetimeTweenValues(0);
   CGlobalRandom random(x1c0_rand);
+#ifdef TARGET_PC
+  // The first Update runs CAddVarSystem::Init again (0x27dde4, or InitialUpdate 0x27d16c).
+  if (!xPortSysInit) {
+    xPortSysInit = true;
+    PortEvalSys(true);
+  }
+#endif
   double evalTime = x28_curFrame * kFrameTime;
   float timeScale = 1.f;
   if (x1c_desc->x4_TIME) {
@@ -204,6 +216,10 @@ const bool CParticleSwoosh::Update(double dt) {
   x30_curTime += advance;
   while (x1d0_26_forceOneUpdate || evalTime < x30_curTime) {
     x1d0_26_forceOneUpdate = false;
+#ifdef TARGET_PC
+    // CAddVarSystem::Update at the start of each tick (InternalUpdate 0x27d308).
+    PortEvalSys(false);
+#endif
     if (++x158_curParticle >= x15c_swooshes.capacity()) {
       x158_curParticle = 0;
     }
@@ -325,6 +341,58 @@ void CParticleSwoosh::SetOrientation(const CTransform4f& orientation) {
 }
 
 #ifdef TARGET_PC
+// The system variables in PSYS order, as CElementGen::PortEvalSys: all of them (CAddVarSystem::Init
+// 0x278438) or those that are not init-only (Update 0x278638), on the swoosh's own time context:
+// its frame and +0x140, the PSLT capped at 0x1000000 or that without one (ctor 0x27c6e8).
+void CParticleSwoosh::PortEvalSys(bool init) {
+  const CPortSys* sys = x1c_desc->xPortSys.get();
+  if (sys == nullptr) {
+    return;
+  }
+  const int frame = x28_curFrame;
+  const int systemLifetime = x1c_desc->x0_PSLT ? rstl::min_val(x2c_PSLT, 0x1000000) : 0x1000000;
+  const int lifetime = CParticleGlobals::mParticleLifetime;
+  const float lifetimeReal = CParticleGlobals::mParticleLifetimeReal;
+  const int percentage = CParticleGlobals::mParticleLifetimePercentage;
+  const float percentageReal = CParticleGlobals::mParticleLifetimePercentageReal;
+  const float percentageRemainder = CParticleGlobals::mParticleLifetimePercentageRemainder;
+  const float systemTween = CParticleGlobals::xPortSystemTween;
+  CParticleGlobals::SetParticleLifetime(systemLifetime);
+  CParticleGlobals::UpdateParticleLifetimeTweenValues(frame);
+  CParticleGlobals::PortSetSystemTime(frame, systemLifetime);
+  for (const SPortSysItem& item : sys->items) {
+    if (item.initOnly && !init) {
+      continue;
+    }
+    std::array< float, 4 > v{};
+    switch (item.type) {
+    case EPortVarType::Real:
+      item.real->GetValue(frame, v[0]);
+      break;
+    case EPortVarType::Int: {
+      int i = 0;
+      item.intE->GetValue(frame, i);
+      v[0] = static_cast< float >(i);
+    } break;
+    case EPortVarType::Color:
+      item.color->GetValueHdr(frame, v.data());
+      break;
+    default: {
+      CVector3f vec;
+      item.vec->GetValue(frame, vec);
+      v = {vec.GetX(), vec.GetY(), vec.GetZ(), 0.f};
+    } break;
+    }
+    xPortVars.SetSys(item.type, item.slot, v);
+  }
+  CParticleGlobals::mParticleLifetime = lifetime;
+  CParticleGlobals::mParticleLifetimeReal = lifetimeReal;
+  CParticleGlobals::mParticleLifetimePercentage = percentage;
+  CParticleGlobals::mParticleLifetimePercentageReal = percentageReal;
+  CParticleGlobals::mParticleLifetimePercentageRemainder = percentageRemainder;
+  CParticleGlobals::xPortSystemTween = systemTween;
+}
+
 // Remastered's PROT KPIN(RAZY(EMRV, ROTV(axis, RLCL), fallback)) at a point's birth
 // (CreateNewParticle 0x27cdc8, CERotationFromAxis::GetValue 0x29d298): Z = the motion, X = F x Z
 // for F the axis turned by the orientation, Y = Z x X, each falling back (orientation or identity)

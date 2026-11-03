@@ -2577,9 +2577,9 @@ public:
   // An ELC2's COLR (tag 3) reads slot 1 = the bolt's end - start (UpdateBolt 0xb77638 sets ctx+0x70
   // = param_2[3] - param_2[2] and calls the colour element with the bolt's age), the lifetime the
   // port's bolt sets, so its offset is 0.
-  // A generator's own SVCn/SVRn/SVIn/SVVn (CAddVarSystem's variables) is evaluated by CAddVarSystem
-  // ::Init/Update 0x278438/0x278638 on the generator's context, so its tag 1 is slot 0 = the system's
-  // PSLT, which CElementGen::PortEvalSys puts in CParticleGlobals: offset 0.
+  // A generator's or swoosh's own SVCn/SVRn/SVIn/SVVn (CAddVarSystem's variables) is evaluated by
+  // CAddVarSystem::Init/Update 0x278438/0x278638 on the system's context, so its tag 1 is slot 0 =
+  // the system's PSLT, which CElementGen/CParticleSwoosh::PortEvalSys put in CParticleGlobals: offset 0.
   static int LifetimeOffset(bool part, bool swoosh, bool electric, const EffectProperty& property) {
     if (electric && property.tag == 3 && property.fourcc == F("COLR")) {
       return 0;
@@ -5162,7 +5162,7 @@ public:
 
   // The system variables (the state's sysItems), in the order CElementGen evaluates them.
   void ReadSystemItems(GeneratorState& s) const {
-    if (s.part) {
+    if (s.part || s.swoosh) {
       struct Pending {
         const EffectProperty* property;
         uint32_t type;
@@ -5785,7 +5785,7 @@ public:
       }
       return true;
     }
-    if (s.part && SystemVarWrite(property.fourcc).first != ~0u) {
+    if ((s.part || s.swoosh) && SystemVarWrite(property.fourcc).first != ~0u) {
       return true;  // written as PSYS
     }
     return false;
@@ -7346,7 +7346,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PortWord();
     } else if (vfx && fourcc == F("PVRT")) {
       ok = reader.PortVariables();
-    } else if (part && fourcc == F("PSYS")) {
+    } else if ((part || type == F("SWHC")) && fourcc == F("PSYS")) {
       ok = reader.PortSystemVars();
     } else if (part && (fourcc == F("PADO") || fourcc == F("PFXB"))) {
       ok = reader.PortWords();

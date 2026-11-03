@@ -89,6 +89,8 @@ public:
   bool xPortInverseExposure = false;
   // port-only PVRT: Remastered particle variables (names, types, defaults)
   std::unique_ptr< CPortVarTable > xPortVars;
+  // port-only PSYS: the system variables (CParticleSwoosh::PortEvalSys)
+  std::unique_ptr< CPortSys > xPortSys;
   // port-only: the PKPR elements (per-point KPIN latches), latched at a point's birth in this
   // order; owned by the element trees
   std::vector< const CREPortKeep* > xPortKeeps;

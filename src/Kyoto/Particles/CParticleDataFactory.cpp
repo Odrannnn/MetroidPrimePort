@@ -104,9 +104,10 @@ Element* PortReadParentVar(CInputStream& in, EPortParentRead kind, Element* (*ge
   }
   return rs_new Read(read, fallback);
 }
+} // namespace
 
 // A PSYS body (after the CNST class id): u32 count, then per item u32 type, slot and
-// init-only flag and the element. Null on a malformed one.
+// init-only flag and the element. Null on a malformed one. Swooshes read it too.
 CPortSys* PortReadSys(CInputStream& in) {
   const u32 count = in.ReadLong();
   if (count > 256) {
@@ -148,6 +149,7 @@ CPortSys* PortReadSys(CInputStream& in) {
   return sys.release();
 }
 
+namespace {
 // A PPVR body (after the CNST class id): u32 count, then per item u32 kind, slot and
 // constant-after-start flag, and for kinds 1 and 2 the element. Null on a malformed one.
 CPortPartVars* PortReadPartVars(CInputStream& in) {
