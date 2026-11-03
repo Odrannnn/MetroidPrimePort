@@ -17,13 +17,14 @@ inline constexpr const char* kStampName = ".echoes-suits-version";
 //    the Dark Spider Ball as Gravity's.
 // 3: the first-person arms, right and left (grapple).
 // 4: the first-person arm cannon and its hologram, under variant ids (Cannon).
-inline constexpr int kVersion = 4;
+// 5: the cannon's Light and Annihilator sets swapped (kGunSets).
+inline constexpr int kVersion = 5;
 
 // The first-person arm cannon (CGunWeapon::LoadGunModels: characters 0 and 1 of each beam's ANCS).
 // Echoes' gun and hologram have Prime's ids and are skinned on its own CINF 46ED31E0, the same 50
 // joints by name and place as Prime's (only the ids differ), so Prime's gun animations drive them.
-// Each goes under the variant id Cannon(id); Echoes' five material sets (Power, Dark, Light,
-// Annihilator, then the fifth) keep their order, picked by beam like Prime's.
+// Each goes under the variant id Cannon(id), its material sets reordered by kGunSets: the game
+// picks a gun's set by beam (CGunWeapon x20c_shaderIdx).
 struct Gun {
   const char* what;  // for the log
   uint32_t cmdl, cskr;
@@ -33,6 +34,10 @@ inline constexpr Gun kGuns[] = {
     {"arm cannon", 0x19AE626C, 0x7281CDBA},
     {"cannon hologram", 0xE6F4DEFC, 0x8DDB712A},
 };
+// The Echoes material set each Prime beam's gun wears, by CPlayerState::EBeamId (Power, Ice, Wave,
+// Plasma, Phazon). Echoes' sets are Power, Dark, Light, Annihilator, then the fifth: Ice wears
+// Dark, Wave Annihilator, Plasma Light.
+inline constexpr uint32_t kGunSets[] = {0, 1, 3, 2, 4};
 // The first-person gun's ANCS of each beam (CPlayerState::EBeamId order). The mod writes a variant
 // of each, Cannon(ancs), whose characters 0 (the gun) and 1 (its hologram) are Echoes'.
 inline constexpr uint32_t kBeamAncs[] = {0x41B63D84, 0xC1135EA3, 0x02B4357C, 0x6AB61E5E, 0x5E7FF762};

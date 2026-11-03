@@ -1266,15 +1266,29 @@ bool Import(const Io& io, Result& result, std::string& error) {
       std::vector<uint8_t> cmdl, cskr, outCmdl, outCskr;
       std::vector<uint32_t> gunTextures;
       std::vector<std::string> folded;
+      PrimeCmdl model;
       if (!io.echoes(kCMDL, gun.cmdl, cmdl) || !io.echoes(kCSKR, gun.cskr, cskr)) {
         error = "The Echoes disc has no " + std::string(gun.what) + " (" + Hex(gun.cmdl) +
                 "): is it Metroid Prime 2: Echoes (USA)?";
         return false;
       }
-      if (!ConvertCmdl(cmdl, outCmdl, gunTextures, &why)) {
+      if (!ConvertCmdl(cmdl, model, gunTextures, &why)) {
         error = std::string(gun.what) + " model " + Hex(gun.cmdl) + ": " + why;
         return false;
       }
+      // The gun has a set per beam; the hologram one for all.
+      if (model.materialSets.size() != 1 && model.materialSets.size() != std::size(kGunSets)) {
+        error = std::string(gun.what) + " model " + Hex(gun.cmdl) + " has " +
+                std::to_string(model.materialSets.size()) + " material sets, not 1 or " +
+                std::to_string(std::size(kGunSets)) + ".";
+        return false;
+      }
+      if (model.materialSets.size() == std::size(kGunSets)) {
+        std::vector<std::vector<uint8_t>> sets;
+        for (const uint32_t set : kGunSets) sets.push_back(model.materialSets[set]);
+        model.materialSets = std::move(sets);
+      }
+      outCmdl = WriteCmdl(model);
       if (!ConvertCskr(cskr, echoesCinf, primeCinf, outCskr, &folded, &why)) {
         error = std::string(gun.what) + " skin " + Hex(gun.cskr) + ": " + why;
         return false;
