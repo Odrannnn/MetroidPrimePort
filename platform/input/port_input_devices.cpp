@@ -1178,7 +1178,14 @@ bool PromptButtonInput(unsigned padButton, PortInput::Family family, Input& out)
 }
 
 bool PromptAxisInput(PADAxis axis, PortInput::Family family, Input& out) {
-  return PromptInputFor({PadAxisAction(axis)}, family, out);
+  // On the map a bound map row (rotate on the control stick, pan on the C-stick) comes first.
+  const Action game = PadAxisAction(axis);
+  if ((GameContexts() & PortInput::kCtxMap) != 0) {
+    for (const PortInput::MapRow& m : PortInput::kMapRows) {
+      if (m.game == game && PromptInputFor({m.row}, family, out)) return true;
+    }
+  }
+  return PromptInputFor({game}, family, out);
 }
 
 PADStatus Synthesize(const PortInput::Output& out) {
@@ -1193,10 +1200,18 @@ PADStatus Synthesize(const PortInput::Output& out) {
   for (const SMenuAction& m : kMenuActions) {
     if (m.padButton != 0 && out.Held(m.menu)) s.button |= static_cast< u16 >(m.padButton);
   }
-  s.stickX = StickX(out.Value(Action::MainRight), out.Value(Action::MainLeft));
-  s.stickY = StickY(out.Value(Action::MainDown), out.Value(Action::MainUp));
-  s.substickX = StickX(out.Value(Action::CRight), out.Value(Action::CLeft));
-  s.substickY = StickY(out.Value(Action::CDown), out.Value(Action::CUp));
+  // A stick direction or its map row (only live on the map), the stronger.
+  const auto stick = [&](Action game) {
+    float v = out.Value(game);
+    for (const PortInput::MapRow& m : PortInput::kMapRows) {
+      if (m.game == game) v = std::max(v, out.Value(m.row));
+    }
+    return v;
+  };
+  s.stickX = StickX(stick(Action::MainRight), stick(Action::MainLeft));
+  s.stickY = StickY(stick(Action::MainDown), stick(Action::MainUp));
+  s.substickX = StickX(stick(Action::CRight), stick(Action::CLeft));
+  s.substickY = StickY(stick(Action::CDown), stick(Action::CUp));
   // An open radial menu takes the C-stick (PortRadial::Tick), so it doesn't swap beams too.
   if (PortRadial::Capturing()) s.substickX = s.substickY = 0;
   s.triggerLeft = Trigger(std::max(out.Value(Action::LAnalog), out.Value(Action::MenuLAnalog)), (s.button & PAD_TRIGGER_L) != 0);
@@ -1236,6 +1251,7 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   BuildProfile(next);
   ApplyMenuButtons(next);
   PortInput::ApplyBallButtons(next);
+  PortInput::ApplyMapRows(next);
   const uint16_t contexts = GameContexts();
   ApplyTwinStickFreeAim(next, contexts);
   if (!sInit || next != sProfile) {

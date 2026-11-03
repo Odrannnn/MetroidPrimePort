@@ -184,7 +184,15 @@ enum class ActionKind : uint8_t {
   X(BeamMenu, Digital, "beam_menu", "Trilogy beam radial selector (hold)")                          \
   X(VisorMenu, Digital, "visor_menu", "Trilogy visor radial selector (hold)")                      \
   X(Dodge, Digital, "dodge", "Dodge (with strafe)") \
-  X(Grapple, Digital, "grapple", "Grapple (at a grapple point)")
+  X(Grapple, Digital, "grapple", "Grapple (at a grapple point)")                                   \
+  X(MapRotateUp, HalfAxis, "map_rotate_up", "Map rotate up")                                       \
+  X(MapRotateDown, HalfAxis, "map_rotate_down", "Map rotate down")                                 \
+  X(MapRotateLeft, HalfAxis, "map_rotate_left", "Map rotate left")                                 \
+  X(MapRotateRight, HalfAxis, "map_rotate_right", "Map rotate right")                              \
+  X(MapPanUp, HalfAxis, "map_pan_up", "Map pan up")                                                \
+  X(MapPanDown, HalfAxis, "map_pan_down", "Map pan down")                                          \
+  X(MapPanLeft, HalfAxis, "map_pan_left", "Map pan left")                                          \
+  X(MapPanRight, HalfAxis, "map_pan_right", "Map pan right")
 
 enum class Action : uint16_t {
 #define PORT_INPUT_ACTION_ENUM(id, kind, key, label) id,

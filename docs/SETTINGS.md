@@ -510,6 +510,14 @@
   the gameplay page. The layout editor's "Ball page" button edits the other page, where
   the ball buttons move, resize, hide and delete like any; an added button belongs to
   the page it was added on, and its "On …" button moves it to Gameplay, Ball or Both.
+  The Map rows (Map rotate up/down/left/right, Map pan up/down/left/right;
+  `map_rotate_up`.. `map_rotate_right`, `map_pan_up`.. `map_pan_right` in controls.toml)
+  tilt the control stick (rotate) or the C-stick (pan) only on the map screen. They start
+  unbound and add to the sticks: their own inputs keep rotating and panning. An input bound
+  to a map row does only that on the map, bindings scoped to the map included, and what it
+  did before everywhere else, so WASD can pan the map without moving the gameplay C-stick.
+  Zoom stays on L/R (or the "Menus and map" L/R rows). On the map the stick prompts name
+  a bound map row's input.
   "Point and click menus" (on by default; `pointer_menus=`, `MP_POINTER_MENUS`) lets
   the mouse and touch work the game's own menus (front end, pause screen, save stations,
   upgrade messages) and the map. A hover selects (a tap on touch), a click confirms (a
