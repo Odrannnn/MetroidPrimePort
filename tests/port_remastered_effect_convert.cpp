@@ -4156,6 +4156,19 @@ void TestShutdownAndPivot() {
     CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
               std::string(flag) + " is consumed and writes nothing");
   }
+  for (const char* flag : {"DEFX", "UGFP"}) {
+    for (uint8_t value : {0, 1}) {
+      parts = convert([&](auto& o) {
+        PutProperty(o, flag, 0);
+        PutFourCC(o, "CNST");
+        o.push_back(value);
+      });
+      const std::vector<std::string> dropped =
+          value != 0 ? std::vector<std::string>{std::string(flag) + " 1"} : std::vector<std::string>{};
+      CHECK_MSG(parts.size() == 1 && parts[0].dropped == dropped && parts[0].part == convert([](auto&) {})[0].part,
+                std::string(flag) + (value != 0 ? " 1 is dropped" : " 0 is consumed and writes nothing"));
+    }
+  }
   parts = convert([](auto& o) {
     PutProperty(o, "ISTR", 1);
     PutConstant(o, Bits(0.2f));

@@ -6629,6 +6629,19 @@ public:
     if (s.part && fourcc == F("DPRE")) {
       return true;
     }
+    // DEFX and UGFP are GPSM bools in 0x6b bits 0 and 1 (CreateGPSM 0x25a29c, 0x258b0c). The
+    // CParticleDescription ctor 0x2883d4 starts the halfword at 0x304 and no other property sets
+    // either bit, so 0 is the default; SRender::Fixup 0x28fcb0 may set UGFP after the parse,
+    // whatever the file says. Only 0 converts (to nothing).
+    if (s.part && (fourcc == F("DEFX") || fourcc == F("UGFP"))) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value) || value > 1) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + ": not a constant 0 or 1");
+      } else if (value != 0) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + " 1");
+      }
+      return true;
+    }
     // FRMD (desc+0x170, CreateGPSM): the face-reflection mode 1..3. An explosion of a generator
     // with it set lights Samus's visor reflection (CVisorEffectManagerMP1::AddExplosionEffect
     // 0xd10144) in place of retail's game lights. The port-only PFRM keeps the mode; 0 writes nothing.
