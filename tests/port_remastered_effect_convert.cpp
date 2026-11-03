@@ -6480,6 +6480,30 @@ void TestElc2NclrAndXfmd() {
                            [](const std::string& d) { return d.rfind("IEXP", 0) == 0; }),
               "ELC2 IEXP is not dropped");
   }
+  // EBDM (read by VMAT) and DDLN (discarded by CreateELC2) are consumed; TEXW and ZBUF 0 are the
+  // ctor default and write nothing, 1 is dropped.
+  auto flags = [](uint32_t texw, uint32_t zbuf) {
+    return ConvertElc2([=](auto& o) {
+      PutProperty(o, "EBDM", 1);
+      o.push_back(1);
+      PutProperty(o, "DDLN", 0);
+      o.push_back(0);
+      PutProperty(o, "TEXW", 1);
+      PutConstant(o, texw);
+      PutProperty(o, "ZBUF", 1);
+      PutConstant(o, zbuf);
+    });
+  };
+  parts = flags(0, 0);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), "ELC2 EBDM, DDLN, TEXW 0 and ZBUF 0 drop nothing");
+  if (parts.size() == 1) {
+    for (const char* tag : {"EBDM", "DDLN", "TEXW", "ZBUF"}) {
+      CHECK_MSG(!Contains(parts[0].part, Retail().f(tag).bytes), std::string("ELC2 ") + tag + " is not written");
+    }
+  }
+  parts = flags(1, 1);
+  const std::vector<std::string> both = {"TEXW 1", "ZBUF 1"};
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped == both, "ELC2 TEXW 1 and ZBUF 1 are dropped");
 }
 
 // Transformed/model primitives consume SIZE, irrespective of TEXR/MTIN.

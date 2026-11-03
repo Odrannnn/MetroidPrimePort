@@ -5753,6 +5753,23 @@ public:
       }
       return true;
     }
+    // ELC2 render-state fields (CreateELC2 0xb70734). EBDM is read by the VMAT writer, the only
+    // way an ELC2 draws. DDLN is read into a stack byte and discarded. TEXW (desc+0x265) and ZBUF
+    // (desc+0x266) are GetBools whose ctor default is 0 (0xb71d3c); InitStaticRenderStateImpl
+    // 0xb72618 sets static-state bits 0x1080 and 0x40 for them, which no port draw takes, so only
+    // 0 converts.
+    if (s.electric && (fourcc == F("EBDM") || fourcc == F("DDLN"))) {
+      return true;
+    }
+    if (s.electric && (fourcc == F("TEXW") || fourcc == F("ZBUF"))) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value) || value > 1) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + ": not a constant 0 or 1");
+      } else if (value != 0) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + " 1");
+      }
+      return true;
+    }
     // Port-only ELC2 fields, written as the retail encoding under their own tags.
     if (s.electric && Elc2Properties().count(fourcc) != 0) {
       std::vector<uint8_t> bytes;
