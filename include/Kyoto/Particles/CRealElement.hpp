@@ -275,6 +275,14 @@ public:
   bool GetValue(int frame, float& valOut) const override;
 };
 
+// Port-only PGTC (Remastered's real GTCP, CREGetTotalCreatedParticleCount::GetValue 0x297434):
+// the generator's total created particles as a float, 0 with no generator. The converter writes it
+// only in an emitter, where Remastered's total is one less than retail's cumulative count.
+class CREPortTotalCreatedParticleCount : public CRealElement {
+public:
+  bool GetValue(int frame, float& valOut) const override;
+};
+
 // Port-only DIVD (CREDivide::GetValue 0x294e0c): a / b, a plain fdiv with no zero guard.
 class CREPortDivide : public CRealElement {
   CRealElement* x4_a;

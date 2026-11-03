@@ -1683,6 +1683,9 @@ CRealElement* CParticleDataFactory::GetRealElement(CInputStream& in) {
     return rs_new CREPortKeyframeInput(loop, count, loopStart, start, rate, std::move(keys),
                                        GetRealElement(in));
   }
+  case SBIG('PGTC'): {
+    return rs_new CREPortTotalCreatedParticleCount();
+  }
   case SBIG('PSLW'): {
     CRealElement* a = GetRealElement(in);
     CRealElement* b = GetRealElement(in);
@@ -1933,6 +1936,27 @@ CVectorElement* CParticleDataFactory::GetVectorElement(CInputStream& in) {
     }
     ret = rs_new CVEPortAngleConeMinMaxVariance(rotateX, rotateY, rotateZ, minAngle, maxAngle, magnitude, polarCount,
                                                 polarVariance, azimuthCount, azimuthVariance, shuffle);
+    break;
+  }
+  case SBIG('PKYF'): {
+    // Remastered's vector KEYF: as the real PKYF, with three floats per key.
+    const bool loop = in.ReadBool();
+    int count = static_cast< int >(in.ReadLong());
+    const float loopStart = in.ReadFloat();
+    const float start = in.ReadFloat();
+    const float rate = in.ReadFloat();
+    if (count <= 0 || count > 0x100000) {
+      PortLog::Write("particles: vector PKYF with key count %d, evaluating to 0\n", count);
+      count = 0;
+    }
+    std::vector< CVector3f > keys;
+    for (int i = 0; i < count; ++i) {
+      const float x = in.ReadFloat();
+      const float y = in.ReadFloat();
+      const float z = in.ReadFloat();
+      keys.push_back(CVector3f(x, y, z));
+    }
+    ret = rs_new CVEPortKeyframeInput(loop, count, loopStart, start, rate, std::move(keys), GetRealElement(in));
     break;
   }
   case SBIG('PMAC'): {

@@ -9,7 +9,10 @@
 #include "Kyoto/Particles/PortParticleMath.hpp"
 #include "Kyoto/Streams/CInputStream.hpp"
 #ifdef TARGET_PC
+#include "Kyoto/Particles/CElementGen.hpp"
 #include "Kyoto/Particles/CPortParticleParseScope.hpp"
+
+#include <algorithm>
 #endif
 
 #include "rstl/math.hpp"
@@ -458,6 +461,15 @@ bool CREPortSwooshNodeTime::GetValue(int frame, float& valOut) const {
   CParticleGlobals::mParticleLifetimePercentageReal = real;
   CParticleGlobals::mParticleLifetimePercentageRemainder = remainder;
   return ret;
+}
+
+bool CREPortTotalCreatedParticleCount::GetValue(int frame, float& valOut) const {
+  const CParticleGlobals::SParticleSystem* system = CParticleGlobals::GetCurrentParticleSystem();
+  const CElementGen* generator =
+      system != nullptr && CParticleGlobals::xPortSwooshEval == nullptr ? system->x4_system : nullptr;
+  // Retail counts a particle before its emitter runs; Remastered's total is one less.
+  valOut = generator != nullptr ? float(std::max(generator->GetCumulativeParticleCount() - 1, 0)) : 0.f;
+  return false;
 }
 
 CREPortSlot2Time::CREPortSlot2Time(CRealElement* a) : x4_a(a) {}

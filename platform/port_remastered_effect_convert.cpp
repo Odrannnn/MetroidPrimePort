@@ -277,8 +277,9 @@ const Signatures& PortElementsOf(Type type) {
       // VARF: a PVRT index. PSYR: a PSYS slot. PSDT: the shutdown countdown's remaining over its
       // total. PMXV: the index, then the fallback. PSLW: the two reals the system tween blends.
       // PDML: a component of the dominant light direction (DOML). PVSQ: the occlusion visibility.
+      // PGTC: Remastered's total created particles (a real GTCP).
       {F("VARF"), "w"}, {F("PSYR"), "w"}, {F("PSDT"), ""}, {F("PMXV"), "ir"}, {F("PSLW"), "rr"},
-      {F("PDML"), "w"}, {F("PVSQ"), ""},
+      {F("PDML"), "w"}, {F("PVSQ"), ""}, {F("PGTC"), ""},
   };
   static const Signatures vectorElements = {
       // VARV: a PVRT index. PCRC: centre, axis, start degrees, count, variance, radius, then the
@@ -1753,17 +1754,20 @@ public:
     // KEYF (version 2) is CREKeyframeInput 0x296490: the 30-byte header (version, an unused word,
     // loop and an unused byte, N at +10, loop start A, start B and rate R as floats, then the key
     // count) with N keys, and an input element. The port-only PKYF: the loop byte, N, A, B, R, the
-    // N keys, then the input. Another version builds no element in Remastered.
-    if (value.fourcc == F("KEYF") && type == Type::Real && value.args.size() == 2 &&
+    // N keys, then the input. Another version builds no element in Remastered. A vector KEYF
+    // (CVEKeyframeInput 0x2a18fc, GetValue 0x2a19b8) is the same with three floats per key, in
+    // Remastered's numbers like any vector tree.
+    if (value.fourcc == F("KEYF") && (type == Type::Real || type == Type::Vector) && value.args.size() == 2 &&
         value.args[0].kind == EffectValue::Kind::Keys) {
       const uint8_t* p = m_data + value.args[0].offset;
       const size_t size = value.args[0].size;
+      const size_t floats = type == Type::Vector ? 3 : 1;
       if (size < 30 || ReadLE32(p) != 2) {
         why = "KEYF of a version other than 2";
         return false;
       }
       const uint32_t n = ReadLE32(p + 10);
-      if (n < 1 || n != ReadLE32(p + 26) || size - 30 != size_t(n) * 4) {
+      if (n < 1 || n != ReadLE32(p + 26) || size - 30 != size_t(n) * 4 * floats) {
         why = "KEYF whose key count differs from N";
         return false;
       }
@@ -1773,8 +1777,8 @@ public:
       AppendBE32(out, ReadLE32(p + 14));
       AppendBE32(out, ReadLE32(p + 18));
       AppendBE32(out, ReadLE32(p + 22));
-      for (uint32_t i = 0; i < n; ++i) {
-        AppendBE32(out, ReadLE32(p + 30 + size_t(i) * 4));
+      for (size_t i = 0; i < size_t(n) * floats; ++i) {
+        AppendBE32(out, ReadLE32(p + 30 + i * 4));
       }
       return Element(value.args[1], Type::Real, out, why);
     }
@@ -1993,6 +1997,18 @@ public:
         return false;
       }
       AppendBE32(out, F("PVSQ"));
+      return true;
+    }
+    // A real GTCP (CREGetTotalCreatedParticleCount 0x297434) is the generator's total created
+    // particles (vfunc +0x50, GetTotalParticlesCreated 0x24db30) as a float, 0 with none. In a
+    // generator's EMTR it is the port-only PGTC (one less than retail's count, which Remastered
+    // raises only at the creation loop's tail 0x24c1c8); elsewhere that offset is unverified.
+    if (value.fourcc == F("GTCP") && type == Type::Real && value.args.empty()) {
+      if (!m_gpsm || !m_emtr) {
+        why = "a real GTCP outside a generator's EMTR";
+        return false;
+      }
+      AppendBE32(out, F("PGTC"));
       return true;
     }
     const Signatures& elements = ElementsOf(type);
@@ -3110,7 +3126,10 @@ public:
       Basis(fourcc == F("PMSC") ? F("BSSC") : F("BSIS"), inner, out);
       return true;
     }
-    return Element(value[0], type.type, out, why);
+    m_emtr = fourcc == F("EMTR");
+    const bool ok = Element(value[0], type.type, out, why);
+    m_emtr = false;
+    return ok;
   }
 
   // A swoosh or electric child a spawn table starts: retail has one of each
@@ -6962,6 +6981,7 @@ private:
   mutable bool m_gpsm = false;                      // the node being written is a GPSM
   mutable uint32_t m_xfmd = 2;                      // its XFMD mode, 2 without one
   mutable const EffectValue* m_semrPos = nullptr;   // the position child of the SEMR being written
+  mutable bool m_emtr = false;                      // an EMTR property is being written
   mutable int64_t m_maxp = -1;                      // its MAXP when a constant, else -1
   // XFMD 5's INTT, and one under XFMD 2/3 that reads no EXTT, is written as retail's POFS.
   bool IntIsPofs(const EffectProperty& intt) const {
@@ -7044,11 +7064,12 @@ public:
       }
       return field == F("NONE") || (field == F("CNST") && Skip(4));
     }
-    // Port-only PKYF: the loop byte, N, the loop start, start and rate, N keys, then the input.
-    if (fourcc == F("PKYF") && type == Type::Real) {
+    // Port-only PKYF: the loop byte, N, the loop start, start and rate, N keys (three floats each
+    // for a vector), then the input.
+    if (fourcc == F("PKYF") && (type == Type::Real || type == Type::Vector)) {
       uint32_t count;
       return Skip(1) && Word(count) && count >= 1 && count <= 0x100000 && Skip(12) &&
-             Skip(size_t(count) * 4) && Element(Type::Real);
+             Skip(size_t(count) * (type == Type::Vector ? 12 : 4)) && Element(Type::Real);
     }
     // Port-only PRTV: the vector, then EXTR, CMRT, INTR or REUL and its three angles.
     if (fourcc == F("PRTV") && type == Type::Vector) {

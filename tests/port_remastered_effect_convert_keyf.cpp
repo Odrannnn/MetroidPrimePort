@@ -78,9 +78,10 @@ std::vector<ConvertedPart> Convert(std::vector<uint8_t>& data) {
   return PortRemastered::CheckedConvert(effect, data.data());
 }
 
-// A KEYF block: header (version, loop, N, A, B, R, count) and the keys, then SCAL-less CNST input.
+// A KEYF block: header (version, loop, N, A, B, R, count) and the keys, then a CNST 3 input, or a
+// real GTCP.
 void PutKeyf(std::vector<uint8_t>& out, uint32_t version, bool loop, uint32_t n, uint32_t count,
-             const std::vector<float>& keys) {
+             const std::vector<float>& keys, bool gtcp = false) {
   PutFourCC(out, "KEYF");
   Put32(out, version);
   Put32(out, 0);
@@ -94,15 +95,19 @@ void PutKeyf(std::vector<uint8_t>& out, uint32_t version, bool loop, uint32_t n,
   for (float key : keys) {
     Put32(out, Bits(key));
   }
+  if (gtcp) {
+    PutFourCC(out, "GTCP");
+    return;
+  }
   PutFourCC(out, "CNST");
   Put32(out, Bits(3.0f));
 }
 
 std::vector<ConvertedPart> ConvertSize(uint32_t version, bool loop, uint32_t n, uint32_t count,
-                                       const std::vector<float>& keys) {
+                                       const std::vector<float>& keys, bool gtcp = false) {
   std::vector<uint8_t> out = Header();
   PutProperty(out, "SIZE", 3);
-  PutKeyf(out, version, loop, n, count, keys);
+  PutKeyf(out, version, loop, n, count, keys, gtcp);
   PutTexr(out, 0x1234ABCD);
   PutProperty(out, "_END", 4);
   return Convert(out);
@@ -143,11 +148,71 @@ void TestKeyfDropped() {
             "a key count that differs from N is dropped with a reason");
 }
 
+// A vector KEYF (three floats per key) as an emitter's position, as the two shipped ones.
+std::vector<ConvertedPart> ConvertEmitter(uint32_t n, uint32_t count, const std::vector<float>& keys,
+                                          bool gtcp = false) {
+  std::vector<uint8_t> out = Header();
+  PutProperty(out, "EMTR", 3);
+  PutFourCC(out, "SEMR");
+  PutKeyf(out, 2, false, n, count, keys, gtcp);
+  PutFourCC(out, "CNST");
+  for (int i = 0; i < 3; ++i) {
+    PutFourCC(out, "CNST");
+    Put32(out, Bits(0.f));
+  }
+  PutTexr(out, 0x1234ABCD);
+  PutProperty(out, "_END", 4);
+  return Convert(out);
+}
+
+void TestVectorKeyf() {
+  const std::vector<float> keys = {1.f, 2.f, 3.f, -4.f, 5.f, -6.f};
+  std::vector<ConvertedPart> parts = ConvertEmitter(2, 2, keys);
+  std::vector<uint8_t> want = {'P', 'K', 'Y', 'F', 0};
+  Append(want, BE(2));
+  Append(want, BE(Bits(1.0f)));
+  Append(want, BE(Bits(0.5f)));
+  Append(want, BE(Bits(2.0f)));
+  for (float key : keys) {
+    Append(want, BE(Bits(key)));
+  }
+  Append(want, {'C', 'N', 'S', 'T'});
+  Append(want, BE(Bits(3.0f)));
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, want), "a vector KEYF maps onto PKYF with 3 floats a key");
+  if (parts.size() == 1) {
+    CHECK_MSG(parts[0].dropped.empty(), "nothing is dropped");
+  }
+  // Keys sized for a real KEYF are not a vector KEYF.
+  parts = ConvertEmitter(2, 2, {1.f, 2.f});
+  CHECK_MSG(parts.size() == 1 && !Contains(parts[0].part, {'P', 'K', 'Y', 'F'}) && !parts[0].dropped.empty(),
+            "a vector KEYF with 4-byte keys is dropped");
+}
+
+// A real GTCP is the port-only PGTC in an emitter, and dropped elsewhere.
+void TestGtcp() {
+  const std::vector<float> keys = {1.f, 2.f, 3.f, -4.f, 5.f, -6.f};
+  std::vector<ConvertedPart> parts = ConvertEmitter(2, 2, keys, true);
+  std::vector<uint8_t> want;
+  for (float key : {5.f, -6.f}) {
+    Append(want, BE(Bits(key)));
+  }
+  Append(want, {'P', 'G', 'T', 'C'});
+  CHECK_MSG(parts.size() == 1 && Contains(parts[0].part, want), "an emitter's real GTCP is PGTC");
+  if (parts.size() == 1) {
+    CHECK_MSG(parts[0].dropped.empty(), "nothing is dropped");
+  }
+  parts = ConvertSize(2, false, 1, 1, {7.f}, true);
+  CHECK_MSG(parts.size() == 1 && !Contains(parts[0].part, {'P', 'G', 'T', 'C'}) && !parts[0].dropped.empty(),
+            "a real GTCP outside an emitter is dropped");
+}
+
 }  // namespace
 
 int main() {
   TestKeyf();
   TestKeyfNoLoop();
   TestKeyfDropped();
+  TestVectorKeyf();
+  TestGtcp();
   return PORT_TEST_RESULT();
 }
