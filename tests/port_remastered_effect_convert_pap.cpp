@@ -279,9 +279,31 @@ void TestIntRandParentRead() {
   CHECK_MSG(Contains(parts[0].part, ltme), "LTME reads a PRAN of the two SPAI reads");
 }
 
+// SPWT on a generator with no child system: nothing reads it, so it is neither written nor dropped.
+void TestChildlessSpwt() {
+  std::vector<uint8_t> out = Header();
+  PutProperty(out, "SPWT", 1);
+  PutFourCC(out, "CNST");
+  PutCnst(out, Bits(0.f));
+  PutCnst(out, Bits(0.5f));
+  PutCnst(out, Bits(0.f));
+  PutTexr(out, 0x1234ABCD);
+  PutProperty(out, "_END", 4);
+  const std::vector<ConvertedPart> parts = Convert(out);
+  CHECK_MSG(parts.size() == 1, "one part");
+  if (parts.size() != 1) {
+    return;
+  }
+  for (const std::string& d : parts[0].dropped) {
+    CHECK_MSG(d.rfind("SPWT", 0) != 0, d.c_str());
+  }
+  CHECK_MSG(!Contains(parts[0].part, Four("SPWT")), "no SPWT written");
+}
+
 }  // namespace
 
 int main() {
+  TestChildlessSpwt();
   TestIntRandParentRead();
   TestPpvr();
   TestPap9Leaf();

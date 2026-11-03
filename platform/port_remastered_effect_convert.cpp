@@ -6604,6 +6604,15 @@ public:
       s.out.insert(s.out.end(), bytes.begin(), bytes.end());
       return;
     }
+    // SPWT/SPWR/SPWS/SPCL are the translation, rotation, scale and colour a generator hands its
+    // child systems (SChildSystems::SetupSpawn 0x28d8ac, desc+0x298..0x2a4), read only when one is
+    // built (ConstructChildSystemCoords 0x24c594) or updated (UpdateChildSystemExternalDataSet
+    // 0x246508). A generator with no child system property never reads them.
+    if (s.part && (fourcc == F("SPWT") || fourcc == F("SPWR") || fourcc == F("SPWS") || fourcc == F("SPCL")) &&
+        !s.Has(F("ICTS")) && !s.Has(F("IDTS")) && !s.Has(F("IITS")) && !s.Has(F("KSSM")) &&
+        !s.Has(F("SSWH")) && !s.Has(F("SELC")) && !s.Has(F("PSPS"))) {
+      return;
+    }
     if (found == s.retail.end()) {
       s.result.dropped.push_back(EffectFourCCString(property.fourcc) + ": Remastered only");
       return;
