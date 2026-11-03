@@ -17,7 +17,8 @@ tooling is in `decomp/`, not here.
 | `make_ap_config.py` | Joins an Archipelago world's `Locations.py` with a port location dump into `archipelago.json` | CTest `port_ap_fixture`; by hand |
 | `gen_skippable_cutscenes.py` | Generates `platform/port_skip_cutscenes_data.inc` from randomprime's skippable-cutscene patches | CTest `port_skip_rev2` imports it; by hand to regenerate |
 | `collect_licenses.sh` | Collects every licence and notice a shipped build must carry into one directory | CI (all release packages), `make_appimage.sh` |
-| `make_appimage.sh` | Packages the executable and texture replacements as an AppImage | CI `linux-release.yml` |
+| `make_appimage.sh` | Packages the executable and embedded RecompLauncher manifest as an AppImage, plus a tarball with an adjacent manifest (requires Python 3) | CI `linux-release.yml` |
+| `write_recomplauncher.py` | Adapts the owned launcher manifest to desktop release layouts and data paths | CI `linux-release.yml`, `macos.yml`; `make_appimage.sh` |
 | `build_ffmpeg_min.sh` | Builds the minimal ffmpeg the Windows and macOS packages carry for the Remastered movie import | CI `windows.yml`, `macos.yml` |
 | `make_flatpak.sh` | Builds a Flatpak bundle from `flatpak/` | by hand |
 | `android_apk.sh` | Builds and signs the Android APK through Gradle | by hand |

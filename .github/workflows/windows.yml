@@ -190,6 +190,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item build-win/metroid_prime_port.exe dist/
+          Copy-Item recomplauncher.json dist/
+          Copy-Item docs/RECOMPLAUNCHER.md dist/RECOMPLAUNCHER.md
           Get-ChildItem build-win/*.dll | Copy-Item -Destination dist/
           if (Test-Path build-win/metroid_prime_port.pdb) { Copy-Item build-win/metroid_prime_port.pdb dist/ }
           # SDL3, zlib, libpng, nod and the runner's OpenSSL are linked into the

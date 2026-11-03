@@ -120,6 +120,19 @@ class Profiles(unittest.TestCase):
             self.assertIn("--appimage-arch requires --platform linux", result.stderr)
             self.assertFalse(output.exists())
 
+    def test_release_workflows_ship_manifests(self):
+        windows = (ROOT / ".github/workflows/windows.yml").read_text()
+        linux = (ROOT / ".github/workflows/linux-release.yml").read_text()
+        macos = (ROOT / ".github/workflows/macos.yml").read_text()
+        appimage = (ROOT / "tools/make_appimage.sh").read_text()
+        self.assertIn("Copy-Item recomplauncher.json dist/", windows)
+        self.assertIn('--platform linux "$d/recomplauncher.json"', linux)
+        self.assertIn("--platform macos dist/recomplauncher.json", macos)
+        self.assertIn('--appimage-arch "$ARCH"', appimage)
+        self.assertIn("appimage.tar.gz", linux)
+        self.assertIn('tar -C "$OUT"', appimage)
+        self.assertIn('"$APPDIR/recomplauncher.json"', appimage)
+        self.assertIn('install -m644 "$APPDIR/recomplauncher.json" "$OUT/$PACKAGE/recomplauncher.json"', appimage)
 
 
 class SettingsContract(unittest.TestCase):

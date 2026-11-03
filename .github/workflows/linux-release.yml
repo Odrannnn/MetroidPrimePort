@@ -134,10 +134,13 @@ jobs:
           d=build/release/metroid-prime-port-linux-${{ matrix.arch }}
           mkdir -p "$d/share/licenses/metroid-prime-port"
           cp build/port-gcc/metroid_prime_port "$d/"
+          python3 tools/write_recomplauncher.py --platform linux "$d/recomplauncher.json"
+          cp docs/RECOMPLAUNCHER.md "$d/RECOMPLAUNCHER.md"
           bash tools/collect_licenses.sh build/port-gcc "$d/share/licenses/metroid-prime-port"
           tar -C build/release -czf build/release/metroid-prime-port-linux-${{ matrix.arch }}.tar.gz \
             metroid-prime-port-linux-${{ matrix.arch }}
           mv build/appimage/MetroidPrime-${{ matrix.arch }}.AppImage build/release/
+          mv build/appimage/metroid-prime-port-linux-${{ matrix.arch }}-appimage.tar.gz build/release/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # The x86_64 name is kept so existing release scripts still find it.
@@ -145,4 +148,5 @@ jobs:
           path: |
             build/release/MetroidPrime-${{ matrix.arch }}.AppImage
             build/release/metroid-prime-port-linux-${{ matrix.arch }}.tar.gz
+            build/release/metroid-prime-port-linux-${{ matrix.arch }}-appimage.tar.gz
             build/release/metroid-prime-port-linux-${{ matrix.arch }}.debug

@@ -45,6 +45,9 @@ rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin"
 
 install -m755 "$BIN" "$APPDIR/usr/bin/metroid_prime_port"
+# Keep the profile with this exact build, at the AppImage filesystem root.
+python3 "$ROOT/tools/write_recomplauncher.py" --platform linux --appimage-arch "$ARCH" \
+    "$APPDIR/recomplauncher.json"
 # Otherwise the port looks for replacements next to the executable.
 # Tracked files only in a git checkout, so nothing dropped into textures/ locally
 # (a dump, a pack made from game data) is handed out with the package.
@@ -109,3 +112,14 @@ fi
 
 ARCH=$ARCH "$TOOL" "${RUN[@]}" "$APPDIR" "$OUT/MetroidPrime-$ARCH.AppImage"
 echo "wrote $OUT/MetroidPrime-$ARCH.AppImage"
+
+# RecompLauncher only copies a standalone AppImage; it cannot read a manifest
+# inside it. Offer an archive with the profile beside the image as well.
+PACKAGE="metroid-prime-port-linux-$ARCH-appimage"
+mkdir -p "$OUT/$PACKAGE"
+install -m755 "$OUT/MetroidPrime-$ARCH.AppImage" "$OUT/$PACKAGE/"
+install -m644 "$APPDIR/recomplauncher.json" "$OUT/$PACKAGE/recomplauncher.json"
+install -m644 "$ROOT/docs/RECOMPLAUNCHER.md" "$OUT/$PACKAGE/RECOMPLAUNCHER.md"
+tar -C "$OUT" -czf "$OUT/$PACKAGE.tar.gz" \
+    "$PACKAGE/MetroidPrime-$ARCH.AppImage" "$PACKAGE/recomplauncher.json" "$PACKAGE/RECOMPLAUNCHER.md"
+echo "wrote $OUT/$PACKAGE.tar.gz"
