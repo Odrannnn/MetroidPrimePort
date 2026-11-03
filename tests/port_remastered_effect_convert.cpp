@@ -3560,6 +3560,28 @@ void TestSystemVars() {
   want.end();
   CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "SVR3/SVR4 become PSYS in dependency order");
   CHECK_MSG(!parts.empty() && parts[0].dropped.empty(), "nothing dropped");
+
+  // RSVn, a rotation system variable, is only observable through a rotation PSAn: without any
+  // PSAn it converts to nothing; with one it stays dropped.
+  const auto plain = ConvertOne(OneGenerator([](auto& o) { PutTexr(o, 0x1234ABCD); }), {});
+  parts = ConvertOne(OneGenerator([](auto& o) {
+                       PutProperty(o, "RSV0", 1);
+                       PutFourCC(o, "INTR");
+                       PutTexr(o, 0x1234ABCD);
+                     }),
+                     {});
+  CHECK_MSG(parts.size() == 1 && plain.size() == 1 && parts[0].part == plain[0].part && parts[0].dropped.empty(),
+            "an unread RSV0 is consumed and writes nothing");
+  parts = ConvertOne(OneGenerator([](auto& o) {
+                       PutProperty(o, "RSV0", 1);
+                       PutFourCC(o, "INTR");
+                       PutProperty(o, "SIZE", 3);
+                       PutFourCC(o, "PSA0");
+                       PutTexr(o, 0x1234ABCD);
+                     }),
+                     {});
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped == std::vector<std::string>{"RSV0: read by PSA0"},
+            "an RSV0 with a PSA0 in the system stays dropped");
 }
 
 // A vector PSAn reads the system's SVVn (GetVectorElement 0x251a44): the port-only PSYV.

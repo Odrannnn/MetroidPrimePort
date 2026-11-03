@@ -6664,6 +6664,22 @@ public:
       }
       return true;
     }
+    // RSV0..9 (CreateGPSM 0x257074) is a rotation system variable: GetRotationElement, then
+    // CAddVarBuilder AddVar(ctx 0, rotation, n). Only a rotation PSAn reads it back
+    // (GetRotationElement 0x25d7ac), and evaluating a rotation has no side effect, so with no PSAn
+    // anywhere in the system it is never observed and converts to nothing.
+    if (s.part && (fourcc & 0xffffff00u) == (F("RSV0") & 0xffffff00u) && (fourcc & 0xffu) >= '0' && (fourcc & 0xffu) <= '9') {
+      const uint32_t read = F("PSA0") + (fourcc & 0xffu) - '0';
+      for (const EffectProperty& other : s.node.properties) {
+        for (const EffectValue& value : other.value) {
+          if (ContainsElement(value, read)) {
+            s.result.dropped.push_back(EffectFourCCString(fourcc) + ": read by " + EffectFourCCString(read));
+            return true;
+          }
+        }
+      }
+      return true;
+    }
     // FRMD (desc+0x170, CreateGPSM): the face-reflection mode 1..3. An explosion of a generator
     // with it set lights Samus's visor reflection (CVisorEffectManagerMP1::AddExplosionEffect
     // 0xd10144) in place of retail's game lights. The port-only PFRM keeps the mode; 0 writes nothing.
