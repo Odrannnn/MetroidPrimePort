@@ -91,6 +91,9 @@ public:
   std::unique_ptr< CPortVarTable > xPortVars;
   // port-only PSYS: the system variables (CParticleSwoosh::PortEvalSys)
   std::unique_ptr< CPortSys > xPortSys;
+  // port-only PPVR: the per-point variables (Remastered's desc+0x18 CAddVarSystem), each point's
+  // values in CParticleSwoosh::xPortPartValues
+  std::unique_ptr< CPortPartVars > xPortPartVars;
   // port-only: the PKPR elements (per-point KPIN latches), latched at a point's birth in this
   // order; owned by the element trees
   std::vector< const CREPortKeep* > xPortKeeps;

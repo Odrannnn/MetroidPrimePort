@@ -1435,13 +1435,14 @@ public:
     if (value.fourcc == F("SEMR") && value.args.size() == 2) {
       m_semrPos = &value.args[0];
     }
-    // A swoosh evaluates no per-particle variables of its own: its PAP0..3 and PAP9 reads (the
-    // port-only ADV9 and IAVn slots) have nothing behind them.
+    // A swoosh's PAP0..3 and PAP9 reads (int ids 0..3, real id 8) have nothing behind them
+    // unless it defines IAV0..3 or ADV8 (its per-point variables, m_swooshVars).
     if (m_swoosh && value.args.empty() && (type == Type::Real || type == Type::Int)) {
       static constexpr uint32_t kRead[] = {F("PAP0"), F("PAP1"), F("PAP2"), F("PAP3"), F("PAP9")};
-      for (const uint32_t read : kRead) {
-        if (value.fourcc == read && (type == Type::Int || read == F("PAP9"))) {
-          why = EffectFourCCString(read) + " in a swoosh";
+      for (uint32_t n = 0; n < 5; ++n) {
+        const uint32_t id = n == 4 ? 8 : 9 + n;
+        if (value.fourcc == kRead[n] && (type == Type::Int || n == 4) && (m_swooshVars & 1u << id) == 0) {
+          why = EffectFourCCString(kRead[n]) + " in a swoosh";
           return false;
         }
       }
@@ -4758,7 +4759,7 @@ public:
   }
 
   struct PartVar {
-    uint32_t id;           // 0..8 ADV1..9, 9..12 IAV0..3
+    uint32_t id;           // 0..8 ADV1..9 (a swoosh's ADV0..8), 9..12 IAV0..3
     uint32_t reads = 0;    // the variables its tree reads (m_varReads)
     uint32_t flags = 0;    // ConstantFlags
     bool converted = false;
@@ -4780,6 +4781,18 @@ public:
       }
     }
     return -1;
+  }
+  // A swoosh's per-point variables (CreateSWSH 0x2db8a4 AddDefinedVar: its ADVn is real id n,
+  // read by PAP(n + 1), unlike a GPSM's ADVn): ADV0..8 are 0..8, IAV0..3 9..12, anything else -1.
+  static int SwooshVarId(uint32_t fourcc) {
+    for (uint32_t n = 0; n < 9; ++n) {
+      const char name[5] = {'A', 'D', 'V', char('0' + n), 0};
+      if (fourcc == F(name)) {
+        return int(n);
+      }
+    }
+    const int id = PartVarId(fourcc);
+    return id >= 9 ? id : -1;
   }
 
   // What Generator writes and the properties it reads set, shared by the functions it is split
@@ -5123,6 +5136,11 @@ public:
       s.additive = s.additive || property.fourcc == F("AALP");
     }
     m_swoosh = s.node.form == F("SWSH");
+    m_swooshVars = 0;
+    for (const EffectProperty& property : s.node.properties) {
+      const int id = m_swoosh ? SwooshVarId(property.fourcc) : -1;
+      m_swooshVars |= id >= 0 ? 1u << id : 0u;
+    }
     m_gpsm = s.node.form == F("GPSM");
     m_xfmd = 2;
     m_pofs = 0;
@@ -5248,9 +5266,10 @@ public:
     if (StructureProperty(s, property, fourcc)) {
       return;
     }
-    const int varId = s.part ? PartVarId(fourcc) : -1;
-    // ADV9 and IAV0..3 have no retail property: they are written in the port-only PPVR.
-    if (varId >= 8) {
+    const int varId = s.part ? PartVarId(fourcc) : s.swoosh ? SwooshVarId(fourcc) : -1;
+    // ADV9 and IAV0..3, and all of a swoosh's, have no retail property: they are written in the
+    // port-only PPVR.
+    if (varId >= 8 || (s.swoosh && varId >= 0)) {
       ParticleVariable(s, property, varId);
       return;
     }
@@ -5263,10 +5282,6 @@ public:
   // The flags and render state a property sets: true where it is taken.
   bool RenderStateProperty(GeneratorState& s, const EffectProperty& property,
                            uint32_t fourcc) const {
-    if (s.swoosh && (fourcc == F("ADV9") || (PartVarId(fourcc) >= 9))) {
-      s.result.dropped.push_back(EffectFourCCString(fourcc) + ": a swoosh has no per-particle variables");
-      return true;
-    }
     if (s.inactivePrimitive && fourcc == F("SIZE")) {
       // Both sprite Fixup and transformed Fixup (0x28ec98) consume SIZE.
       // Only inactive primitives clear it; do not substitute SIZE=0 to hide draws.
@@ -6289,7 +6304,7 @@ public:
   // A variable that reads a dropped one would evaluate it as zero, which Remastered does not:
   // drop the reader too, transitively (the retail ADV1..8 properties are taken back out).
   void DropVariableReaders(GeneratorState& s) const {
-    if (s.part) {
+    if (s.part || s.swoosh) {
       uint32_t lost = 0;
       for (const PartVar& v : s.partVars) {
         lost |= v.converted ? 0u : 1u << v.id;
@@ -6303,7 +6318,8 @@ public:
             again = true;
             const char* names[] = {"ADV1", "ADV2", "ADV3", "ADV4", "ADV5", "ADV6", "ADV7", "ADV8", "ADV9",
                                    "IAV0", "IAV1", "IAV2", "IAV3"};
-            s.result.dropped.push_back(std::string(names[v.id]) + ": reads a dropped variable");
+            const std::string name = s.swoosh && v.id < 9 ? "ADV" + std::to_string(v.id) : names[v.id];
+            s.result.dropped.push_back(name + ": reads a dropped variable");
           }
         }
       }
@@ -6577,10 +6593,11 @@ public:
   // so that each comes after those it reads, otherwise by stream order): ADV1 = KPIN(PAP2 + ..)
   // reads ADV2 = 0.5 of the same particle. A node with ADV9 or an IAVn writes them all as the
   // port-only PPVR (with each one's constant-after-start flag); otherwise ADV1..8 are the
-  // port-only PADO, in index order, when that is not 1..8.
+  // port-only PADO, in index order, when that is not 1..8. A swoosh's per-point variables are
+  // all in its PPVR.
   void ParticleVariableWrites(GeneratorState& s) const {
-    if (s.part && !s.partVars.empty()) {
-      const bool ppvr = std::any_of(s.partVars.begin(), s.partVars.end(), [](const PartVar& v) {
+    if ((s.part || s.swoosh) && !s.partVars.empty()) {
+      const bool ppvr = s.swoosh || std::any_of(s.partVars.begin(), s.partVars.end(), [](const PartVar& v) {
         return v.id >= 8 && v.converted;
       });
       std::vector<const PartVar*> pending;
@@ -6628,12 +6645,15 @@ public:
             written.push_back(v);
           }
         }
+        if (written.empty()) {
+          return;
+        }
         AppendBE32(s.out, F("PPVR"));
         AppendBE32(s.out, F("CNST"));
         AppendBE32(s.out, uint32_t(written.size()));
         for (const PartVar* v : written) {
           const bool ints = v->id >= 9;
-          AppendBE32(s.out, ints ? 2 : v->id == 8 ? 1 : 0);
+          AppendBE32(s.out, ints ? 2 : s.swoosh || v->id == 8 ? 1 : 0);
           AppendBE32(s.out, ints ? v->id - 9 : v->id);
           AppendBE32(s.out, (v->flags & 3) != 0);
           s.out.insert(s.out.end(), v->element.begin(), v->element.end());
@@ -6753,6 +6773,7 @@ private:
   mutable uint32_t m_keepNext = 0;                  // the next PKPR slot
   mutable uint32_t m_varReads = 0;                  // the particle variables Element() has read
   mutable bool m_swoosh = false;                    // the node being written is a SWSH
+  mutable uint32_t m_swooshVars = 0;                // its ADV0..8 and IAV0..3 (SwooshVarId), a bit each
   mutable bool m_gpsm = false;                      // the node being written is a GPSM
   mutable uint32_t m_xfmd = 2;                      // its XFMD mode, 2 without one
   mutable const EffectValue* m_semrPos = nullptr;   // the position child of the SEMR being written
@@ -7072,8 +7093,9 @@ public:
   }
 
   // The port-only PPVR property: CNST, a count up to 13, then per variable its kind, slot and
-  // constant-after-start flag, and for kinds 1 (a real) and 2 (an int) the element.
-  bool PortPartVars() {
+  // constant-after-start flag, and for kinds 1 (a real) and 2 (an int) the element. A swoosh's
+  // are kinds 1 (any of ADV0..8) and 2 only.
+  bool PortPartVars(bool swoosh) {
     uint32_t fourcc, count;
     if (!Word(fourcc) || fourcc != F("CNST") || !Word(count) || count > 13) {
       return false;
@@ -7082,7 +7104,7 @@ public:
     for (uint32_t i = 0; i < count; ++i) {
       uint32_t kind, slot, flag;
       if (!Word(kind) || kind > 2 || !Word(slot) || slot >= (kind == 2 ? 4u : kind == 1 ? 9u : 8u) ||
-          (kind == 1 && slot != 8) || !Word(flag) || flag > 1 ||
+          (swoosh ? kind == 0 : kind == 1 && slot != 8) || !Word(flag) || flag > 1 ||
           (seen & (1u << (kind == 2 ? 9 + slot : slot))) != 0 ||  // the factory rejects a duplicate
           (kind != 0 && !Element(kind == 1 ? Type::Real : Type::Int))) {
         if (m_error.empty()) {
@@ -7350,8 +7372,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.PortSystemVars();
     } else if (part && (fourcc == F("PADO") || fourcc == F("PFXB"))) {
       ok = reader.PortWords();
-    } else if (part && fourcc == F("PPVR")) {
-      ok = reader.PortPartVars();
+    } else if ((part || type == F("SWHC")) && fourcc == F("PPVR")) {
+      ok = reader.PortPartVars(type == F("SWHC"));
     } else if (part && fourcc == F("PSWX")) {
       ok = reader.PortExtraSwooshes();
     } else if (part && fourcc == F("PKSM")) {

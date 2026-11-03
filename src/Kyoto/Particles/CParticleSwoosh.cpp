@@ -180,6 +180,35 @@ static CParticleGlobals::SPortSwooshEval PortSwooshEvalFor(const CTransform4f& w
 }
 #endif
 
+#ifdef TARGET_PC
+namespace {
+// Binds a point's variables for the PAPn its elements read (Remastered's ctx+0x20); a null one
+// keeps whatever is bound.
+struct PortAccessScope {
+  float* prev = CParticleGlobals::mParticleAccessParameters;
+  explicit PortAccessScope(float* values) {
+    if (values != nullptr) {
+      CParticleGlobals::mParticleAccessParameters = values;
+    }
+  }
+  ~PortAccessScope() { CParticleGlobals::mParticleAccessParameters = prev; }
+  PortAccessScope(const PortAccessScope&) = delete;
+  PortAccessScope& operator=(const PortAccessScope&) = delete;
+};
+}  // namespace
+
+float* CParticleSwoosh::PortPartValues(int index) {
+  if (!x1c_desc->xPortPartVars) {
+    return nullptr;
+  }
+  const size_t size = size_t(x15c_swooshes.capacity()) * kPortPartValues;
+  if (xPortPartValues.size() != size) {
+    xPortPartValues.assign(size, 0.f);
+  }
+  return &xPortPartValues[size_t(index) * kPortPartValues];
+}
+#endif
+
 const bool CParticleSwoosh::Update(double dt) {
 #ifdef TARGET_PC
   PortFx::UpdateScope fxScope(dt);
@@ -242,6 +271,17 @@ const bool CParticleSwoosh::Update(double dt) {
       CPortKeepScope spawnKeepScope(&spawnKeep);
       for (const CREPortKeep* keep : x1c_desc->xPortKeeps) {
         keep->Latch(0);
+      }
+      // CreateNewParticle 0x27cdc8: the new point's time context (age 0, life LENG - 1), then
+      // _Init_Particle (0x27ced0) runs every per-point variable at time 0 into its slice, which
+      // stays bound for the point's create-time elements.
+      float* const spawnValues = PortPartValues(x158_curParticle);
+      PortAccessScope spawnAccess(spawnValues);
+      if (spawnValues != nullptr) {
+        CParticleGlobals::SetParticleLifetime(rstl::max_val(x1b4_LENG - 1, 1));
+        CParticleGlobals::UpdateParticleLifetimeTweenValues(0);
+        static CRealElement* const kNoAdvs[8] = {};
+        x1c_desc->xPortPartVars->Eval(kNoAdvs, true, 0, spawnValues);
       }
 #endif
       if (x1c_desc->x1c_IROT) {
@@ -509,6 +549,15 @@ void CParticleSwoosh::UpdateTranslationAndOrientation() {
     }
     CParticleGlobals::PortSwooshEvalScope segEvalScope(&segEval);
     CPortKeepScope segKeepScope(&swoosh.mPortKeep);
+    // UpdateExisting 0x27d590: _Update_Particle (0x27d6d4) runs the variables that are not
+    // constant after start at the point's age, before its elements. A point is never updated in
+    // the tick that created it (CreateNewParticle comes after UpdateExisting).
+    float* const pointValues = PortPartValues(i);
+    PortAccessScope pointAccess(pointValues);
+    if (pointValues != nullptr && swoosh.mFrame > 0) {
+      static CRealElement* const kNoAdvs[8] = {};
+      x1c_desc->xPortPartVars->Eval(kNoAdvs, false, swoosh.mFrame, pointValues);
+    }
 #endif
     if (x1c_desc->x44_28_SROT == true) {
       if (x1c_desc->x1c_IROT) {

@@ -149,10 +149,7 @@ CPortSys* PortReadSys(CInputStream& in) {
   return sys.release();
 }
 
-namespace {
-// A PPVR body (after the CNST class id): u32 count, then per item u32 kind, slot and
-// constant-after-start flag, and for kinds 1 and 2 the element. Null on a malformed one.
-CPortPartVars* PortReadPartVars(CInputStream& in) {
+CPortPartVars* PortReadPartVars(CInputStream& in, bool swoosh) {
   const u32 count = in.ReadLong();
   if (count > 13) {
     return nullptr;
@@ -170,7 +167,8 @@ CPortPartVars* PortReadPartVars(CInputStream& in) {
     }
     // A bad slot or a duplicate (it would evaluate the variable twice) still reads its element,
     // so the rest of the property is consumed and the stream stays in sync; the table is dropped.
-    if (slot >= (kind == 2 ? 4u : kind == 1 ? 9u : 8u) || (kind == 1 && slot != 8)) {
+    if (slot >= (kind == 2 ? 4u : kind == 1 ? 9u : 8u) ||
+        (swoosh ? kind == 0 : kind == 1 && slot != 8)) {
       bad = true;
     } else {
       const u32 bit = 1u << (kind == 2 ? 9 + slot : slot);
@@ -188,6 +186,8 @@ CPortPartVars* PortReadPartVars(CInputStream& in) {
   }
   return bad ? nullptr : vars.release();
 }
+
+namespace {
 
 enum EPortKssmKind { kPKK_Real, kPKK_Vector, kPKK_Rotation };
 
@@ -741,7 +741,7 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
     // Port-only PPVR: Remastered's variables ADV1..9 and IAV0..3 in SortVars order (PortReadPartVars).
     case SBIG('PPVR'):
       GetClassID(in);
-      desc->xPortPartVars.reset(PortReadPartVars(in));
+      desc->xPortPartVars.reset(PortReadPartVars(in, false));
       if (!desc->xPortPartVars) {
         PortLog::Write("particles: malformed PPVR, falling back to the retail ADV path\n");
       }

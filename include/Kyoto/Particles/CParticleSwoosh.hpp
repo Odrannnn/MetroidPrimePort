@@ -239,6 +239,11 @@ private:
   // CAddVarSystem::Init has run in the first Update (the CParticleGen +0xa0 0x1000 flag).
   bool xPortSysInit = false;
   void PortEvalSys(bool init);
+  // The per-point variables' values (the buffer at Remastered's this+0x158), kPortPartValues a
+  // point in ring order; empty without a PPVR.
+  static constexpr int kPortPartValues = 13;
+  std::vector< float > xPortPartValues;
+  float* PortPartValues(int index);
   float PortTexUScroll() const;
   CTransform4f PortRazyOrientation(const CVector3f& motion) const;
   CTransform4f PortRotZOrientation() const;

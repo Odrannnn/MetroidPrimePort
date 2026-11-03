@@ -884,6 +884,11 @@ class CInputStream;
 CPortVarTable* PortReadVarTable(CInputStream& in);
 // Reads a PSYS body (after the CNST class id). Null on a malformed one.
 CPortSys* PortReadSys(CInputStream& in);
+// Reads a PPVR body (after the CNST class id): u32 count, then per item u32 kind, slot and
+// constant-after-start flag, and for kinds 1 and 2 the element. A generator's kind 1 is ADV9
+// only; a swoosh (whose ADV0..8 are all its own, per point) has kinds 1 and 2 only. Null on a
+// malformed one.
+CPortPartVars* PortReadPartVars(CInputStream& in, bool swoosh);
 
 #endif // TARGET_PC
 #endif // _CPORTPARTICLEVARS

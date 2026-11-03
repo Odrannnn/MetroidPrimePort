@@ -222,6 +222,12 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       CParticleDataFactory::GetClassID(in);
       swoosh->xPortSys.reset(PortReadSys(in));
       break;
+    // Port-only Remastered per-point variables (PPVR, ADV0..8 and IAV0..3); a malformed one
+    // leaves none.
+    case 'PPVR':
+      CParticleDataFactory::GetClassID(in);
+      swoosh->xPortPartVars.reset(PortReadPartVars(in, true));
+      break;
     // Port-only marker of a converted Remastered swoosh (xPortIrnd).
     case 'PIRN':
       CParticleDataFactory::GetClassID(in);
