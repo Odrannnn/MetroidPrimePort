@@ -6334,6 +6334,31 @@ public:
       }
       return;
     }
+    // A swoosh's SNRD/SNRA are raw floats (GetReal) clamped to 0..10 / 0..60 into desc+0x21c/+0x220
+    // (CreateSWSH 0x2dc280/0x2dc5bc). Either above 0 sizes each segment's spline steps by its
+    // length and turn (UpdateRenderData_Swoosh 0x2b5a78; CParticleSwoosh::PortSplineSteps). The
+    // port-only PSRD/PSRA, the clamped float's bits; 0 writes nothing.
+    if (s.swoosh && (fourcc == F("SNRD") || fourcc == F("SNRA"))) {
+      if (property.value.size() != 1 || property.value[0].kind != EffectValue::Kind::Word) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + ": not a raw float");
+        return;
+      }
+      uint32_t bits = property.value[0].word;
+      float value;
+      std::memcpy(&value, &bits, sizeof(value));
+      if (!std::isfinite(value)) {
+        s.result.dropped.push_back(EffectFourCCString(fourcc) + ": not finite");
+        return;
+      }
+      value = std::clamp(value, 0.f, fourcc == F("SNRD") ? 10.f : 60.f);
+      if (value > 0.f) {
+        std::memcpy(&bits, &value, sizeof(bits));
+        AppendBE32(s.out, fourcc == F("SNRD") ? F("PSRD") : F("PSRA"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, bits);
+      }
+      return;
+    }
     // A generator's per-particle child system: PSPS names an embedded child and its type word, read
     // into desc+0x200; PSMX is an int element (desc+0x208) capping how many live at once
     // (CreateGPSM; ConstructParticleSpawnedChildSystem 0x24bc00). The child is built through
@@ -7492,7 +7517,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
                (vfx && fourcc == F("PIRN")) ||
                (type == F("SWHC") && (fourcc == F("PGID") || fourcc == F("PSED") || fourcc == F("PTXU") ||
-                                        fourcc == F("PLWQ")))) {
+                                        fourcc == F("PLWQ") || fourcc == F("PSRD") || fourcc == F("PSRA")))) {
       ok = reader.PortWord();
     } else if (vfx && fourcc == F("PVRT")) {
       ok = reader.PortVariables();

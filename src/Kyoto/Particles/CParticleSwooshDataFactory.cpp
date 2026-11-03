@@ -263,6 +263,18 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       swoosh->xPortLwqd = n < 1 ? 1 : n > 10 ? 10 : n;
       break;
     }
+    // Port-only Remastered SNRD/SNRA (xPortSnrd/xPortSnra), clamped as CreateSWSH 0x2dc280/0x2dc5bc.
+    case 'PSRD':
+    case 'PSRA': {
+      CParticleDataFactory::GetClassID(in);
+      const float v = in.ReadFloat();
+      if (classId == 'PSRD') {
+        swoosh->xPortSnrd = v < 0.f ? 0.f : v > 10.f ? 10.f : v;
+      } else {
+        swoosh->xPortSnra = v < 0.f ? 0.f : v > 60.f ? 60.f : v;
+      }
+      break;
+    }
     // Port-only Remastered material, as a PART's.
     case 'VMAT':
     case 'VTMT':

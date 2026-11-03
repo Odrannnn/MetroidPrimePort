@@ -1447,6 +1447,37 @@ void TestSwooshLwqd() {
   CHECK_MSG(part.part == one.bytes && part.dropped.empty(), "LWQD 0 clamps to 1");
 }
 
+// A swoosh's SNRD/SNRA (desc+0x21c/+0x220, CreateSWSH 0x2dc280/0x2dc5bc) are raw floats clamped to
+// 0..10 / 0..60 and become the port-only PSRD/PSRA unless 0.
+void TestSwooshSplineRates() {
+  const auto bitsOf = [](float v) {
+    uint32_t bits;
+    std::memcpy(&bits, &v, sizeof(bits));
+    return bits;
+  };
+  const auto rates = [&](float snrd, float snra) {
+    return ConvertSwoosh([&](auto& o) {
+      PutProperty(o, "SNRD", 0);
+      Put32(o, bitsOf(snrd));
+      PutProperty(o, "SNRA", 0);
+      Put32(o, bitsOf(snra));
+    });
+  };
+  ConvertedPart part = rates(2.5f, 90.f);
+  Retail want;
+  want.f("SWSH").f("PSRD").f("CNST").w(bitsOf(2.5f)).f("PSRA").f("CNST").w(bitsOf(60.f)).f("PIRN").f("CNST").w(1)
+      .f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == want.bytes && part.dropped.empty(), "SNRD 2.5 is PSRD 2.5, SNRA 90 clamps to 60");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), part.part.data(), part.part.size(), properties, error),
+            "PSRD/PSRA read as swoosh properties");
+  part = rates(0.f, -3.f);
+  Retail none;
+  none.f("SWSH").f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == none.bytes && part.dropped.empty(), "SNRD 0 and SNRA -3 write nothing");
+}
+
 bool Contains(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& what);
 
 // A swoosh's INTR of a constant REUL r, or RADD(EXTR, r), becomes the port-only PSIR: flags
@@ -6988,6 +7019,7 @@ int main() {
   TestSwooshSeed();
   TestSwooshTxup();
   TestSwooshLwqd();
+  TestSwooshSplineRates();
   TestSwooshIntr();
   TestConvert();
   TestRejects();

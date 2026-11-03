@@ -253,6 +253,7 @@ private:
   bool PortVfxSwoosh() const;
   void PortRenderVfx();
   int PortSplineRef(int curIdx, int j);
+  int PortSplineSteps(int curIdx, int prevIdx) const;
 #endif
 
   static uint mSwooshAliveCount;

@@ -77,6 +77,11 @@ public:
   bool xPortTexUScroll = false;
   // port-only PLWQ: Remastered's LWQD (desc+0x228, 1..10); strips per side face across the trail
   int xPortLwqd = 1;
+  // port-only PSRD/PSRA: Remastered's SNRD (desc+0x21c, 0..10) and SNRA (+0x220, 0..60). Either
+  // above 0 sizes each segment's spline steps by its length and turn instead of SPLN
+  // (SetupSplineNodeGenerationMode 0x29bfac; CParticleSwoosh::PortSplineSteps)
+  float xPortSnrd = 0.f;
+  float xPortSnra = 0.f;
   // port-only PSIR: Remastered's INTR, a constant Euler vector in the port's space (PINR's), times
   // the external orientation when xPortIntExternal; the local orientation under XFMD 2, the global
   // one under 3 (CParticleSwoosh::PortIntOrientation)

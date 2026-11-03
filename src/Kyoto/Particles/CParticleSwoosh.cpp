@@ -12,6 +12,7 @@
 #include "Kyoto/Particles/CSwooshDescription.hpp"
 
 #include "Kyoto/Math/CAbsAngle.hpp"
+#include "Kyoto/Math/CQuaternion.hpp"
 #include "dolphin/gx/GXVert.h"
 #include "float.h"
 #include "rstl/math.hpp"
@@ -979,6 +980,24 @@ int CParticleSwoosh::PortSplineRef(int curIdx, int j) {
   }
 }
 
+// The spline steps of the segment curIdx -> prevIdx. SPLN, unless Remastered's SNRD or SNRA is
+// set (SetupSplineNodeGenerationMode 0x29bfac); then UpdateRenderData_Swoosh 0x2b5a78 takes the
+// larger of round(SNRD * the segment's length) and round(SNRA * (1 - dot(q, q')^2)) of its
+// endpoint orientations.
+int CParticleSwoosh::PortSplineSteps(int curIdx, int prevIdx) const {
+  const CSwooshDescription& d = **x1c_desc;
+  if (!(d.xPortSnrd > 0.f) && !(d.xPortSnra > 0.f)) {
+    return x1b0_SPLN;
+  }
+  const SSwooshData& cur = x15c_swooshes.data()[curIdx];
+  const SSwooshData& prev = x15c_swooshes.data()[prevIdx];
+  const float dist = (prev.mTranslation - cur.mTranslation).Magnitude();
+  const float dot = CQuaternion::Dot(CQuaternion::FromMatrix(cur.mOrientation), CQuaternion::FromMatrix(prev.mOrientation));
+  const int byDist = static_cast< int >(floorf(d.xPortSnrd * dist + 0.5f));
+  const int byTurn = static_cast< int >(floorf(d.xPortSnra * (1.f - dot * dot) + 0.5f));
+  return byTurn < byDist ? byDist : byTurn;
+}
+
 void CParticleSwoosh::PortRenderVfx() {
   const CPortVfxData& vfx = *x1c_desc->xPortVfx;
   float vsmt[kPortVfxVsmtCount] = {};
@@ -1112,10 +1131,11 @@ void CParticleSwoosh::PortRenderVfx() {
     };
 
     float uMin = (x1ec_TSPN > 0 ? i % x1ec_TSPN : i) * uvSpan - uScroll;
-    const float segUvSpan = uvSpan / (x1b0_SPLN + 1);
-    for (int splineIdx = 0; splineIdx < x1b0_SPLN + 1; ++splineIdx) {
-      const float t0 = splineIdx / static_cast< float >(x1b0_SPLN + 1);
-      const float t1 = (splineIdx + 1) / static_cast< float >(x1b0_SPLN + 1);
+    const int steps = PortSplineSteps(curIdx, prevIdx) + 1;
+    const float segUvSpan = uvSpan / steps;
+    for (int splineIdx = 0; splineIdx < steps; ++splineIdx) {
+      const float t0 = splineIdx / static_cast< float >(steps);
+      const float t1 = (splineIdx + 1) / static_cast< float >(steps);
       const float uMax = uMin + segUvSpan;
       float c0[4], c1[4], e0[4][4], e1[4][4];
       pointAt(t0, c0, e0);
