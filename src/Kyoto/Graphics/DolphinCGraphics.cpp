@@ -549,10 +549,21 @@ void CGraphics::LoadLight(ERglLight light, const CLight& info) {
     CVector3f hdrPos = info.GetPosition() + info.GetPortHdrOffset();
     MTXMultVec(mCameraMtx, reinterpret_cast< VecPtr >(&hdrPos), reinterpret_cast< VecPtr >(&hdrPos));
     const f32 viewPos[3] = {hdrPos.GetX(), hdrPos.GetY(), hdrPos.GetZ()};
+    f32 toLight[3];
+    if (info.HasPortHdrCone()) {
+      // SCachedLight::Initialize 0x16b5c8 +0x20: the way to the light, minus the turned axis.
+      CVector3f axis = info.GetPortHdrConeAxis();
+      MTXMultVecSR(mCameraMtx, reinterpret_cast< VecPtr >(&axis), reinterpret_cast< VecPtr >(&axis));
+      toLight[0] = -axis.GetX();
+      toLight[1] = -axis.GetY();
+      toLight[2] = -axis.GetZ();
+    }
     GXSetPBRLightHdr(lightId, info.GetPortHdrColor(), viewPos, info.GetPortHdrR0(),
-                     info.GetPortHdrR1(), info.GetPortHdrFalloff(), info.GetPortHdrWiden());
+                     info.GetPortHdrR1(), info.GetPortHdrFalloff(), info.GetPortHdrWiden(),
+                     info.HasPortHdrCone() ? toLight : nullptr, info.GetPortHdrConeScale(),
+                     info.GetPortHdrConeBias());
   } else {
-    GXSetPBRLightHdr(lightId, nullptr, nullptr, 0.f, 0.f, 0, 0.f);
+    GXSetPBRLightHdr(lightId, nullptr, nullptr, 0.f, 0.f, 0, 0.f, nullptr, 0.f, 0.f);
   }
 #endif
 }

@@ -311,6 +311,8 @@ public:
   // XFMD mode: 2 = zero/identity/external scale, 3 = the external T/Q/S, 4 = the mover's
   // position and rotation (the external T/Q for the identity SMVR the converter drops) at unit scale.
   void PortGlobalFrame(CVector3f& t, CQuaternion& q, CVector3f& s) const;
+  // A nested particle light's world position and spot axis (zero when degenerate).
+  void PortNestedLightFrame(CVector3f& pos, CVector3f& axis) const;
   // True for a converted Remastered PART (its PIRN marker).
   bool PortIsRemastered() const;
   // Remastered _CreateNewParticlesAtPositions / ...IncludingChildren (0x24c0dc / 0x24bfd0): n

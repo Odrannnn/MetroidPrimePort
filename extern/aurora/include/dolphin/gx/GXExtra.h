@@ -241,10 +241,12 @@ void GXSetPBRShield(const f32 rows[8][4]);
 // position and attenuation: a linear colour (no gamma, not clamped), a view-space position,
 // and a falloff from full at r0 to none at r1 (0 none, 1 linear, 2 quadratic, 3 1 - smoothstep,
 // as Remastered's particle lights). `widen` (the light's LSPS) raises the roughness of its
-// specular lobe to r + (1 - r) * widen. Non-PBR draws keep the GX light. r1 <= 0 (or a null
-// colour) turns it off.
+// specular lobe to r + (1 - r) * widen. A spot passes `toLight`, the view-space unit way back
+// along its axis, and its cone: the light is scaled by clamp(dot(L, toLight) * coneScale +
+// coneBias, 0, 1); a null `toLight` is a point light. Non-PBR draws keep the GX light. r1 <= 0
+// (or a null colour) turns it off.
 void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3], f32 r0, f32 r1, u32 falloff,
-                      f32 widen);
+                      f32 widen, const f32 toLight[3], f32 coneScale, f32 coneBias);
 // Aurora extension: the following PBR draws multiply the diffuse colour (before the lights and
 // the ambient) and F0 (before the direct Fresnel and the environment BRDF) by these; nothing
 // else is scaled. 1, 1 is neutral, and it is what a caller sets for every material that has no

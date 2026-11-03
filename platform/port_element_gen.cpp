@@ -47,6 +47,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "port_clustered_lights.h"
 #include "port_debug.h"
 #include "port_fx_debug.h"
 #include "port_room_env.h"
@@ -289,7 +290,19 @@ void CElementGen::PortCollectNestedLightSnapshots(
                             xPortNestedHdrOuterRadius,
                             x28_loadedGenDesc->xPortNestedLightFalloff);
     light.SetPortHdrWiden(x28_loadedGenDesc->xPortNestedLightWiden);
-    out.push_back({this, PortSystemOrigin(), light});
+    CVector3f origin;
+    CVector3f axis;
+    PortNestedLightFrame(origin, axis);
+    if (x28_loadedGenDesc->xPortNestedLightSpot) {
+      // CGameLight moves this light by translation only, so the axis stays in world space.
+      float scale;
+      float bias;
+      PortClusteredLights::ConeAttenuation(true, x28_loadedGenDesc->xPortNestedLightInnerAngle,
+                                           x28_loadedGenDesc->xPortNestedLightOuterAngle, scale,
+                                           bias);
+      light.SetPortHdrCone(axis, scale, bias);
+    }
+    out.push_back({this, origin, light});
   }
 
   for (int i = 0; i < GetNumActiveChildParticles(); ++i) {

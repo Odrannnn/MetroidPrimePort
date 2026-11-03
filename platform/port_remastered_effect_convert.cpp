@@ -4969,9 +4969,9 @@ public:
     // An ELC2 (CParticleElectric2) is written as an ELSC stream that starts with the port-only PEL2
     // marker and carries the ELC2 fields; it draws through its VMAT like a swoosh.
     const bool electric = type == F("ELSC") && node.form == F("ELC2");
-    // Remastered builds a real scene light for every generator with a point LTYP, from
-    // LCLR*LINT, LIRD/LORD and LFOT. Those become the port-only PHDR/PIR0/POR0/PHFO that
-    // CElementGen carries as an HDR light (spot lights stay on the retail GX path).
+    // Remastered builds a real scene light for every generator with a point or spot LTYP, from
+    // LCLR*LINT, LIRD/LORD and LFOT (and a spot's LIAN/LOAN cone). Those become the port-only
+    // PHDR/PIR0/POR0/PHFO (PLIA/PLOA) that CElementGen carries as an HDR light.
     std::vector<uint8_t> nestedLightInnerRadius;
     std::vector<uint8_t> nestedLightOuterRadius;
     bool nestedHdrLight = false;
@@ -4981,6 +4981,10 @@ public:
     // LSPS: the light block's +0x50, CLight+0x74, which widens the light's specular lobe
     // (roughness r + (1 - r) * LSPS in the PBR shaders). A CNST real's bits; 0 = none.
     uint32_t nestedLightWiden = 0;
+    // LIAN/LOAN of a spot LTYP (raw 3): the full cone angles in degrees, CNST real bits.
+    bool nestedLightSpot = false;
+    uint32_t nestedLightInnerAngle = 0;
+    uint32_t nestedLightOuterAngle = 0;
     // The light is built once and never updated (port-only PLON); see NestedLight.
     bool lightOnce = false;
     // FXBR/FXBM/FXBO/FXBI, the system's own bounds (FixedBounds): the constant box in the port's
@@ -5138,7 +5142,7 @@ public:
     return std::move(s.result);
   }
 
-  // The nested HDR light of a point LTYP (the state's nestedLight*).
+  // The nested HDR light of a point or spot LTYP (the state's nestedLight*).
   void NestedLight(GeneratorState& s) const {
     if (s.part) {
       auto unique = [&s](uint32_t fourcc) -> const EffectProperty* {
@@ -5164,10 +5168,17 @@ public:
       std::string why;
       std::vector<uint8_t> colorProbe;
       std::vector<uint8_t> intensityProbe;
-      s.nestedHdrLight = ltyp != nullptr && lfot != nullptr && lird != nullptr && lord != nullptr &&
+      // Raw LTYP 2 is a point, 3 a spot (GetLight 0x2df3f0's type byte 1 / anything else).
+      const bool typed = ltyp != nullptr && SmallInteger(*ltyp, lightType) && (lightType == 2 || lightType == 3);
+      const bool spot = typed && lightType == 3;
+      const EffectProperty* lian = spot ? unique(F("LIAN")) : nullptr;
+      const EffectProperty* loan = spot ? unique(F("LOAN")) : nullptr;
+      const bool cone = !spot || (lian != nullptr && loan != nullptr && lian->value.size() == 1 &&
+                                  loan->value.size() == 1 && ConstWord(lian->value[0], s.nestedLightInnerAngle) &&
+                                  ConstWord(loan->value[0], s.nestedLightOuterAngle));
+      s.nestedHdrLight = typed && cone && lfot != nullptr && lird != nullptr && lord != nullptr &&
                        lclr != nullptr && lint != nullptr && lclr->value.size() == 1 &&
-                       lint->value.size() == 1 &&
-                       SmallInteger(*ltyp, lightType) && lightType == 2 && SmallInteger(*lfot, falloff) &&
+                       lint->value.size() == 1 && SmallInteger(*lfot, falloff) &&
                        falloff <= 3 && lird->value.size() == 1 && lord->value.size() == 1 &&
                        Element(lclr->value[0], Type::Color, colorProbe, why) &&
                        Element(lint->value[0], Type::Real, intensityProbe, why) &&
@@ -5175,6 +5186,7 @@ public:
                        Element(lord->value[0], Type::Real, s.nestedLightOuterRadius, why);
       if (s.nestedHdrLight) {
         s.nestedLightFalloff = falloff;
+        s.nestedLightSpot = spot;
         const EffectProperty* lixp = unique(F("LIXP"));
         uint32_t inverseExposed = 0;
         s.nestedLightInverseExposure = lixp != nullptr && SmallInteger(*lixp, inverseExposed) && inverseExposed != 0;
@@ -5183,8 +5195,12 @@ public:
         if (lsps == nullptr || lsps->value.size() != 1 || !ConstWord(lsps->value[0], s.nestedLightWiden)) {
           s.nestedLightWiden = 0;
         }
-      } else if (ltyp != nullptr && SmallInteger(*ltyp, lightType) && lightType == 2) {
-        s.result.dropped.push_back("PHDR: point light lacks constant LFOT or supported LCLR/LINT/LIRD/LORD");
+      } else if (typed) {
+        s.nestedLightInnerAngle = 0;
+        s.nestedLightOuterAngle = 0;
+        s.result.dropped.push_back(spot ? "PHDR: spot light lacks constant LFOT/LIAN/LOAN or supported "
+                                          "LCLR/LINT/LIRD/LORD"
+                                        : "PHDR: point light lacks constant LFOT or supported LCLR/LINT/LIRD/LORD");
       }
       // CParticleLight::Create 0x2def58 builds every generator's light in its ctor; only
       // TickSystem_Light 0x24af3c calls CParticleLight::Update. Compile 0x290e4c picks that tick
@@ -6428,6 +6444,9 @@ public:
     if (s.nestedHdrLight && (fourcc == F("LIRD") || fourcc == F("LORD") || fourcc == F("LIXP"))) {
       return true;  // consumed as PIR0/POR0/PLIX below
     }
+    if (s.nestedHdrLight && s.nestedLightSpot && (fourcc == F("LIAN") || fourcc == F("LOAN"))) {
+      return true;  // consumed as PLIA/PLOA below
+    }
     if (s.boundsConsumed &&
         (fourcc == F("FXBR") || fourcc == F("FXBM") || fourcc == F("FXBO") || fourcc == F("FXBI"))) {
       return true;  // consumed as PFXB/PFXC below
@@ -7123,6 +7142,14 @@ public:
         AppendBE32(s.out, F("CNST"));
         AppendBE32(s.out, s.nestedLightWiden);
       }
+      if (s.nestedLightSpot) {
+        AppendBE32(s.out, F("PLIA"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, s.nestedLightInnerAngle);
+        AppendBE32(s.out, F("PLOA"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, s.nestedLightOuterAngle);
+      }
     }
     if (s.lightOnce) {
       AppendBE32(s.out, F("PLON"));
@@ -7752,7 +7779,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
     } else if (part && fourcc == F("PSPS")) {
       ok = reader.Asset();
     } else if ((part && (fourcc == F("VORN") || fourcc == F("XFMD") ||
-                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PLON") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
+                         fourcc == F("PPRM") || fourcc == F("PSHP") || fourcc == F("PHDR") || fourcc == F("PHFO") || fourcc == F("PLIX") || fourcc == F("PLSP") || fourcc == F("PLIA") || fourcc == F("PLOA") || fourcc == F("PLON") || fourcc == F("PFXC") || fourcc == F("PGID") || fourcc == F("PBDM") ||
                          fourcc == F("PDFG") || fourcc == F("PZTS") || fourcc == F("PIVS") || fourcc == F("PWST") ||
                          fourcc == F("PITP") || fourcc == F("PDBO") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("POSD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||

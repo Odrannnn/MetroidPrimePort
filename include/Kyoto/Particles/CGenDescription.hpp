@@ -213,6 +213,11 @@ public:
   bool xPortNestedLightInverseExposure = false;
   // port-only PLSP: Remastered's LSPS, the light's specular roughness widen (CLight::SetPortHdrWiden)
   float xPortNestedLightWiden = 0.f;
+  // port-only PLIA/PLOA: a spot light's LIAN/LOAN, the full inner/outer cone angles in degrees
+  // (PortClusteredLights::ConeAttenuation); either one marks the light a spot
+  bool xPortNestedLightSpot = false;
+  float xPortNestedLightInnerAngle = 0.f;
+  float xPortNestedLightOuterAngle = 0.f;
   // port-only PLON: Remastered builds this generator's light once (CParticleLight::Create
   // 0x2def58, from the ctor) and never updates it, as every tick mode but TickSystem_Light does.
   bool xPortLightOnce = false;

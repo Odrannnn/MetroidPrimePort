@@ -80,7 +80,21 @@ public:
     xPortHdrFalloff = falloff;
     xPortHdrWiden = 0.f;
     xPortHdrHasBoundsRadius = false;
+    xPortHdrHasCone = false;
   }
+  // A Remastered spot's cone (SCachedLight +0x1c/+0x20/+0x2c): the light is scaled by
+  // clamp(dot(L, -axis) * scale + bias, 0, 1), L the unit way to the light and axis the world
+  // beam direction. Set after SetPortHdr, which clears it (a point light).
+  void SetPortHdrCone(const CVector3f& axis, float scale, float bias) {
+    xPortHdrConeAxis = axis;
+    xPortHdrConeScale = scale;
+    xPortHdrConeBias = bias;
+    xPortHdrHasCone = true;
+  }
+  bool HasPortHdrCone() const { return xPortHdrHasCone; }
+  const CVector3f& GetPortHdrConeAxis() const { return xPortHdrConeAxis; }
+  float GetPortHdrConeScale() const { return xPortHdrHasCone ? xPortHdrConeScale : 0.f; }
+  float GetPortHdrConeBias() const { return xPortHdrHasCone ? xPortHdrConeBias : 1.f; }
   // Remastered's CLight+0x74 (0 but for particle lights' LSPS): the light's specular lobe takes
   // roughness r + (1 - r) * widen (SCachedLight +0xc). Set after SetPortHdr, which clears it.
   void SetPortHdrWiden(float widen) { xPortHdrWiden = widen; }
@@ -127,6 +141,10 @@ private:
   float xPortHdrWiden = 0.f;
   float xPortHdrBoundsRadius = 0.f;
   bool xPortHdrHasBoundsRadius = false;
+  CVector3f xPortHdrConeAxis = CVector3f(0.f, 0.f, 0.f);
+  float xPortHdrConeScale = 0.f;
+  float xPortHdrConeBias = 1.f;
+  bool xPortHdrHasCone = false;
 #endif
 };
 CHECK_SIZEOF(CLight, 0x50)

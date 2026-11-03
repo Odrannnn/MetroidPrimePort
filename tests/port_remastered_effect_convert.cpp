@@ -15,6 +15,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -312,7 +313,8 @@ std::vector<uint8_t> OneGenerator(Body body, int primitive = 1) {
 
 std::vector<uint8_t> NestedLightEffect(const EffectGuid& childId, uint8_t lightType = 2,
                                        uint8_t falloff = 3, bool includeRadii = true,
-                                       int inverseExposed = 1, float specWiden = -1.f) {
+                                       int inverseExposed = 1, float specWiden = -1.f,
+                                       float innerAngle = -1.f, float outerAngle = -1.f) {
   std::vector<uint8_t> out(0x3c, 0);
   std::memcpy(out.data(), "RFRM", 4);
   std::memcpy(out.data() + 0x14, "GENP", 4);
@@ -362,6 +364,14 @@ std::vector<uint8_t> NestedLightEffect(const EffectGuid& childId, uint8_t lightT
   if (specWiden >= 0.f) {
     PutProperty(out, "LSPS", 0);
     PutConstant(out, Bits(specWiden));
+  }
+  if (innerAngle >= 0.f) {
+    PutProperty(out, "LIAN", 0);
+    PutConstant(out, Bits(innerAngle));
+  }
+  if (outerAngle >= 0.f) {
+    PutProperty(out, "LOAN", 0);
+    PutConstant(out, Bits(outerAngle));
   }
   PutProperty(out, "_END", 4);
   out.insert(out.end(), {'F', 'O', 'O', 'T'});
@@ -522,11 +532,31 @@ void TestPlasmaNestedHdrLight() {
     const auto unlit = ConvertOne(OneGenerator([](auto&) {}), {});
     CHECK_MSG(unlit.size() == 1 && findIn(unlit[0], "PLON", props) == nullptr, "no LTYP writes no PLON");
   }
-  // A spot light (LTYP 3) stays on the retail path.
+  // A spot light (LTYP 3) needs a constant LIAN/LOAN cone, written as PLIA/PLOA (float bits).
   const auto spot = ConvertOne(NestedLightEffect(Fresh(7), 3, 2), {});
   CHECK_MSG(spot.size() == 2 &&
             std::search(spot[1].part.begin(), spot[1].part.end(), "PHDR", "PHDR" + 4) == spot[1].part.end(),
-        "a spot light is not converted to an HDR light");
+        "a spot light without LIAN/LOAN is not converted to an HDR light");
+  CHECK_MSG(spot.size() == 2 && droppedHas(spot[1], "spot light"), "a coneless spot light is reported");
+  {
+    const auto coned = ConvertOne(NestedLightEffect(Fresh(7), 3, 2, true, 1, -1.f, 0.f, 30.f), {});
+    std::vector<RetailPartProperty> props;
+    auto bitsOf = [&](const char* name) -> std::optional<uint32_t> {
+      const RetailPartProperty* p = coned.size() == 2 ? findIn(coned[1], name, props) : nullptr;
+      if (p == nullptr || p->value.size() != 8 || std::memcmp(p->value.data(), "CNST", 4) != 0) {
+        return std::nullopt;
+      }
+      return uint32_t(p->value[4]) << 24 | uint32_t(p->value[5]) << 16 | uint32_t(p->value[6]) << 8 | p->value[7];
+    };
+    CHECK_MSG(coned.size() == 2 && findIn(coned[1], "PHDR", props) != nullptr, "a coned spot light gets PHDR");
+    CHECK_MSG(bitsOf("PLIA") == Bits(0.f) && bitsOf("PLOA") == Bits(30.f), "LIAN/LOAN are written as PLIA/PLOA");
+    CHECK_MSG(coned.size() == 2 && !droppedHas(coned[1], "LIAN") && !droppedHas(coned[1], "LOAN") &&
+                  !droppedHas(coned[1], "LIRD") && !droppedHas(coned[1], "LORD"),
+              "a coned spot light's LIAN/LOAN/LIRD/LORD are consumed");
+    CHECK_MSG(anyChild.size() == 2 && findIn(anyChild[1], "PLIA", props) == nullptr &&
+                  findIn(anyChild[1], "PLOA", props) == nullptr,
+              "a point light writes no PLIA/PLOA");
+  }
   const auto wrongType = ConvertOne(NestedLightEffect(kPlasmaNestedLight, 1, 3), {});
   CHECK_MSG(wrongType.size() == 2 &&
             std::search(wrongType[1].part.begin(), wrongType[1].part.end(), "PHDR", "PHDR" + 4) ==

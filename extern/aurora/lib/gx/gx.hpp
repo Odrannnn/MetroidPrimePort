@@ -450,8 +450,9 @@ struct GXState {
   Vec4<float> pbrThermal{};
   std::array<Vec4<float>, 8> pbrShield{}; // GX_AURORA_SET_PBR_SHIELD: CCH0..6, then AUVI xyz + DIFC.w
   // GX_AURORA_SET_PBR_LIGHT_HDR, per light: colour (rgb, falloff + 1; w 0 = off), then
-  // (view position, r0), then (r1, specular roughness widen, -, -).
-  std::array<Vec4<float>, GX::MaxLights * 3> pbrLightHdr{};
+  // (view position, r0), then (r1, specular roughness widen, cone scale, cone bias), then
+  // (view-space way to the light along a spot's axis, -).
+  std::array<Vec4<float>, GX::MaxLights * 4> pbrLightHdr{};
   // GX_AURORA_PORT_VOLUMETRIC_FOG up to its _END: the draws fog themselves (ShaderConfig::volFog)
   // with the recorded fog's near, range, exposure and the start of the world's depth range (nearer is the viewmodel) and its tone curve.
   bool volFog = false;

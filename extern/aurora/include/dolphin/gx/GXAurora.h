@@ -256,7 +256,8 @@ extern "C" {
 // Payload:
 //   u32 light (its GX_LIGHTn bit), f32 r, g, b (linear), f32 view-space x, y, z,
 //   f32 inner radius, f32 outer radius (0 = off), u32 falloff (0 none, 1 linear, 2 quadratic,
-//   3 1 - smoothstep)
+//   3 1 - smoothstep), f32 widen, f32 view-space x, y, z of the way to the light along a spot's
+//   axis, f32 cone scale, f32 cone bias (0, 1 for a point light)
 #define GX_AURORA_SET_PBR_LIGHT_HDR 0x0056
 
 // Multiplies the baked light of the following PBR draws (see GXSetPBRBakedLightModulation).

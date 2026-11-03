@@ -1977,6 +1977,37 @@ void CElementGen::PortGlobalFrame(CVector3f& t, CQuaternion& q, CVector3f& s) co
   }
 }
 
+// CParticleLight::Update 0x2df3f0: a point light takes the translation of
+// BuildCombinedSystemEmitterTransform 0x27bdcc (T_g + Q_g(S_g * (Q_l v + vec12))); a spot takes the
+// whole transform, and UpdateLightFromTransform 0x2e0744 aims it along its local +Z, port local +Y.
+void CElementGen::PortNestedLightFrame(CVector3f& pos, CVector3f& axis) const {
+  CVector3f t;
+  CQuaternion qg;
+  CVector3f s;
+  PortGlobalFrame(t, qg, s);
+  CQuaternion ql = CQuaternion::NoRotation();
+  pos = PortSystemOrigin();
+  switch (x28_loadedGenDesc->xPortXfmd) {
+  case kPortXfmdFollow:
+    break;
+  case kPortXfmdFollowUnscaled:
+    if (xPortEmvr.kssm != nullptr) {
+      ql = xPortEmvr.hasRot ? xPortEmvr.rotQuat : CQuaternion::NoRotation();
+      pos = t + qg.Transform(xPortEmvr.pos);
+    } else {
+      pos = t;
+    }
+    break;
+  default:
+    ql = PortSystemRotation();
+    break;
+  }
+  const CVector3f local = ql.Transform(CVector3f(0.f, 1.f, 0.f));
+  const CVector3f dir = qg.Transform(
+      CVector3f(s.GetX() * local.GetX(), s.GetY() * local.GetY(), s.GetZ() * local.GetZ()));
+  axis = dir.CanBeNormalized() ? dir.AsNormalized() : CVector3f::Zero();
+}
+
 bool CElementGen::PortHasMover() const {
   return x28_loadedGenDesc->xPortMover && x28_loadedGenDesc->xPortXfmd == kPortXfmdFollowUnscaled;
 }

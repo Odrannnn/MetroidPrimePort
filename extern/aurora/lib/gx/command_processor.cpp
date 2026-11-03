@@ -1897,17 +1897,22 @@ void handle_aurora(ByteReader& reader) noexcept {
     }
     const u32 falloff = std::min(reader.read<u32>(), 3u);
     const f32 widen = reader.read<f32>();
+    f32 cone[5];
+    for (f32& f : cone) {
+      f = reader.read<f32>();
+    }
     if (bit != 0) {
       const u32 idx = static_cast<u32>(std::countr_zero(bit));
       const bool on = v[7] > 0.f;
-      const std::array<Vec4<float>, 3> rows{
+      const std::array<Vec4<float>, 4> rows{
           on ? Vec4<float>{v[0], v[1], v[2], static_cast<f32>(falloff + 1)} : Vec4<float>{},
           on ? Vec4<float>{v[3], v[4], v[5], v[6]} : Vec4<float>{},
-          on ? Vec4<float>{v[7], widen, 0.f, 0.f} : Vec4<float>{},
+          on ? Vec4<float>{v[7], widen, cone[3], cone[4]} : Vec4<float>{},
+          on ? Vec4<float>{cone[0], cone[1], cone[2], 0.f} : Vec4<float>{},
       };
-      for (u32 row = 0; row < 3; ++row) {
-        if (g_gxState.pbrLightHdr[idx * 3 + row] != rows[row]) {
-          g_gxState.pbrLightHdr[idx * 3 + row] = rows[row];
+      for (u32 row = 0; row < 4; ++row) {
+        if (g_gxState.pbrLightHdr[idx * 4 + row] != rows[row]) {
+          g_gxState.pbrLightHdr[idx * 4 + row] = rows[row];
           g_gxState.dirty |= DirtyUniform;
         }
       }

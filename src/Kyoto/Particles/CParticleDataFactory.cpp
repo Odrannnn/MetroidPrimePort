@@ -836,6 +836,16 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       GetClassID(in);
       desc->xPortNestedLightWiden = in.ReadFloat();
       break;
+    case SBIG('PLIA'):
+      GetClassID(in);
+      desc->xPortNestedLightSpot = true;
+      desc->xPortNestedLightInnerAngle = in.ReadFloat();
+      break;
+    case SBIG('PLOA'):
+      GetClassID(in);
+      desc->xPortNestedLightSpot = true;
+      desc->xPortNestedLightOuterAngle = in.ReadFloat();
+      break;
     case SBIG('PLON'):
       GetClassID(in);
       desc->xPortLightOnce = in.ReadLong() != 0;

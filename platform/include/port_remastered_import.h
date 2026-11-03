@@ -248,7 +248,8 @@ inline constexpr int kModels = 30;
 // 209: DFCP and DFCS take two reals only (an ARRY of their colours read across them).
 // 210: an int RAND of parent reads (SPAI/DPVI/TPVI never fold) is PRAN, not a drop.
 // 211: SPWT/SPWR/SPWS/SPCL on a generator with no child system are inert, not a drop.
-inline constexpr int kEffects = 211;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
+// 212: a nested spot light (LTYP 3) is an HDR light with its LIAN/LOAN cone (PLIA/PLOA).
+inline constexpr int kEffects = 212;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

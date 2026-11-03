@@ -83,6 +83,9 @@ struct PBRLightHdrWrite {
   f32 r1;
   u32 falloff;
   f32 widen;
+  f32 toLight[3];
+  f32 coneScale;
+  f32 coneBias;
 };
 struct PBRMaterialWrite {
   f32 emissive[3];
@@ -933,7 +936,7 @@ void GXSetPBRShield(const f32 rows[8][4]) {
 }
 
 void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3], f32 r0, f32 r1, u32 falloff,
-                      f32 widen) {
+                      f32 widen, const f32 toLight[3], f32 coneScale, f32 coneBias) {
   const u32 bit = static_cast<u32>(light) & 0xFF;
   if (bit == 0) {
     return;
@@ -941,7 +944,15 @@ void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3],
   const u32 idx = static_cast<u32>(std::countr_zero(bit));
   PBRLightHdrWrite now{};
   if (color != nullptr && viewPos != nullptr && r1 > 0.f) {
-    now = {{color[0], color[1], color[2]}, {viewPos[0], viewPos[1], viewPos[2]}, r0, r1, falloff, widen};
+    now = {{color[0], color[1], color[2]}, {viewPos[0], viewPos[1], viewPos[2]}, r0, r1, falloff, widen,
+           {0.f, 0.f, 0.f}, 0.f, 1.f};
+    if (toLight != nullptr) {
+      now.toLight[0] = toLight[0];
+      now.toLight[1] = toLight[1];
+      now.toLight[2] = toLight[2];
+      now.coneScale = coneScale;
+      now.coneBias = coneBias;
+    }
   }
   static LastPBRWrite<PBRLightHdrWrite> sLast[8];
   if (sLast[idx].repeats(now)) {
@@ -959,6 +970,11 @@ void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3],
   GX_WRITE_F32(now.r1);
   GX_WRITE_U32(now.falloff);
   GX_WRITE_F32(now.widen);
+  for (f32 v : now.toLight) {
+    GX_WRITE_F32(v);
+  }
+  GX_WRITE_F32(now.coneScale);
+  GX_WRITE_F32(now.coneBias);
 }
 
 void GXSetPBRLightScale(f32 diffuse, f32 f0, f32 alpha, GXBool alphaReplaces) {
