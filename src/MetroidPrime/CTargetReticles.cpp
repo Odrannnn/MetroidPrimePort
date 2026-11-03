@@ -2294,7 +2294,14 @@ void CCompoundTargetReticle::PortTriDrawCrosshairs(const CMatrix3f& rot, const C
   if (const CModel* model = x34_crosshairs.GetObject()) {
     CColor color = PortTriXhairColor(gpTweakTargeting->x1c0_crosshairsColor);
     color.SetAlpha(PortTriAlphaU8(255.f * PortTriXhairAlpha(x1e8_crosshairsScale)));
-    gpRender->SetModelMatrix(xf * CTransform4f::Scale(x1e8_crosshairsScale * PortTriXhairSize()));
+    CTransform4f scale = CTransform4f::Scale(x1e8_crosshairsScale * PortTriXhairSize());
+    if (PortDebug::CrosshairStyle() == PortDebug::kCrosshairStyle_GameCube) {
+      // Placed at the eye, a scale about the origin moves the model out with its size and its
+      // apparent size never changes (issue #255): scale it about its own centre instead.
+      const CVector3f centre = model->GetBoundingBox().GetCenterPoint();
+      scale = CTransform4f::Translate(centre) * scale * CTransform4f::Translate(-centre);
+    }
+    gpRender->SetModelMatrix(xf * scale);
     model->Draw(CModelFlags(CModelFlags::kT_Additive, 0, CModelFlags::kF_Nothing, color));
   }
 }
