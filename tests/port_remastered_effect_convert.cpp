@@ -1415,6 +1415,38 @@ void TestSwooshTxup() {
   CHECK_MSG(part.part == off.bytes && part.dropped.empty(), "TXUP 0 writes nothing");
 }
 
+// A swoosh's LWQD (desc+0x228, CreateSWSH 0x2dbae0) is clamped to 1..10 and becomes the
+// port-only PLWQ unless it is 1.
+void TestSwooshLwqd() {
+  const auto lwqd = [](uint8_t value) {
+    return ConvertSwoosh([=](auto& o) {
+      PutProperty(o, "LWQD", 0);
+      PutFourCC(o, "CNST");
+      o.push_back(value);
+    });
+  };
+  const auto plwq = [](uint32_t value) {
+    Retail want;
+    want.f("SWSH").f("PLWQ").f("CNST").w(value).f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f(
+        "_END");
+    return want.bytes;
+  };
+  ConvertedPart part = lwqd(4);
+  CHECK_MSG(part.part == plwq(4) && part.dropped.empty(), "LWQD 4 becomes PLWQ 4");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), part.part.data(), part.part.size(), properties, error),
+            "PLWQ reads as a swoosh property");
+  part = lwqd(12);
+  CHECK_MSG(part.part == plwq(10) && part.dropped.empty(), "LWQD 12 clamps to 10");
+  Retail one;
+  one.f("SWSH").f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  part = lwqd(1);
+  CHECK_MSG(part.part == one.bytes && part.dropped.empty(), "LWQD 1 writes nothing");
+  part = lwqd(0);
+  CHECK_MSG(part.part == one.bytes && part.dropped.empty(), "LWQD 0 clamps to 1");
+}
+
 bool Contains(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& what);
 
 // A swoosh's per-point variables are ADV0..8 and IAV/VAV/CAV0..3 (CreateSWSH AddDefinedVar),
@@ -6860,6 +6892,7 @@ int main() {
   TestSwooshZProt();
   TestSwooshSeed();
   TestSwooshTxup();
+  TestSwooshLwqd();
   TestConvert();
   TestRejects();
   TestSingleNode();

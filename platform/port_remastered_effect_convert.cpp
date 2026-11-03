@@ -6232,6 +6232,23 @@ public:
       }
       return;
     }
+    // A swoosh's LWQD is a GetIntElementAsConst clamped to 1..10 into desc+0x228 (CreateSWSH
+    // 0x2dbae0): UpdateRenderData_Swoosh 0x2b6a58 splits each side face into that many strips
+    // across the trail (CParticleSwoosh::PortRenderVfx). The port-only PLWQ.
+    if (s.swoosh && fourcc == F("LWQD")) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value)) {
+        s.result.dropped.push_back("LWQD: invalid constant");
+      } else {
+        value = static_cast<uint32_t>(std::clamp(static_cast<int32_t>(value), 1, 10));
+        if (value != 1) {
+          AppendBE32(s.out, F("PLWQ"));
+          AppendBE32(s.out, F("CNST"));
+          AppendBE32(s.out, value);
+        }
+      }
+      return;
+    }
     // A generator's per-particle child system: PSPS names an embedded child and its type word, read
     // into desc+0x200; PSMX is an int element (desc+0x208) capping how many live at once
     // (CreateGPSM; ConstructParticleSpawnedChildSystem 0x24bc00). The child is built through
@@ -7389,7 +7406,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
                (vfx && fourcc == F("PIRN")) ||
-               (type == F("SWHC") && (fourcc == F("PGID") || fourcc == F("PSED") || fourcc == F("PTXU")))) {
+               (type == F("SWHC") && (fourcc == F("PGID") || fourcc == F("PSED") || fourcc == F("PTXU") ||
+                                        fourcc == F("PLWQ")))) {
       ok = reader.PortWord();
     } else if (vfx && fourcc == F("PVRT")) {
       ok = reader.PortVariables();

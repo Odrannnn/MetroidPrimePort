@@ -73,6 +73,8 @@ public:
   u32 xPortGuidWord = 0;
   // port-only PTXU: Remastered's TXUP (desc+0x22c bit 0x80); u scrolls back one TSPN step per point created
   bool xPortTexUScroll = false;
+  // port-only PLWQ: Remastered's LWQD (desc+0x228, 1..10); strips per side face across the trail
+  int xPortLwqd = 1;
   // port-only PDFG: Remastered's DFOG 1, drawn without volumetric fog (CGenDescription::xPortUnfogged)
   bool xPortUnfogged = false;
   // port-only PZTS: Remastered's ZTES 0, the depth test passes everywhere (compare ALWAYS)

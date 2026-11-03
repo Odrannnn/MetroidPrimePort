@@ -247,6 +247,14 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       CParticleDataFactory::GetClassID(in);
       swoosh->xPortTexUScroll = in.ReadLong() != 0;
       break;
+    // Port-only Remastered LWQD (xPortLwqd).
+    case 'PLWQ':
+      CParticleDataFactory::GetClassID(in);
+    {
+      const int n = in.ReadLong();
+      swoosh->xPortLwqd = n < 1 ? 1 : n > 10 ? 10 : n;
+      break;
+    }
     // Port-only Remastered material, as a PART's.
     case 'VMAT':
     case 'VTMT':

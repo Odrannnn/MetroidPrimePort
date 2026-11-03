@@ -991,6 +991,7 @@ void CParticleSwoosh::PortRenderVfx() {
   const bool cros = x1c_desc->x44_25_CROS && x1b8_SIDE % 2 == 0;
   // Remastered builds one strip per segment below SIDE 3 (0x2b52e0), not a quad per ring edge.
   const int faces = x1b8_SIDE < 3 ? 1 : (cros ? x1b8_SIDE / 2 : x1b8_SIDE);
+  const int strips = x1c_desc->xPortLwqd;
   // ORNT with SIDE 2: the ribbon width axis is rebuilt from the camera and the trail direction
   // every frame (CERotationFromAxis), not taken from the stored orientation.
   const bool orntView = x1c_desc->x45_25_ORNT && x1b8_SIDE == 2;
@@ -1094,10 +1095,22 @@ void CParticleSwoosh::PortRenderVfx() {
       pointAt(t1, c1, e1);
       for (int face = 0; face < faces; ++face) {
         const int other = cros ? face + x1b8_SIDE / 2 : (face + 1) % x1b8_SIDE;
-        emit(GetSplinePoint(ring[0][face], ring[1][face], ring[2][face], ring[3][face], t0), uMin, 0.f, c0, e0);
-        emit(GetSplinePoint(ring[0][other], ring[1][other], ring[2][other], ring[3][other], t0), uMin, 1.f, c0, e0);
-        emit(GetSplinePoint(ring[0][other], ring[1][other], ring[2][other], ring[3][other], t1), uMax, 1.f, c1, e1);
-        emit(GetSplinePoint(ring[0][face], ring[1][face], ring[2][face], ring[3][face], t1), uMax, 0.f, c1, e1);
+        const CVector3f a0 = GetSplinePoint(ring[0][face], ring[1][face], ring[2][face], ring[3][face], t0);
+        const CVector3f b0 = GetSplinePoint(ring[0][other], ring[1][other], ring[2][other], ring[3][other], t0);
+        const CVector3f a1 = GetSplinePoint(ring[0][face], ring[1][face], ring[2][face], ring[3][face], t1);
+        const CVector3f b1 = GetSplinePoint(ring[0][other], ring[1][other], ring[2][other], ring[3][other], t1);
+        // LWQD: the face's edge points are lerped across in n steps, position and v alike
+        // (0x2b6a58 calling 0x2b6c70 at t = 0, then t += 1/n n times).
+        const float step = 1.f / static_cast< float >(strips);
+        float s1 = 0.f;
+        for (int q = 0; q < strips; ++q) {
+          const float s0 = s1;
+          s1 += step;
+          emit(CVector3f::Lerp(a0, b0, s0), uMin, s0, c0, e0);
+          emit(CVector3f::Lerp(a0, b0, s1), uMin, s1, c0, e0);
+          emit(CVector3f::Lerp(a1, b1, s1), uMax, s1, c1, e1);
+          emit(CVector3f::Lerp(a1, b1, s0), uMax, s0, c1, e1);
+        }
       }
       uMin = uMax;
     }
