@@ -776,6 +776,14 @@ void CmdAreas(CStateManager& mgr) {
     Out("%3d %08X%s%s", i, static_cast< uint32_t >(area.GetAreaAssetId()),
         area.IsPostConstructed() ? " loaded" : "", i == current ? "  <- current" : "");
   }
+  if (current >= 0 && current < world->GetNumAreas()) {
+    // Remastered's object positions (room files) are area-local: world = this * (-x, z, y).
+    const CTransform4f& m = world->GetAreaAlways(TAreaId(current)).GetTM();
+    Out("current area transform rows (%.4f %.4f %.4f %.3f) (%.4f %.4f %.4f %.3f) "
+        "(%.4f %.4f %.4f %.3f)",
+        m.Get00(), m.Get01(), m.Get02(), m.Get03(), m.Get10(), m.Get11(), m.Get12(), m.Get13(),
+        m.Get20(), m.Get21(), m.Get22(), m.Get23());
+  }
   Finish();
 }
 

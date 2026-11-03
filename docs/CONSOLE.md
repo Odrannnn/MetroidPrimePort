@@ -15,7 +15,7 @@ morph, visor, beam, first_person, cinematic, freecam, `physics` (see below) and
 load is still black or lifting, i.e. the screen is not fully visible;
 `tools/mprig.py` waits on it),
 `pipetrim [frames]` (releases built pipelines unused for that many frames, 16 minimum, as Android's onTrimMemory does; the log says how many),
-`worlds`, `areas`, `warp <world id or name prefix> [mrea]` (replies once the
+`worlds`, `areas` (also prints the current area's transform, which maps Remastered's area-local object positions to the world), `warp <world id or name prefix> [mrea]` (replies once the
 new world runs), `tp x y z`, `goto <id> [dist]` (stands on the floor dist units, default 6, from an actor, facing it: the side toward the player first, then around it and closer in, preferring a clear line of sight; says when it has none), `enter <area>` (makes an area of the current
 world the current one, as walking into it would; `tp` alone does not),
 `room <area>` (the F1 room list's teleport, to the area's spawn point),
