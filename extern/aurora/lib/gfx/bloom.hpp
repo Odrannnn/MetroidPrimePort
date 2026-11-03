@@ -18,8 +18,9 @@ struct Params {
   float add[4];       // the HDR composite's added term, linear r, g, b, a (a 0: none); see CompositeAddWgsl
   float radial[3][4]; // the HDR composite's radial fan: apex c0, rim c1, frame multiplier c2; see CompositeRadialWgsl
   uint32_t radialOn;  // 1: the radial term is applied
+  float mul[4];       // the HDR composite's multiplier, linear r, g, b, a (a 1: on); see CompositeMultiplyWgsl
 };
-static_assert(sizeof(Params) <= 196);
+static_assert(sizeof(Params) == 53 * sizeof(uint32_t));
 // Params::bloom bits for speed tests (GXSetPBRCostTest), which leave out one part of the work and
 // look wrong: the pass after the bloom clearing depth instead of loading it. CostKeepDepth looks
 // right: it always loads depth after the bloom, as before that pass learned to clear it when the HUD
@@ -69,6 +70,17 @@ fn composite_radial(frame: vec4f, ndc: vec2f, c0: vec4f, c1: vec4f, c2: vec4f) -
   let v = composite_radial_fan(ndc, c0, c1);
   let m = clamp(c2, vec4f(0.0), vec4f(1.0));
   return vec4f(clamp(frame.rgb, vec3f(0.0), vec3f(1.0)) * m.rgb + v.rgb * v.a, frame.a * m.a);
+}
+)";
+
+// The HDR composite's last term, the state manager's fullscreen Multiply camera filter (the
+// underwater tint): Remastered draws it after UberPost (RenderAfterPostFX 0xf9fa6c, priority 2)
+// with blend Zero/SrcColor onto its RGBA8 sRGB output, so the blend multiplies the linear frame,
+// clamped to [0, 1] by the target, by the filter colour as it is. The display EFB here is unorm,
+// where the same blend would multiply the encoded value; folded in, it multiplies before the encode.
+inline constexpr const char* CompositeMultiplyWgsl = R"(
+fn composite_multiply(frame: vec3f, c: vec4f) -> vec3f {
+  return clamp(frame, vec3f(0.0), vec3f(1.0)) * clamp(c.rgb, vec3f(0.0), vec3f(1.0));
 }
 )";
 

@@ -381,17 +381,26 @@ void CMFGame::Draw() const {
         if (mainPost) {
           CSamusHud::PortSetTintFolded(folded);
         }
-        // The frame is measured at the opaque/sorted boundary (CStateManager::DrawWorld).
-        GXPortPostProcessScene(bloom, threshold, tints, tone, gradeA, gradeB, gradeWeight, 0.f);
-        CCubeMaterial::sPortSceneHdr = false;
         // Remastered RenderAfterPostFX (0xf9fa6c): priority-2 camera filters
-        // (0xc6273c), including the underwater multiply, follow tone/grade.
+        // (0xc6273c), including the underwater multiply, follow tone/grade, blended
+        // onto its sRGB output. The display EFB is unorm, so a leading fullscreen
+        // multiply is folded into the composite, which multiplies in linear light.
+        float multiply[3];
+        int foldedFilter = mStateManager->PortCameraFilterMultiply(multiply);
+        if (foldedFilter >= 0) {
+          GXPortPostCompositeMultiply(multiply);
+        }
+        // The frame is measured at the opaque/sorted boundary (CStateManager::DrawWorld).
+        if (!GXPortPostProcessScene(bloom, threshold, tints, tone, gradeA, gradeB, gradeWeight, 0.f)) {
+          foldedFilter = -1;
+        }
+        CCubeMaterial::sPortSceneHdr = false;
         // These GX filters replace the perspective with an ortho projection.
         // Their old DrawWorld call was followed by ResetViewAfterDraw; retain
         // that boundary before targeting/visor draws (including scan zoom).
         const CViewport filterViewport = CGraphics::GetViewport();
         const CTransform4f filterView = CGraphics::GetViewMatrix();
-        mStateManager->DrawCameraFilters();
+        mStateManager->PortDrawCameraFilters(foldedFilter);
         mStateManager->ResetViewAfterDraw(filterViewport, filterView);
         // RenderVisorEffects follows the filters, in the main frame only.
         if (mainPost) {

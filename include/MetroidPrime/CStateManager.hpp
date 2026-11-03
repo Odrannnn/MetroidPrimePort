@@ -346,6 +346,13 @@ public:
 #endif
   void RenderCamerasAndAreaLights() const;
   void DrawCameraFilters() const;
+#ifdef TARGET_PC
+  // The pass index of a fullscreen Multiply filter the HDR composite can take (no pass before it
+  // draws), its colour in rgb; -1 for none.
+  int PortCameraFilterMultiply(float rgb[3]) const;
+  // DrawCameraFilters leaving out pass `skip` (-1: none).
+  void PortDrawCameraFilters(int skip) const;
+#endif
   void DrawE3DeathEffect() const;
   void DrawAdditionalFilters() const;
   void GetCharacterRenderMaskAndTarget(bool, int&, int&);

@@ -82,6 +82,7 @@ struct Uniform {
   float grade[4]; // x: B's weight, y: A is a LUT, z: B is a LUT, w: bloom on
   float add[4];   // the HDR composite's added term (Params::add)
   float radial[4][4]; // c0, c1, c2 (Params::radial); [3].x: on
+  float mul[4];       // the HDR composite's multiplier (Params::mul); w: on
 };
 static_assert(sizeof(Uniform) <= SlotSize);
 
@@ -93,6 +94,7 @@ struct Params {
   grade: vec4f,
   add: vec4f,
   radial: array<vec4f, 4>,
+  mul: vec4f,
 };
 @group(0) @binding(0) var samp: sampler;
 @group(0) @binding(1) var src: texture_2d<f32>;
@@ -249,7 +251,15 @@ fn fs_composite_hdr(in: VertexOutput) -> @location(0) vec4f {
   if (p.radial[3].x > 0.5) {
     let ndc = vec2f(in.uv.x * 2.0 - 1.0, 1.0 - in.uv.y * 2.0);
     let o = composite_radial(vec4f(graded, f.a), ndc, p.radial[0], p.radial[1], p.radial[2]);
-    return vec4f(hdr_srgb_enc(o.rgb), o.a);
+    var rgb = o.rgb;
+    if (p.mul.w > 0.5) {
+      rgb = composite_multiply(rgb, p.mul);
+    }
+    return vec4f(hdr_srgb_enc(rgb), o.a);
+  }
+  // Last, the underwater Multiply camera filter, which Remastered draws after this composite.
+  if (p.mul.w > 0.5) {
+    graded = composite_multiply(graded, p.mul);
   }
   return vec4f(hdr_srgb_enc(graded), f.a);
 }
@@ -498,6 +508,7 @@ void ensure_pipelines() {
   code += hdr::PostToneWgsl;
   code += CompositeAddWgsl;
   code += CompositeRadialWgsl;
+  code += CompositeMultiplyWgsl;
   code += HdrSource;
   wgpu::ShaderSourceWGSL source{};
   source.code = code.c_str();
@@ -803,6 +814,7 @@ void encode(const EncoderTaskContext& ctx, const wgpu::CommandEncoder& cmd, cons
     std::memcpy(u.add, params.add, sizeof(u.add));
     std::memcpy(u.radial, params.radial, sizeof(params.radial));
     u.radial[3][0] = params.radialOn != 0 ? 1.f : 0.f;
+    std::memcpy(u.mul, params.mul, sizeof(u.mul));
     std::memcpy(slots[slot].data(), &u, sizeof(u));
   };
   uint32_t slot = 0;

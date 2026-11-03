@@ -295,6 +295,11 @@ void GXPortPostCompositeAdd(const f32 rgba[4]);
 // [0, 1], and out.rgb = clamp(frame) * clamp(c2).rgb + v.rgb * v.a, out.a = frame.a * clamp(c2).a.
 // Taken by that post and cleared; any NULL clears it.
 void GXPortPostCompositeRadial(const f32 c0[4], const f32 c1[4], const f32 c2[4]);
+// Port extension: a fullscreen Multiply camera filter (Remastered draws them after UberPost onto
+// its sRGB output) for the next GXPortPostProcessScene's composite, after the add and radial terms:
+// out.rgb = clamp(frame) * clamp(rgb), in linear light before the encode. Taken by that post and
+// cleared; NULL clears it.
+void GXPortPostCompositeMultiply(const f32 rgb[3]);
 // Port extension: Remastered's volumetric fog over the EFB as drawn so far: a froxel grid
 // (16x16 pixels by 64 slices out to `fog[0]`) of height and noise shaped density, lit by the
 // ambient volume's mean light, integrated front to back and applied to every pixel at the

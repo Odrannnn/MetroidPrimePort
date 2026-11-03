@@ -1636,7 +1636,7 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.dirty |= DirtyUniform;
     }
   } else if (subCmd == GX_AURORA_PORT_POST_PROCESS) {
-    u32 words[49];
+    u32 words[53];
     for (u32& word : words) {
       word = reader.read<u32>();
     }

@@ -4341,6 +4341,32 @@ void CStateManager::DrawCameraFilters() const {
   }
 }
 
+#ifdef TARGET_PC
+int CStateManager::PortCameraFilterMultiply(float rgb[3]) const {
+  for (int i = 0; i < kCFS_Max; ++i) {
+    CColor color;
+    if (xb84_camFilterPasses[i].PortMultiplyColor(color)) {
+      rgb[0] = color.GetRed();
+      rgb[1] = color.GetGreen();
+      rgb[2] = color.GetBlue();
+      return i;
+    }
+    if (!xb84_camFilterPasses[i].PortDrawsNothing()) {
+      return -1;
+    }
+  }
+  return -1;
+}
+
+void CStateManager::PortDrawCameraFilters(int skip) const {
+  for (int i = 0; i < kCFS_Max; ++i) {
+    if (i != skip) {
+      xb84_camFilterPasses[i].Draw();
+    }
+  }
+}
+#endif
+
 void CStateManager::DrawDebugStuff() const {}
 
 void CStateManager::BuildDynamicLightListForWorld() {

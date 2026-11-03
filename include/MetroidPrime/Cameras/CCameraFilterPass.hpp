@@ -56,6 +56,10 @@ public:
   void PortDescribe(char* out, unsigned int size) const;
   // Port: the colour of a plain fullscreen Add filter (what Draw would add), false for any other.
   bool PortAddColor(CColor& out) const;
+  // Port: likewise for a plain fullscreen Multiply filter (the underwater tint).
+  bool PortMultiplyColor(CColor& out) const;
+  // Port: Draw would draw nothing (passthru, or the hidden cinema bars).
+  bool PortDrawsNothing() const;
   // Port: SetFilter with Remastered's SRadialGradientColorData (c0 apex, c1 rim, c2 the texture
   // mod colour) and the radial shape. Any other SetFilter drops the gradient.
   void PortSetRadialFilter(EFilterType type, const CColor& color, const float c0[4],

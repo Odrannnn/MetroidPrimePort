@@ -964,7 +964,8 @@ bloom::Params scene_post() {
 // clamp(c).rgb * clamp(c).a in linear light. The Null backend runs no shader, so this checks the
 // shared WGSL through Tint and the wire layout, and the term itself against a CPU mirror.
 TEST_F(SceneHdrTest, CompositeAddTermCompilesAndKeepsItsWireLayout) {
-  static_assert(sizeof(bloom::Params) == 49 * sizeof(uint32_t));
+  static_assert(sizeof(bloom::Params) == 53 * sizeof(uint32_t));
+  static_assert(offsetof(bloom::Params, mul) == 49 * sizeof(uint32_t));
   static_assert(offsetof(bloom::Params, add) == 32 * sizeof(uint32_t));
   static_assert(offsetof(bloom::Params, radial) == 36 * sizeof(uint32_t));
   static_assert(offsetof(bloom::Params, radialOn) == 48 * sizeof(uint32_t));
@@ -1010,6 +1011,19 @@ TEST_F(SceneHdrTest, CompositeRadialTermCompiles) {
   EXPECT_EQ(module_error(source), "");
   // No fan recorded: the default params leave the radial term off.
   EXPECT_EQ(scene_post().radialOn, 0u);
+}
+
+// The underwater Multiply camera filter folded in last: clamp(frame) * clamp(c.rgb), linear.
+TEST_F(SceneHdrTest, CompositeMultiplyTermCompiles) {
+  const std::string source =
+      std::string{bloom::CompositeMultiplyWgsl} +
+      "@compute @workgroup_size(1) fn main() { let v = composite_multiply(vec3f(1.5), vec4f(0.2, 0.8, 0.9, 1.0)); _ = v; }";
+  EXPECT_EQ(module_error(source), "");
+  EXPECT_NE(std::string{bloom::CompositeMultiplyWgsl}.find(
+                "clamp(frame, vec3f(0.0), vec3f(1.0)) * clamp(c.rgb, vec3f(0.0), vec3f(1.0))"),
+            std::string::npos);
+  // No filter recorded: the default params leave the multiply off.
+  EXPECT_EQ(scene_post().mul[3], 0.f);
 }
 
 // CompositeRadialWgsl line for line on the CPU (module_error only compiles WGSL), checked against

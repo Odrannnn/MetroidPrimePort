@@ -477,6 +477,18 @@ bool CCameraFilterPass::PortAddColor(CColor& out) const {
   out = x18_curColor;
   return true;
 }
+
+bool CCameraFilterPass::PortMultiplyColor(CColor& out) const {
+  if (x0_curType != kFT_Multiply || x8_shape != kFS_Fullscreen || !x24_texObj.null()) {
+    return false;
+  }
+  out = x18_curColor;
+  return true;
+}
+
+bool CCameraFilterPass::PortDrawsNothing() const {
+  return x0_curType == kFT_Passthru || (x8_shape == kFS_CinemaBars && !PortDebug::CinemaBars());
+}
 #endif
 
 void CCameraFilterPass::DrawFilter(EFilterType type, EFilterShape shape, const CColor& color,
