@@ -1454,11 +1454,26 @@ void CElementGen::CreateNewParticles(int count) {
 
   if (x26d_28_enableADV && x60_advValues.capacity() < newCount + x30_particles.size()) {
     int newCap = x60_advValues.capacity() * 2;
+#ifdef TARGET_PC
+    // One doubling can fall short of a burst (MAXP is re-read every tick, and Remastered bursts
+    // run to the hundreds): the ADVs past the end were written into the heap.
+    x60_advValues.reserve(rstl::max_val(newCount + static_cast< int >(x30_particles.size()),
+                                        rstl::min_val(x90_MAXP, newCap)));
+#else
     x60_advValues.reserve(rstl::min_val(x90_MAXP, newCap));
+#endif
     while (x60_advValues.size() < x60_advValues.capacity()) {
       x60_advValues.push_back(CAdvancedValues());
     }
   }
+#ifdef TARGET_PC
+  // Sized to MAXP's first value; a MAXP that grows later would index past it.
+  if (PortParentMatrices()) {
+    while (x50_parentMatrices.size() < newCount + x30_particles.size()) {
+      x50_parentMatrices.push_back(CMatrix3f::Identity());
+    }
+  }
+#endif
 
   CParticleGlobals::mParticleAccessParameters = NULL;
 
@@ -2831,11 +2846,26 @@ void CElementGen::PortCreateParticlesAtPositions(int n, const CVector3f* pos) {
 
   if (x26d_28_enableADV && x60_advValues.capacity() < newCount + x30_particles.size()) {
     int newCap = x60_advValues.capacity() * 2;
+#ifdef TARGET_PC
+    // One doubling can fall short of a burst (MAXP is re-read every tick, and Remastered bursts
+    // run to the hundreds): the ADVs past the end were written into the heap.
+    x60_advValues.reserve(rstl::max_val(newCount + static_cast< int >(x30_particles.size()),
+                                        rstl::min_val(x90_MAXP, newCap)));
+#else
     x60_advValues.reserve(rstl::min_val(x90_MAXP, newCap));
+#endif
     while (x60_advValues.size() < x60_advValues.capacity()) {
       x60_advValues.push_back(CAdvancedValues());
     }
   }
+#ifdef TARGET_PC
+  // Sized to MAXP's first value; a MAXP that grows later would index past it.
+  if (PortParentMatrices()) {
+    while (x50_parentMatrices.size() < newCount + x30_particles.size()) {
+      x50_parentMatrices.push_back(CMatrix3f::Identity());
+    }
+  }
+#endif
 
   CParticleGlobals::mParticleAccessParameters = NULL;
 
