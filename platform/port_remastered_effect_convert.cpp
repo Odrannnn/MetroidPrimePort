@@ -547,6 +547,56 @@ bool ConstIs(const EffectValue& value, uint32_t word) {
   return ConstWord(value, have) && have == word;
 }
 
+// A swoosh's SYSR (desc+0x78, CreateSWSH 0x2dd224) makes any XFMD but 5 transform mode 1
+// (SetupTransformMode 0x2887d8; 5 deletes it). Mode 1 binds the system vars to the system's own
+// elements instead of the external transform: a8 translation, ac SYSR, b0 SYSS, b8 the birth
+// position and bc the birth orientation, which default to zero, identity, one, zero and identity.
+// So the setters move nothing; EXTR and the getters still read what they set. A zero REUL under
+// XFMD 2 is the port-only XFMD 1 (CParticleSwoosh xPortXfmdSystem) unless an EXTT or EXTS reads
+// the external translation or scale, an INTR other than a zero REUL is a rotation the points no
+// longer start from, or a RAZY's EMRV reads the frozen birth position. 1 writes it, 5 is a no-op,
+// and 0 is a drop with `why`.
+int SwooshSystemMode(const EffectNode& node, std::string& why) {
+  const auto zeroReul = [](const EffectProperty& property) {
+    if (property.value.size() != 1 || !IsElement(property.value[0], F("REUL")) || property.value[0].args.size() != 4) {
+      return false;
+    }
+    for (size_t i = 0; i < 3; ++i) {
+      uint32_t word = 0;
+      if (!ConstWord(property.value[0].args[i], word) || (word & 0x7fffffffu) != 0) {
+        return false;
+      }
+    }
+    return true;
+  };
+  uint32_t mode = 2;
+  bool zeroSysr = false;
+  bool otherIntr = false;
+  bool razy = false;
+  bool external = false;
+  for (const EffectProperty& property : node.properties) {
+    if (property.fourcc == F("XFMD") && (property.value.size() != 1 || !ConstWord(property.value[0], mode))) {
+      mode = UINT32_MAX;
+    }
+    zeroSysr = zeroSysr || (property.fourcc == F("SYSR") && zeroReul(property));
+    otherIntr = otherIntr || (property.fourcc == F("INTR") && !zeroReul(property));
+    for (const EffectValue& value : property.value) {
+      razy = razy || ContainsElement(value, F("RAZY"));
+      external = external || ContainsElement(value, F("EXTT")) || ContainsElement(value, F("EXTS"));
+    }
+  }
+  if (mode == 5) {
+    return 5;
+  }
+  why = mode != 2       ? "under XFMD " + std::to_string(int32_t(mode))
+        : !zeroSysr     ? "not a zero REUL"
+        : external      ? "with an EXTT or EXTS"
+        : otherIntr     ? "with an INTR other than a zero REUL"
+        : razy          ? "with a RAZY"
+                        : "";
+  return why.empty() ? 1 : 0;
+}
+
 // A constant vector of three zeros (CNST of three CNST 0).
 bool IsZeroVector(const EffectValue& value) {
   return IsElement(value, F("CNST")) && value.args.size() == 3 &&
@@ -5698,6 +5748,19 @@ public:
     // material data is written by Material() alongside the VMAT.
     if (s.part && fourcc == F("XFMD")) {
       s.xfmd = &property;
+      return true;
+    }
+    // A swoosh's SYSR forces transform mode 1 (SwooshSystemMode).
+    if (s.swoosh && fourcc == F("SYSR")) {
+      std::string why;
+      const int mode = SwooshSystemMode(s.node, why);
+      if (mode == 1) {
+        AppendBE32(s.out, F("XFMD"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, 1);
+      } else if (mode == 0) {
+        s.result.dropped.push_back("SYSR: " + why);
+      }
       return true;
     }
     // A swoosh's XFMD 3 draws its points in the emitter's frame (CParticleSwoosh xPortXfmdFollow);

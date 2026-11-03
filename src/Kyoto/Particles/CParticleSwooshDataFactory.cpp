@@ -205,10 +205,12 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       swoosh->xPortExposurePolicy = true;
       swoosh->xPortInverseExposure = in.ReadLong() != 0;
       break;
-    // Port-only Remastered transform mode; only 3 (xPortXfmdFollow) and 4 (xPortXfmdMover) are written.
+    // Port-only Remastered transform mode; only 1 (xPortXfmdSystem), 3 (xPortXfmdFollow) and 4
+    // (xPortXfmdMover) are written.
     case 'XFMD': {
       CParticleDataFactory::GetClassID(in);
       const int mode = in.ReadLong();
+      swoosh->xPortXfmdSystem = mode == 1;
       swoosh->xPortXfmdFollow = mode == 3;
       swoosh->xPortXfmdMover = mode == 4;
       break;

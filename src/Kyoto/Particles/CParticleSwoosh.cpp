@@ -366,6 +366,10 @@ void CParticleSwoosh::SetOrientation(const CTransform4f& orientation) {
   // SetExternalRotation), which the draw uses as the global orientation; the local one stays identity.
   // INTR replaces what they set with the system rotation var (PortIntOrientation).
   xPortExtOrientation = orientation;
+  // XFMD 1: the birth orientation (var bc) is the system's own; only EXTR reads what is set.
+  if (x1c_desc->xPortXfmdSystem) {
+    return;
+  }
   const CTransform4f system = x1c_desc->xPortIntRotation ? PortIntOrientation(orientation) : orientation;
   if (x1c_desc->xPortXfmdFollow) {
     xb0_globalOrientation = system.GetRotation();
@@ -653,6 +657,11 @@ void CParticleSwoosh::UpdateTranslationAndOrientation() {
 
 void CParticleSwoosh::SetTranslation(const CVector3f& translation) {
 #ifdef TARGET_PC
+  // XFMD 1: the system's own transform births and draws the points; no setter moves them.
+  if (x1c_desc->xPortXfmdSystem) {
+    xPortExtTranslation = translation;
+    return;
+  }
   // XFMD 3: the one system translation (MPT_SetTranslation 0x27f9c4 -> SetExternalTranslation
   // 0x27b45c), drawn as the global translation; points are born at zero and the head is not moved.
   if (x1c_desc->xPortXfmdFollow) {
@@ -666,6 +675,10 @@ void CParticleSwoosh::SetTranslation(const CVector3f& translation) {
 
 void CParticleSwoosh::SetGlobalTranslation(const CVector3f& translation) {
 #ifdef TARGET_PC
+  if (x1c_desc->xPortXfmdSystem) {
+    xPortExtTranslation = translation;
+    return;
+  }
   // XFMD 4: MPT_SetGlobalTranslation 0x27faa4 also writes the external translation, which the
   // EMVR's EXTT gives var b8, the position a point is born at; the global translation stays zero.
   if (x1c_desc->xPortXfmdMover) {
@@ -678,6 +691,10 @@ void CParticleSwoosh::SetGlobalTranslation(const CVector3f& translation) {
 
 void CParticleSwoosh::SetGlobalOrientation(const CTransform4f& orientation) {
 #ifdef TARGET_PC
+  if (x1c_desc->xPortXfmdSystem) {
+    xPortExtOrientation = orientation;
+    return;
+  }
   // XFMD 4: MPT_SetGlobalOrientation 0x27fa24 writes the external rotation (EXTR, var bc).
   if (x1c_desc->xPortXfmdMover) {
     SetOrientation(orientation);
@@ -692,7 +709,14 @@ void CParticleSwoosh::SetGlobalOrientation(const CTransform4f& orientation) {
   xb0_globalOrientation = orientation.GetRotation();
 }
 
-void CParticleSwoosh::SetLocalScale(const CVector3f& scale) { x14c_localScale = scale; }
+void CParticleSwoosh::SetLocalScale(const CVector3f& scale) {
+#ifdef TARGET_PC
+  if (x1c_desc->xPortXfmdSystem) {
+    return;
+  }
+#endif
+  x14c_localScale = scale;
+}
 
 #ifdef TARGET_PC
 // A point is born at the system translation plus POFS, both in the system's axes. Spreading POFS
@@ -1975,6 +1999,10 @@ void CParticleSwoosh::UpdateSwooshTranslation(const CVector3f& translation) {
 
 void CParticleSwoosh::SetGlobalScale(const CVector3f& scale) {
 #ifdef TARGET_PC
+  // XFMD 1: var b0 is SYSS's, one by default.
+  if (x1c_desc->xPortXfmdSystem) {
+    return;
+  }
   // XFMD 4: the external scale is read by no mover, so the draw keeps unit scale (var b0 = one).
   if (x1c_desc->xPortXfmdMover) {
     return;
@@ -2013,9 +2041,9 @@ void CParticleSwoosh::PortDoShutdownBehavior(u32 mode) {
   }
 }
 // XFMD 3: the getters read the one system var too (MPT_GetTranslation 0x27fb54). MPT_GetOrientation
-// 0x27fb28 reads the external rotation (var bc only under XFMD 5), not INTR's.
+// 0x27fb28 reads the external rotation (var bc only under XFMD 5), not INTR's; so does XFMD 1.
 const CTransform4f& CParticleSwoosh::GetOrientation() const {
-  if (x1c_desc->xPortIntRotation) {
+  if (x1c_desc->xPortIntRotation || x1c_desc->xPortXfmdSystem) {
     return xPortExtOrientation;
   }
   return x1c_desc->xPortXfmdFollow ? xb0_globalOrientation : x44_orientation;
@@ -2028,6 +2056,9 @@ const CTransform4f& CParticleSwoosh::GetGlobalOrientation() const { return xb0_g
 const CVector3f& CParticleSwoosh::GetGlobalTranslation() const { return xa4_globalTranslation; }
 #ifdef TARGET_PC
 const CVector3f& CParticleSwoosh::GetTranslation() const {
+  if (x1c_desc->xPortXfmdSystem) {
+    return xPortExtTranslation;
+  }
   return x1c_desc->xPortXfmdFollow ? xa4_globalTranslation : x38_translation;
 }
 #else

@@ -1640,6 +1640,37 @@ void TestSwooshIntr() {
             "a varying INTR is dropped");
 }
 
+// A swoosh's SYSR forces SetupTransformMode 0x2887d8 into mode 1, where the setters move no
+// point: a zero REUL under XFMD 2 becomes the port-only XFMD 1; XFMD 5 deletes SYSR.
+void TestSwooshSystemRotation() {
+  const auto sysr = [](uint32_t xfmd, float z) {
+    return ConvertSwoosh([=](auto& o) {
+      PutProperty(o, "XFMD", 0);
+      PutConstant(o, xfmd);
+      PutProperty(o, "SYSR", 3);
+      PutFourCC(o, "REUL");
+      PutConstant(o, 0);
+      PutConstant(o, 0);
+      PutConstant(o, Bits(z));
+      o.push_back(0);
+    });
+  };
+  Retail want;
+  want.f("XFMD").f("CNST").w(1);
+  ConvertedPart part = sysr(2, 0.f);
+  CHECK_MSG(Contains(part.part, want.bytes) && part.dropped.empty(), "a zero SYSR under XFMD 2 becomes XFMD 1");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), part.part.data(), part.part.size(), properties, error),
+            "XFMD 1 reads as a swoosh property");
+  part = sysr(2, 45.f);
+  CHECK_MSG(part.dropped.size() == 1 && part.dropped[0].rfind("SYSR: ", 0) == 0 &&
+                !Contains(part.part, want.bytes),
+            "a nonzero SYSR is dropped");
+  part = sysr(5, 45.f);
+  CHECK_MSG(part.dropped.empty() && !Contains(part.part, want.bytes), "SYSR under XFMD 5 writes nothing");
+}
+
 // A swoosh's per-point variables are ADV0..8 and IAV/VAV/CAV0..3 (CreateSWSH AddDefinedVar),
 // all in its PPVR: kinds 1 (ADVn), 2 (IAVn), 3 (VAVn) and 4 (CAVn). It has no ADV9 or PAP9.
 void TestSwooshParticleVars() {
@@ -7304,6 +7335,7 @@ int main() {
   TestSwooshLwqd();
   TestSwooshSplineRates();
   TestSwooshIntr();
+  TestSwooshSystemRotation();
   TestConvert();
   TestRejects();
   TestSingleNode();

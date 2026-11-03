@@ -252,6 +252,8 @@ private:
   CTransform4f PortIntOrientation(const CTransform4f& external) const;
   // The external orientation (Remastered's var at desc+0x28), which EXTR reads apart from INTR
   CTransform4f xPortExtOrientation = CTransform4f::Identity();
+  // XFMD 1: the external translation, which only MPT_GetTranslation 0x27fb54 reads there
+  CVector3f xPortExtTranslation = CVector3f(0.f, 0.f, 0.f);
   bool PortVfxSwoosh() const;
   void PortRenderVfx();
   int PortSplineRef(int curIdx, int j);

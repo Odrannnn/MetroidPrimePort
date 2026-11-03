@@ -67,6 +67,9 @@ public:
   // port-only XFMD 4 with an EMVR of SMOV(EXTT, 0, EXTR) and no SMVR: points are born at the
   // external translation and rotation (vars b8/bc), drawn at identity and unit scale (a8/ac/b0)
   bool xPortXfmdMover = false;
+  // port-only XFMD 1 (a zero SYSR under XFMD 2): the system's own transform, zero, identity and
+  // one, births and draws the points, so no setter moves them; only EXTR still reads the rotation
+  bool xPortXfmdSystem = false;
   // port-only PIRN: a converted Remastered swoosh, whose COLR runs over the live points
   bool xPortIrnd = false;
   // port-only PSED: Remastered's SEED (desc+0x204); nonzero replaces the system's seed
