@@ -893,6 +893,30 @@ int main(int argc, char** argv) {
         aurora_dvd_close();
         return result;
     }
+    // --import-echoes-suits <image>: the Varia, Dark and Light Suit bodies from the user's own
+    // Metroid Prime 2: Echoes GameCube disc into <mods>/echoes-suits (port_echoes_suits.h), without
+    // starting the game. The Prime disc comes from MP_DISC or the path the game remembers.
+    if (argc >= 2 && std::strcmp(argv[1], "--import-echoes-suits") == 0) {
+        if (argc != 3) {
+            std::fprintf(stderr, "usage: %s %s <Echoes disc image>\n", argv[0], argv[1]);
+            return 2;
+        }
+        PortDebug::LoadDiscPath();
+        const char* disc = ResolveDiscPath(1, argv);
+        if (disc == nullptr || !OpenDiscImage(disc)) {
+            std::fprintf(stderr, "cannot open the Metroid Prime disc image; set MP_DISC\n");
+            return 1;
+        }
+        const DVDDiskID* id = DVDGetCurrentDiskID();
+        int result = 1;
+        if (!IsSupportedDisc(id)) {
+            std::fprintf(stderr, "unsupported disc: %s\n", DescribeUnsupportedDisc(id).c_str());
+        } else {
+            result = PortRemastered::RunEchoesSuitsImportFromCommandLine(argv[2]);
+        }
+        aurora_dvd_close();
+        return result;
+    }
     // --import-pal-languages <image>: add a PAL disc's languages to a USA game
     // (port_pal_languages.h), without starting it.
     if (argc >= 2 && std::strcmp(argv[1], "--import-pal-languages") == 0) {

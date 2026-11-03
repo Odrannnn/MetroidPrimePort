@@ -18,6 +18,7 @@
 #include "port_log.h"
 #include "port_remastered_import.h"
 #include "port_dread_samus_mod.h"
+#include "port_echoes_suits_mod.h"
 #include "port_room_env.h"
 #include "port_room_geo.h"
 #include "port_room_effects.h"
@@ -81,6 +82,8 @@ std::set<uint32_t> sDreadLowBalls;
 std::set<uint32_t> sDreadCannons;  // first-person cannon variants (PortDreadSamus::FirstPersonCannon)
 // The Dread-proportioned CINFs it serves (PortDreadSamus::Skeleton).
 std::set<uint32_t> sDreadSkeletons;
+// The CMDLs the echoes-suits mod serves (PortDreadSamus::Replaces too: its bodies carry their cannon).
+std::set<uint32_t> sEchoesBodies;
 // thermal.lut: the thermal visor's heat gradient (port_thermal.h).
 std::string sThermalLut;
 // envfx.bin: Remastered's EnvironmentFX textures (port_envfx_assets.h).
@@ -445,7 +448,12 @@ bool HasNativeTexture(uint32_t id) { return sNativeTextures.count(id) != 0; }
 
 }  // namespace PortMods
 
-bool PortDreadSamus::Replaces(uint32_t bodyCmdl) { return bodyCmdl != 0 && PortMods::sDreadBodies.count(bodyCmdl) != 0; }
+bool PortDreadSamus::Replaces(uint32_t bodyCmdl) {
+  return bodyCmdl != 0 && (PortMods::sDreadBodies.count(bodyCmdl) != 0 || PortMods::sEchoesBodies.count(bodyCmdl) != 0);
+}
+bool PortDreadSamus::ReplacesWithDread(uint32_t bodyCmdl) {
+  return bodyCmdl != 0 && PortMods::sDreadBodies.count(bodyCmdl) != 0;
+}
 bool PortDreadSamus::ReplacesBall(int suit, bool spider) {
   return PortMods::sDreadBalls.count(BallModel(suit, spider)) != 0;
 }
@@ -464,7 +472,7 @@ bool PortDreadSamus::ReplacesFirstPersonCannon(int suit) {
 
 uint32_t PortDreadSamus::Skeleton(uint32_t bodyCmdl) {
   const uint32_t cinf = DreadCinf(bodyCmdl);
-  return cinf != 0 && Replaces(bodyCmdl) && PortMods::sDreadSkeletons.count(cinf) != 0 ? cinf : 0;
+  return cinf != 0 && ReplacesWithDread(bodyCmdl) && PortMods::sDreadSkeletons.count(cinf) != 0 ? cinf : 0;
 }
 
 namespace PortMods {
@@ -632,6 +640,7 @@ void Initialize() {
   sDreadCannons.clear();
   sDreadLowBalls.clear();
   sDreadSkeletons.clear();
+  sEchoesBodies.clear();
   {
     std::lock_guard<std::mutex> lock(sEffectIdsMutex);
     sEffectIdMapPath.clear();
@@ -683,6 +692,13 @@ void Initialize() {
         if (ImportStampStale(dreadStamp.is_open() ? port::ReadAllText(dreadStamp) : std::string(),
                              PortDreadSamus::kVersion)) {
           Message(info.name + " was imported by an older version; import the Dread Samus models again");
+        }
+      }
+      if (info.name == PortEchoesSuits::kModName) {
+        std::ifstream echoesStamp(modDir / PortEchoesSuits::kStampName);
+        if (ImportStampStale(echoesStamp.is_open() ? port::ReadAllText(echoesStamp) : std::string(),
+                             PortEchoesSuits::kVersion)) {
+          Message(info.name + " was imported by an older version; import the Echoes suits again");
         }
       }
       if (info.importStale && sStatus.staleImport.empty()) {
@@ -1016,6 +1032,19 @@ void Initialize() {
     }
     if (!sDreadBodies.empty()) {
       PortLog::Write("mods: %s serves %zu Samus body model(s):%s\n", PortDreadSamus::kModName, sDreadBodies.size(),
+                     ids.c_str());
+    }
+    ids.clear();
+    for (const auto& [key, resource] : loose) {
+      if (key.first == 0x434D444C && resource.mod == PortEchoesSuits::kModName && PortEchoesSuits::IsBody(key.second)) {
+        sEchoesBodies.insert(key.second);
+        char text[12];
+        std::snprintf(text, sizeof(text), " %08X", key.second);
+        ids += text;
+      }
+    }
+    if (!sEchoesBodies.empty()) {
+      PortLog::Write("mods: %s serves %zu Samus body model(s):%s\n", PortEchoesSuits::kModName, sEchoesBodies.size(),
                      ids.c_str());
     }
   }

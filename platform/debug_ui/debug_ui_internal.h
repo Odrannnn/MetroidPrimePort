@@ -413,6 +413,9 @@ inline constexpr int kDreadPick = 4;
 // opens again, so the Remastered panel's own descriptor stays open (Android).
 inline constexpr int kDreadKeysSlot = 5;
 extern std::string sDreadPick;
+// Which 6 of the same picker: the Metroid Prime 2: Echoes GameCube image for the Echoes suits import.
+inline constexpr int kEchoesPick = 6;
+extern std::string sEchoesPick;
 std::string RemasteredPickFile(int which);
 void TakeRemasteredPickFiles();
 void OpenRemasteredDialog(int which);
@@ -457,6 +460,7 @@ void DrawDiscReadFailedAlert();
 void DrawImportKeys();
 void DrawRemasteredImport();
 void DrawDreadSamusImport();
+void DrawEchoesSuitsImport();
 void DrawMods();
 // remastered.cpp: the Mods page's built-in mods (Remastered's models, Dread's Samus).
 void DrawBuiltinMods();

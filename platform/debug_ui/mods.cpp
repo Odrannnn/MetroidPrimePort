@@ -10,6 +10,7 @@
 #include "port_importers.h"
 #include "port_remastered_import.h"
 #include "port_dread_samus_mod.h"
+#include "port_echoes_suits_mod.h"
 #include "port_remastered_text.h"
 #include "port_savestate.h"
 
@@ -438,6 +439,95 @@ void DrawDreadSamusImport() {
     ImGui::PopStyleColor();
   }
   if (!state.lines.empty() && ImGui::TreeNode("dread-log", "%d notes", int(state.lines.size()))) {
+    for (const std::string& line : state.lines) {
+      ImGui::TextWrapped("%s", line.c_str());
+    }
+    ImGui::TreePop();
+  }
+}
+
+// The Echoes suits import (port_echoes_suits.h): the Varia, Dark and Light Suit bodies from the
+// player's own Metroid Prime 2: Echoes GameCube disc into the echoes-suits mod. Same progress, notes
+// and mods reload as the Dread import, with which it shares the one import worker.
+void DrawEchoesSuitsImport() {
+  static char sImage[1024] = "";
+  static bool sStarted = false;  // the shared state is this import's
+  {
+    std::lock_guard lock(sRemasteredPickMutex);
+#if defined(__ANDROID__)
+    // A pick the previous process never saw (the game was killed behind the picker). The content
+    // URI goes to the disc reader as is, as the Flaahgra theme's does.
+    static bool sTookFile = false;
+    if (!sTookFile) {
+      sTookFile = true;
+      std::ifstream in(RemasteredPickFile(kEchoesPick));
+      std::string uri;
+      if (sEchoesPick.empty() && std::getline(in, uri) && !uri.empty()) {
+        sEchoesPick = uri;
+      }
+    }
+#endif
+    if (!sEchoesPick.empty()) {
+      std::snprintf(sImage, sizeof(sImage), "%s", sEchoesPick.c_str());
+      sEchoesPick.clear();
+    }
+  }
+  const PortRemastered::ImportState state = PortRemastered::ImportStatus();
+  ImGui::TextWrapped(
+      "Puts the Varia, Dark and Light Suit bodies from your own Metroid Prime 2: Echoes (GameCube) in place of "
+      "Prime's Varia, Gravity and Phazon Suits; the Power Suit stays. Needs the game's disc image. It is the "
+      "echoes-suits mod: switch it off above.");
+  ImGui::BeginDisabled(state.running);
+#if defined(__ANDROID__)
+  if (ImGui::Button("Load Echoes disc image##echoes-image")) {
+    OpenRemasteredDialog(kEchoesPick);
+  }
+  ImGui::SameLine();
+  ImGui::TextUnformatted(sImage[0] == '\0' ? "Metroid Prime 2: Echoes disc image" : RemasteredPickName(sImage).c_str());
+  ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+  ImGui::TextWrapped("Android may close the game while you pick a file. The pick is kept: open this page again.");
+  ImGui::PopStyleColor();
+#else
+  const ImGuiStyle& style = ImGui::GetStyle();
+  const float avail = ImGui::GetContentRegionAvail().x;
+  const float buttonWidth = ImGui::CalcTextSize("Load Echoes disc image").x + style.FramePadding.x * 2.f;
+  ImGui::SetNextItemWidth(std::max(120.f, std::min(avail * 0.6f, avail - buttonWidth - style.ItemSpacing.x)));
+  ImGui::InputTextWithHint("##echoes-image", "Metroid Prime 2: Echoes disc image", sImage, sizeof(sImage));
+  ImGui::SameLine();
+  if (ImGui::Button("Load Echoes disc image##echoes-image")) {
+    OpenRemasteredDialog(kEchoesPick);
+  }
+#endif
+  ImGui::BeginDisabled(sImage[0] == '\0');
+  if (ImGui::Button("Import##echoes")) {
+    sStarted = StartEchoesSuitsImport(sImage) || !state.running;
+  }
+  ImGui::EndDisabled();
+  ImGui::EndDisabled();
+  if (!sStarted) {
+    return;
+  }
+  if (state.running) {
+    const float fraction = state.total > 0 ? float(state.done) / float(state.total) : 0.f;
+    ImGui::ProgressBar(fraction, ImVec2(-1.f, 0.f), state.cancelling ? "Cancelling..." : state.message.c_str());
+    ImGui::BeginDisabled(state.cancelling || state.installing);
+    if (ImGui::Button("Cancel##echoes")) {
+      PortRemastered::CancelImport();
+    }
+    ImGui::EndDisabled();
+  } else if (state.finished && state.ok) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ThemeGoodColor(ImVec4(0.5f, 1.f, 0.5f, 1.f)));
+    ImGui::TextWrapped("%s", state.message.c_str());
+    ImGui::PopStyleColor();
+    DrawModReloadMessage();
+  } else if (state.finished && state.cancelled) {
+    ImGui::TextDisabled("The import was cancelled.");
+  } else if (state.finished) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ThemeBadColor());
+    ImGui::TextWrapped("The import failed: %s", state.message.c_str());
+    ImGui::PopStyleColor();
+  }
+  if (!state.lines.empty() && ImGui::TreeNode("echoes-log", "%d notes", int(state.lines.size()))) {
     for (const std::string& line : state.lines) {
       ImGui::TextWrapped("%s", line.c_str());
     }

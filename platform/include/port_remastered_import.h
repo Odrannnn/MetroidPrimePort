@@ -817,4 +817,11 @@ bool StartDreadSamusImport(const std::string& nspPath, const std::string& keysPa
 // `--import-dread-samus <nsp> [keys]`, as RunImportFromCommandLine. Returns the exit code.
 int RunDreadSamusImportFromCommandLine(const std::string& nspPath, const std::string& keysPath);
 
+// The Echoes suits import (port_echoes_suits.h): Varia, Gravity and Phazon bodies from the user's
+// own Metroid Prime 2: Echoes GameCube image into <mods>/echoes-suits, with the disc open. Shares
+// this import's state, cancelling and thread like StartDreadSamusImport.
+bool StartEchoesSuitsImport(const std::string& imagePath);
+// `--import-echoes-suits <image>`, as RunImportFromCommandLine. Returns the exit code.
+int RunEchoesSuitsImportFromCommandLine(const std::string& imagePath);
+
 }  // namespace PortRemastered
