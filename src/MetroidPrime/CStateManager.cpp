@@ -1629,7 +1629,12 @@ void CStateManager::Update(float dt) {
   UpdateGameState();
 #ifdef TARGET_PC
   // Remastered's CVisorEffectManagerMP1::Update; where it runs in the frame is (unverified).
-  CHUDBillboardEffect::PortUpdateVisorOverrides(*this, dt);
+  // Update 0xd0ef2c returns at once while soft-paused (game logic +0x158 == 1); otherwise its
+  // first step is the face reflection fade.
+  if (x904_gameState != kGS_SoftPaused) {
+    PortFaceReflection::Update(xPortFaceReflection, dt);
+    CHUDBillboardEffect::PortUpdateVisorOverrides(*this, dt);
+  }
 #endif
 #ifdef MP_ENABLE_SMOKE_DRIVER
   PortSmokeAreaReload(*this);

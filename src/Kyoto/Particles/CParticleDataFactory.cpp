@@ -713,6 +713,12 @@ bool CParticleDataFactory::CreateGPSM(CGenDescription* desc, CInputStream& in,
       const u32 frame = in.ReadLong();
       desc->xPortPmrqFrame = frame <= 2 ? static_cast< u8 >(frame) : 0;
     } break;
+    // Port-only Remastered FRMD face-reflection mode (CGenDescription::xPortFrmd).
+    case SBIG('PFRM'): {
+      GetClassID(in);
+      const u32 mode = in.ReadLong();
+      desc->xPortFrmd = mode <= 3 ? static_cast< u8 >(mode) : 0;
+    } break;
     // Port-only Remastered particle variables (PVRT); a malformed table leaves none.
     case SBIG('PVRT'):
       GetClassID(in);

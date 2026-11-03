@@ -27,6 +27,12 @@ private:
   CVector3f x60_lookDir;
   int x6c_;
   bool x70_hidden;
+#ifdef TARGET_PC
+  // Remastered: the colour FRMD explosions light the face with (PreRender 0xe7c044), and
+  // whether that pass draws.
+  CColor xPortColor = CColor::Black();
+  bool xPortHidden = true;
+#endif
 };
 
 #endif // _CSAMUSFACEREFLECTION

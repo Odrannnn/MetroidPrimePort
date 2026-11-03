@@ -6219,6 +6219,20 @@ public:
     if (s.part && fourcc == F("DPRE")) {
       return true;
     }
+    // FRMD (desc+0x170, CreateGPSM): the face-reflection mode 1..3. An explosion of a generator
+    // with it set lights Samus's visor reflection (CVisorEffectManagerMP1::AddExplosionEffect
+    // 0xd10144) in place of retail's game lights. The port-only PFRM keeps the mode; 0 writes nothing.
+    if (s.part && fourcc == F("FRMD")) {
+      uint32_t value = 0;
+      if (!SmallInteger(property, value) || value > 3) {
+        s.result.dropped.push_back("FRMD: not a constant 0 to 3");
+      } else if (value != 0) {
+        AppendBE32(s.out, F("PFRM"));
+        AppendBE32(s.out, F("CNST"));
+        AppendBE32(s.out, value);
+      }
+      return true;
+    }
     // A POFS goes out with an INTT written as POFS above, added to it.
     if (s.part && fourcc == F("POFS") &&
         std::any_of(s.node.properties.begin(), s.node.properties.end(),
@@ -7474,7 +7488,7 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
                          fourcc == F("PITP") || fourcc == F("PDBO") || fourcc == F("PSHM") || fourcc == F("PISD") || fourcc == F("POSD") || fourcc == F("PBLT") || fourcc == F("PBOR") ||
                          fourcc == F("VMPC") || fourcc == F("DVVN") || fourcc == F("IEXP") ||
                          (fourcc >= F("VGD1") && fourcc <= F("VGD4")) ||
-                         fourcc == F("PMRF") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
+                         fourcc == F("PMRF") || fourcc == F("PFRM") || fourcc == F("PVSD") || fourcc == F("PVSN") ||
                          fourcc == F("PVSM") || fourcc == F("PVDT"))) ||
                (vfx && fourcc == F("PIRN")) ||
                (type == F("SWHC") && (fourcc == F("PGID") || fourcc == F("PSED") || fourcc == F("PTXU") ||

@@ -464,8 +464,15 @@ void CActorLights::BuildFaceLightList(const CStateManager& mgr, const CGameArea&
     if (entity != nullptr) {
       if (entity->GetActive()) {
         const CGameLight* light = TCastToConstPtr< CGameLight >(entity);
-        if (const CExplosion* explosion =
-                TCastToConstPtr< CExplosion >(mgr.GetObjectById(light->GetParentId()))) {
+        const CExplosion* explosion =
+            TCastToConstPtr< CExplosion >(mgr.GetObjectById(light->GetParentId()));
+#ifdef TARGET_PC
+        // Remastered lights the face from FRMD instead (PortFaceReflection).
+        if (explosion && explosion->PortIsRemastered()) {
+          explosion = nullptr;
+        }
+#endif
+        if (explosion) {
           const CLight& originalLight = light->GetLight();
           CLight reflectedLight = originalLight;
           float attenConstant = gpTweakGui->GetExplosionLightFalloffMultConstant() *

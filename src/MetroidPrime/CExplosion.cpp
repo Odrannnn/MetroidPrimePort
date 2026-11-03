@@ -12,6 +12,12 @@
 #include "Kyoto/Particles/CParticleElectric.hpp"
 #include "MetaRender/CCubeRenderer.hpp"
 
+#ifdef TARGET_PC
+#include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "MetroidPrime/Cameras/CFirstPersonCamera.hpp"
+#include "MetroidPrime/TCastTo.hpp"
+#endif
+
 CExplosion::CExplosion(const TLockedToken< CGenDescription >& particle, TUniqueId uid, bool active,
                        const CEntityInfo& info, const rstl::string& name, const CTransform4f& xf,
                        const uint flags, const CVector3f& scale, const CColor& color)
@@ -117,6 +123,19 @@ void CExplosion::Think(float dt, CStateManager& mgr) {
 }
 
 #ifdef TARGET_PC
+bool CExplosion::PortIsRemastered() const {
+  return xe8_particleGen->Get4CharId() == 'PART' &&
+         static_cast< const CElementGen& >(*xe8_particleGen).PortIsRemastered();
+}
+
+const CGenDescription* CExplosion::PortFaceReflectDesc() const {
+  if (!PortIsRemastered()) {
+    return nullptr;
+  }
+  const CGenDescription* desc = static_cast< const CElementGen& >(*xe8_particleGen).PortDesc();
+  return desc->xPortFrmd != 0 ? desc : nullptr;
+}
+
 void CExplosion::PortUpdateNestedLights(CStateManager& mgr) {
   xPortNestedLights.Update(mgr, xe8_particleGen.get(), GetActive(), GetUniqueId(),
                            GetCurrentAreaId(), rstl::string_l("ExplodePHDR_") + GetDebugName(),
@@ -140,8 +159,23 @@ void CExplosion::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId sender, CSt
                                       GetTransform(), GetUniqueId(), xe8_particleGen->GetLight(),
                                       sourceId, 1, 0.f));
     }
+#ifdef TARGET_PC
+    // CExplosionMP1GOC::CreateExplosionGameObject 0xd0d16c: a Remastered PART with FRMD set adds
+    // the explosion to the face reflection, at its translation from the first-person camera's.
+    if (const CGenDescription* desc = PortFaceReflectDesc()) {
+      if (const CFirstPersonCamera* cam = TCastToConstPtr< CFirstPersonCamera >(
+              mgr.GetCameraManager()->GetCurrentCamera(mgr))) {
+        PortFaceReflection::AddExplosion(
+            mgr.PortFaceReflectionManager(), GetUniqueId(), desc->xPortFrmd,
+            (GetTranslation() - cam->GetTransform().GetTranslation()).Magnitude());
+      }
+    }
+#endif
     break;
   case kSM_Deleted:
+#ifdef TARGET_PC
+    PortFaceReflection::RemoveExplosion(mgr.PortFaceReflectionManager(), GetUniqueId());
+#endif
     if (xec_explosionLight != kInvalidUniqueId) {
       mgr.DeleteObjectRequest(xec_explosionLight);
       xec_explosionLight = kInvalidUniqueId;

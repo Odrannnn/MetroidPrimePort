@@ -42,6 +42,11 @@ public:
   CAssetId GetSourceId() const { return xf0_sourceId; }
 #ifdef TARGET_PC
   static uint PortNestedLightSourceId(CAssetId explosionSourceId) { return explosionSourceId; }
+  // A Remastered PART with FRMD set (CExplosionMP1::GetFaceReflectMode 0xd0e6cc), else null:
+  // retail explosions keep lighting the face through their game light.
+  const CGenDescription* PortFaceReflectDesc() const;
+  // A Remastered PART: Remastered builds no face light list, so its lights skip the face.
+  bool PortIsRemastered() const;
 #endif
 
 #ifdef TARGET_PC

@@ -183,6 +183,9 @@ public:
   // port-only PEMV (Remastered EMRV, var 0x16): the description reads the per-tick system
   // velocity. 0 none, 1 the external (global + local) translation, 2 the local translation.
   u8 xPortPemv = 0;
+  // port-only PFRM: Remastered FRMD, the face-reflection mode 1..3 an explosion of this effect
+  // lights Samus's visor reflection with (PortFaceReflection); 0 none.
+  u8 xPortFrmd = 0;
   // port-only PIRN: a converted Remastered effect, whose nested IRND elements are stable per particle
   bool xPortIrnd = false;
   // port-only PVSD/PVSN/PVSM: Remastered's visor effect data (any VE* property) and its splat

@@ -21,6 +21,14 @@
 
 #include "port_debug.h"
 
+#ifdef TARGET_PC
+#include "Kyoto/Particles/CGenDescription.hpp"
+#include "Kyoto/Particles/CParticleGen.hpp"
+#include "MetroidPrime/CExplosion.hpp"
+#include "MetroidPrime/Player/CPlayerState.hpp"
+#include "rstl/math.hpp"
+#endif
+
 static const char* const skFaceAssetIdName = "ACS_SamusFace";
 static const CTransform4f skFaceModelViewAdjust =
     CTransform4f::Scale(0.3f) * CTransform4f::Translate(CVector3f(0.f, 0.5f, 0.f));
@@ -84,19 +92,91 @@ void CSamusFaceReflection::Update(float dt, const CStateManager& mgr, CRandom16&
   }
 }
 
+#ifdef TARGET_PC
+// CVector3f::IsAngleBetweenLessThan 0x6b378: compares signed squares, so no square roots.
+static bool PortIsAngleBetweenLessThan(const CVector3f& a, const CVector3f& b, float ang) {
+  if (ang > M_PIF) {
+    return true;
+  }
+  const float d = CVector3f::Dot(a, b);
+  const float c = CMath::FastCosR(ang);
+  const float dSq = d >= 0.f ? d * d : -(d * d);
+  const float cSq = c >= 0.f ? c * c : -(c * c);
+  return dSq > cSq * a.MagSquared() * b.MagSquared();
+}
+
+// CSamusFaceReflectionMP1::PreRender 0xe7c044: each FRMD explosion in front of the camera adds
+// its modulation colour, weighted by its mode's curve at the explosion's age.
+static bool PortFaceReflectColor(const CStateManager& mgr, const CFirstPersonCamera& fpCam,
+                                 CColor& out) {
+  const PortFaceReflection::State& state = mgr.PortFaceReflectionManager();
+  const float alphaMod = PortFaceReflection::AlphaModifier(state);
+  if (alphaMod == 0.f || state.explosions.empty()) {
+    return false;
+  }
+  const CVector3f camPos = fpCam.GetTransform().GetTranslation();
+  const CVector3f camFwd = fpCam.GetTransform().GetColumn(kDY);
+  bool visible = false;
+  float r = 0.f, g = 0.f, b = 0.f, a = 0.f;
+  for (const TUniqueId id : state.explosions) {
+    const CExplosion* const explosion = TCastToConstPtr< CExplosion >(mgr.GetObjectById(id));
+    if (!explosion || !explosion->xf4_25_hasRenderBounds) {
+      continue;
+    }
+    const CGenDescription* const desc = explosion->PortFaceReflectDesc();
+    if (!desc ||
+        !PortIsAngleBetweenLessThan(
+            camFwd, explosion->GetRenderBoundsCached().GetCenterPoint() - camPos, 0.9599f)) {
+      continue;
+    }
+    const float w = PortFaceReflection::Weight(desc->xPortFrmd, explosion->xf8_time);
+    if (w > 0.f) {
+      const CColor& color = explosion->xe8_particleGen->GetModulationColor();
+      visible = true;
+      r += color.GetRed() * w;
+      g += color.GetGreen() * w;
+      b += color.GetBlue() * w;
+      a += color.GetAlpha() * w;
+    }
+  }
+  if (visible) {
+    out = CColor(rstl::min_val(r, 1.f), rstl::min_val(g, 1.f), rstl::min_val(b, 1.f),
+                 alphaMod * mgr.GetPlayerState()->GetVisorTransitionFactor() *
+                     rstl::min_val(a, 1.f));
+  }
+  return visible;
+}
+#endif
+
 void CSamusFaceReflection::PreDraw(const CStateManager& mgr) {
+  const CFirstPersonCamera* const fpCam =
+      TCastToConstPtr< CFirstPersonCamera >(mgr.GetCameraManager()->GetCurrentCamera(mgr));
   if ((x6c_ == 2 || (x4c_lights->GetActiveLightCount() < 1 && (x6c_ == 0 || x6c_ == 3))) ||
-      !TCastToConstPtr< CFirstPersonCamera >(mgr.GetCameraManager()->GetCurrentCamera(mgr))) {
+      !fpCam) {
     x70_hidden = true;
   } else {
     x70_hidden = false;
+  }
+#ifdef TARGET_PC
+  xPortHidden = !fpCam || !PortFaceReflectColor(mgr, *fpCam, xPortColor);
+  if (!x70_hidden || !xPortHidden) {
     x0_modelData.AnimationData()->PreRender();
   }
+#else
+  if (!x70_hidden) {
+    x0_modelData.AnimationData()->PreRender();
+  }
+#endif
 }
 
 void CSamusFaceReflection::Draw(const CStateManager& mgr) const {
+#ifdef TARGET_PC
+  if (x70_hidden && xPortHidden)
+    return;
+#else
   if (x70_hidden)
     return;
+#endif
 
   if (const CFirstPersonCamera* fpCam =
           TCastToConstPtr< CFirstPersonCamera >(mgr.GetCameraManager()->GetCurrentCamera(mgr))) {
@@ -131,6 +211,15 @@ void CSamusFaceReflection::Draw(const CStateManager& mgr) const {
     CGraphics::SetOrtho(wide * aspect * -orthoWidth, wide * aspect * orthoWidth, orthoHeight,
                         -orthoHeight, -10.f, 10.f);
 
+#ifdef TARGET_PC
+    // Remastered Draw 0xe7c318: combat visor only, one unlit additive pass that writes depth.
+    if (!xPortHidden && mgr.GetPlayerState()->GetActiveVisor(mgr) == CPlayerState::kPV_Combat) {
+      x0_modelData.Render(mgr, modelXf, nullptr,
+                          CModelFlags::Additive(xPortColor).DepthCompareUpdate(true, true));
+    }
+    if (x70_hidden)
+      return;
+#endif
     CActorLights* lights = x6c_ == 1 ? nullptr : x4c_lights.get();
     if (x6c_ == 3) {
       x0_modelData.Render(mgr, modelXf, lights, CModelFlags::Normal());

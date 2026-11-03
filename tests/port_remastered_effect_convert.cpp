@@ -3747,6 +3747,28 @@ void TestShutdownAndPivot() {
     o.push_back(1);
   });
   CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty(), "EMTU without PMOV is consumed");
+  const auto frmd = [&](uint32_t mode) {
+    return convert([&](auto& o) {
+      PutProperty(o, "FRMD", 0);
+      Put32(o, mode);
+    });
+  };
+  parts = frmd(2);
+  Retail pfrm;
+  pfrm.f("GPSM").f("PFRM").f("CNST").w(2).f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+  CHECK_MSG(parts.size() == 1 && parts[0].part == pfrm.bytes && parts[0].dropped.empty(), "FRMD 2 is PFRM 2");
+  if (!parts.empty()) {
+    std::vector<RetailPartProperty> properties;
+    std::string error;
+    CHECK_MSG(SplitRetailPart(parts[0].part.data(), parts[0].part.size(), properties, error),
+              "a PART with PFRM passes the retail element reader");
+  }
+  parts = frmd(0);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() && parts[0].part == convert([](auto&) {})[0].part,
+            "FRMD 0 writes nothing");
+  parts = frmd(4);
+  CHECK_MSG(parts.size() == 1 && parts[0].dropped.size() == 1 && parts[0].dropped[0] == "FRMD: not a constant 0 to 3",
+            "an unknown FRMD mode is dropped");
   for (const char* flag : {"PVRS", "STRY", "DPRE"}) {
     parts = convert([&](auto& o) {
       PutProperty(o, flag, 0);

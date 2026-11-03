@@ -219,12 +219,20 @@ void CHUDBillboardEffect::Think(float dt, CStateManager& mgr) {
     if (!x104_27_runIndefinitely) {
       x108_timeoutTimer += dt;
       if (x108_timeoutTimer > 30.f) {
+#ifdef TARGET_PC
+        PortRemoveFromFaceReflection(mgr);
+#endif
         mgr.DeleteObjectRequest(GetUniqueId());
         return;
       }
     }
-    if (xe8_generator->IsSystemDeletable())
+    if (xe8_generator->IsSystemDeletable()) {
+#ifdef TARGET_PC
+      // CHUDBillboardEffectMP1::Think 0xd7f2fc: a finished effect leaves the manager at once.
+      PortRemoveFromFaceReflection(mgr);
+#endif
       mgr.DeleteObjectRequest(GetUniqueId());
+    }
   }
 }
 
@@ -248,7 +256,23 @@ void CHUDBillboardEffect::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId ui
     PortVisorOverrides::Remove(mgr.PortVisorOverrideManager(), GetUniqueId());
     xPortVisorOverride = false;
   }
+  // The face reflection counts every billboard (AddBillboardEffect from the ctor 0xd7eca8,
+  // RemoveBillboardEffect from AcceptScriptMsg 0xd7ef60 and Think); the rain-splash one is
+  // counted by CEnvFxManager instead.
+  if (msg == kSM_Registered && !xPortFaceCounted && !xPortFaceUncounted) {
+    PortFaceReflection::AddBillboard(mgr.PortFaceReflectionManager());
+    xPortFaceCounted = true;
+  } else if (msg == kSM_Deleted) {
+    PortRemoveFromFaceReflection(mgr);
+  }
   CEffect::AcceptScriptMsg(msg, uid, mgr);
+}
+
+void CHUDBillboardEffect::PortRemoveFromFaceReflection(CStateManager& mgr) {
+  if (xPortFaceCounted) {
+    PortFaceReflection::RemoveBillboard(mgr.PortFaceReflectionManager());
+    xPortFaceCounted = false;
+  }
 }
 
 // ExtractCurrentData: the generator's VE* values at its current frame (unverified: the frame the

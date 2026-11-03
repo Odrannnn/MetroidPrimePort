@@ -202,6 +202,10 @@ private:
   CVectorFixed8_8 xPortStep;                                 // rain, underwater: every particle
   rstl::reserved_vector< CVectorFixed8_8, 256 > xPortSnowSteps; // snow: by force index
   int xPortSnowFirst;
+  // Remastered keeps the rain-splash billboard only while it can splash (UpdateVisorSplashes
+  // 0xf97ebc), so only then does the face reflection count it.
+  bool xPortSplashFaceCounted;
+  void PortUpdateSplashFaceCount(CStateManager& mgr, EEnvFxType fxType);
 #endif
 };
 CHECK_SIZEOF(CEnvFxManager, 0xc58);

@@ -24,6 +24,9 @@ public:
   void Render(const CStateManager& mgr) const override;
   bool IsElementGen() const { return x104_26_isElementGen; }
   void SetRunIndefinitely(bool b) { x104_27_runIndefinitely = b; }
+#ifdef TARGET_PC
+  void PortSetFaceUncounted() { xPortFaceUncounted = true; }
+#endif
   CParticleGen* GetParticleGen() const { return xe8_generator.get(); }
 
   static float GetNearClipDistance(const CStateManager& mgr);
@@ -59,6 +62,11 @@ private:
   int xPortManagedType = -1;
   // Added to the visor effect override list (AddBillboardEffect).
   bool xPortVisorOverride = false;
+  // Counted by the face reflection, which every billboard fades out (AddBillboardEffect).
+  bool xPortFaceCounted = false;
+  // Not counted on registration: the rain-splash billboard, which CEnvFxManager counts itself.
+  bool xPortFaceUncounted = false;
+  void PortRemoveFromFaceReflection(CStateManager& mgr);
   // The spread last given to the generator, which passes it down to its children.
   CVector3f xPortSpawnSpread{1.f, 1.f, 1.f};
   int xPortScaleType = 1;
