@@ -151,7 +151,7 @@ CPortSys* PortReadSys(CInputStream& in) {
 
 CPortPartVars* PortReadPartVars(CInputStream& in, bool swoosh) {
   const u32 count = in.ReadLong();
-  if (count > 13) {
+  if (count > 21) {
     return nullptr;
   }
   std::unique_ptr< CPortPartVars > vars(new CPortPartVars());
@@ -162,16 +162,17 @@ CPortPartVars* PortReadPartVars(CInputStream& in, bool swoosh) {
     const u32 kind = in.ReadLong();
     const u32 slot = in.ReadLong();
     item.constAfterStart = in.ReadLong() != 0;
-    if (kind > 2) {
+    if (kind > 4) {
       return nullptr;  // the item's body length is unknown: the stream cannot be resynced
     }
     // A bad slot or a duplicate (it would evaluate the variable twice) still reads its element,
     // so the rest of the property is consumed and the stream stays in sync; the table is dropped.
-    if (slot >= (kind == 2 ? 4u : kind == 1 ? 9u : 8u) ||
+    if (slot >= (kind >= 2 ? 4u : kind == 1 ? 9u : 8u) ||
         (swoosh ? kind == 0 : kind == 1 && slot != 8)) {
       bad = true;
     } else {
-      const u32 bit = 1u << (kind == 2 ? 9 + slot : slot);
+      // Bits: ADV 0..8, IAV 9..12, VAV 13..16, CAV 17..20.
+      const u32 bit = 1u << (kind >= 2 ? 9 + (kind - 2) * 4 + slot : slot);
       bad = bad || (seen & bit) != 0;
       seen |= bit;
     }
@@ -181,6 +182,12 @@ CPortPartVars* PortReadPartVars(CInputStream& in, bool swoosh) {
       return nullptr;
     }
     if (kind == 2 && (item.intE = CParticleDataFactory::GetIntElement(in)) == nullptr) {
+      return nullptr;
+    }
+    if (kind == 3 && (item.vec = CParticleDataFactory::GetVectorElement(in)) == nullptr) {
+      return nullptr;
+    }
+    if (kind == 4 && (item.color = CParticleDataFactory::GetColorElement(in)) == nullptr) {
       return nullptr;
     }
   }

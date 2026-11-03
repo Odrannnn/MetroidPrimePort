@@ -1415,7 +1415,10 @@ void TestSwooshTxup() {
   CHECK_MSG(part.part == off.bytes && part.dropped.empty(), "TXUP 0 writes nothing");
 }
 
-// A swoosh has no per-particle variables: PAP9, PAP0..3 reads and ADV9/IAVn are dropped.
+bool Contains(const std::vector<uint8_t>& bytes, const std::vector<uint8_t>& what);
+
+// A swoosh's per-point variables are ADV0..8 and IAV/VAV/CAV0..3 (CreateSWSH AddDefinedVar),
+// all in its PPVR: kinds 1 (ADVn), 2 (IAVn), 3 (VAVn) and 4 (CAVn). It has no ADV9 or PAP9.
 void TestSwooshParticleVars() {
   const auto dropped = [](const ConvertedPart& part, const char* what) {
     for (const std::string& d : part.dropped) {
@@ -1434,12 +1437,35 @@ void TestSwooshParticleVars() {
     PutProperty(o, "ADV9", 3);
     PutConstant(o, Bits(1.0f));
   });
-  CHECK_MSG(dropped(part, "ADV9: a swoosh has no per-particle variables"), "ADV9 in a swoosh is dropped");
+  CHECK_MSG(dropped(part, "ADV9"), "ADV9 in a swoosh is dropped");
   part = ConvertSwoosh([](auto& o) {
     PutProperty(o, "IAV1", 3);
     PutConstant(o, 1);
+    PutProperty(o, "VAV0", 3);
+    PutFourCC(o, "CNST");
+    PutConstant(o, 0);
+    PutConstant(o, Bits(1.f));
+    PutConstant(o, 0);
+    PutProperty(o, "CAV2", 3);
+    PutFourCC(o, "CNST");
+    PutConstant(o, Bits(1.f));
+    PutConstant(o, Bits(0.5f));
+    PutConstant(o, 0);
+    PutConstant(o, Bits(1.f));
+    PutProperty(o, "VAV1", 3);  // KPIN: its child, run at spawn only
+    PutFourCC(o, "KPIN");
+    PutFourCC(o, "CNST");
+    PutConstant(o, Bits(2.f));
+    PutConstant(o, 0);
+    PutConstant(o, 0);
   });
-  CHECK_MSG(dropped(part, "IAV1: a swoosh has no per-particle variables"), "IAV1 in a swoosh is dropped");
+  Retail ppvr;
+  ppvr.f("PPVR").f("CNST").w(4);
+  ppvr.w(2).w(1).w(1).f("CNST").w(1);
+  ppvr.w(3).w(0).w(1).f("CNST").f("CNST").w(0).f("CNST").w(Bits(1.f)).f("CNST").w(0);
+  ppvr.w(4).w(2).w(1).f("CNST").f("CNST").w(Bits(1.f)).f("CNST").w(Bits(0.5f)).f("CNST").w(0).f("CNST").w(Bits(1.f));
+  ppvr.w(3).w(1).w(1).f("CNST").f("CNST").w(Bits(2.f)).f("CNST").w(0).f("CNST").w(0);
+  CHECK_MSG(Contains(part.part, ppvr.bytes) && part.dropped.empty(), "a swoosh's IAVn, VAVn and CAVn are its PPVR");
 }
 
 // KPIN(RAZY(EMRV, ROTV((0, 1, 0), RLCL), fallback)). `fallback` writes RAZY's third argument.

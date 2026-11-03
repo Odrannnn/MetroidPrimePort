@@ -1,4 +1,4 @@
-// Remastered particle variables ADV9 and IAV0..3 (CPortPartVars): spawn evaluates every item in
+// Remastered particle variables ADV9, IAV0..3 and VAV/CAV0..3 (CPortPartVars): spawn evaluates every item in
 // order, later frames skip the constant-after-start ones, and an initial-random int draws the one
 // RNG exactly once. Per-particle ints live as raw bits after ADV1..9 in CAdvancedValues.
 #include "Kyoto/CRandom16.hpp"
@@ -88,6 +88,46 @@ void TestSpawnThenFrames() {
   CHECK_MSG(rnd.GetSeed() == seedAfterSpawn, "no RNG draw after spawn");
 }
 
+// RAND x3 under KPIN, as a swoosh's VAV0: three draws at spawn, none later.
+class DrawVector final : public CVectorElement {
+public:
+  explicit DrawVector(int* calls) : mCalls(calls) {}
+  bool GetValue(int, CVector3f& out) const override {
+    ++*mCalls;
+    for (int i = 0; i < 3; ++i) {
+      CRandom16::GetRandomNumber()->Range(0, 100);
+    }
+    out = CVector3f::Zero();
+    return false;
+  }
+
+private:
+  int* mCalls;
+};
+
+// A VAVn has no reader, but it runs in its place, so the draws after it are Remastered's.
+void TestVectorKeepsRng() {
+  CRandom16 rnd(99);
+  CGlobalRandom global(rnd);
+  CRandom16 reference(99);
+  for (int i = 0; i < 3; ++i) {
+    reference.Range(0, 100);
+  }
+  const int e3 = reference.Range(0, 100);
+  int vecCalls = 0, ivCalls = 0;
+  CPortPartVars vars;
+  SPortPartVarItem vav{EPortPartVarKind::Vector, 0, true};
+  vav.vec = new DrawVector(&vecCalls);
+  vars.items.push_back(vav);
+  vars.items.push_back({EPortPartVarKind::Int, 0, true, nullptr, new DrawInt(0, 100, &ivCalls)});
+  CRealElement* advs[8] = {};
+  float values[13] = {};
+  vars.Eval(advs, true, 0, values);
+  CHECK_MSG(ReadInt(values, 0) == e3 && vecCalls == 1, "VAV0's draws come before IAV0's");
+  vars.Eval(advs, false, 1, values);
+  CHECK_MSG(vecCalls == 1 && ivCalls == 1, "an initial-only VAV0 runs at spawn only");
+}
+
 void TestRealAdvSlot() {
   int calls = 0;
   CountReal adv3(2.f, &calls);
@@ -136,5 +176,6 @@ int main() {
   TestIntBits();
   TestSpawnThenFrames();
   TestRealAdvSlot();
+  TestVectorKeepsRng();
   return PORT_TEST_RESULT();
 }

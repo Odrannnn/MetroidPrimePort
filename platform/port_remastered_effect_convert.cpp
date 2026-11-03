@@ -498,7 +498,8 @@ uint32_t ConstantFlags(const EffectValue& value, Type type) {
   if (value.fourcc == F("IRND") && type != Type::Vector && type != Type::Color) {
     return 2;
   }
-  if (value.fourcc == F("KPIN") && type == Type::Real) {
+  // KPIN: CREKeepInitial 0x299d3c, CVEKeepInitial 0x2a4364, CCEKeepInitial 0x2c92bc.
+  if (value.fourcc == F("KPIN") && (type == Type::Real || type == Type::Vector || type == Type::Color)) {
     return 2;
   }
   const bool plain = type == Type::Real && value.args.size() == 2 &&
@@ -4759,14 +4760,26 @@ public:
   }
 
   struct PartVar {
-    uint32_t id;           // 0..8 ADV1..9 (a swoosh's ADV0..8), 9..12 IAV0..3
+    uint32_t id;           // 0..8 ADV1..9 (a swoosh's ADV0..8), 9..12 IAV0..3, 13..16 VAV0..3, 17..20 CAV0..3
     uint32_t reads = 0;    // the variables its tree reads (m_varReads)
     uint32_t flags = 0;    // ConstantFlags
     bool converted = false;
     size_t begin = 0, end = 0;     // ADV1..8: its retail property in `out` (to take back out)
-    std::vector<uint8_t> element;  // ADV9 and IAVn: the converted tree
+    std::vector<uint8_t> element;  // ADV9, IAVn, VAVn, CAVn: the converted tree
   };
-  // ADV1..9 are 0..8, IAV0..3 9..12, anything else -1.
+  static Type PartVarType(uint32_t id) {
+    return id >= 17 ? Type::Color : id >= 13 ? Type::Vector : id >= 9 ? Type::Int : Type::Real;
+  }
+  static std::string PartVarName(uint32_t id, bool swoosh) {
+    if (id < 9) {
+      return "ADV" + std::to_string(swoosh ? id : id + 1);
+    }
+    const char* kinds[] = {"IAV", "VAV", "CAV"};
+    return kinds[(id - 9) / 4] + std::to_string((id - 9) % 4);
+  }
+  // ADV1..9 are 0..8, IAV0..3 9..12, VAV0..3 13..16, CAV0..3 17..20 (CreateGPSM AddDefinedVar;
+  // no shipped element reads a VAV or CAV, but they run, and a RAND in one draws), anything
+  // else -1.
   static int PartVarId(uint32_t fourcc) {
     for (uint32_t n = 0; n < 9; ++n) {
       const char name[5] = {'A', 'D', 'V', char('1' + n), 0};
@@ -4776,14 +4789,23 @@ public:
     }
     for (uint32_t n = 0; n < 4; ++n) {
       const char name[5] = {'I', 'A', 'V', char('0' + n), 0};
+      const char vav[5] = {'V', 'A', 'V', char('0' + n), 0};
+      const char cav[5] = {'C', 'A', 'V', char('0' + n), 0};
       if (fourcc == F(name)) {
         return int(9 + n);
+      }
+      if (fourcc == F(vav)) {
+        return int(13 + n);
+      }
+      if (fourcc == F(cav)) {
+        return int(17 + n);
       }
     }
     return -1;
   }
   // A swoosh's per-point variables (CreateSWSH 0x2db8a4 AddDefinedVar: its ADVn is real id n,
-  // read by PAP(n + 1), unlike a GPSM's ADVn): ADV0..8 are 0..8, IAV0..3 9..12, anything else -1.
+  // read by PAP(n + 1), unlike a GPSM's ADVn): ADV0..8 are 0..8, IAV/VAV/CAV as PartVarId,
+  // anything else -1.
   static int SwooshVarId(uint32_t fourcc) {
     for (uint32_t n = 0; n < 9; ++n) {
       const char name[5] = {'A', 'D', 'V', char('0' + n), 0};
@@ -5806,14 +5828,14 @@ public:
     return false;
   }
 
-  // An ADV9 or IAVn, converted for the port-only PPVR.
+  // An ADV9, IAVn, VAVn or CAVn, converted for the port-only PPVR.
   void ParticleVariable(GeneratorState& s, const EffectProperty& property, int varId) const {
     PartVar var{uint32_t(varId)};
     std::string why;
     m_varReads = 0;
     if (property.value.size() != 1) {
       why = "not one element";
-    } else if (varId >= 9 && IsElement(property.value[0], F("IRND")) && property.value[0].args.size() == 2 &&
+    } else if (PartVarType(varId) == Type::Int && IsElement(property.value[0], F("IRND")) && property.value[0].args.size() == 2 &&
                ConstantFlags(property.value[0].args[0], Type::Int) == 1 &&
                ConstantFlags(property.value[0].args[1], Type::Int) == 1) {
       // IRND(CNST, CNST) is CIEInitialRandomConstant (0x2a8c40): one draw of the one RNG at
@@ -5823,11 +5845,16 @@ public:
           Element(property.value[0].args[1], Type::Int, var.element, why)) {
         var.converted = true;
       }
+    } else if ((PartVarType(varId) == Type::Vector || PartVarType(varId) == Type::Color) &&
+               IsElement(property.value[0], F("KPIN")) && property.value[0].args.size() == 1) {
+      // CVEKeepInitial/CCEKeepInitial (0x29e878, 0x2c7d58) run their child at age 0 only, and
+      // the variable is initial-only (PPVR runs it at spawn only): the child alone.
+      var.converted = Element(property.value[0].args[0], PartVarType(varId), var.element, why);
     } else {
-      var.converted = Element(property.value[0], varId >= 9 ? Type::Int : Type::Real, var.element, why);
+      var.converted = Element(property.value[0], PartVarType(varId), var.element, why);
     }
     var.reads = m_varReads;
-    var.flags = property.value.size() == 1 ? ConstantFlags(property.value[0], varId >= 9 ? Type::Int : Type::Real) : 0;
+    var.flags = property.value.size() == 1 ? ConstantFlags(property.value[0], PartVarType(varId)) : 0;
     if (!var.converted) {
       s.result.dropped.push_back(EffectFourCCString(property.fourcc) + ": " + why);
     }
@@ -6316,10 +6343,7 @@ public:
             v.converted = false;
             lost |= 1u << v.id;
             again = true;
-            const char* names[] = {"ADV1", "ADV2", "ADV3", "ADV4", "ADV5", "ADV6", "ADV7", "ADV8", "ADV9",
-                                   "IAV0", "IAV1", "IAV2", "IAV3"};
-            const std::string name = s.swoosh && v.id < 9 ? "ADV" + std::to_string(v.id) : names[v.id];
-            s.result.dropped.push_back(name + ": reads a dropped variable");
+            s.result.dropped.push_back(PartVarName(v.id, s.swoosh) + ": reads a dropped variable");
           }
         }
       }
@@ -6652,9 +6676,9 @@ public:
         AppendBE32(s.out, F("CNST"));
         AppendBE32(s.out, uint32_t(written.size()));
         for (const PartVar* v : written) {
-          const bool ints = v->id >= 9;
-          AppendBE32(s.out, ints ? 2 : s.swoosh || v->id == 8 ? 1 : 0);
-          AppendBE32(s.out, ints ? v->id - 9 : v->id);
+          // Kinds 2, 3 and 4 are IAVn, VAVn and CAVn.
+          AppendBE32(s.out, v->id >= 9 ? 2 + (v->id - 9) / 4 : s.swoosh || v->id == 8 ? 1 : 0);
+          AppendBE32(s.out, v->id >= 9 ? (v->id - 9) % 4 : v->id);
           AppendBE32(s.out, (v->flags & 3) != 0);
           s.out.insert(s.out.end(), v->element.begin(), v->element.end());
         }
@@ -7092,27 +7116,28 @@ public:
     return true;
   }
 
-  // The port-only PPVR property: CNST, a count up to 13, then per variable its kind, slot and
-  // constant-after-start flag, and for kinds 1 (a real) and 2 (an int) the element. A swoosh's
-  // are kinds 1 (any of ADV0..8) and 2 only.
+  // The port-only PPVR property: CNST, a count up to 21, then per variable its kind, slot and
+  // constant-after-start flag, and for kinds 1 (a real), 2 (an int), 3 (a vector) and 4 (a
+  // colour) the element. A swoosh has no kind 0 (its ADV0..8 are all kind 1).
   bool PortPartVars(bool swoosh) {
     uint32_t fourcc, count;
-    if (!Word(fourcc) || fourcc != F("CNST") || !Word(count) || count > 13) {
+    if (!Word(fourcc) || fourcc != F("CNST") || !Word(count) || count > 21) {
       return false;
     }
     uint32_t seen = 0;
     for (uint32_t i = 0; i < count; ++i) {
       uint32_t kind, slot, flag;
-      if (!Word(kind) || kind > 2 || !Word(slot) || slot >= (kind == 2 ? 4u : kind == 1 ? 9u : 8u) ||
+      const Type types[] = {Type::Real, Type::Real, Type::Int, Type::Vector, Type::Color};
+      if (!Word(kind) || kind > 4 || !Word(slot) || slot >= (kind >= 2 ? 4u : kind == 1 ? 9u : 8u) ||
           (swoosh ? kind == 0 : kind == 1 && slot != 8) || !Word(flag) || flag > 1 ||
-          (seen & (1u << (kind == 2 ? 9 + slot : slot))) != 0 ||  // the factory rejects a duplicate
-          (kind != 0 && !Element(kind == 1 ? Type::Real : Type::Int))) {
+          (seen & (1u << (kind >= 2 ? 9 + (kind - 2) * 4 + slot : slot))) != 0 ||  // the factory rejects a duplicate
+          (kind != 0 && !Element(types[kind]))) {
         if (m_error.empty()) {
           m_error = "bad PPVR";
         }
         return false;
       }
-      seen |= 1u << (kind == 2 ? 9 + slot : slot);
+      seen |= 1u << (kind >= 2 ? 9 + (kind - 2) * 4 + slot : slot);
     }
     return true;
   }

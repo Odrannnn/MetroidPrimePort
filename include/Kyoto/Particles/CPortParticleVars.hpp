@@ -99,15 +99,20 @@ public:
 // Remastered's particle variables (GPSM ADV1..9 and IAV0..3), in its SortVars order: one is
 // evaluated after those it reads. At spawn every variable runs; on later frames only those that are
 // not constant after start (CVarContext IsConstantAfterStart), so the one RNG sequence is the same
-// as Remastered's. A kind 0 item runs the generator's own ADVn element.
-enum class EPortPartVarKind : u32 { RealAdv = 0, RealOwn = 1, Int = 2 };
+// as Remastered's. A kind 0 item runs the generator's own ADVn element. Kinds 3 and 4 are VAV0..3
+// and CAV0..3 (CreateGPSM/CreateSWSH AddDefinedVar): no shipped element reads them, so their
+// values are not kept, but they run in their place, which keeps the RNG sequence (a VAV0 of
+// RAND draws).
+enum class EPortPartVarKind : u32 { RealAdv = 0, RealOwn = 1, Int = 2, Vector = 3, Color = 4 };
 
 struct SPortPartVarItem {
   EPortPartVarKind kind = EPortPartVarKind::RealAdv;
   u32 slot = 0;
   bool constAfterStart = false;
-  CRealElement* real = nullptr;  // kind 1: ADV9
-  CIntElement* intE = nullptr;   // kind 2: IAV<slot>
+  CRealElement* real = nullptr;    // kind 1: ADV9
+  CIntElement* intE = nullptr;     // kind 2: IAV<slot>
+  CVectorElement* vec = nullptr;   // kind 3: VAV<slot>
+  CColorElement* color = nullptr;  // kind 4: CAV<slot>
 };
 
 class CPortPartVars {
@@ -121,6 +126,8 @@ public:
     for (size_t i = 0; i < items.size(); ++i) {
       delete items[i].real;
       delete items[i].intE;
+      delete items[i].vec;
+      delete items[i].color;
     }
   }
 
@@ -144,6 +151,16 @@ public:
         int v = 0;
         item.intE->GetValue(frame, v);
         std::memcpy(&values[9 + item.slot], &v, sizeof(v));
+        break;
+      }
+      case EPortPartVarKind::Vector: {
+        CVector3f v;
+        item.vec->GetValue(frame, v);
+        break;
+      }
+      case EPortPartVarKind::Color: {
+        CColor c;
+        item.color->GetValue(frame, c);
         break;
       }
       }
@@ -885,9 +902,8 @@ CPortVarTable* PortReadVarTable(CInputStream& in);
 // Reads a PSYS body (after the CNST class id). Null on a malformed one.
 CPortSys* PortReadSys(CInputStream& in);
 // Reads a PPVR body (after the CNST class id): u32 count, then per item u32 kind, slot and
-// constant-after-start flag, and for kinds 1 and 2 the element. A generator's kind 1 is ADV9
-// only; a swoosh (whose ADV0..8 are all its own, per point) has kinds 1 and 2 only. Null on a
-// malformed one.
+// constant-after-start flag, and for kinds 1..4 the element. A generator's kind 1 is ADV9 only; a
+// swoosh (whose ADV0..8 are all its own, per point) has no kind 0. Null on a malformed one.
 CPortPartVars* PortReadPartVars(CInputStream& in, bool swoosh);
 
 #endif // TARGET_PC

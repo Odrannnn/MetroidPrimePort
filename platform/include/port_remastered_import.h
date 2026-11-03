@@ -238,7 +238,7 @@ inline constexpr int kModels = 30;
 // 183: a vector PSAn reads the system's SVVn (PSYV). 184: a swoosh's SEED and child seed (PSED, PGID).
 // 185: a swoosh's TXUP (PTXU). 186: a light TickSystem_Light does not update is built once (PLON).
 // 190: SSZE, a per-particle value without a VMAT too (PSSZ).
-inline constexpr int kEffects = 193;   // swoosh per-point ADV0..8/IAV0..3: a swoosh's PPVR
+inline constexpr int kEffects = 194;   // VAV0..3/CAV0..3 (and a vector or colour KPIN) in the PPVR
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).
