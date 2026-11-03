@@ -212,7 +212,8 @@ constexpr PropertyType kPropertyTypes[] = {
     {'V', "PSIV PSOV ILOC IVEC POFS PMOP PMRT PMSC SSPO SEPO LOFF LDIR"},
     {'M', "PSVM VEL1 VEL2 VEL3 VEL4"},
     {'C', "COLR PMCL LCLR NCLR"},
-    {'E', "EMTR"},
+    // IEMT/FEMT: ELSC's start/end emitters (CParticleElectricDataFactory).
+    {'E', "EMTR IEMT FEMT"},
     {'Q', "PMRQ"},
 };
 

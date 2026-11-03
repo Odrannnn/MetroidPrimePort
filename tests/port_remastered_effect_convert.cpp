@@ -6962,6 +6962,35 @@ void TestElc2BlendAndLifetime() {
   }
 }
 
+// An ELC2's IEMT/FEMT are emitters (f670e197): read as untyped, the loose RNDV parsed with no
+// argument and its CNST was taken as ADD_'s second vector.
+void TestElc2EmitterRndv() {
+  for (const char* name : {"IEMT", "FEMT"}) {
+    auto parts = ConvertElc2([name](auto& o) {
+      PutProperty(o, name, 3);
+      PutFourCC(o, "SEMR");
+      PutFourCC(o, "ADD_");
+      PutFourCC(o, "RNDV");
+      PutConstant(o, Bits(20.0f));
+      PutFourCC(o, "CNST");
+      PutConstant(o, 0);
+      PutConstant(o, Bits(20.0f));
+      PutConstant(o, 0);
+      PutFourCC(o, "CNST");
+      PutConstant(o, 0);
+      PutConstant(o, 0);
+      PutConstant(o, 0);
+    });
+    CHECK_MSG(parts.size() == 1, "ELC2 with an RNDV emitter converts");
+    if (parts.size() == 1) {
+      Retail rndv;
+      rndv.f("RNDV").f("CNST").w(Bits(20.0f));
+      CHECK_MSG(Contains(parts[0].part, rndv.bytes), "the emitter keeps RNDV(CNST 20)");
+      CHECK_MSG(parts[0].dropped.empty(), "nothing dropped from an RNDV emitter");
+    }
+  }
+}
+
 // An ELC2 holds a PART's visor effect data (CreateELC2 0xb70734, desc +0x218): VESC..VEDT are
 // written as the port-only PVSD..PVDT, which CParticleElectricDataFactory reads.
 void TestElc2VisorData() {
@@ -7768,6 +7797,7 @@ int main() {
   TestVmatParticleLit();
   TestElc2BlendAndLifetime();
   TestElc2NclrAndXfmd();
+  TestElc2EmitterRndv();
   TestElc2VisorData();
   TestWaveOrbHeaderBlend();
   TestWaveOrbExposurePolicy();
