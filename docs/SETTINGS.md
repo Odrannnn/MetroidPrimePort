@@ -981,6 +981,18 @@
   finish at once, a Reset ends a beetle's emergence, no skip without a
   cutscene camera). Rooms a mod replaced are left unpatched. Archipelago
   games also skip the Landing Site intro: Samus starts on top of her ship.
+- Seamless item pickups (F1 > Game > Cutscenes, `seamless_pickups`, console
+  `seamlesspickups`, off by default and off in the Original experience): picking
+  up an item keeps control and plays no cutscene, as in the randomizer. Rooms load
+  with randomprime's pickup patches, as Archipelago games do
+  (`platform/port_skip_cutscenes.cpp` PatchPickups: the "Player Hint Disable
+  Controls", the cinematic's start relay and the logbook screen go; what the
+  cinematic's end did moves onto a relay the pickup fires), but the artifacts
+  still light their Artifact Temple totems. The item's message box shows its
+  headline ("Missile Expansion acquired!") as a HUD memo instead of pausing
+  (`CScriptHUDMemo`). Applies to rooms loaded afterwards; a room the patch
+  doesn't match (a mod's room, another disc revision) is left as is (logged as
+  `pickups: room ...`).
 - Stack beams (F1 > Game > Cutscenes, `stack_beams`, off by default and off in the Original
   experience): every normal or charged arm-cannon shot also fires the projectiles
   of each other beam you own (Power, Ice, Wave, Plasma), from the same spot, at

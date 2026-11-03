@@ -1083,6 +1083,14 @@ bool OwnsMemo(uint32_t world, uint32_t area, uint32_t entity) {
   }
 }
 
+bool IsPickupMemo(uint32_t world, uint32_t area, uint32_t entity) {
+  try {
+    return MetroidPrime::FindMemo(world, area, entity) != nullptr;
+  } catch (...) {
+    return false;
+  }
+}
+
 bool PickupJingle(uint32_t world, uint32_t area, uint32_t entity, std::string& out) {
   try {
     const MetroidPrime::Location* location = MetroidPrime::FindAudio(world, area, entity);

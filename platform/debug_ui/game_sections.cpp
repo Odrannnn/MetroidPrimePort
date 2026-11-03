@@ -49,6 +49,12 @@ void DrawCutscenesSection() {
     SameLineAfterHelp();
     ImGui::TextDisabled("(on in randomized games)");
   }
+  bool seamlessPickups = sSeamlessPickups;
+  if (ImGui::Checkbox("Seamless item pickups", &seamlessPickups)) {
+    SetSeamlessPickups(seamlessPickups);
+  }
+  ItemHelp("Picking up an item keeps you in control: no cutscene, and its message shows on the "
+           "HUD instead of pausing. Applies to rooms loaded afterwards.");
   int elevatorRide = sElevatorRide;
   if (ImGui::Combo("Elevator ride", &elevatorRide, "Original\0Fast\0Skip\0")) {
     SetElevatorRide(static_cast< EElevatorRide >(elevatorRide));

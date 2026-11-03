@@ -134,6 +134,7 @@ bool sSkippableCutscenes = false;
 // Off by default: a beam door that was opened stays blue (PortBeamDoors).
 bool sBeamDoorsStayUnlocked = false;
 bool sStackBeams = false;
+bool sSeamlessPickups = false;
 bool sWalkSpeedEnabled = true;
 int sWalkSpeed = PortDebug::kWalkSpeedDefault;
 // The stored choice only. Randomizer and Archipelago games force it on at use

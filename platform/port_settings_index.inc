@@ -9,6 +9,7 @@
 {"Game", "", "Game", "Photo mode", "camera freecam picture"},
 {"Game", "", "Game", "Exit game", "quit close leave"},
 {"Game", "", "Cutscenes", "Skippable cutscenes", "skip cinematics movies"},
+{"Game", "", "Cutscenes", "Seamless item pickups", "pickup item acquired message box pause cinematic control"},
 {"Game", "", "Cutscenes", "Elevator ride", "elevator loading length skip"},
 {"Game", "", "Cutscenes", "Boot logos", "nintendo retro dolby startup intro skip"},
 {"Game", "", "Cutscenes", "Scan speed", "scanning visor fast quick"},

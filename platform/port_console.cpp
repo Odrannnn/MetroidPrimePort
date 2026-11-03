@@ -2741,6 +2741,18 @@ void CmdStackBeams() {
   Finish();
 }
 
+void CmdSeamlessPickups() {
+  if (sCmd.args.size() > 1) {
+    const std::string& v = sCmd.args[1];
+    if (v != "0" && v != "1") {
+      return Finish("usage: seamlesspickups [0|1]");
+    }
+    PortDebug::SetSeamlessPickups(v == "1");
+  }
+  Out(PortDebug::SeamlessPickups() ? "seamlesspickups 1" : "seamlesspickups 0");
+  Finish();
+}
+
 void CmdAimLockOn() {
   if (sCmd.args.size() > 1) {
     const std::string& v = sCmd.args[1];
@@ -4513,6 +4525,8 @@ const CommandSpec kCommands[] = {
      "mapui [0|1]                 the map's extra legend entries and the Mark room prompt"},
     {"stackbeams", CmdStackBeams, nullptr,
      "stackbeams [0|1]           every shot also fires the other owned beams' projectiles (stack_beams)"},
+    {"seamlesspickups", CmdSeamlessPickups, nullptr,
+     "seamlesspickups [0|1]      pickups without control lock, cutscene or message box (seamless_pickups)"},
     {"aimlockon", CmdAimLockOn, nullptr,
      "aimlockon [0|1]            lock-on picks the target nearest the crosshair (aim_lock_on)"},
     {"dodge", CmdDodge, nullptr,

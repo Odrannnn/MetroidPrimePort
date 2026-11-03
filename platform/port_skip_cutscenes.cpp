@@ -46,16 +46,43 @@ const SkipRoom* FindRoom(const SkipRoom* begin, const SkipRoom* end, uint32_t mr
 // randomprime's pickup patches (tools/gen_ap_pickup_patches.py), on top of the
 // skippable ones: a randomized pickup no longer plays its retail item's
 // cutscene, and what that cutscene's end did moves onto a relay the pickup
-// fires. Only in AP games, where every pickup holds a multiworld item.
-void PatchPickups(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out) {
+// fires. In AP games, where every pickup holds a multiworld item, and for
+// seamless_pickups (`keepTotems`), where the item is the retail one.
+//
+// The Artifact Temple totem each artifact's pickup lights (a layer controller
+// it sends Increment on Arrived); randomprime drops them, since its artifacts
+// are tracked otherwise, but a retail game needs them.
+const uint32_t kTotemSwitches[] = {0x00042881, 0x0008025C, 0x000B003C, 0x000D0345,
+                                   0x001B001E, 0x00270084, 0x002704D4, 0x002A0239,
+                                   0x003600AE, 0x00390008, 0x041001D9, 0x18252F81};
+
+void PatchPickups(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out,
+                  bool keepTotems) {
   out.clear();
   const SkipRoom* room =
       FindRoom(kPickupRooms, kPickupRooms + sizeof(kPickupRooms) / sizeof(kPickupRooms[0]), mreaId);
   if (room == nullptr)
     return;
-  const int misses = ApplyOps(scly, size, kPickupOps + room->offset, room->size, out);
+  const uint8_t* ops = kPickupOps + room->offset;
+  size_t opsSize = room->size;
+  std::vector< uint8_t > kept;
+  if (keepTotems) {
+    // The generator writes a room's removals (op 6, 5 bytes) first.
+    size_t i = 0;
+    for (; i + 5 <= opsSize && ops[i] == 6; i += 5) {
+      const uint32_t id = uint32_t(ops[i + 1]) << 24 | uint32_t(ops[i + 2]) << 16 |
+                          uint32_t(ops[i + 3]) << 8 | ops[i + 4];
+      if (std::find(std::begin(kTotemSwitches), std::end(kTotemSwitches), id) ==
+          std::end(kTotemSwitches))
+        kept.insert(kept.end(), ops + i, ops + i + 5);
+    }
+    kept.insert(kept.end(), ops + i, ops + opsSize);
+    ops = kept.data();
+    opsSize = kept.size();
+  }
+  const int misses = ApplyOps(scly, size, ops, opsSize, out);
   if (misses != 0) {
-    PortLog::Write("archipelago: room %08X pickup patch doesn't match (%d), left unpatched\n",
+    PortLog::Write("pickups: room %08X pickup patch doesn't match (%d), left unpatched\n",
                    mreaId, misses);
     out.clear();
   }
@@ -154,10 +181,14 @@ bool Active() { return PortDebug::SkippableCutscenes() || Forced(); }
 
 bool PatchArea(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector< uint8_t >& out) {
   out.clear();
-  if (Active())
+  if (Active()) {
     PatchScripts(mreaId, scly, size, out);
-  else
+  } else {
+    // Seamless pickups without the skippable patches (AP games force those).
+    if (PortDebug::SeamlessPickups())
+      PatchPickups(mreaId, scly, size, out, true);
     PatchDoors(mreaId, scly, size, out);
+  }
   // Revision compatibility (USA 1.00 behaviour on later discs), after the
   // patches above. Randomized games always want it; otherwise it's the
   // setting. A miss keeps what the patches above made.
@@ -224,12 +255,12 @@ bool PatchScripts(uint32_t mreaId, const uint8_t* scly, size_t size, std::vector
     else
       PortLog::Write("skippable cutscenes: Landing Site intro skip doesn't match, left as is\n");
   }
-  if (apGame) {
+  if (apGame || PortDebug::SeamlessPickups()) {
     std::vector< uint8_t > pickups;
     if (skipped)
-      PatchPickups(mreaId, out.data(), out.size(), pickups);
+      PatchPickups(mreaId, out.data(), out.size(), pickups, !apGame);
     else
-      PatchPickups(mreaId, scly, size, pickups);
+      PatchPickups(mreaId, scly, size, pickups, !apGame);
     if (!pickups.empty())
       out.swap(pickups);
   }

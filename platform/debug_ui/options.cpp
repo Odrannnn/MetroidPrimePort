@@ -692,6 +692,13 @@ bool StackBeams() {
 
 void SetStackBeams(bool enabled) { StoreSetting(sStackBeams, enabled); }
 
+bool SeamlessPickups() {
+  EnsureInitialized();
+  return sSeamlessPickups && !sOriginalExperience;
+}
+
+void SetSeamlessPickups(bool enabled) { StoreSetting(sSeamlessPickups, enabled); }
+
 int WalkSpeed() {
   EnsureInitialized();
   return sOriginalExperience || !sWalkSpeedEnabled ? kWalkSpeedDefault : sWalkSpeed;

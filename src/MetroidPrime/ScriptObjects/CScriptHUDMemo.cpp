@@ -8,6 +8,7 @@
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/CWorld.hpp"
 #include "port_apclient.h"
+#include "port_debug.h"
 #endif
 
 CScriptHUDMemo::CScriptHUDMemo(TUniqueId uid, const rstl::string& name, const CEntityInfo& info,
@@ -27,14 +28,24 @@ void CScriptHUDMemo::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId uid, CS
   switch (msg) {
   case kSM_SetToZero:
 #ifdef TARGET_PC
-    // An Archipelago location's "acquired" memo names the retail item, which
-    // the pickup no longer holds; the pickup announced what it did hold.
-    if (mgr.GetWorld() != nullptr && GetAreaId() != kInvalidAreaId &&
-        PortAp::OwnsMemo(
-            static_cast< uint32_t >(mgr.GetWorld()->IGetWorldAssetId()),
-            static_cast< uint32_t >(mgr.GetWorld()->IGetAreaAlways(GetAreaId())->IGetAreaAssetId()),
-            static_cast< uint32_t >(GetEditorId().Value())))
-      break;
+    if (mgr.GetWorld() != nullptr && GetAreaId() != kInvalidAreaId) {
+      const uint32_t world = static_cast< uint32_t >(mgr.GetWorld()->IGetWorldAssetId());
+      const uint32_t area =
+          static_cast< uint32_t >(mgr.GetWorld()->IGetAreaAlways(GetAreaId())->IGetAreaAssetId());
+      const uint32_t editorId = static_cast< uint32_t >(GetEditorId().Value());
+      // An Archipelago location's "acquired" memo names the retail item, which
+      // the pickup no longer holds; the pickup announced what it did hold.
+      if (PortAp::OwnsMemo(world, area, editorId))
+        break;
+      // seamless_pickups: the message box's headline ("X acquired!") on the
+      // HUD, without the pause.
+      if (GetActive() && x3c_dispType == kDT_MessageBox && x44_stringTable &&
+          PortDebug::SeamlessPickups() && PortAp::IsPickupMemo(world, area, editorId)) {
+        CSamusHud::DisplayHudMemo((*x44_stringTable)->GetString(0),
+                                  CHUDMemoParms(5.f, true, false, false));
+        break;
+      }
+    }
 #endif
     if (GetActive()) {
       if (x3c_dispType == kDT_MessageBox) {

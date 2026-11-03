@@ -155,6 +155,9 @@ void QueueCheck(const char* locationKey);
 // off too.
 bool OwnsPickup(uint32_t world, uint32_t area, uint32_t entity);
 bool OwnsMemo(uint32_t world, uint32_t area, uint32_t entity);
+// Whether `entity` is a pickup's "acquired" memo (any game, AP or not), which
+// seamless_pickups shows on the HUD instead of as a message box.
+bool IsPickupMemo(uint32_t world, uint32_t area, uint32_t entity);
 // The jingle file for the StreamedAudio `entity` when it is an AP location's
 // pickup jingle and the item placed there is known (scouted), so the pickup
 // plays the placed item's jingle, not the retail item's. Without an AP

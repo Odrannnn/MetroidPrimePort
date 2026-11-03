@@ -122,6 +122,8 @@ constexpr BoolSetting kBoolSettings[] = {
     {"beam_doors_stay_unlocked", "Unlock beam doors once opened", "Game > Cutscenes",
      &PortDebug::BeamDoorsStayUnlocked, &PortDebug::SetBeamDoorsStayUnlocked},
     {"stack_beams", "Stack beams", "Game > Cutscenes", &PortDebug::StackBeams, &PortDebug::SetStackBeams},
+    {"seamless_pickups", "Seamless item pickups", "Game > Cutscenes", &PortDebug::SeamlessPickups,
+     &PortDebug::SetSeamlessPickups},
     {"walk_speed_enabled", "Custom walk speed", "Game > Cutscenes", &PortDebug::WalkSpeedEnabled,
      &PortDebug::SetWalkSpeedEnabled},
     {"speedrun_timer", "On-screen in-game time", "Game > Speedrun", &PortDebug::SpeedrunTimer,
