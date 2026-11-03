@@ -33,6 +33,8 @@ constexpr uint32_t kPropDieWhenDone = 0xf13f4e03;
 constexpr uint32_t kPropExternalVariables = 0x3def0de6;  // CScriptEffectMP1::InitializeExternalVariables
 
 constexpr uint8_t kRetailEffect = 7;
+constexpr uint8_t kRetailGenerator = 0x0A;
+constexpr uint32_t kMessageActivate = 1;  // EScriptObjectMessage kSM_Activate
 // A retail effect no object matched, with an added one this near, is the one it replaces.
 constexpr double kReplaceDistance = 5.0;
 
@@ -1881,6 +1883,88 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
       follows.push_back(plan.record);
     }
   }
+  // A retail Generator whose effect templates Remastered's GeneratorMP1 generates, with the rest
+  // of its templates gone: they are not created, so it picks among Remastered's alone
+  // (CScriptGenerator skips a template that does not exist). The Reflecting Pool's drain
+  // generator had six DebrisExtended and two effects; Remastered's makes its six copies from
+  // the two effects (bubbles and its debris PKSM), so retail's mostly made debris and often no
+  // bubbles. Every template this drops (42, in 13 rooms) is a DebrisExtended in a room where
+  // Remastered has none.
+  size_t templatesDropped = 0;
+  {
+    const std::vector<Component>& comps = room.Components();
+    const std::vector<Connection> conns = ReadConnections(room);
+    std::map<uint32_t, size_t> incoming;  // retail connections per target id
+    std::map<uint32_t, size_t> indexOf;
+    for (size_t j = 0; j < objects.size(); ++j) {
+      indexOf.emplace(objects[j].id & 0x3FFFFFF, j);
+      for (uint32_t t : objects[j].targets) {
+        ++incoming[t & 0x3FFFFFF];
+      }
+    }
+    for (const Component* gen : room.Of(kGeneratorMP1)) {
+      std::set<size_t> generated;  // the retail objects its templates matched
+      bool exact = true;
+      for (const Connection& c : conns) {
+        if (comps[c.sender].entity != gen->entity || comps[c.sender].type != kGeneratorMP1 ||
+            c.event != kEventGeneratorZero || c.action != kActionGenerate) {
+          continue;
+        }
+        const int t = room.ByGuid(c.target);
+        const int te = t < 0 ? -1 : comps[size_t(t)].type == kEntity ? t : comps[size_t(t)].entity;
+        const auto m = te < 0 ? scripts.retail.end() : scripts.retail.find(te);
+        if (m == scripts.retail.end() || objects[m->second].type != kRetailEffect) {
+          exact = false;
+          break;
+        }
+        generated.insert(m->second);
+      }
+      if (!exact || generated.empty()) {
+        continue;
+      }
+      // The one retail Generator that activates each of them on Zero, and only it.
+      std::set<size_t> owners;
+      for (size_t j = 0; j < objects.size(); ++j) {
+        for (const ScriptObject::Link& l : objects[j].links) {
+          const auto k = indexOf.find(l.target & 0x3FFFFFF);
+          if (k != indexOf.end() && generated.count(k->second) != 0) {
+            owners.insert(j);
+            exact = exact && objects[j].type == kRetailGenerator && l.state == kStateZero &&
+                    l.message == kMessageActivate;
+          }
+        }
+      }
+      if (!exact || owners.size() != 1) {
+        continue;
+      }
+      const ScriptObject& g = objects[*owners.begin()];
+      // The same spawn count (retail's first property after the name).
+      const auto f = room.Flat(*gen);
+      const auto count = f.find(kPropGeneratorCount);
+      if (g.props.size() < 4 || count == f.end() || count->second.size != 4 ||
+          ReadLE32(room.Bytes(count->second)) != ReadBE32(g.props.data())) {
+        continue;
+      }
+      std::vector<uint32_t> drop;
+      for (const ScriptObject::Link& l : g.links) {
+        const auto k = indexOf.find(l.target & 0x3FFFFFF);
+        if (l.state != kStateZero || l.message != kMessageActivate || k == indexOf.end() ||
+            generated.count(k->second) != 0) {
+          continue;
+        }
+        // Only a template Remastered has no object for, that nothing else talks to.
+        if (matchedObjects.count(k->second) != 0 || incoming[l.target & 0x3FFFFFF] != 1) {
+          drop.clear();
+          break;
+        }
+        drop.push_back(objects[k->second].id);
+      }
+      for (uint32_t id : drop) {
+        skips.insert(id);
+        ++templatesDropped;
+      }
+    }
+  }
   // A retail effect no Remastered entity matched, that nothing sends a message to, next to an
   // added one: Remastered replaced it.
   const auto unmatchedEffect = [&](size_t j) {
@@ -2289,6 +2373,11 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   if (!follows.empty()) {
     const size_t at = std::strlen(generatorNote);
     std::snprintf(generatorNote + at, sizeof generatorNote - at, ", %zu follow(s)", follows.size());
+  }
+  if (templatesDropped != 0) {
+    const size_t at = std::strlen(generatorNote);
+    std::snprintf(generatorNote + at, sizeof generatorNote - at,
+                  ", %zu generator template(s) dropped", templatesDropped);
   }
   if (!followsLeftOut.empty()) {
     const size_t at = std::strlen(generatorNote);
