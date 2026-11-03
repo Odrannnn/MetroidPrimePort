@@ -57,6 +57,10 @@ public:
   uint PortFxAsset() const override;
   void PortFxDescribe(PortFxInfo& out) const override;
   bool PortIsRemastered() const { return xPortElc2.get() != nullptr; }
+  // Remastered's CParticleGen::ShutdownEffect 0x27a66c (no electric SHTT, so at once) into
+  // DoShutdownBehavior: ELSM 0x283094, ELC2 0xb74f84. A retail electric only stops emitting.
+  void ShutdownEffect() override;
+  void PortDoShutdownBehavior(u32 mode) override;
   const CElectricDescription* PortDesc() const { return *x1c_elecDesc; }
   int PortCurFrame() const { return x28_currentFrame; }
   // CParticleElectric2::HasAnyParticlesRecursive 0xb77b08: a live bolt, else any GPSM or EPSM

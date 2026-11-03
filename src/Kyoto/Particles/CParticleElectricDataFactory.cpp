@@ -150,6 +150,11 @@ bool CParticleElectricDataFactory::CreateELSM(CElectricDescription* desc, CInput
       CParticleDataFactory::GetClassID(in);
       desc->xPortElc2 = in.ReadLong() != 0;
       break;
+    // Port-only marker of any converted Remastered electric (ELSM-form or ELC2).
+    case 'PIRN':
+      CParticleDataFactory::GetClassID(in);
+      desc->xPortIrnd = in.ReadLong() != 0;
+      break;
     case 'SIDE':
       desc->xPortSIDE = CParticleDataFactory::GetIntElement(in);
       break;

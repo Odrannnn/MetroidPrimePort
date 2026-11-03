@@ -5200,6 +5200,12 @@ public:
       AppendBE32(s.out, F("CNST"));
       AppendBE32(s.out, 1);
     }
+    if (type == F("ELSC")) {
+      // Every converted electric, ELSM-form ones too, which otherwise read like retail streams.
+      AppendBE32(s.out, F("PIRN"));
+      AppendBE32(s.out, F("CNST"));
+      AppendBE32(s.out, 1);
+    }
     NestedLight(s);
     FixedBounds(s);
     NodeModes(s);

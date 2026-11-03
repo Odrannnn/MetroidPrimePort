@@ -1404,13 +1404,13 @@ void TestSwooshElectric() {
   CHECK_MSG(parts[1].droppedRetail == 0, "swoosh drops nothing");
 
   Retail electric;
-  electric.f("ELSM").f("LWD1").f("CNST").w(Bits(2.0f)).f("SSWH").f("CNST").w(0x0000AAAA).f("GPSM").f("NONE").f("_END");
-  CHECK_MSG(parts[2].type == EffectFourCC("ELSC") && parts[2].part == electric.bytes, "ELSM child is an ELSC");
+  electric.f("ELSM").f("PIRN").f("CNST").w(1).f("LWD1").f("CNST").w(Bits(2.0f)).f("SSWH").f("CNST").w(0x0000AAAA).f("GPSM").f("NONE").f("_END");
+  CHECK_MSG(parts[2].type == EffectFourCC("ELSC") && parts[2].part == electric.bytes, "ELSM child is an ELSC led by PIRN");
   CHECK_MSG(parts[2].dropped.empty(), "an electric's own OSDM is consumed: it never constructs children");
 
   // An ELC2 child is an ELSC stream led by the port-only PEL2 marker; its fields follow.
   Retail elc2;
-  elc2.f("ELSM").f("PEL2").f("CNST").w(1).f("SCNT").f("CNST").w(4);
+  elc2.f("ELSM").f("PEL2").f("CNST").w(1).f("PIRN").f("CNST").w(1).f("SCNT").f("CNST").w(4);
   elc2.f("SIDE").f("CNST").w(3).f("RADS").f("CNST").w(Bits(0.5f)).f("_END");
   CHECK_MSG(parts[3].type == EffectFourCC("ELSC") && parts[3].part == elc2.bytes, "ELC2 child is an ELSC with PEL2");
   CHECK_MSG(parts[3].droppedRetail == 0, "ELC2 drops no retail property");
@@ -1428,8 +1428,8 @@ void TestSwooshElectric() {
   CHECK_MSG(!SplitRetailEffect(EffectFourCC("SWHC"), wrong.bytes.data(), wrong.bytes.size(), properties, error),
             "a PART property in a swoosh refused");
   CHECK_MSG(SplitRetailEffect(EffectFourCC("ELSC"), electric.bytes.data(), electric.bytes.size(), properties, error) &&
-                properties.size() == 3,
-            "retail ELSC splits into its properties");
+                properties.size() == 4,
+            "an ELSC splits into its properties, PIRN included");
 }
 
 // A root generator holding one swoosh child, whose properties `body` writes;

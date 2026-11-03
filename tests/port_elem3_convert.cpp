@@ -271,7 +271,7 @@ void TestNfom() {
     return;
   }
   Retail want;
-  want.f("ELSM").f("PEL2").f("CNST").w(1).f("SCNT").f("CNST").w(4).f("NFOM").f("CNST").w(1).f("_END");
+  want.f("ELSM").f("PEL2").f("CNST").w(1).f("PIRN").f("CNST").w(1).f("SCNT").f("CNST").w(4).f("NFOM").f("CNST").w(1).f("_END");
   CHECK_MSG(parts[1].part == want.bytes, "NFOM byte 1 is CNST s32 1");
   CHECK_MSG(parts[1].droppedRetail == 0, "NFOM drops nothing");
 }

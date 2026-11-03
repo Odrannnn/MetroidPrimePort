@@ -197,6 +197,51 @@ void CParticleElectric::PortBeamReset() {
     x410_epsmGenerators[i]->PortDoShutdownBehavior(1);
   }
 }
+
+void CParticleElectric::ShutdownEffect() {
+  if (!x1c_elecDesc->xPortIrnd) {
+    SetParticleEmission(false);
+    return;
+  }
+  PortDoShutdownBehavior(0xff);
+}
+
+// The base half (0x27b88c) stops the emission for modes 0 and 1; an electric's DestroyParticles is
+// empty (0x286554, 0xb78e8c). Then the same mode reaches the swoosh of every live line (ELSM) or
+// bolt (ELC2) and every GPSM and EPSM child. ELSM's LWD1-3 swoosh arrays (gated by desc+0x150/
+// 0x158/0x160) have no generators here: the port draws those lines with CLineManager.
+void CParticleElectric::PortDoShutdownBehavior(u32 mode) {
+  if ((mode == 0xff ? PortShutdownMode() : (mode & 0xff)) < 2) {
+    SetParticleEmission(false);
+  }
+  if (!x1c_elecDesc->xPortIrnd) {
+    return;
+  }
+  if (x450_27_haveSSWH) {
+    if (xPortElc2) {
+      const std::vector< CParticleElectric2Port::Bolt >& bolts = xPortElc2->Bolts();
+      for (size_t i = 0; i < bolts.size(); ++i) {
+        if (bolts[i].swoosh != -1) {
+          x1e0_swooshGenerators[bolts[i].swoosh]->PortDoShutdownBehavior(mode);
+        }
+      }
+    } else {
+      for (AUTO(it, x3e8_electricManagers.begin()); it != x3e8_electricManagers.end(); ++it) {
+        x1e0_swooshGenerators[it->x0_idx]->PortDoShutdownBehavior(mode);
+      }
+    }
+  }
+  if (x450_25_haveGPSM) {
+    for (int i = 0; i < x400_gpsmGenerators.size(); ++i) {
+      x400_gpsmGenerators[i]->PortDoShutdownBehavior(mode);
+    }
+  }
+  if (x450_26_haveEPSM) {
+    for (int i = 0; i < x410_epsmGenerators.size(); ++i) {
+      x410_epsmGenerators[i]->PortDoShutdownBehavior(mode);
+    }
+  }
+}
 #endif
 
 CParticleElectric::CParticleElectric(TToken< CElectricDescription > desc)

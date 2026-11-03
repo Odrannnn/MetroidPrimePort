@@ -47,6 +47,8 @@ public:
   // Port-only ELC2 (Remastered CParticleElectric2) fields, read when the stream starts with PEL2.
   // Absent properties keep the ELC2 defaults the runtime applies (8 nodes, SIDE 2, RADS 1, ...).
   bool xPortElc2 = false;
+  // Port-only PIRN: any converted Remastered electric, ELSM-form ones included.
+  bool xPortIrnd = false;
   CIntElement* xPortSIDE = nullptr;
   CIntElement* xPortLWQD = nullptr;
   CIntElement* xPortNFOM = nullptr;
