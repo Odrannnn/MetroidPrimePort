@@ -157,6 +157,12 @@ Java_org_metroidprime_port_TouchControlsView_nativeTouchButtonActions(JNIEnv* en
   return out;
 }
 
+// Changes when nativeTouchButtonActions' list may have (controls.toml loaded or edited).
+extern "C" JNIEXPORT jlong JNICALL
+Java_org_metroidprime_port_TouchControlsView_nativeTouchButtonActionsVersion(JNIEnv*, jclass) {
+  return static_cast< jlong >(PortInputDevices::UserBindingsVersion());
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_org_metroidprime_port_TouchControlsView_nativeVirtualAxis(JNIEnv*, jclass, jint axis,
                                                                jfloat value) {
