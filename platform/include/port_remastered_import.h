@@ -156,7 +156,9 @@ inline constexpr int kTextures = 5;
 // 29: the Puffer (E7CDBAF2) is paired with its CHPR's plain skin 5a42cd1b, not Metal.Skin 36d02b0c.
 // 30: the Puffer's Metal.Skin is imported as variant 1 of its ANCS (8DC8052E), for the Tower of
 //     Light's puffers.
-inline constexpr int kModels = 30;
+// 31: retail CMDL E4C4F3CA (the Omega fight's Phazon healing nodule, ANCS 7C26C9EE) is in the
+//     table, paired with dfa19c72, the skinned model of its CHPR.
+inline constexpr int kModels = 31;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.
