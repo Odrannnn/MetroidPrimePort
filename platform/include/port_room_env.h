@@ -783,6 +783,7 @@ struct Convergence {
 // target. A new CStateManager starts over (Reset); doors and area loads do not.
 struct ExposureAverage {
   float L = -1.f;
+  float rgb[3] = {}; // the readback L came from (roomenv info)
   bool created = false;
   Convergence ev;
   float sigma = -1.f;

@@ -1469,7 +1469,8 @@ void TestEnvVars() {
 
 // CPostFXManager::UpdateTonemapping 0xaffb18: L from the readback, and the start.
 void TestExposureAverage() {
-  constexpr float kGrey = 0.2158605f;
+  // pow(128 / 255, 2.2): Remastered's SRGB_To_Linear 0x12c394 is a plain 2.2 power
+  constexpr float kGrey = 0.2195197f;
   PortRoomEnv::ExposureAverage e;
   float target = 0.f;
   CHECK_MSG(e.L == -1.f && !e.created, "exposure average: starts without a measurement");

@@ -2772,13 +2772,14 @@ void Stats(int& areas, int& probes, int& cubes, int& grids) {
 
 std::string Info(const float pos[3]) {
   std::string out;
-  char line[320];
+  char line[400];
   if (sFrame.started) {
     const FrameState& f = sFrame;
     std::snprintf(line, sizeof(line),
-                  "frame: EV %g towards %g (L %g, %s), exposure %g, sigma %g, measurement %u%s, tone EV %g mid %g "
-                  "contrast %g toe %g shoulder %g, static EV %g (glow x%g)\n",
-                  f.ev, f.targetEv, sAverage.L, sAverage.created ? "Gaussian" : "tonemap EV", f.exposure,
+                  "frame: EV %g towards %g (L %g of %g %g %g, %s), exposure %g, sigma %g, measurement %u%s, tone EV "
+                  "%g mid %g contrast %g toe %g shoulder %g, static EV %g (glow x%g)\n",
+                  f.ev, f.targetEv, sAverage.L, sAverage.rgb[0], sAverage.rgb[1], sAverage.rgb[2],
+                  sAverage.created ? "Gaussian" : "tonemap EV", f.exposure,
                   sAverage.sigma, sAverage.serial,
                   f.measuring ? " (measuring)" : "", f.shown[0], f.shown[1], f.shown[2], f.shown[3], f.shown[4],
                   f.shown[5], GlowScale());

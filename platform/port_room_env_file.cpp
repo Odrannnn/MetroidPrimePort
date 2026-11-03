@@ -1636,12 +1636,14 @@ void ExposureAverage::Reset() {
 }
 
 void ExposureAverage::Take(const float rgb[3]) {
+  std::copy(rgb, rgb + 3, this->rgb);
   L = std::max(std::max(rgb[0], rgb[1]), rgb[2]);
 }
 
 float ExposureAverage::Update(bool hint, float tonemapEv, float lo, float hi, float bias, float s, bool snap,
                               int steps, float* target) {
-  constexpr float kGrey = 0.2158605f; // sRGB 128, linear
+  // Remastered's SRGB_To_Linear (0x12c394) is pow(x, 2.2), not the sRGB curve: 128/255 -> 0.21952
+  constexpr float kGrey = 0.2195197f;
   if (!hint || !(L >= 0.f)) {
     *target = tonemapEv;
     return tonemapEv;
