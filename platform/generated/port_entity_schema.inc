@@ -1072,8 +1072,9 @@ template <> const PortSchemaClass& PortEntitySchema::Describe< CFishCloud >() {
       {"x250_29_repelFromThreats", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CFishCloud, x250_29_repelFromThreats), PES_SETI(CFishCloud, x250_29_repelFromThreats)},
       {"x250_30_enablePlayerRepelDamping", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CFishCloud, x250_30_enablePlayerRepelDamping), PES_SETI(CFishCloud, x250_30_enablePlayerRepelDamping)},
       {"x250_31_updateWithoutPartitions", "bool", PortSchemaKind::bitfield, 1, kPortSchemaPrivate, 0, nullptr, PES_GETI(CFishCloud, x250_31_updateWithoutPartitions), PES_SETI(CFishCloud, x250_31_updateWithoutPartitions)},
+      {"xPortSwim", "PortRoomEffects::FishCloud *", PortSchemaKind::pointer, 0, kPortSchemaPrivate, sizeof(CFishCloud::xPortSwim), PES_ADDR(CFishCloud, xPortSwim), nullptr, nullptr},
   };
-  static const PortSchemaClass desc = {"CFishCloud", "CActor", fields, 43, 0x40386ABAAF50757Dull};
+  static const PortSchemaClass desc = {"CFishCloud", "CActor", fields, 44, 0x165360158483434Cull};
   return desc;
 }
 template <> const PortSchemaClass& PortEntitySchema::Describe< CFishCloudModifier >() {
@@ -4703,4 +4704,4 @@ const PortSchemaClass* const* PortEntitySchema::Classes(int& count) {
 }
 
 const int PortEntitySchema::kClassCount = 159;
-const int PortEntitySchema::kFieldCount = 3429;
+const int PortEntitySchema::kFieldCount = 3430;

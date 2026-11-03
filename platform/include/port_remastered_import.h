@@ -324,7 +324,8 @@ inline constexpr int kEffects = 227;   // PIRN marks every converted electric
 // ones one Remastered link activates, is replaced (the Reactor's Smoke'n'Sparks drew twice).
 // 82: roomfx v17, retail effects Remastered dropped are hidden.
 // 83: retail Generator templates Remastered's GeneratorMP1 dropped are skipped.
-inline constexpr int kRooms = 83;
+// 84: roomfx v18, FishCloudMP1's swim properties (speed variance, turning, darting, wobble).
+inline constexpr int kRooms = 84;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

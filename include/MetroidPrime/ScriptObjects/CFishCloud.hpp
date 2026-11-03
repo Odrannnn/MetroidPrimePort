@@ -11,6 +11,12 @@
 #include "rstl/reserved_vector.hpp"
 #include "rstl/vector.hpp"
 
+#ifdef TARGET_PC
+namespace PortRoomEffects {
+struct FishCloud;
+}
+#endif
+
 class CFishCloud : public CActor {
   friend struct PortEntitySchema; // save-state field schema (platform/include/port_entity_schema.h)
 public:
@@ -40,6 +46,11 @@ public:
   bool AddAttractor(TUniqueId source, const bool swirl, float radius, float priority);
   void RemoveRepulsor(TUniqueId source);
   void RemoveAttractor(TUniqueId source);
+#ifdef TARGET_PC
+  // Port: swim like Remastered's FishCloudMP1, from the one a mod's .roomfx paired with this
+  // object (PortRoomEffects::FindFishCloud). Call before the cloud is registered.
+  void PortSetSwim(const PortRoomEffects::FishCloud& swim);
+#endif
 
 private:
   class CModifierSource {
@@ -69,6 +80,17 @@ private:
     float x18_scale;
     CBoid* x1c_next;
     bool x20_active;
+#ifdef TARGET_PC
+    // Remastered's CFishCloudMP1::CBoid swimming state (only with xPortSwim): the facing that
+    // turns toward the velocity, the boid's own speed (base, current, this frame's), the dart
+    // timer and the wobble phase.
+    CVector3f xPort_heading;
+    float xPort_baseSpeed;
+    float xPort_curSpeed;
+    float xPort_frameSpeed;
+    float xPort_dartTimer;
+    float xPort_wobblePhase;
+#endif
 
   public:
     CBoid(const CVector3f& pos, const CVector3f& vel, float scale);
@@ -154,6 +176,11 @@ private:
   bool x250_29_repelFromThreats : 1;
   bool x250_30_enablePlayerRepelDamping : 1;
   bool x250_31_updateWithoutPartitions : 1;
+#ifdef TARGET_PC
+  PortRoomEffects::FishCloud* xPortSwim = nullptr;
+  void PortSwim(float dt, CStateManager& mgr, const CAABox& bounds);
+  CTransform4f PortBoidTransform(const CBoid& boid) const;
+#endif
 };
 CHECK_SIZEOF(CFishCloud, (VERSION >= VERSION_GM8P_00 ? 0x268 : 0x258))
 

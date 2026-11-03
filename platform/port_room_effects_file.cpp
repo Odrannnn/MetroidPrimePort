@@ -341,7 +341,8 @@ std::vector<uint8_t> Write(const File& file) {
   PutLE32(out, kFileMagic);
   const bool placements = std::any_of(file.overrides.begin(), file.overrides.end(),
                                     [](const Override& o) { return o.hasPlacement; });
-  const bool hidden = !file.hidden.empty();
+  const bool fishClouds = !file.fishClouds.empty();
+  const bool hidden = fishClouds || !file.hidden.empty();
   const bool ambients = hidden || !file.ambients.empty();
   const bool relays = ambients || !file.relays.empty();
   const bool triggers = relays || !file.triggers.empty();
@@ -354,7 +355,7 @@ std::vector<uint8_t> Write(const File& file) {
   const bool steams = actorSlots || !file.steams.empty();
   const bool patches = steams || !file.patches.empty();
   const bool patterned = patches || !file.patterned.empty();
-  PutLE32(out, hidden ? 17 : ambients ? 16 : relays ? 15 : triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
+  PutLE32(out, fishClouds ? 18 : hidden ? 17 : ambients ? 16 : relays ? 15 : triggers ? 14 : follows ? 13 : timers ? 12 : generators ? 11 : drives ? 10 : actorSlots ? 9 : steams ? 8 : patches ? 7 : patterned ? 6 : placements ? 5 : 4);
   PutLE32(out, uint32_t(file.skips.size()));
   for (uint32_t id : file.skips) {
     PutLE32(out, id);
@@ -550,6 +551,18 @@ std::vector<uint8_t> Write(const File& file) {
     PutLE32(out, uint32_t(file.hidden.size()));
     for (uint32_t id : file.hidden) {
       PutLE32(out, id);
+    }
+  }
+  if (fishClouds) {
+    PutLE32(out, uint32_t(file.fishClouds.size()));
+    for (const FishCloud& f : file.fishClouds) {
+      PutLE32(out, f.id);
+      for (float v : {f.speedVariance, f.turn[0], f.turn[1], f.slowAngle[0], f.slowAngle[1], f.dartInterval[0],
+                      f.dartInterval[1], f.minSpeed, f.speedDecay, f.dartCone, f.wobblePivot, f.wobbleAngle,
+                      f.wobbleLength}) {
+        PutLEFloat(out, v);
+      }
+      PutLE32(out, f.flags);
     }
   }
   return out;
@@ -1119,6 +1132,33 @@ bool Parse(const std::vector<uint8_t>& data, File& out, std::string& error) {
         return false;
       }
       file.hidden.push_back(id);
+    }
+  }
+  if (version >= 18) {
+    constexpr size_t kFishCloudBytes = 4 * (1 + 13 + 1);
+    uint32_t count = 0;
+    if (!ReadLE32(data, at, count) || count > (data.size() - at) / kFishCloudBytes) {
+      error = "truncated fish clouds";
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      FishCloud f;
+      ReadLE32(data, at, f.id);
+      bool finite = true;
+      for (float* v : {&f.speedVariance, &f.turn[0], &f.turn[1], &f.slowAngle[0], &f.slowAngle[1],
+                       &f.dartInterval[0], &f.dartInterval[1], &f.minSpeed, &f.speedDecay, &f.dartCone,
+                       &f.wobblePivot, &f.wobbleAngle, &f.wobbleLength}) {
+        uint32_t bits = 0;
+        ReadLE32(data, at, bits);
+        std::memcpy(v, &bits, 4);
+        finite = finite && std::isfinite(*v);
+      }
+      ReadLE32(data, at, f.flags);
+      if (IsAddOnId(f.id) || !finite || (f.flags & ~kFishCloudFlags) != 0) {
+        error = "invalid fish cloud " + std::to_string(i);
+        return false;
+      }
+      file.fishClouds.push_back(f);
     }
   }
   auto isTrigger = [&](uint32_t id) {

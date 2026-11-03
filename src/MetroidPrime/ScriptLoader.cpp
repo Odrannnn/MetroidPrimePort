@@ -2874,7 +2874,7 @@ CEntity* ScriptLoader::LoadFishCloud(CStateManager& mgr, CInputStream& in, int p
   bool repelFromThreats = in.ReadBool();
   bool hotInThermal = in.ReadBool();
 
-  return rs_new CFishCloud(
+  CFishCloud* const cloud = rs_new CFishCloud(
       mgr.AllocateUniqueId(), active, head.x0_actorHead.x0_name, info, head.x40_scale,
       head.x0_actorHead.x10_transform, CModelData(CStaticRes(model, CVector3f(1.f, 1.f, 1.f))),
       CAnimRes(ancsFile, charIdx, CVector3f(1.f, 1.f, 1.f), defaultAnim, true), numBoids, speed,
@@ -2883,6 +2883,14 @@ CEntity* ScriptLoader::LoadFishCloud(CStateManager& mgr, CInputStream& in, int p
       weaponRepelDampingSpeed, playerRepelDampingSpeed, containmentRadius, updateShift, color,
       killable, weaponKillRadius, part1, partCount1, part2, partCount2, part3, partCount3, part4,
       partCount4, deathSfx, repelFromThreats, hotInThermal);
+#ifdef TARGET_PC
+  // PORT: a FishCloud a mod's Remastered FishCloudMP1 matched swims like it (port_room_effects.h).
+  if (const PortRoomEffects::FishCloud* const rm =
+          PortRoomEffects::FindFishCloud(info.GetEditorId().value)) {
+    cloud->PortSetSwim(*rm);
+  }
+#endif
+  return cloud;
 }
 
 CEntity* ScriptLoader::LoadFishCloudModifier(CStateManager& mgr, CInputStream& in, int propCount,

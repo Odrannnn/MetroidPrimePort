@@ -1120,6 +1120,26 @@ constexpr uint32_t kPropSteamI = 0x6b6d170d;
 constexpr uint32_t kPropSteamColorFlag = 0x1c983b7f;
 // The link CScriptSteamMP1 averages its source position over (its constructor's EScriptLink).
 constexpr uint32_t kSteamSourceLink = 0x2ae68d05;
+// FishCloudMP1 (retail FishCloud, 0x4f) and the SLdrFishCloudMP1 properties port_room_effects.h
+// FishCloud takes (SLdrFishCloudMP1::Load 0xed64f8). The three MinMaxes are SLdrMinMaxDouble
+// (two floats, min dc3a1851 and max 5db27c90).
+constexpr uint32_t kFishCloudMP1 = 0x4e8a3ce2;
+constexpr uint32_t kPropFishSpeedVariance = 0x1b365802;
+constexpr uint32_t kPropFishTurn = 0x66317b1a;
+constexpr uint32_t kPropFishSlowAngle = 0x9f7a5320;
+constexpr uint32_t kPropFishDartInterval = 0x36a7a73d;
+constexpr uint32_t kPropFishMinSpeed = 0x80e236bf;
+constexpr uint32_t kPropFishSpeedDecay = 0x0ce12e2e;
+constexpr uint32_t kPropFishDartCone = 0x91989ec8;
+constexpr uint32_t kPropFishWobblePivot = 0xd197d04b;
+constexpr uint32_t kPropFishWobbleAngle = 0x5fc25d67;
+constexpr uint32_t kPropFishWobbleLength = 0xdc0c1975;
+constexpr uint32_t kPropFishSmoothTurn = 0x85287746;
+constexpr uint32_t kPropFishSlowOnTurn = 0x881fece8;
+constexpr uint32_t kPropFishDart = 0xb6bd9c54;
+constexpr uint32_t kPropFishWobble = 0xbe336d94;
+constexpr uint32_t kPropMinMaxMin = 0xdc3a1851;
+constexpr uint32_t kPropMinMaxMax = 0x5db27c90;
 constexpr uint32_t kPrimeData = 0x7e3d43f5;  // SLdrMetroidPrimeData_MP1Typedef
 constexpr PartSlot kPartSlots[] = {
     // CScriptWater: splash particles 1-3, visor runoff, unmorph visor runoff
@@ -2323,12 +2343,70 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
       steams.push_back(std::move(s));
     }
   }
-  char steamNote[160] = "";
+  // A paired FishCloud's Remastered swimming (port_room_effects.h FishCloud).
+  std::vector<PortRoomEffects::FishCloud> fishClouds;
+  size_t fishUnpaired = 0;
+  for (size_t ci = 0; ci < comps.size(); ++ci) {
+    const Component& c = comps[ci];
+    if (c.type != kFishCloudMP1) {
+      continue;
+    }
+    const auto matched = c.entity >= 0 ? scripts.retail.find(c.entity) : scripts.retail.end();
+    if (matched == scripts.retail.end() || matched->second >= objects.size() ||
+        objects[matched->second].type != 0x4f) {
+      ++fishUnpaired;
+      continue;
+    }
+    const auto f = room.Flat(c);
+    PortRoomEffects::FishCloud fc;
+    fc.id = objects[matched->second].id;
+    for (const auto& [id, value] :
+         {std::pair{kPropFishSpeedVariance, &fc.speedVariance}, std::pair{kPropFishMinSpeed, &fc.minSpeed},
+          std::pair{kPropFishSpeedDecay, &fc.speedDecay}, std::pair{kPropFishDartCone, &fc.dartCone},
+          std::pair{kPropFishWobblePivot, &fc.wobblePivot}, std::pair{kPropFishWobbleAngle, &fc.wobbleAngle},
+          std::pair{kPropFishWobbleLength, &fc.wobbleLength}}) {
+      const auto it = f.find(id);
+      if (it != f.end() && it->second.size == 4) {
+        *value = ReadLEFloat(room.Bytes(it->second));
+      }
+    }
+    for (const auto& [id, value] : {std::pair{kPropFishTurn, fc.turn}, std::pair{kPropFishSlowAngle, fc.slowAngle},
+                                    std::pair{kPropFishDartInterval, fc.dartInterval}}) {
+      for (int k = 0; k < 2; ++k) {
+        const uint32_t path[4] = {id, k == 0 ? kPropMinMaxMin : kPropMinMaxMax};
+        Span at{};
+        if (room.Nested(c, path, 2, at) && at.size == 4) {
+          value[k] = ReadLEFloat(room.Bytes(at));
+        }
+      }
+    }
+    for (const auto& [id, flag] : {std::pair{kPropFishSmoothTurn, PortRoomEffects::kFishCloudSmoothTurn},
+                                   std::pair{kPropFishSlowOnTurn, PortRoomEffects::kFishCloudSlowOnTurn},
+                                   std::pair{kPropFishDart, PortRoomEffects::kFishCloudDart},
+                                   std::pair{kPropFishWobble, PortRoomEffects::kFishCloudWobble}}) {
+      const auto it = f.find(id);
+      if (it != f.end() && it->second.size >= 1) {
+        fc.flags = room.Bytes(it->second)[0] != 0 ? fc.flags | flag : fc.flags & ~flag;
+      }
+    }
+    const float* values[] = {&fc.speedVariance, fc.turn, fc.turn + 1, fc.slowAngle, fc.slowAngle + 1,
+                             fc.dartInterval, fc.dartInterval + 1, &fc.minSpeed, &fc.speedDecay, &fc.dartCone,
+                             &fc.wobblePivot, &fc.wobbleAngle, &fc.wobbleLength};
+    if (std::all_of(std::begin(values), std::end(values), [](const float* v) { return std::isfinite(*v); })) {
+      fishClouds.push_back(fc);
+    }
+  }
+  char steamNote[224] = "";
   if (!steams.empty() || steamUnpaired != 0) {
     std::snprintf(steamNote, sizeof steamNote,
                   ", %zu Remastered steam(s) (%zu without a PART, %zu unpaired), %zu steam source(s) (%zu on a "
                   "retail object)",
                   steams.size(), steamNoPart, steamUnpaired, steamSources, steamSourcesPaired);
+  }
+  if (!fishClouds.empty() || fishUnpaired != 0) {
+    const size_t at = std::strlen(steamNote);
+    std::snprintf(steamNote + at, sizeof steamNote - at, ", %zu fish cloud(s) (%zu unpaired)", fishClouds.size(),
+                  fishUnpaired);
   }
   char patternedNote[224] = "";
   if (!patterned.empty() || patternedNoPart != 0 || !patches.empty() || patchNoPart != 0 || !actorSlots.empty() ||
@@ -2413,7 +2491,7 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
     summary += "; hidden:" + unpaired;
   }
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
-      steams.empty() && actorSlots.empty() && follows.empty() && hidden.empty()) {
+      steams.empty() && actorSlots.empty() && follows.empty() && hidden.empty() && fishClouds.empty()) {
     return summary;
   }
   PortRoomEffects::File file;
@@ -2435,6 +2513,7 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   file.follows = std::move(follows);
   file.ambients = std::move(ambients);
   file.hidden = std::move(hidden);
+  file.fishClouds = std::move(fishClouds);
   if (group) {
     PortRoomEffects::BarrierGroup barrierGroup;
     barrierGroup.controller = PortQueenBarrier::kController;

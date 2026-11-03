@@ -334,6 +334,18 @@ const Steam* FindSteam(uint32_t eid) {
   return nullptr;
 }
 
+const FishCloud* FindFishCloud(uint32_t eid) {
+  if (!sLoading) {
+    return nullptr;
+  }
+  for (const FishCloud& f : sFile.fishClouds) {
+    if ((f.id & 0x3FFFFFF) == (eid & 0x3FFFFFF)) {
+      return &f;
+    }
+  }
+  return nullptr;
+}
+
 const ActorSlotEffect* FindActorSlotEffect(uint32_t eid, uint32_t slot) {
   if (!sLoading) {
     return nullptr;

@@ -88,10 +88,14 @@ struct SPortExternalVar;  // Kyoto/Particles/CPortParticleVars.hpp
 //   objects Remastered has no effect for that other objects still talk through. They are
 //   created, with their connections, but draw nothing and light nothing. Files without them
 //   are still written as version 16 or older.
+//   version 18 then has u32 fish clouds, then per record: u32 editor id (layer bits included),
+//   f32 speed variance, f32 turn[2], f32 slow angle[2], f32 dart interval[2], f32 min speed,
+//   f32 speed decay, f32 dart cone, f32 wobble pivot, f32 wobble angle, f32 wobble length, u32
+//   flags (see FishCloud). Files without them are still written as version 17 or older.
 namespace PortRoomEffects {
 
 constexpr uint32_t kFileMagic = 0x4652504D;  // 'MPRF'
-constexpr uint32_t kFileVersion = 17;
+constexpr uint32_t kFileVersion = 18;
 constexpr uint32_t kMaxSteamSplineBytes = 0x1000;
 constexpr uint32_t kMaxSteamSources = 64;
 constexpr uint32_t kMaxPatchOffset = 0x10000;
@@ -407,6 +411,40 @@ struct Ambient {
   std::vector<AmbientShape> shapes;
 };
 
+// A retail FishCloud the script matcher paired with a Remastered FishCloudMP1: its boids swim as
+// CFishCloudMP1's do (AcceptScriptMsg 0xdedff8, Think 0xdeea94, Render 0xdf0ac8). Each boid
+// gets its own speed, speed +- variance/2; it turns its heading toward its velocity at most
+// `turn` degrees a second (from turn[0] at full speed to turn[1] at min speed) with
+// kFishCloudSmoothTurn, else takes it at once; with kFishCloudSlowOnTurn it slows toward
+// `minSpeed` as its velocity leaves its heading (full speed inside slowAngle[0] degrees,
+// minSpeed outside slowAngle[1]); with kFishCloudDart it loses speedDecay a second and every
+// dartInterval seconds (at random between the two) gets back its own speed and a kick within
+// dartCone degrees of its velocity; with kFishCloudWobble its model swings wobbleAngle degrees
+// (scaled by its speed) about a point wobblePivot along it, a cycle every wobbleLength units
+// it swims. The properties are SLdrFishCloudMP1's (defaults when the instance leaves them
+// out): variance 1b365802, turn 66317b1a, slow angle 9f7a5320, dart interval 36a7a73d (each a
+// MinMax), min speed 80e236bf, decay 0ce12e2e, cone 91989ec8, pivot d197d04b, angle 5fc25d67,
+// length dc0c1975, the flags 85287746, 881fece8, b6bd9c54, be336d94.
+constexpr uint32_t kFishCloudSmoothTurn = 1;
+constexpr uint32_t kFishCloudSlowOnTurn = 2;
+constexpr uint32_t kFishCloudDart = 4;
+constexpr uint32_t kFishCloudWobble = 8;
+constexpr uint32_t kFishCloudFlags = 15;
+struct FishCloud {
+  uint32_t id = 0;
+  float speedVariance = 0.f;
+  float turn[2] = {0, 0};
+  float slowAngle[2] = {0, 0};
+  float dartInterval[2] = {0, 0};
+  float minSpeed = 0.1f;
+  float speedDecay = 0.15f;
+  float dartCone = 45.f;
+  float wobblePivot = 0.1f;
+  float wobbleAngle = 15.f;
+  float wobbleLength = 0.8f;
+  uint32_t flags = kFishCloudSmoothTurn;
+};
+
 struct File {
   std::vector<uint32_t> skips;
   uint32_t connected = 0;
@@ -425,6 +463,7 @@ struct File {
   std::vector<Relay> relays;
   std::vector<Ambient> ambients;
   std::vector<uint32_t> hidden;
+  std::vector<FishCloud> fishClouds;
 };
 
 // Appends the effect as one SCLY object. Its light parameters are retail's most common
@@ -465,6 +504,8 @@ const Override* FindOverride(uint32_t eid);
 const PatternedEffect* FindPatternedEffect(uint32_t eid, uint32_t slot);
 // The steam record of the retail Steam object `eid` in the area being loaded, or null.
 const Steam* FindSteam(uint32_t eid);
+// The fish cloud record of the retail FishCloud object `eid` in the area being loaded, or null.
+const FishCloud* FindFishCloud(uint32_t eid);
 // The actor slot effect `slot` (ActorSlotEffect) of the retail object `eid` in the area being
 // loaded, or null.
 const ActorSlotEffect* FindActorSlotEffect(uint32_t eid, uint32_t slot);

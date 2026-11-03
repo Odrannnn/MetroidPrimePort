@@ -95,7 +95,7 @@ void TestFile() {
   bad[4] = 9;
   CHECK_MSG(!PortRoomEffects::Parse(bad, out, error), "version");
   // Write writes version 4 with no barriers, placements or patterned records.
-  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 17);
+  CHECK(data[4] == 4 && data[5] == 0 && PortRoomEffects::kFileVersion == 18);
 
   // An object outside the add-on range, or on another layer than its own, is refused.
   File wrong;
@@ -738,6 +738,39 @@ void TestFileAmbients() {
   REQUIRE(PortRoomEffects::Write(f)[4] == 17);
   REQUIRE_MSG(PortRoomEffects::Parse(PortRoomEffects::Write(f), out, error), error.c_str());
   CHECK(out.hidden == f.hidden && out.ambients.empty());
+
+  // Version 18 adds FishClouds' Remastered swimming; the hidden list rides along.
+  PortRoomEffects::FishCloud fc;
+  fc.id = 0x041A0021;
+  fc.speedVariance = 0.5f;
+  fc.turn[0] = 30.f;
+  fc.turn[1] = 90.f;
+  fc.slowAngle[1] = 60.f;
+  fc.dartInterval[0] = 1.f;
+  fc.dartInterval[1] = 3.f;
+  fc.wobbleLength = 2.f;
+  fc.flags = PortRoomEffects::kFishCloudDart | PortRoomEffects::kFishCloudWobble;
+  f.fishClouds = {fc, PortRoomEffects::FishCloud{0x04190035}};
+  const auto withFish = PortRoomEffects::Write(f);
+  REQUIRE(withFish[4] == 18);
+  REQUIRE_MSG(PortRoomEffects::Parse(withFish, out, error), error.c_str());
+  REQUIRE(out.fishClouds.size() == 2 && out.hidden == f.hidden);
+  const PortRoomEffects::FishCloud& g = out.fishClouds[0];
+  CHECK(g.id == fc.id && g.speedVariance == 0.5f && g.turn[0] == 30.f && g.turn[1] == 90.f &&
+        g.slowAngle[0] == 0.f && g.slowAngle[1] == 60.f && g.dartInterval[1] == 3.f && g.minSpeed == 0.1f &&
+        g.wobbleLength == 2.f && g.flags == fc.flags);
+  CHECK(out.fishClouds[1].id == 0x04190035 && out.fishClouds[1].flags == PortRoomEffects::kFishCloudSmoothTurn);
+  cut = withFish;
+  cut.resize(cut.size() - 4);
+  CHECK_MSG(!PortRoomEffects::Parse(cut, out, error), "a truncated fish cloud");
+  auto refusedFish = [&](auto change, const char* what) {
+    File x = f;
+    change(x.fishClouds[0]);
+    CHECK_MSG(!PortRoomEffects::Parse(PortRoomEffects::Write(x), out, error), what);
+  };
+  refusedFish([&](PortRoomEffects::FishCloud& x) { x.id = a; }, "a fish cloud add-on");
+  refusedFish([](PortRoomEffects::FishCloud& x) { x.wobbleAngle = NAN; }, "a NaN fish cloud");
+  refusedFish([](PortRoomEffects::FishCloud& x) { x.flags = 16; }, "an unknown fish cloud flag");
 }
 
 // Version 13 adds ObjectFollowLocators: a retail SpecialFunction that moves one of this file's

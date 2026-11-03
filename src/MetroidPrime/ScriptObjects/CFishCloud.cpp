@@ -6,6 +6,8 @@
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "Kyoto/CSimplePool.hpp"
 #include "Kyoto/Math/CMath.hpp"
+#include "Kyoto/Math/CQuaternion.hpp"
+#include "Kyoto/Math/CRelAngle.hpp"
 #include "Kyoto/Math/CUnitVector3f.hpp"
 #include "Kyoto/Math/CloseEnough.hpp"
 #include "MetaRender/CCubeRenderer.hpp"
@@ -14,6 +16,7 @@
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/TCastTo.hpp"
 #include "port_debug.h"
+#include "port_room_effects.h"
 
 #include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
@@ -113,7 +116,21 @@ bool CFishCloud::CModifierSource::operator<(const CModifierSource& other) const 
 }
 
 CFishCloud::CBoid::CBoid(const CVector3f& pos, const CVector3f& vel, float scale)
-: x0_pos(pos), xc_vel(vel), x18_scale(scale), x1c_next(nullptr), x20_active(true) {}
+: x0_pos(pos)
+, xc_vel(vel)
+, x18_scale(scale)
+, x1c_next(nullptr)
+, x20_active(true)
+#ifdef TARGET_PC
+, xPort_heading(0.f, 1.f, 0.f)
+, xPort_baseSpeed(0.f)
+, xPort_curSpeed(0.f)
+, xPort_frameSpeed(0.f)
+, xPort_dartTimer(0.f)
+, xPort_wobblePhase(0.f)
+#endif
+{
+}
 
 CFishCloud::CFishCloud(TUniqueId uid, const bool active, const rstl::string& name,
                        const CEntityInfo& info, const CVector3f& scale, const CTransform4f& xf,
@@ -317,6 +334,36 @@ void CFishCloud::AcceptScriptMsg(EScriptObjectMessage msg, TUniqueId sender, CSt
     CRandom16& random = *mgr.Random();
     const CVector3f& min = bounds.GetMinPoint();
     for (int i = 0; i < xe8_boids.capacity(); ++i) {
+#ifdef TARGET_PC
+      if (xPortSwim) {
+        // CFishCloudMP1's boid creation: each boid draws its own speed between the position
+        // and the velocity, faces its velocity, and starts its dart timer and wobble phase.
+        const PortRoomEffects::FishCloud& swim = *xPortSwim;
+        const float px = random.Float();
+        const float py = random.Float();
+        const float pz = random.Float();
+        const CVector3f pos(px * bounds.GetWidth() + min[kDX], py * bounds.GetHeight() + min[kDY],
+                            pz * bounds.GetDepth() + min[kDZ]);
+        const float base = x130_speed + swim.speedVariance * (random.Float() - 0.5f);
+        const float vx = random.Float() - 0.5f;
+        const float vy = random.Float() - 0.5f;
+        const float scale = 0.2f * CMath::PowF(random.Float(), 7.f) + 0.9f;
+        CBoid boid(GetTransform() * pos, CVector3f(vx, vy, 0.f), scale);
+        if (boid.xc_vel.CanBeNormalized()) {
+          boid.xPort_heading = boid.xc_vel.AsNormalized();
+        }
+        boid.xPort_baseSpeed = boid.xPort_curSpeed = boid.xPort_frameSpeed = base;
+        if (swim.flags & PortRoomEffects::kFishCloudDart) {
+          boid.xPort_dartTimer =
+              swim.dartInterval[0] + (swim.dartInterval[1] - swim.dartInterval[0]) * random.Float();
+        }
+        if (swim.flags & PortRoomEffects::kFishCloudWobble) {
+          boid.xPort_wobblePhase = random.Float();
+        }
+        xe8_boids.push_back(boid);
+        continue;
+      }
+#endif
       const CVector3f pos(random.Float() * bounds.GetWidth() + min[kDX],
                           random.Float() * bounds.GetHeight() + min[kDY],
                           random.Float() * bounds.GetDepth() + min[kDZ]);
@@ -490,6 +537,11 @@ void CFishCloud::Think(float dt, CStateManager& mgr) {
     x12c_randomMovementTimer = 0.f;
     x250_24_randomMovement = false;
   }
+#ifdef TARGET_PC
+  if (xPortSwim) {
+    PortSwim(dt, mgr, bounds);
+  } else
+#endif
   for (AUTO(it, xe8_boids.begin()); it != xe8_boids.end(); ++it) {
     if (it->x20_active) {
       it->x0_pos += x130_speed * (dt * it->xc_vel);
@@ -530,6 +582,12 @@ void CFishCloud::RenderBoid(int idx, const CBoid& boid, uint& drawMask, const bo
     model.Calculate(animData.GetPose(), rstl::optional_object< CVertexMorphEffect >(), nullptr,
                     x178_posWorkspaces[modelIndex].get());
   }
+#ifdef TARGET_PC
+  // CFishCloudMP1 faces an animated boid along its turning heading; no scale, no wobble.
+  if (xPortSwim) {
+    gpRender->SetModelMatrix(CTransform4f::LookAt(boid.x0_pos, boid.x0_pos + boid.xPort_heading));
+  } else
+#endif
   gpRender->SetModelMatrix(CTransform4f::LookAt(boid.x0_pos, boid.x0_pos + boid.xc_vel));
   const float* const positions = x178_posWorkspaces[modelIndex].get();
   const float* const normals = x19c_nrmWorkspaces[modelIndex];
@@ -582,6 +640,12 @@ void CFishCloud::Render(const CStateManager& mgr) const {
     for (AUTO(it, xe8_boids.begin()); it != xe8_boids.end(); ++it) {
       if (it->x20_active) {
         modelData.SetScale(CVector3f(it->x18_scale, it->x18_scale, it->x18_scale));
+#ifdef TARGET_PC
+        if (xPortSwim) {
+          modelData.Render(mgr, PortBoidTransform(*it), nullptr, flags);
+          continue;
+        }
+#endif
         modelData.Render(mgr, CTransform4f::LookAt(it->x0_pos, it->x0_pos + it->xc_vel), nullptr,
                          flags);
       }
@@ -915,4 +979,106 @@ void CFishCloud::RenderParticles() const {
   }
 }
 
-CFishCloud::~CFishCloud() {}
+CFishCloud::~CFishCloud() {
+#ifdef TARGET_PC
+  delete xPortSwim;
+#endif
+}
+
+#ifdef TARGET_PC
+void CFishCloud::PortSetSwim(const PortRoomEffects::FishCloud& swim) {
+  delete xPortSwim;
+  xPortSwim = new PortRoomEffects::FishCloud(swim);
+}
+
+// CFishCloudMP1::Think's last pass over the boids, after containment has normalised each
+// velocity: darts (a speed burst and a kick inside a cone around the facing), slowing on sharp
+// turns, the heading turning toward the velocity at a speed-dependent rate, the move at the
+// boid's own speed, and the wobble phase advancing by distance swum.
+void CFishCloud::PortSwim(float dt, CStateManager& mgr, const CAABox& bounds) {
+  const PortRoomEffects::FishCloud& swim = *xPortSwim;
+  const uint32_t flags = swim.flags;
+  CRandom16& random = *mgr.Random();
+  const float cosA = CMath::FastCosR(swim.slowAngle[0] * 0.017453292f);
+  const float cosB = CMath::FastCosR(swim.slowAngle[1] * 0.017453292f);
+  const float invSlow = cosA > cosB ? 1.f / (cosA - cosB) : 0.f;
+  const float invLength = fabsf(swim.wobbleLength) >= 1e-5f ? 1.f / swim.wobbleLength : 0.f;
+  for (AUTO(it, xe8_boids.begin()); it != xe8_boids.end(); ++it) {
+    if (!it->x20_active) {
+      continue;
+    }
+    CBoid& boid = *it;
+    if (flags & PortRoomEffects::kFishCloudDart) {
+      boid.xPort_dartTimer -= dt;
+      if (boid.xPort_dartTimer < 0.f) {
+        boid.xPort_curSpeed = boid.xPort_baseSpeed;
+        const CTransform4f facing = CTransform4f::LookAt(boid.x0_pos, boid.x0_pos + boid.xc_vel);
+        const float yaw = random.Float() * (2.f * M_PIF);
+        const float pitch = random.Float() * swim.dartCone * 0.017453292f;
+        const CQuaternion kick =
+            CQuaternion::YRotation(CRelAngle(yaw)) * CQuaternion::XRotation(CRelAngle(-pitch));
+        boid.xc_vel += boid.x18_scale * facing.Rotate(kick.Transform(CVector3f(0.f, 1.f, 0.f)));
+        boid.xPort_dartTimer =
+            swim.dartInterval[0] + (swim.dartInterval[1] - swim.dartInterval[0]) * random.Float();
+      } else {
+        boid.xPort_curSpeed -= swim.speedDecay * dt;
+      }
+    }
+    float speed = boid.xPort_curSpeed;
+    if (flags & PortRoomEffects::kFishCloudSlowOnTurn) {
+      const float d = CVector3f::Dot(boid.xc_vel, boid.xPort_heading);
+      if (d < cosB) {
+        speed = swim.minSpeed;
+      } else if (d < cosA) {
+        speed = swim.minSpeed + (speed - swim.minSpeed) * ((d - cosB) * invSlow);
+      }
+    }
+    boid.xPort_frameSpeed = speed;
+    if (boid.xc_vel.CanBeNormalized()) {
+      const CVector3f n = boid.xc_vel.AsNormalized();
+      if (!(flags & PortRoomEffects::kFishCloudSmoothTurn) ||
+          close_enough(boid.xPort_heading, n, 1e-4f)) {
+        boid.xPort_heading = n;
+      } else {
+        float angle = swim.turn[1];
+        if (fabsf(swim.turn[0] - swim.turn[1]) >= 1e-5f) {
+          angle = swim.turn[0] + (swim.turn[1] - swim.turn[0]) *
+                                     (1.f - (speed - swim.minSpeed) /
+                                                (boid.xPort_baseSpeed - swim.minSpeed));
+        }
+        const CQuaternion turn =
+            CQuaternion::LookAt(CUnitVector3f(boid.xPort_heading, CUnitVector3f::kN_No),
+                                CUnitVector3f(n, CUnitVector3f::kN_No),
+                                CRelAngle(angle * 0.017453292f * dt));
+        boid.xPort_heading = turn.Transform(boid.xPort_heading).AsNormalized();
+      }
+    }
+    const float step = speed * dt;
+    boid.x0_pos += step * boid.xc_vel;
+    if (!PointInBox(bounds, boid.x0_pos)) {
+      PlaceBoid(mgr, boid, bounds);
+    }
+    if (flags & PortRoomEffects::kFishCloudWobble) {
+      boid.xPort_wobblePhase = fmodf(boid.xPort_wobblePhase + step * invLength, 1.f);
+    }
+  }
+}
+
+// CFishCloudMP1's static boid: faced along its heading, scaled, and wobbled by a yaw about a
+// pivot ahead of its origin, swinging with the phase and harder the faster it swims. The scale
+// is applied by CModelData::Render, so it is factored out here (it commutes with the yaw).
+CTransform4f CFishCloud::PortBoidTransform(const CBoid& boid) const {
+  const CTransform4f facing =
+      CTransform4f::LookAt(boid.x0_pos, boid.x0_pos + boid.xPort_heading);
+  if (!(xPortSwim->flags & PortRoomEffects::kFishCloudWobble)) {
+    return facing;
+  }
+  const float angle = xPortSwim->wobbleAngle * (boid.xPort_frameSpeed / x130_speed) *
+                      CMath::FastSinR(boid.xPort_wobblePhase * (2.f * M_PIF)) * 0.017453292f;
+  CTransform4f xf = facing * CTransform4f::RotateZ(CRelAngle(angle));
+  const float pivot = boid.x18_scale * xPortSwim->wobblePivot;
+  xf.SetTranslation(facing.GetTranslation() +
+                    pivot * (facing.GetColumn(kDY) - xf.GetColumn(kDY)));
+  return xf;
+}
+#endif
