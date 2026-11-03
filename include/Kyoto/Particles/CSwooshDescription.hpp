@@ -87,6 +87,9 @@ public:
   // one under 3 (CParticleSwoosh::PortIntOrientation)
   std::unique_ptr< CVectorElement > xPortIntRotation;
   bool xPortIntExternal = false;
+  // port-only PSSC: Remastered's PSCL (desc+0x138) in its own numbers, each point's ring scale
+  // along its local X and Y (CParticleSwoosh::SSwooshData::mPortScale)
+  std::unique_ptr< CVectorElement > xPortScale;
   // port-only PDFG: Remastered's DFOG 1, drawn without volumetric fog (CGenDescription::xPortUnfogged)
   bool xPortUnfogged = false;
   // port-only PZTS: Remastered's ZTES 0, the depth test passes everywhere (compare ALWAYS)

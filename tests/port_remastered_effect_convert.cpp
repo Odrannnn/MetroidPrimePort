@@ -1496,6 +1496,26 @@ void TestSwooshBlit() {
   CHECK_MSG(part.part == off.bytes && part.dropped.size() == 1, "swoosh BLIT 1 is a drop");
 }
 
+// A swoosh's PSCL (desc+0x138, CreateSWSH 0x2dbea8) becomes the port-only PSSC in Remastered's
+// numbers: a scale along the ring's local axes, not turned into the port's space.
+void TestSwooshScale() {
+  ConvertedPart part = ConvertSwoosh([](auto& o) {
+    PutProperty(o, "PSCL", 3);
+    PutFourCC(o, "CNST");
+    for (const float c : {0.5f, 2.f, 3.f}) {
+      PutConstant(o, Bits(c));
+    }
+  });
+  Retail want;
+  want.f("SWSH").f("PSSC").f("CNST").f("CNST").w(Bits(0.5f)).f("CNST").w(Bits(2.f)).f("CNST").w(Bits(3.f));
+  want.f("PIRN").f("CNST").w(1).f("PGID").f("CNST").w(0x10000000).f("_END");
+  CHECK_MSG(part.part == want.bytes && part.dropped.empty(), "PSCL CNST(0.5, 2, 3) becomes PSSC unturned");
+  std::vector<RetailPartProperty> properties;
+  std::string error;
+  CHECK_MSG(SplitRetailEffect(EffectFourCC("SWHC"), part.part.data(), part.part.size(), properties, error),
+            "PSSC reads as a swoosh property");
+}
+
 // A swoosh's LWQD (desc+0x228, CreateSWSH 0x2dbae0) is clamped to 1..10 and becomes the
 // port-only PLWQ unless it is 1.
 void TestSwooshLwqd() {
@@ -7280,6 +7300,7 @@ int main() {
   TestSwooshSeed();
   TestSwooshTxup();
   TestSwooshBlit();
+  TestSwooshScale();
   TestSwooshLwqd();
   TestSwooshSplineRates();
   TestSwooshIntr();

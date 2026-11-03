@@ -634,6 +634,10 @@ void CParticleSwoosh::UpdateTranslationAndOrientation() {
         x1c_desc->x14_COLR->GetValueHdr(swoosh.mFrame, point.color);
       }
     }
+    // PSCL runs for every point after PROT, at its birth and each update (UpdateExisting 0x27d700).
+    if (x1c_desc->xPortScale) {
+      x1c_desc->xPortScale->GetValue(swoosh.mFrame, swoosh.mPortScale);
+    }
 #endif
     swoosh.mLeftRad = GetLeftRadius(i);
     UpdateMaxRadius(swoosh.mLeftRad);
@@ -1097,9 +1101,11 @@ void CParticleSwoosh::PortRenderVfx() {
         const PortSwooshRing::Vec newerPos = newer ? sysVec(newer->mTranslation) : pos;
         const PortSwooshRing::Vec axis =
             PortSwooshRing::WidthAxis(pos, sysVec(camSys), older ? &olderPos : nullptr, newer ? &newerPos : nullptr);
+        // PSCL's X scales the ring's local X (0x2b607c), the width axis here.
+        const float scaleX = swoosh.mPortScale.GetX();
         PortSwooshRing::Vec v0, v1;
-        PortSwooshRing::Ring(sysVec(swoosh.mTranslation + swoosh.mUseOffset), axis, swoosh.mLeftRad,
-                             swoosh.mRightRad, v0, v1);
+        PortSwooshRing::Ring(sysVec(swoosh.mTranslation + swoosh.mUseOffset), axis, swoosh.mLeftRad * scaleX,
+                             swoosh.mRightRad * scaleX, v0, v1);
         ring[j][0] = CVector3f(v0.x, v0.y, v0.z);
         ring[j][1] = CVector3f(v1.x, v1.y, v1.z);
         continue;
@@ -1109,7 +1115,11 @@ void CParticleSwoosh::PortRenderVfx() {
         const float rawAngle = M_PIF * (sideAngle + (swoosh.mInitialRot + swoosh.mRotm)) / 180.f;
         const float angle = fabs(rawAngle) > M_PIF ? CMath::WrapPi(rawAngle) : rawAngle;
         const float radius = sideAngle > 0.f && sideAngle <= 180.f ? swoosh.mLeftRad : swoosh.mRightRad;
-        ring[j][k] = swoosh.mOrientation * CVector3f(radius * fast_cosine(angle), 0.f, radius * fast_sine(angle)) +
+        // 0x2b607c scales the local ring (r cos, r sin, 0) by PSCL before q; the port's ring is
+        // m * (r cos, 0, r sin) with m = Q * Rx(-90), so Remastered's local Y is the port's Z.
+        const CVector3f& scale = swoosh.mPortScale;
+        ring[j][k] = swoosh.mOrientation * CVector3f(radius * fast_cosine(angle) * scale.GetX(), 0.f,
+                                                     radius * fast_sine(angle) * scale.GetY()) +
                      swoosh.mTranslation + swoosh.mUseOffset;
       }
     }

@@ -56,6 +56,8 @@ public:
     CVector3f mVelocity;
 #ifdef TARGET_PC
     SPortKeep mPortKeep{}; // KPIN values latched at the point's birth (CREPortKeep)
+    // PSCL (point+0x40): the ring's local scale, skOneVector until evaluated (0x27c8d0)
+    CVector3f mPortScale{1.f, 1.f, 1.f};
 #endif
   };
   CParticleSwoosh(TToken< CSwooshDescription > desc, int i);

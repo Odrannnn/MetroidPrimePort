@@ -255,6 +255,10 @@ bool CParticleSwooshDataFactory::CreateWPSM(CSwooshDescription* swoosh, CInputSt
       swoosh->xPortIntExternal = (in.ReadLong() & 1) != 0;
       swoosh->xPortIntRotation.reset(CParticleDataFactory::GetVectorElement(in));
       break;
+    // Port-only Remastered PSCL (xPortScale), in Remastered's numbers.
+    case 'PSSC':
+      swoosh->xPortScale.reset(CParticleDataFactory::GetVectorElement(in));
+      break;
     // Port-only Remastered LWQD (xPortLwqd).
     case 'PLWQ':
       CParticleDataFactory::GetClassID(in);

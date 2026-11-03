@@ -6449,6 +6449,21 @@ public:
       }
       return;
     }
+    // A swoosh's PSCL is a GetVectorElement into desc+0x138 (CreateSWSH 0x2dbea8), run for each
+    // point after PROT (UpdateExisting 0x27d700) into point+0x40, which scales the local ring vertex
+    // before the point's rotation (UpdateRenderData_Swoosh 0x2b607c). The port-only PSSC, in
+    // Remastered's numbers: a scale along the ring's own axes, not a vector in the port's space.
+    if (s.swoosh && fourcc == F("PSCL")) {
+      std::vector<uint8_t> bytes;
+      std::string why;
+      if (property.value.size() != 1 || !Element(property.value[0], Type::Vector, bytes, why)) {
+        s.result.dropped.push_back("PSCL: " + (why.empty() ? std::string("not one vector") : why));
+        return;
+      }
+      AppendBE32(s.out, F("PSSC"));
+      s.out.insert(s.out.end(), bytes.begin(), bytes.end());
+      return;
+    }
     // A swoosh's LWQD is a GetIntElementAsConst clamped to 1..10 into desc+0x228 (CreateSWSH
     // 0x2dbae0): UpdateRenderData_Swoosh 0x2b6a58 splits each side face into that many strips
     // across the trail (CParticleSwoosh::PortRenderVfx). The port-only PLWQ.
@@ -7698,6 +7713,8 @@ bool SplitRetailEffect(uint32_t type, const uint8_t* data, size_t size, std::vec
       ok = reader.Element(Type::Vector);
     } else if (type == F("SWHC") && fourcc == F("PSIR")) {
       ok = reader.PortWord() && reader.Element(Type::Vector);
+    } else if (type == F("SWHC") && fourcc == F("PSSC")) {
+      ok = reader.Element(Type::Vector);
     } else if (!part && vfx && fourcc == F("PROZ")) {
       ok = reader.PortWord() && reader.Element(Type::Real);
     } else if (electric && fourcc == F("PEL2")) {
