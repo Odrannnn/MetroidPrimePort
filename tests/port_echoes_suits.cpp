@@ -183,11 +183,16 @@ void TestSkin() {
 
 // Every body the import writes is one the loader counts as a body (port_echoes_suits_mod.h), so the
 // game leaves out Prime's cannon, boots and visor for it; and every body the loader counts is written.
+// The arms are not bodies.
 void TestBodies() {
   size_t written = 0;
   for (const Target& t : kTargets) {
-    CHECK(IsBody(t.cmdl));
-    ++written;
+    const bool arm = std::string(t.skeleton) == "grapple";
+    CHECK(IsBody(t.cmdl) == !arm);
+    written += arm ? 0 : 1;
+  }
+  for (const Arm& a : kArms) {
+    CHECK(!IsBody(a.cmdl));
   }
   for (const Copy& c : kCopies) {
     if (c.type == 0x434D444C) {
@@ -306,6 +311,21 @@ void TestBall() {
   CHECK(!MainJoint(retail, joint, &error));
 }
 
+// One material set kept of several: the arm's, with that set's textures only.
+void TestKeepMaterialSet() {
+  std::string error;
+  PrimeCmdl m = BallFixture(0x11111111, 0.5f);
+  m.materialSets.push_back(BallFixture(0x22222222, 0.5f).materialSets[0]);
+  m.materialSets.push_back(BallFixture(0x33333333, 0.5f).materialSets[0]);
+  std::vector<uint32_t> textures;
+  CHECK(!KeepMaterialSet(m, 3, textures, &error));
+  REQUIRE_MSG(KeepMaterialSet(m, 1, textures, &error), error);
+  CHECK_EQ(m.materialSets.size(), size_t(1));
+  CHECK(textures == std::vector<uint32_t>({0x22222222}));
+  CHECK_EQ(Get32(m.materialSets[0], 4), 0x22222222u);
+  CHECK_EQ(Get32(WriteCmdl(m), 0x28), 1u);
+}
+
 }  // namespace
 
 int main() {
@@ -314,5 +334,6 @@ int main() {
   TestSkin();
   TestBodies();
   TestBall();
+  TestKeepMaterialSet();
   return PORT_TEST_RESULT();
 }

@@ -13,7 +13,8 @@ inline constexpr const char* kStampName = ".echoes-suits-version";
 // 1: Varia, Gravity (Echoes' Dark Suit) and Phazon (its Light Suit), cutscene and in-game bodies.
 // 2: the pause screen's doll bodies; the Morph Balls (Varia, Dark as Gravity, Light as Phazon) and
 //    the Dark Spider Ball as Gravity's.
-inline constexpr int kVersion = 2;
+// 3: the first-person arms, right and left (grapple).
+inline constexpr int kVersion = 3;
 
 // The Prime body CMDLs the mod writes (PortEchoesSuits::kTargets and kCopies): cutscene Varia,
 // Gravity, Phazon, the Tallon Phazon copy, in-game Varia, Gravity, Phazon, then the doll's Varia,

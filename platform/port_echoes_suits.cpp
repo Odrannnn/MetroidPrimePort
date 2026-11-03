@@ -664,6 +664,21 @@ bool ConvertCmdl(const std::vector<uint8_t>& in, PrimeCmdl& model, std::vector<u
   return true;
 }
 
+bool KeepMaterialSet(PrimeCmdl& model, size_t set, std::vector<uint32_t>& textures, std::string* error) {
+  if (set >= model.materialSets.size()) {
+    return Fail(error, "no material set " + std::to_string(set));
+  }
+  MaterialSet parsed;
+  if (!ParseSet(model.materialSets[set], parsed, error)) {
+    return false;
+  }
+  model.materialSets = {std::move(model.materialSets[set])};
+  textures = std::move(parsed.textures);
+  std::sort(textures.begin(), textures.end());
+  textures.erase(std::unique(textures.begin(), textures.end()), textures.end());
+  return true;
+}
+
 bool FloatNormals(PrimeCmdl& model, std::string* error) {
   Reader h{model.header.data(), model.header.size()};
   const uint32_t flags = h.U32(8);
@@ -1024,7 +1039,7 @@ bool Import(const Io& io, Result& result, std::string& error) {
   std::map<uint32_t, PortDread::PrimeSkeleton> primeCinfs;
   std::set<uint32_t> textures;
   std::map<uint32_t, std::vector<uint8_t>> written;  // CMDL/CSKR by Prime id, for kCopies
-  const size_t total = std::size(kTargets) + std::size(kBalls);
+  const size_t total = std::size(kTargets) + std::size(kBalls) + std::size(kArms);
   for (size_t i = 0; i < std::size(kTargets); ++i) {
     const Target& t = kTargets[i];
     if (cancelled()) {
@@ -1177,6 +1192,33 @@ bool Import(const Io& io, Result& result, std::string& error) {
         std::to_string(joint) + "), " + std::to_string(ballTextures.size()) + " textures");
     ++result.balls;
   }
+  std::vector<uint8_t> arm;
+  for (size_t i = 0; i < std::size(kArms); ++i) {
+    const Arm& a = kArms[i];
+    if (cancelled()) {
+      error = "Cancelled.";
+      return false;
+    }
+    if (io.progress) io.progress(std::size(kTargets) + std::size(kBalls) + i, total);
+    const std::string what = std::string(a.suit) + " arm";
+    if (arm.empty() && !io.echoes(kCMDL, kEchoesArm, arm)) {
+      error = "The Echoes disc has no arm (" + Hex(kEchoesArm) + "): is it Metroid Prime 2: Echoes (USA)?";
+      return false;
+    }
+    std::string why;
+    PrimeCmdl model;
+    std::vector<uint32_t> armTextures;
+    if (!ConvertCmdl(arm, model, armTextures, &why) || !KeepMaterialSet(model, a.set, armTextures, &why)) {
+      error = what + " " + Hex(kEchoesArm) + ": " + why;
+      return false;
+    }
+    if (!write(Hex(a.cmdl) + ".CMDL", WriteCmdl(model))) {
+      return false;
+    }
+    textures.insert(armTextures.begin(), armTextures.end());
+    log("echoes: " + what + " -> " + Hex(a.cmdl) + ", " + std::to_string(armTextures.size()) + " textures");
+    ++result.arms;
+  }
   for (const uint32_t id : textures) {
     if (cancelled()) {
       error = "Cancelled.";
@@ -1202,8 +1244,8 @@ bool Import(const Io& io, Result& result, std::string& error) {
     }
   }
   if (io.progress) io.progress(total, total);
-  log("echoes: " + std::to_string(result.converted) + " bodies, " + std::to_string(result.balls) + " balls, " +
-      std::to_string(textures.size()) + " textures");
+  log("echoes: " + std::to_string(result.converted) + " bodies and left arms, " + std::to_string(result.balls) +
+      " balls, " + std::to_string(result.arms) + " right arms, " + std::to_string(textures.size()) + " textures");
   return true;
 }
 

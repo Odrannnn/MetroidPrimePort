@@ -90,7 +90,7 @@ bool ConvertCskr(const std::vector<uint8_t>& in, const std::vector<EchoesJoint>&
 // One body: Echoes' CMDL and CSKR on its CINF, written over Prime's on Prime's CINF.
 struct Target {
   const char* suit;      // Echoes' suit, for the log
-  const char* skeleton;  // "cine50", "game20" or "doll49"
+  const char* skeleton;  // "cine50", "game20", "doll49" or "grapple"
   uint32_t echoesCmdl, echoesCskr, echoesCinf;
   uint32_t cmdl, cskr, cinf;
 };
@@ -108,6 +108,11 @@ inline constexpr Target kTargets[] = {
     {"Varia", "doll49", 0xCDF1C541, 0xA6DE6A97, 0xA27AFE83, 0xA602C954, 0xCD2D6682, 0xF76E70A6},
     {"Dark", "doll49", 0x3A93B6F2, 0x51BC1924, 0xA27AFE83, 0x11A5BC8A, 0x7A8A135C, 0xF76E70A6},
     {"Light", "doll49", 0x726FB01A, 0x19401FCC, 0xA27AFE83, 0x5644E7A1, 0x3D6B4877, 0xF76E70A6},
+    // The first-person left (grapple) arm, characters of Prime's ANCS 5808EB6A on CINF 516F4445;
+    // Echoes' ANCS 670ABE2A gives every suit CINF D07D1BD9, the same 23 joints plus LGBeamLight.
+    {"Varia", "grapple", 0x463D7A4E, 0x2D12D598, 0xD07D1BD9, 0x00A6EC53, 0x6B894385, 0x516F4445},
+    {"Dark", "grapple", 0x078B71CB, 0x6CA4DE1D, 0xD07D1BD9, 0xCBFA3FF6, 0xA0D59020, 0x516F4445},
+    {"Light", "grapple", 0xBACC46C8, 0xD1E3E91E, 0xD07D1BD9, 0xD6FF0F4E, 0xBDD0A098, 0x516F4445},
 };
 // Copies the mod also serves (port_dread_samus.h): the cutscene Varia skin under ANCS 863C1B6A's
 // 8C72FDAC, and the cutscene Phazon body under Tallon ANCS BAD39B59's B333E1D7.
@@ -137,6 +142,23 @@ inline constexpr Ball kBalls[] = {
     {"Dark", 1, true, 0x6AA79226, 0x5A5C0FEC},
 };
 
+// The first-person right arm (CGunWeapon::LoadSuitArm, a static model at the gun's elbow): Echoes
+// has one, VariaArm, with a material set per suit; each set alone over Prime's arm of that suit.
+inline constexpr uint32_t kEchoesArm = 0x4AD9BBAC;
+struct Arm {
+  const char* suit;  // Echoes' suit, for the log
+  uint32_t set;      // kEchoesArm's material set
+  uint32_t cmdl;     // Prime's arm
+};
+inline constexpr Arm kArms[] = {
+    {"Varia", 0, 0x4AD9BBAC},
+    {"Dark", 1, 0x81856809},
+    {"Light", 2, 0x57DC8B14},
+};
+
+// `model` with only its material set `set`; `textures` gets that set's TXTR ids.
+bool KeepMaterialSet(PrimeCmdl& model, size_t set, std::vector<uint32_t>& textures, std::string* error);
+
 struct Io {
   // A resource of the Echoes disc by type FourCC and id, decompressed.
   std::function<bool(uint32_t type, uint32_t id, std::vector<uint8_t>& out)> echoes;
@@ -154,6 +176,7 @@ struct Io {
 struct Result {
   size_t converted = 0;            // bodies written
   size_t balls = 0;                // Morph Balls written
+  size_t arms = 0;                 // right arms written
   std::vector<std::string> files;  // every file written, in order
 };
 
