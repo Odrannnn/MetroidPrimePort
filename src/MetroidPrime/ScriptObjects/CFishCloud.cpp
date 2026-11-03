@@ -15,6 +15,7 @@
 #include "MetroidPrime/TCastTo.hpp"
 #include "port_debug.h"
 
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Graphics/CModelFlags.hpp"
 #include "Kyoto/Math/CTri.hpp"
@@ -558,6 +559,11 @@ void CFishCloud::Render(const CStateManager& mgr) const {
     flags = CModelFlags(CModelFlags::kT_One, x16c_color);
   }
   RenderParticles();
+#ifdef TARGET_PC
+  // Remastered's boid proxies (CFishCloudMP1::CreateStaticBoidRenderProxy and the animated one)
+  // have no baked lighting; see CCubeModel::sPortUnbaked. Only their PBR draws read it.
+  CCubeModel::sPortUnbaked = true;
+#endif
   if (x250_27_validModel) {
     gpRender->SetAmbientColor(CColor::White());
     CGraphics::DisableAllLights();
@@ -581,6 +587,9 @@ void CFishCloud::Render(const CStateManager& mgr) const {
       }
     }
   }
+#ifdef TARGET_PC
+  CCubeModel::sPortUnbaked = false;
+#endif
 }
 
 void CFishCloud::KillBoid(CBoid& boid) {

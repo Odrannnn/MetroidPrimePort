@@ -341,6 +341,11 @@ public:
   void PortDrawThermalOverride(const float* positions, const float* normals, const CModelFlags& flags,
                                ESurfaceSelection which) const;
   static bool sPortThermalSplit;
+  // Set around draws of Remastered scene nodes with no baked lighting: CModelLightingData::Default
+  // (no lightmap, no probe volume) on scene group 0, which no area's baked context has, so
+  // InitializeBakedLightingMaterialData gives them no probe either (the fish cloud's boids). Their
+  // PBR draws take no baked ambient, volume, lightmap or backlight; only the runtime lights.
+  static bool sPortUnbaked;
 #endif
   bool TryLockTextures() const;
   void Draw(const CModelFlags& flags) const;

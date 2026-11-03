@@ -955,7 +955,7 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
   }
   // The TEV fallback of a PBR material lit by the bake takes only the runtime lights, as its PBR
   // draw does (GXSetPBRLightSkip below); Remastered has no area lights on a baked-lit model.
-  if (!inventory && material.IsFlagSet(kStateFlag_PortPBR) && CCubeMaterial::sPortAreaLights != 0 &&
+  if (!inventory && !sPortUnbaked && material.IsFlagSet(kStateFlag_PortPBR) && CCubeMaterial::sPortAreaLights != 0 &&
       !PortRoomEnv::AreaLights() && !(outside && (fadeBlend || CCubeMaterial::PortPBRAllowed(drawFlags)))) {
     const CTransform4f& tevXf = CGraphics::GetModelMatrix();
     const CVector3f tevOrigin = x20_bounds.Invalid() ? tevXf.GetTranslation() : tevXf * x20_bounds.GetCenterPoint();
@@ -1079,7 +1079,11 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
         ++CCubeMaterial::sPortPBRProbeDraws;
       }
     }
-    if (found && env.hasAmbient) {
+    if (sPortUnbaked) {
+      // No baked light: an absolute ambient of nothing, not the GX ambient (null would take that).
+      static const f32 kNoAmbient[6][3] = {};
+      GXSetPBRAmbient(kNoAmbient, 2.f);
+    } else if (found && env.hasAmbient) {
       // The baked ambient's directions are in world space, the shader's normal in view space.
       f32 rows[6][3];
       memcpy(rows, env.ambient, sizeof(rows));
@@ -1093,7 +1097,7 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
     } else {
       GXSetPBRAmbient(nullptr, 0.f);
     }
-    if (found && env.volume != 0) {
+    if (!sPortUnbaked && found && env.volume != 0) {
       // The volume is in world space, the shader's position and normal in view space.
       const CVector3f eye = view.GetTranslation();
       const f32 at[3] = {eye.GetX(), eye.GetY(), eye.GetZ()};
@@ -1117,7 +1121,7 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
     // Room geometry with a lookup into its room's lightmap is lit by that, per texel, in
     // place of the volume; the material says which texcoord holds the lightmap UV.
     const int lightmapSlot =
-        !icy && found && env.lightmap != 0 ? PortLightmapSlot(static_cast< int >(surface.GetMaterialIndex())) : -1;
+        !icy && !sPortUnbaked && found && env.lightmap != 0 ? PortLightmapSlot(static_cast< int >(surface.GetMaterialIndex())) : -1;
     if (lightmapSlot >= 0) {
       f32 axes[3][3];
       for (int row = 0; row < 3; ++row) {
@@ -1133,8 +1137,8 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
       GXSetPBRLightmap(0, nullptr, nullptr);
     }
     // Lit by the bake, which holds the area's light, a model keeps only the runtime lights.
-    const bool baked =
-        found && ((env.hasAmbient && env.ambientAbsolute) || env.volume != 0 || lightmapSlot >= 0);
+    const bool baked = !sPortUnbaked && found &&
+                       ((env.hasAmbient && env.ambientAbsolute) || env.volume != 0 || lightmapSlot >= 0);
     GXSetPBRLightSkip(PortPauseLighting::doll ? 0xffu :
                      baked && !PortRoomEnv::AreaLights() ? CCubeMaterial::sPortAreaLights : 0u);
     // The frame's tone curve, when rooms are exposed as Remastered exposes them. Remastered
@@ -1155,7 +1159,8 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
     // MP_REMASTERED_BACKLIGHT=0 turns it off; set but empty leaves it on, as it always has.
     static const bool sBacklightOff =
         !port::EnvFlag("MP_REMASTERED_BACKLIGHT", true) && *port::EnvString("MP_REMASTERED_BACKLIGHT") != '\0';
-    if (sBacklightOff) {
+    // Its colours are the baked ambient's, which an unbaked draw has none of.
+    if (sBacklightOff || sPortUnbaked) {
       GXSetPBRBacklight(nullptr, nullptr, 0.f, 0.f, 0.f, 0.f);
     } else {
       const CAABox& box = GetBoundingBox();
@@ -1587,6 +1592,7 @@ void CCubeModel::DrawFlat(const float* positions, const float* normals,
 
 #ifdef TARGET_PC
 bool CCubeModel::sPortThermalSplit = false;
+bool CCubeModel::sPortUnbaked = false;
 
 void CCubeModel::PortSetThermalOverride(const float a, const float b) {
   sPortThermalOverride.on = true;
