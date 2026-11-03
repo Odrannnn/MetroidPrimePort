@@ -6032,12 +6032,14 @@ public:
     // ELC2 render-state fields (CreateELC2 0xb70734). EBDM is read by the VMAT writer, the only
     // way an ELC2 draws. DDLN is read into a stack byte and discarded. TEXW (desc+0x265) and ZBUF
     // (desc+0x266) are GetBools whose ctor default is 0 (0xb71d3c); InitStaticRenderStateImpl
-    // 0xb72618 sets static-state bits 0x1080 and 0x40 for them, which no port draw takes, so only
-    // 0 converts.
-    if (s.electric && (fourcc == F("EBDM") || fourcc == F("DDLN"))) {
+    // 0xb72618 sets static-state bits 0x1080 and 0x40 for them. Bit 0x1000 has no reader (the
+    // state word's consumers test bits 6, 7, 9 and 14-18 only, and desc+0x265 is read nowhere
+    // else), so TEXW is consumed whatever its value. ZBUF 1 (depth write in BindGraphicsState
+    // 0x2b10e4) is not ported, so only 0 converts.
+    if (s.electric && (fourcc == F("EBDM") || fourcc == F("DDLN") || fourcc == F("TEXW"))) {
       return true;
     }
-    if (s.electric && (fourcc == F("TEXW") || fourcc == F("ZBUF"))) {
+    if (s.electric && fourcc == F("ZBUF")) {
       uint32_t value = 0;
       if (!SmallInteger(property, value) || value > 1) {
         s.result.dropped.push_back(EffectFourCCString(fourcc) + ": not a constant 0 or 1");
