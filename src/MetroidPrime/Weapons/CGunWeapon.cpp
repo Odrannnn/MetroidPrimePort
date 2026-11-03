@@ -36,6 +36,7 @@
 #include <dolphin/gx/GXExtra.h>
 
 #include "port_dread_samus_mod.h"
+#include "port_echoes_suits_mod.h"
 #endif
 
 const char* const CGunWeapon::skMuzzleNames[10] = {
@@ -143,8 +144,15 @@ void CGunWeapon::LoadGunModels(CStateManager& mgr) {
   if (x218_27_subtypeBasePose) {
     defaultAnim = 0;
   }
+#ifdef TARGET_PC
+  // Echoes' arm cannon (echoes-suits mod): the beam's ANCS with Echoes' gun and hologram.
+  const CAssetId ancsId = PortEchoesSuits::GunAncs(x214_ancsId);
+  x10_solidModelData = CAnimRes(ancsId, 0, x4_scale, defaultAnim, false);
+  x60_holoModelData = CAnimRes(ancsId, 1, x4_scale, defaultAnim, false);
+#else
   x10_solidModelData = CAnimRes(x214_ancsId, 0, x4_scale, defaultAnim, false);
   x60_holoModelData = CAnimRes(x214_ancsId, 1, x4_scale, defaultAnim, false);
+#endif
   CAnimPlaybackParms parms(defaultAnim, -1, 1.f, true);
   x10_solidModelData->AnimationData()->SetAnimation(parms, true);
   LoadSuitArm(mgr);

@@ -84,6 +84,8 @@ std::set<uint32_t> sDreadCannons;  // first-person cannon variants (PortDreadSam
 std::set<uint32_t> sDreadSkeletons;
 // The CMDLs the echoes-suits mod serves (PortDreadSamus::Replaces too: its bodies carry their cannon).
 std::set<uint32_t> sEchoesBodies;
+// The beam ANCS whose Echoes cannon variant it serves (PortEchoesSuits::GunAncs).
+std::set<uint32_t> sEchoesGuns;
 // thermal.lut: the thermal visor's heat gradient (port_thermal.h).
 std::string sThermalLut;
 // envfx.bin: Remastered's EnvironmentFX textures (port_envfx_assets.h).
@@ -469,6 +471,14 @@ bool PortDreadSamus::ReplacesFirstPersonCannon(int suit) {
   const uint32_t id = FirstPersonCannon(suit);
   return sDreadCannonShown && id != 0 && PortMods::sDreadCannons.count(id) != 0;
 }
+namespace {
+bool sEchoesCannonShown = true;
+}
+void PortEchoesSuits::SetFirstPersonCannonShown(bool shown) { sEchoesCannonShown = shown; }
+bool PortEchoesSuits::FirstPersonCannonShown() { return sEchoesCannonShown; }
+uint32_t PortEchoesSuits::GunAncs(uint32_t ancs) {
+  return sEchoesCannonShown && PortMods::sEchoesGuns.count(ancs) != 0 ? Cannon(ancs) : ancs;
+}
 
 uint32_t PortDreadSamus::Skeleton(uint32_t bodyCmdl) {
   const uint32_t cinf = DreadCinf(bodyCmdl);
@@ -641,6 +651,7 @@ void Initialize() {
   sDreadLowBalls.clear();
   sDreadSkeletons.clear();
   sEchoesBodies.clear();
+  sEchoesGuns.clear();
   {
     std::lock_guard<std::mutex> lock(sEffectIdsMutex);
     sEffectIdMapPath.clear();
@@ -1046,6 +1057,21 @@ void Initialize() {
     if (!sEchoesBodies.empty()) {
       PortLog::Write("mods: %s serves %zu Samus body model(s):%s\n", PortEchoesSuits::kModName, sEchoesBodies.size(),
                      ids.c_str());
+    }
+    // A beam's cannon variant: its ANCS and both models it names, all the mod's.
+    const auto echoes = [&](uint32_t type, uint32_t id) {
+      const auto it = loose.find({type, id});
+      return it != loose.end() && it->second.mod == PortEchoesSuits::kModName;
+    };
+    bool gunModels = true;
+    for (const auto& gun : PortEchoesSuits::kGuns) {
+      gunModels = gunModels && echoes(0x434D444Cu, PortEchoesSuits::Cannon(gun.cmdl));  // 'CMDL'
+    }
+    for (const uint32_t ancs : PortEchoesSuits::kBeamAncs) {
+      if (gunModels && echoes(0x414E4353u, PortEchoesSuits::Cannon(ancs))) sEchoesGuns.insert(ancs);  // 'ANCS'
+    }
+    if (!sEchoesGuns.empty()) {
+      PortLog::Write("mods: %s serves the arm cannon of %zu beam(s)\n", PortEchoesSuits::kModName, sEchoesGuns.size());
     }
   }
 

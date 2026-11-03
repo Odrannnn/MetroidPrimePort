@@ -1063,7 +1063,9 @@
   (`mods_disabled`, the names left out, `/`-separated), read at startup
   (`MODS.md`); the Metroid Dread section's "Dread arm cannon in first person"
   (`dread_first_person_cannon`, on by default; off keeps Prime's arm cannon,
-  `DREAD_SAMUS.md`); the Remastered import's "What to import" (`remastered_skip`: the
+  `DREAD_SAMUS.md`); the Metroid Prime 2: Echoes section's "Echoes arm cannon in
+  first person" (`echoes_first_person_cannon`, on by default; off keeps Prime's arm
+  cannon from the next beam selected, `MODS.md`); the Remastered import's "What to import" (`remastered_skip`: the
   parts left out, comma-separated from `geometry`, `effects`, `hud`, `text`,
   `movies` and `gallery`; `MODS.md`); its "Parts to use" (`remastered_hide`:
   the installed parts the mods load without, comma-separated from `geometry`,

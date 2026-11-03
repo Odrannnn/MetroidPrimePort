@@ -321,7 +321,11 @@ Prime's, and so do the Varia and Phazon Spider Balls (Echoes has no Varia or Lig
   Prime has.
 - It replaces the same body models as `dread-samus`: switch one of the two off.
 - From a terminal: `--import-echoes-suits <Echoes disc image>` (the Prime disc from `MP_DISC`).
-- Not yet: Echoes' arm cannon.
+- The first-person arm cannon is Echoes' too, for every suit: Power, Ice, Wave, Plasma and Phazon
+  Beam take its Power, Dark, Light, Annihilator and fifth look, moved by Prime's gun animations
+  (the two guns share one skeleton). "Echoes arm cannon in first person"
+  (`echoes_first_person_cannon`, on by default; console `echoescannon 0|1`) switches it, from the
+  next beam selected.
 
 ## Texture packs
 

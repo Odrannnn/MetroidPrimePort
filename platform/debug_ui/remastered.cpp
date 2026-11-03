@@ -391,6 +391,13 @@ void DrawBuiltinMods() {
     ImGui::Indent();
     DrawBuiltinModToggle(PortEchoesSuits::kModName, "Use the Echoes Suit models",
                          ModImportStale(status, PortEchoesSuits::kModName));
+    bool cannon = PortEchoesSuits::FirstPersonCannonShown();
+    if (ImGui::Checkbox("Echoes arm cannon in first person", &cannon)) {
+      PortEchoesSuits::SetFirstPersonCannonShown(cannon);
+      MarkDirty();
+    }
+    ItemHelp("Off keeps Prime's own arm cannon in first person; the Echoes Suit bodies stay. Applies the next "
+             "time a beam is selected.");
     ImGui::SeparatorText("Import");
     DrawEchoesSuitsImport();
     ImGui::Unindent();

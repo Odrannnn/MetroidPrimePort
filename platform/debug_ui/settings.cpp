@@ -18,6 +18,7 @@
 #include "port_discord.h"
 #include "port_suit_colours.h"
 #include "port_dread_samus_mod.h"
+#include "port_echoes_suits_mod.h"
 #include "port_textures.h"
 
 #include <dolphin/gx/GXExtra.h>
@@ -449,6 +450,9 @@ const SettingKey kSettingKeys[] = {
     {"dread_first_person_cannon",
      [](const std::string& value) { PortDreadSamus::SetFirstPersonCannonShown(ParseBool(value)); },
      [](std::ostream& out) { WriteBool(out, PortDreadSamus::FirstPersonCannonShown()); }, false, "0", "1"},
+    {"echoes_first_person_cannon",
+     [](const std::string& value) { PortEchoesSuits::SetFirstPersonCannonShown(ParseBool(value)); },
+     [](std::ostream& out) { WriteBool(out, PortEchoesSuits::FirstPersonCannonShown()); }, false, "0", "1"},
     BoolKey< &sVsyncEnabled >("vsync"),
     BoolKey< &sFullscreen >("fullscreen"),
     BoolKey< &sOverlayWindowed >("overlay_windowed"),

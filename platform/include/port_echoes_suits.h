@@ -156,6 +156,10 @@ inline constexpr Arm kArms[] = {
     {"Light", 2, 0x57DC8B14},
 };
 
+// A beam's ANCS with each kGuns character (the 12 bytes model, skin, skeleton, found once) pointed
+// at the Cannon variants. False when one is not found exactly once.
+bool PatchGunAncs(std::vector<uint8_t>& ancs, std::string* error);
+
 // `model` with only its material set `set`; `textures` gets that set's TXTR ids.
 bool KeepMaterialSet(PrimeCmdl& model, size_t set, std::vector<uint32_t>& textures, std::string* error);
 
@@ -177,6 +181,7 @@ struct Result {
   size_t converted = 0;            // bodies written
   size_t balls = 0;                // Morph Balls written
   size_t arms = 0;                 // right arms written
+  size_t guns = 0;                 // beam ANCS variants written
   std::vector<std::string> files;  // every file written, in order
 };
 

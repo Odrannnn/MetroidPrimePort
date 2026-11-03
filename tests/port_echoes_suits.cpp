@@ -326,6 +326,41 @@ void TestKeepMaterialSet() {
   CHECK_EQ(Get32(WriteCmdl(m), 0x28), 1u);
 }
 
+// A beam ANCS's gun and hologram characters (unaligned, as in Prime's) pointed at the variants.
+void TestGunAncs() {
+  std::string error;
+  std::vector<uint8_t> ancs = {0x00, 0x01, 0x02};
+  const auto put = [&ancs](const Gun& gun) {
+    for (const uint32_t v : {gun.cmdl, gun.cskr, kGunCinf, 0x12345678u}) Put32(ancs, v);
+  };
+  put(kGuns[0]);
+  ancs.push_back(0x7F);
+  put(kGuns[1]);
+  std::vector<uint8_t> patched = ancs;
+  REQUIRE_MSG(PatchGunAncs(patched, &error), error);
+  CHECK_EQ(patched.size(), ancs.size());
+  CHECK_EQ(Get32(patched, 3), Cannon(kGuns[0].cmdl));
+  CHECK_EQ(Get32(patched, 7), Cannon(kGuns[0].cskr));
+  CHECK_EQ(Get32(patched, 11), kGunCinf);
+  CHECK_EQ(Get32(patched, 15), 0x12345678u);
+  CHECK_EQ(Get32(patched, 20), Cannon(kGuns[1].cmdl));
+  CHECK_EQ(Get32(patched, 24), Cannon(kGuns[1].cskr));
+  // Patched again, nothing is left to find.
+  CHECK(!PatchGunAncs(patched, &error));
+  // The gun twice: which one is the character's is unknown.
+  put(kGuns[0]);
+  CHECK(!PatchGunAncs(ancs, &error));
+  // Every variant id is new.
+  std::vector<uint32_t> ids;
+  for (const Gun& gun : kGuns) {
+    ids.insert(ids.end(), {gun.cmdl, gun.cskr, Cannon(gun.cmdl), Cannon(gun.cskr)});
+  }
+  for (const uint32_t a : kBeamAncs) ids.insert(ids.end(), {a, Cannon(a)});
+  for (size_t i = 0; i < ids.size(); ++i) {
+    for (size_t j = i + 1; j < ids.size(); ++j) CHECK(ids[i] != ids[j]);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -335,5 +370,6 @@ int main() {
   TestBodies();
   TestBall();
   TestKeepMaterialSet();
+  TestGunAncs();
   return PORT_TEST_RESULT();
 }
