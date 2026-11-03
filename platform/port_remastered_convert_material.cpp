@@ -227,6 +227,9 @@ constexpr ShaderTwin kShaderTwins[] = {
     {0x81B8E136, 0xA978D507},
     // 1ac34e37 (Core_Phazon_Mat) is 07acff46's skinned copy, as the others.
     {0x1AC34E37, kShaderPhazonPool},
+    // cc3e88af is cc96c27d's skinned copy (its fragment perms 006/042/054 are cc96c27d's 018/042/078; the vertex
+    // perms add the bone fetch and pass the vertex colour through raw): the Omega fight's healing nodules.
+    {0xCC3E88AF, kShaderPhazon},
     // The fx shaders of kb material/{96009286,a5bd3ed7,ed8ab6e7,937a8c35}.md routed to the kind they match (a5bd3ed7 and
     // ed8ab6e7 differ in AUVI only; 937a8c35 has no MTRL: inferred).
     {0x96009286, kShaderRefractGlassB}, {0xA5BD3ED7, kShaderPickUp}, {0xED8AB6E7, kShaderPickUp},
