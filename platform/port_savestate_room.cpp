@@ -802,7 +802,7 @@ struct SpawnOverride {
 };
 std::vector< SpawnOverride > sOverrides;
 
-uint32_t WorldKey(CStateManager& mgr) {
+uint32_t WorldKey(const CStateManager& mgr) {
   const CWorld* world = mgr.GetWorld();
   return world != nullptr ? static_cast< uint32_t >(world->IGetWorldAssetId()) : 0;
 }
@@ -863,6 +863,14 @@ void NoteAreaSpawnBegin(CStateManager& mgr, int area) {
   if (layers == nullptr || area < 0 || area >= static_cast< int >(layers->GetAreaLayers().size()))
     return;
   sSpawnMasks[{WorldKey(mgr), area}] = LayerMask(*layers, area);
+}
+
+bool AreaLoadedLayers(const CStateManager& mgr, int area, uint64_t& mask) {
+  const auto it = sSpawnMasks.find({WorldKey(mgr), area});
+  if (it == sSpawnMasks.end())
+    return false;
+  mask = it->second;
+  return true;
 }
 
 void NoteAreaSpawnEnd(CStateManager& mgr, int area) {

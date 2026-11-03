@@ -3147,36 +3147,36 @@ static std::vector<const PortRoomEnv::FogRegion*> sPortFogRegions;
 // MP_SHADOW_DIR ("x,y,z", the way the light travels) and MP_SHADOW_COLOR ("r,g,b") override the
 // room's sun.
 // The room's Remastered sun (port_room_env.h), when its import has one.
-static bool PortRoomSun(const CGameArea& area, CScriptLayerManager* layers, bool cinematic, float dir[3],
+static bool PortRoomSun(const CGameArea& area, const CStateManager& mgr, bool cinematic, float dir[3],
                         float color[3]) {
   struct Layers {
-    CScriptLayerManager* layers;
+    const CStateManager& mgr;
     TAreaId area;
-  } l{layers, area.GetId()};
+  } l{mgr, area.GetId()};
   return PortRoomEnv::Sun(
       [](int32_t layer, void* context) {
         const Layers& l = *static_cast< const Layers* >(context);
-        return l.layers == nullptr || l.layers->IsLayerActive(l.area, TLayerId(layer));
+        return l.mgr.PortLayerLoaded(l.area, layer);
       },
       &l, cinematic, dir, color);
 }
 
 // The room's other directional lights, which light without a shadow, as room light records.
-static void PortRoomSunLights(const CGameArea& area, CScriptLayerManager* layers, bool cinematic,
+static void PortRoomSunLights(const CGameArea& area, const CStateManager& mgr, bool cinematic,
                               const float worldToView[3][4], std::vector< float >& out) {
   struct Layers {
-    CScriptLayerManager* layers;
+    const CStateManager& mgr;
     TAreaId area;
-  } l{layers, area.GetId()};
+  } l{mgr, area.GetId()};
   PortRoomEnv::SunLights(
       [](int32_t layer, void* context) {
         const Layers& l = *static_cast< const Layers* >(context);
-        return l.layers == nullptr || l.layers->IsLayerActive(l.area, TLayerId(layer));
+        return l.mgr.PortLayerLoaded(l.area, layer);
       },
       &l, cinematic, worldToView, out);
 }
 
-static bool PortSetupShadow(const CTransform4f& view, const CGameArea* area, CScriptLayerManager* layers,
+static bool PortSetupShadow(const CTransform4f& view, const CGameArea* area, const CStateManager& mgr,
                             bool cinematic, bool enabled, bool roomLights) {
   static const bool sOn = port::EnvFlag("MP_SHADOWS", true);
   static const float sDistance = port::EnvFloat("MP_SHADOW_DISTANCE", 350.f);
@@ -3189,7 +3189,7 @@ static bool PortSetupShadow(const CTransform4f& view, const CGameArea* area, CSc
     float envDir[3];
     if (sDirEnv != nullptr && sscanf(sDirEnv, "%f,%f,%f", &envDir[0], &envDir[1], &envDir[2]) == 3) {
       dir[0] = envDir[0], dir[1] = envDir[1], dir[2] = envDir[2];
-    } else if (area != nullptr && PortRoomSun(*area, layers, cinematic, dir, color)) {
+    } else if (area != nullptr && PortRoomSun(*area, mgr, cinematic, dir, color)) {
       for (int i = 0; i < 3; ++i) {
         dir[i] = -dir[i]; // the way the light travels, as a CLight's direction
       }
@@ -3241,7 +3241,7 @@ static bool PortSetupShadow(const CTransform4f& view, const CGameArea* area, CSc
   if (roomLights) {
     PortRoomEnv::RoomLights(worldToView, sRoomLights);
     if (area != nullptr) {
-      PortRoomSunLights(*area, layers, cinematic, worldToView, sRoomLights);
+      PortRoomSunLights(*area, mgr, cinematic, worldToView, sRoomLights);
     }
   }
   GXPortSetRoomLights(sRoomLights.data(), u32(sRoomLights.size() / 16));
@@ -3344,6 +3344,18 @@ static void PortDrawVolumetricFog(const CStateManager& mgr, const CTransform4f& 
   GXPortVolumetricFog(&p);
 }
 
+bool CStateManager::PortLayerLoaded(TAreaId area, int layer) const {
+  const CScriptLayerManager* layers = x8c8_worldLayerState.GetPtr();
+  if (layers == nullptr || area == kInvalidAreaId || layer >= layers->GetAreaLayerCount(area)) {
+    return true;
+  }
+  uint64_t loaded = 0;
+  if (PortSaveState::AreaLoadedLayers(*this, area.Value(), loaded)) {
+    return ((loaded >> layer) & 1) != 0;
+  }
+  return layers->IsLayerActive(area, TLayerId(layer));
+}
+
 void CStateManager::PortCaptureProbeFace() const {
   if (CCubeMaterial::sPortPBRProbeMode < 0) {
     // off/on/mirror/window or 0-3, as docs/SETTINGS.md lists them.
@@ -3372,22 +3384,20 @@ void CStateManager::PortCaptureProbeFace() const {
       PortRoomEnv::SetAreaVisible(area.GetAreaAssetId(), area.GetOcclusionState() == CGameArea::kOS_Visible);
     }
   }
-  // Their probes follow the script layers, as Remastered's ReflectionProbe entities do.
-  if (const CScriptLayerManager* const layers = x8c8_worldLayerState.GetPtr()) {
-    for (int i = 0; i < x850_world->GetNumAreas(); ++i) {
-      const CGameArea& area = *x850_world->GetArea(TAreaId(i));
-      if (!area.IsLoaded()) {
-        continue;
-      }
-      uint64_t active = 0;
-      const int count = layers->GetAreaLayerCount(TAreaId(i));
-      for (int layer = 0; layer < 64; ++layer) {
-        if (layer >= count || layers->IsLayerActive(TAreaId(i), TLayerId(layer))) {
-          active |= uint64_t(1) << layer;
-        }
-      }
-      PortRoomEnv::SetAreaLayers(area.GetAreaAssetId(), active);
+  // Their probes follow the script layers the area loaded with, as Remastered's ReflectionProbe
+  // entities do.
+  for (int i = 0; i < x850_world->GetNumAreas(); ++i) {
+    const CGameArea& area = *x850_world->GetArea(TAreaId(i));
+    if (!area.IsLoaded()) {
+      continue;
     }
+    uint64_t active = 0;
+    for (int layer = 0; layer < 64; ++layer) {
+      if (PortLayerLoaded(TAreaId(i), layer)) {
+        active |= uint64_t(1) << layer;
+      }
+    }
+    PortRoomEnv::SetAreaLayers(area.GetAreaAssetId(), active);
   }
   PortRoomEnv::UpdateLightHints();
   if (x8cc_nextAreaId != kInvalidAreaId) {
@@ -3480,18 +3490,12 @@ void CStateManager::PortCaptureProbeFace() const {
       dt += 900.f;
     }
     lastTime = xf14_curTimeMod900;
-    struct Layers {
-      const CScriptLayerManager* layers;
-      TAreaId area;
-    } layers{x8c8_worldLayerState.GetPtr(), x8cc_nextAreaId};
     PortRoomEnv::UpdateFog(
         [](int32_t layer, void* context) {
-          const Layers& l = *static_cast< const Layers* >(context);
-          return l.layers == nullptr || l.area == kInvalidAreaId ||
-                 layer >= l.layers->GetAreaLayerCount(l.area) ||
-                 l.layers->IsLayerActive(l.area, TLayerId(layer));
+          const CStateManager& mgr = *static_cast< const CStateManager* >(context);
+          return mgr.PortLayerLoaded(mgr.x8cc_nextAreaId, layer);
         },
-        &layers, dt);
+        const_cast< CStateManager* >(this), dt);
     PortRoomLiquid::Advance(dt);
     sPortVolFog = PortRoomEnv::VolumetricFog(sPortFog);
     sPortRemasteredFog = PortRoomEnv::FogOwnsRoom();
@@ -3752,7 +3756,7 @@ void CStateManager::DrawWorld() const {
   const u32 portGunFirstSerial = GXPortCopySerial();
   // The opaque world casts (and receives) from here to GXPortRenderShadowMap, but for the sky.
   const bool portShadow =
-      PortSetupShadow(backupViewMatrix, portVisArea, x8c8_worldLayerState.GetPtr(),
+      PortSetupShadow(backupViewMatrix, portVisArea, *this,
                       x870_cameraManager->IsInCinematicCamera(), !thermal && visor != CPlayerState::kPV_XRay && !portCollisionOnly,
                       !thermal && visor != CPlayerState::kPV_XRay);
   GXPortSetShadowCaster(portShadow);

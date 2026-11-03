@@ -304,6 +304,8 @@ void NoteAreaSpawnEnd(CStateManager& mgr, int area);
 void ArmSpawnLayers(const RoomState& room, uint32_t worldId);
 void DisarmSpawnLayers();
 void SetSpawnLayersLive(bool live);
+// The layer bits area `area` of mgr's world last spawned with; false before it has spawned.
+bool AreaLoadedLayers(const CStateManager& mgr, int area, uint64_t& mask);
 
 // Quick resume: one extra state (resume.mpss, outside the slots) written when
 // the app goes to the background or quits, with which memory card file it

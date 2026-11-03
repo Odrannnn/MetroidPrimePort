@@ -320,17 +320,12 @@ void CMFGame::Draw() const {
 #ifdef TARGET_PC
     {
       // Remastered's character backlight hint of the camera's room, before the models draw.
-      struct Layers {
-        CScriptLayerManager* layers;
-        TAreaId area;
-      } layers{mStateManager->WorldLayerState().GetPtr(), mStateManager->GetNextAreaId()};
       PortRoomEnv::UpdateBacklight(
           [](int32_t layer, void* context) {
-            const Layers& l = *static_cast< const Layers* >(context);
-            return l.layers == nullptr || l.area == kInvalidAreaId ||
-                   l.layers->IsLayerActive(l.area, TLayerId(layer));
+            const CStateManager& mgr = *static_cast< const CStateManager* >(context);
+            return mgr.PortLayerLoaded(mgr.GetNextAreaId(), layer);
           },
-          &layers);
+          mStateManager.GetPtr());
     }
 #endif
 #ifdef TARGET_PC
@@ -349,21 +344,16 @@ void CMFGame::Draw() const {
         const bool toned = PortRoomEnv::Tone(tone);
         // X-ray's render context sets flag 0x400, which drops the bloom; thermal keeps it.
         const bool bloom = visor != CPlayerState::kPV_XRay && toned && PortRoomEnv::Bloom(threshold, tints);
-        struct Layers {
-          CScriptLayerManager* layers;
-          TAreaId area;
-        } layers{mStateManager->WorldLayerState().GetPtr(), mStateManager->GetNextAreaId()};
         uint32_t gradeA = 0;
         uint32_t gradeB = 0;
         float gradeWeight = 0.f;
         if (normalVisor) {
           PortRoomEnv::ColorGrade(
               [](int32_t layer, void* context) {
-                const Layers& l = *static_cast< const Layers* >(context);
-                return l.layers == nullptr || l.area == kInvalidAreaId ||
-                       l.layers->IsLayerActive(l.area, TLayerId(layer));
+                const CStateManager& mgr = *static_cast< const CStateManager* >(context);
+                return mgr.PortLayerLoaded(mgr.GetNextAreaId(), layer);
               },
-              &layers, gradeA, gradeB, gradeWeight);
+              mStateManager.GetPtr(), gradeA, gradeB, gradeWeight);
         }
         // Remastered folds the HUD's damage Add filter into this composite (kept off the free
         // camera, whose frame has no HUD). Only the main post carries it.
