@@ -285,9 +285,9 @@ const Signatures& PortElementsOf(Type type) {
       // VARV: a PVRT index. PCRC: centre, axis, start degrees, count, variance, radius, then the
       // shuffle byte. RNDV: the magnitude. PCRO: P, the frequency, the octave count, the gain,
       // then the amplitude A. PNCV: the normalised compensated velocity, no payload. PSYV: a PSYS
-      // slot.
+      // slot. PCRS: the raw slice, P, F, A.
       {F("VARV"), "w"}, {F("PCRC"), "vvrirrd"}, {F("RNDV"), "r"}, {F("PCRO"), "vrirv"}, {F("PNCV"), ""},
-      {F("PSYV"), "w"},
+      {F("PSYV"), "w"}, {F("PCRS"), "wvrv"},
   };
   static const Signatures modVectorElements = {
       // PCRM: the raw mode, the V vector, then t.
@@ -2524,9 +2524,10 @@ public:
 
   // CMVECurlNoise(V, mode, t) as the port-only PCRM (mode, V, t) around V's curl-noise evaluator
   // as the port-only PCRN (P, F, A, then the field: NONE, or CNST and the VECF's id), Remastered's
-  // CVECurlNoise_Perlin3d (slice 0, no octaves). The other slices and the octave classes are not
-  // ported. PCRN's vectors are in Remastered's numbers; V, like any mod-vector argument, is
-  // turned into the port's space around PCRN.
+  // CVECurlNoise_Perlin3d (slice 0, no octaves), the 2d slices as the port-only PCRS and slice 0
+  // with octaves as PCRO. The octave slices are not ported. The noise's vectors are in
+  // Remastered's numbers; V, like any mod-vector argument, is turned into the port's space
+  // around it.
   bool CurlNoise(const EffectValue& value, std::vector<uint8_t>& out, std::string& why) const {
     const std::vector<EffectValue>& a = value.args;
     const auto isByte = [](const EffectValue& v) {
@@ -2538,9 +2539,28 @@ public:
       why = "CRLN in a form not ported";
       return false;
     }
-    if (a[0].args[1].word != 0) {
-      why = "CRLN slice " + std::to_string(a[0].args[1].word) + " not ported";
+    const uint32_t slice = a[0].args[1].word;
+    if (slice > 3 || (slice != 0 && !IsElement(a[4], F("NONE")))) {
+      why = "CRLN slice " + std::to_string(slice) + (slice > 3 ? "" : " with octaves") + " not ported";
       return false;
+    }
+    if (slice != 0) {
+      // ReadCurlNoiseVectorParticleEvaluator 0x26ea20 releases the VECF of a slice.
+      std::vector<uint8_t> noise;
+      AppendBE32(noise, F("PCRS"));
+      AppendBE32(noise, slice);
+      if (!Element(a[2], Type::Vector, noise, why) || !Element(a[3], Type::Real, noise, why) ||
+          !Element(a[6], Type::Vector, noise, why)) {
+        return false;
+      }
+      AppendBE32(out, F("PCRM"));
+      AppendBE32(out, a[7].word);
+      if (m_mp1Space) {
+        out.insert(out.end(), noise.begin(), noise.end());
+      } else {
+        Basis(F("BSIS"), noise, out);
+      }
+      return Element(a[8], Type::Real, out, why);
     }
     if (!IsElement(a[4], F("NONE"))) {
       // Octaves: the port-only PCRO (P, freq, octaves, gain, A). The VECF is released in

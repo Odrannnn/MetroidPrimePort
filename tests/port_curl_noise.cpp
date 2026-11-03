@@ -55,6 +55,30 @@ void TestCurl() {
   CHECK(Near(c.GetZ(), 0.202735991f, 2.e-3f));
 }
 
+// CurlNoise2dSliceXY/XZ/YZ: (db, -da) of the noise on the plane, the third coordinate 0.
+void TestSlice() {
+  const float e = 1.e-2f;
+  const float s = 1.f / (e + e);
+  const auto n = [](float x, float y, float z) { return PortCurlNoise::PerlinNoise(x, y, z, 256); };
+  float u, v;
+  PortCurlNoise::CurlNoise2dSlice(2, 0.3f, 0.9f, e, 256, u, v);
+  CHECK(Near(u, s * (n(0.3f, 0.f, 0.9f + e) - n(0.3f, 0.f, 0.9f - e))));
+  CHECK(Near(v, s * -(n(0.3f + e, 0.f, 0.9f) - n(0.3f - e, 0.f, 0.9f))));
+  PortCurlNoise::CurlNoise2dSlice(1, 0.3f, 0.6f, e, 256, u, v);
+  CHECK(Near(u, s * (n(0.3f, 0.6f + e, 0.f) - n(0.3f, 0.6f - e, 0.f))));
+  PortCurlNoise::CurlNoise2dSlice(3, 0.6f, 0.9f, e, 256, u, v);
+  CHECK(Near(v, s * -(n(0.f, 0.6f + e, 0.9f) - n(0.f, 0.6f - e, 0.9f))));
+  CHECK(!Near(u, 0.f) || !Near(v, 0.f));
+
+  // PCRS: P*F's slice axes in, A scales the result's, the third axis 0.
+  CVEPortCurlNoiseSlice xz(2, new TestVector(CVector3f(0.15f, 0.f, 0.45f)), new TestReal(2.f),
+                           new TestVector(CVector3f(3.f, 5.f, 7.f)));
+  CVector3f out;
+  xz.GetValue(0, out);
+  PortCurlNoise::CurlNoise2dSlice(2, 0.3f, 0.9f, 1.e-5f, 256, u, v);
+  CHECK(Near(out.GetX(), 3.f * u) && out.GetY() == 0.f && Near(out.GetZ(), 7.f * v));
+}
+
 // A 2x2x2 field whose cell value is its index y * (X * Z) + z * X + x in every component.
 CVectorField MakeField() {
   std::vector< CVector3f > cells;
@@ -169,6 +193,7 @@ const CVectorField* CVEPortCurlNoise::ResolveField() const { return mField; }
 int main() {
   TestNoise();
   TestCurl();
+  TestSlice();
   TestField();
   TestParse();
   TestMod();

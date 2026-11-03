@@ -145,7 +145,7 @@ void TestOtherSlice() {
   std::vector<uint8_t> in = Crln(2);
   const std::vector<ConvertedPart> parts = Convert(in);
   CHECK_MSG(parts.size() == 1 && parts[0].dropped.size() == 1 &&
-                parts[0].dropped[0].find("CRLN slice 2 not ported") != std::string::npos,
+                parts[0].dropped[0].find("CRLN slice 2 with octaves not ported") != std::string::npos,
             "an octave CRLN of slice 2 stays dropped");
 }
 

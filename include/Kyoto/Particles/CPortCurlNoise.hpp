@@ -22,6 +22,11 @@ namespace PortCurlNoise {
 float PerlinNoise(float x, float y, float z, int period);
 // 0x68700: (dy - dz, dz - dx, dx - dy) of central differences of the noise.
 CVector3f CurlNoise3d(float x, float y, float z, float epsilon, int period);
+// CurlNoise2dSliceXY/XZ/YZ 0x684c0/0x68580/0x68640 (slice 1/2/3): the noise on the plane through
+// the origin, the left-out coordinate 0, a and b its two axes in order. Returns
+// (db, -da) of central differences.
+void CurlNoise2dSlice(int slice, float a, float b, float epsilon, int period, float& outA,
+                      float& outB);
 // 0x28708c, CParticleMath::CurlNoise_PerlinOctave3d: the curl of the octave sum
 // S = sum_k gain^k * noise(p * freq * 2^k), period 256. The step is added to a coordinate before
 // the frequency multiplies it. octaves < 1 gives zero.
@@ -93,6 +98,23 @@ private:
   CRealElement* mFreq;
   CIntElement* mOctaves;
   CRealElement* mGain;
+  CVectorElement* mA;
+};
+
+// PCRS: the vector element CVECurlNoise_Perlin2dSliceXY/XZ/YZ (0x2a35d8/0x2a3988/0x2a3d38).
+// Reads the slice (raw u32: 1 XY, 2 XZ, 3 YZ), P, F, A. The two slice axes of P*F feed the noise;
+// the result's slice axes are scaled by A's, the third is 0. No field.
+class CVEPortCurlNoiseSlice : public CVectorElement {
+public:
+  CVEPortCurlNoiseSlice(uint slice, CVectorElement* p, CRealElement* f, CVectorElement* a);
+  ~CVEPortCurlNoiseSlice() override;
+
+  bool GetValue(int frame, CVector3f& valOut) const override;
+
+private:
+  uint mSlice;
+  CVectorElement* mP;
+  CRealElement* mF;
   CVectorElement* mA;
 };
 

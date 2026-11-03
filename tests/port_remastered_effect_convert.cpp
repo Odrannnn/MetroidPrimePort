@@ -3485,10 +3485,20 @@ void TestCurlNoise() {
     CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes, "mod-vector CRLN mode 1 with a zero field is NONE");
   }
   {
+    // A slice is PCRS (slice, P, F, A); its field is released.
     auto parts = convert(2, field, false, 0, 0.0f);
-    CHECK_MSG(parts.size() == 1 && parts[0].dropped.size() == 1 &&
-                  parts[0].dropped[0].find("CRLN slice 2 not ported") != std::string::npos,
-              "CRLN slice 2 drops with a reason");
+    Retail want;
+    want.f("GPSM").f("VEL1").f("PCRM").w(0).f("BSIS");
+    want.f("PCRS").w(2).f("BSIS").f("PLOC").f("CNST").w(Bits(1.0f));
+    RetailVector(want, 0.5f, 0.25f, 2.0f);
+    want.f("CNST").w(Bits(0.0f));
+    want.f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).end();
+    CHECK_MSG(parts.size() == 1 && parts[0].part == want.bytes && parts[0].dropped.empty(),
+              "CRLN slice 2 is PCRM around PCRS");
+    auto octaves = convert(2, field, true, 0, 0.0f);
+    CHECK_MSG(octaves.size() == 1 && octaves[0].dropped.size() == 1 &&
+                  octaves[0].dropped[0].find("CRLN slice 2 with octaves not ported") != std::string::npos,
+              "CRLN slice 2 with octaves drops with a reason");
     // Octaves convert to PCRO (tests/port_remastered_effect_convert_crlnoct.cpp).
     auto unknown = convert(0, EffectGuid{0x11}, false, 0, 0.0f);
     CHECK_MSG(unknown.size() == 1 && unknown[0].dropped.size() == 1 &&

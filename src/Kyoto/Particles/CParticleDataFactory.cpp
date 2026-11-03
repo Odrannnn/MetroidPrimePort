@@ -1912,6 +1912,15 @@ CVectorElement* CParticleDataFactory::GetVectorElement(CInputStream& in) {
     ret = rs_new CVEPortCurlNoiseOctave(pos, freq, octaves, gain, amp);
     break;
   }
+  case SBIG('PCRS'): {
+    // CVECurlNoise_Perlin2dSlice*: raw u32 slice (1 XY, 2 XZ, 3 YZ), P, F, A.
+    const uint slice = in.ReadLong();
+    CVectorElement* pos = GetVectorElement(in);
+    CRealElement* freq = GetRealElement(in);
+    CVectorElement* amp = GetVectorElement(in);
+    ret = rs_new CVEPortCurlNoiseSlice(slice, pos, freq, amp);
+    break;
+  }
   case SBIG('PRTV'): {
     // Port-only ROTV: the vector, the rotation kind, and REUL's three angles.
     CVectorElement* vec = GetVectorElement(in);

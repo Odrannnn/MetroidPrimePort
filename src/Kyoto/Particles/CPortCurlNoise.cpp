@@ -103,6 +103,24 @@ CVector3f CurlNoise3d(float x, float y, float z, float e, int period) {
   return CVector3f(dy - dz, dz - dx, dx - dy);
 }
 
+void CurlNoise2dSlice(int slice, float a, float b, float e, int period, float& outA, float& outB) {
+  const auto noise = [&](float u, float v) {
+    switch (slice) {
+    case 1:
+      return PerlinNoise(u, v, 0.f, period);
+    case 2:
+      return PerlinNoise(u, 0.f, v, period);
+    default:
+      return PerlinNoise(0.f, u, v, period);
+    }
+  };
+  const float s = 1.0f / (e + e);
+  const float da = noise(a + e, b) - noise(a - e, b);
+  const float db = noise(a, b + e) - noise(a, b - e);
+  outA = s * db;
+  outB = s * -da;
+}
+
 namespace {
 // One probe of the octave sum: amp0 = 1, f0 = freq, f(k+1) = fk + fk, amp(k+1) = amp(k) * gain,
 // summed in order. The offset is already in the coordinates, ahead of the frequency.
@@ -276,6 +294,49 @@ bool CVEPortCurlNoiseOctave::GetValue(int frame, CVector3f& valOut) const {
   const CVector3f n = PortCurlNoise::CurlNoiseOctave3d(octaves, p.GetX(), p.GetY(), p.GetZ(),
                                                        freq, gain, 1.0e-5f);
   valOut = CVector3f(a.GetX() * n.GetX(), a.GetY() * n.GetY(), a.GetZ() * n.GetZ());
+  return false;
+}
+
+CVEPortCurlNoiseSlice::CVEPortCurlNoiseSlice(uint slice, CVectorElement* p, CRealElement* f,
+                                             CVectorElement* a)
+: mSlice(slice), mP(p), mF(f), mA(a) {}
+
+CVEPortCurlNoiseSlice::~CVEPortCurlNoiseSlice() {
+  delete mP;
+  delete mF;
+  delete mA;
+}
+
+bool CVEPortCurlNoiseSlice::GetValue(int frame, CVector3f& valOut) const {
+  // The original's order: P, F, A.
+  CVector3f p = CVector3f::Zero();
+  if (mP) {
+    mP->GetValue(frame, p);
+  }
+  float f = 1.0f;
+  if (mF) {
+    mF->GetValue(frame, f);
+  }
+  CVector3f a = CVector3f::Zero();
+  if (mA) {
+    mA->GetValue(frame, a);
+  }
+  float u = 0.f;
+  float v = 0.f;
+  switch (mSlice) {
+  case 1:
+    PortCurlNoise::CurlNoise2dSlice(1, p.GetX() * f, f * p.GetY(), 1.0e-5f, 256, u, v);
+    valOut = CVector3f(u * a.GetX(), v * a.GetY(), 0.f);
+    break;
+  case 2:
+    PortCurlNoise::CurlNoise2dSlice(2, p.GetX() * f, f * p.GetZ(), 1.0e-5f, 256, u, v);
+    valOut = CVector3f(u * a.GetX(), 0.f, v * a.GetZ());
+    break;
+  default:
+    PortCurlNoise::CurlNoise2dSlice(3, p.GetY() * f, f * p.GetZ(), 1.0e-5f, 256, u, v);
+    valOut = CVector3f(0.f, u * a.GetY(), v * a.GetZ());
+    break;
+  }
   return false;
 }
 
