@@ -83,7 +83,7 @@ constexpr ElementSig kElementSigs[] = {
     {"SMOV", "eeeee"},       {"SPAC", "be"},         {"SPAF", "be"},      {"SPAH", "eee"},
     {"SPAI", "be"},    {"SPAV", "be"},         {"SPHE", "eee"},     {"SPOS", "e"},
     {"SUB_", "ee"},    {"SWRL", "eeee"},       {"TPVC", "ge"},      {"TPVF", "ge"},
-    {"TPVI", "ge"},    {"TRSS", "eeeeee"},     {"TSCL", "e"},       {"VARC", "g"},
+    {"TPVI", "ge"},    {"TRSS", "RRRRRR"},     {"TSCL", "e"},       {"VARC", "g"},
     {"VARF", "g"},     {"VARI", "g"},          {"VARV", "g"},       {"VECF", "g"},
     {"VMAG", "e"},     {"VXTR", "e"},          {"VYTR", "e"},       {"VZTR", "e"},
     {"WIND", "ee"},
@@ -94,7 +94,8 @@ constexpr ElementSig kElementSigs[] = {
     {"DFCS", "ee"},
     // EXTT, EXTR and EXTS are leaves; SMOV is CSimpleMoverElement's (position,
     // velocity, rotation, scale, modifier); ROTV a vector turned by a rotation;
-    // TRST is five reals and a raw word.
+    // TRST is five reals and a raw word. TRSS (TMTR's UV transform) is six reals: untyped, a loose
+    // SLCT among them could take one argument and leave its ARRY to the next slot.
     {"TRST", "eeeeew"}, {"EXTS", "-"}, {"ROTV", "ee"},
     // TEXR's texture elements besides ATEX: an id and three elements (TXP2),
     // or an id and one to four (TXFB, whose first is an LFTW).

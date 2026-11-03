@@ -254,7 +254,8 @@ inline constexpr int kModels = 30;
 // 215: a swoosh's RAZY PROT under XFMD 3 is its zero-REUL fallback (PROZ).
 // 216: a generator's SPWS beside a child system is the port-only PSWS, the children's scale;
 //      a swoosh's PSWT 0 is consumed.
-inline constexpr int kEffects = 216;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
+// 217: TRSS is six reals, so a SLCT in a TMTR keeps its ARRY (VTMT written).
+inline constexpr int kEffects = 217;   // ELSM/ELC2 GPSM/EPSM GENPs written standalone
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

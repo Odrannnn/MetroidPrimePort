@@ -566,6 +566,66 @@ void TestBoneAndFlipbook() {
             "ATFB has an id and two arguments");
 }
 
+// A TMTR (u8 0, u8 count, the TRSS) whose TRSS hold SLCT over an ARRY, as 2fab93e3's: TRSS is
+// six reals, so a SLCT keeps its ARRY (untyped, the first SLCT took one argument and the list
+// read TRSS, ITRL, TRSS).
+void TestTrssSelect() {
+  std::vector<uint8_t> out(0x3c, 0);
+  std::memcpy(out.data(), "RFRM", 4);
+  std::memcpy(out.data() + 0x14, "GENP", 4);
+  PutGenerator(out, true);
+  PutProperty(out, "TMTR", 3);
+  out.push_back(0);
+  out.push_back(3);
+  auto trss = [&out](bool select, bool random, float offset) {
+    PutFourCC(out, "TRSS");
+    PutConstant(out, 0.0f);
+    PutConstant(out, 0.0f);
+    if (select) {
+      PutFourCC(out, "SLCT");
+      if (random) {
+        PutFourCC(out, "IRND");
+        PutIntConstant(out, 0);
+        PutIntConstant(out, 1);
+      } else {
+        PutIntConstant(out, 0);
+      }
+      PutFourCC(out, "ARRY");
+      Put32(out, 2);
+      PutConstant(out, -offset);
+      PutConstant(out, offset);
+    } else {
+      PutConstant(out, 1.0f);
+    }
+    PutConstant(out, select ? -offset : 1.0f);
+    PutConstant(out, 0.0f);
+    PutFourCC(out, "ITRL");
+    PutIntConstant(out, 0);
+    PutConstant(out, 1.0f);
+  };
+  trss(true, false, 1.0f);
+  trss(true, true, 2.0f);
+  trss(false, false, 0.0f);
+  PutProperty(out, "_END", 4);
+  Put32(out, 0);
+  out.insert(out.end(), {'F', 'O', 'O', 'T'});
+  EffectNode effect;
+  std::string error;
+  CHECK_MSG(ParseEffect(out.data(), out.size(), effect, error), "TMTR with SLCT parses");
+  bool ok = effect.properties.size() == 1 && effect.properties[0].value.size() == 3;
+  for (size_t i = 0; ok && i < 3; ++i) {
+    const EffectValue& trss = effect.properties[0].value[i];
+    ok = trss.fourcc == EffectFourCC("TRSS") && trss.args.size() == 6 &&
+         trss.args[5].fourcc == EffectFourCC("ITRL") &&
+         (i == 2 || (trss.args[2].fourcc == EffectFourCC("SLCT") && trss.args[2].args.size() == 2 &&
+                     trss.args[2].args[1].fourcc == EffectFourCC("ARRY")));
+  }
+  CHECK_MSG(ok, "TMTR is three TRSS, each SLCT over its ARRY");
+  if (!ok) {
+    std::fprintf(stderr, "%s", DumpEffect(effect, out.data()).c_str());
+  }
+}
+
 int main() {
   TestParse();
   TestFailure();
@@ -577,6 +637,7 @@ int main() {
   TestDeepNesting();
   TestVarianceEmitters();
   TestBoneAndFlipbook();
+  TestTrssSelect();
   if (port_test::Failures() == 0) {
     std::printf("port_remastered_effect: ok\n");
   }
