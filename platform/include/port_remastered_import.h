@@ -317,7 +317,9 @@ inline constexpr int kEffects = 227;   // PIRN marks every converted electric
 // or whose parts Generator's one incoming link Remastered sends it directly.
 // 79: roomenv version 34, LightHints (the dominant light direction DOML reads).
 // 80: layers whose units never load (NeverLoadedUnits: debug skips) are left out.
-inline constexpr int kRooms = 80;
+// 81: a volley of unmatched retail effects one sender activates, paired one to one with the added
+// ones one Remastered link activates, is replaced (the Reactor's Smoke'n'Sparks drew twice).
+inline constexpr int kRooms = 81;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

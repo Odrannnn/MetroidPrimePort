@@ -1290,6 +1290,8 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   std::set<uint32_t> skips;
   std::vector<PortRoomEffects::Override> overrides;
   std::vector<Vec3> added;
+  std::vector<std::vector<PortRoomEffects::Drive>> addedDrives;  // per added effect: the links that switch it
+  std::vector<uint32_t> addedParts;                              // and its PART
   std::map<int, uint32_t> addedIds;  // the effects added, by entity
   std::set<int> seen;
   std::map<std::string, size_t> connectedWhy;  // connected ones left out, by cause
@@ -1731,6 +1733,8 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
     layer.vars.push_back(std::move(vars));
     ++layer.count;
     added.push_back(world);
+    addedDrives.push_back(generated ? std::vector<PortRoomEffects::Drive>() : drives);
+    addedParts.push_back(part);
   }
   // The barrier's ten effects, once every one of them converted: their ids follow the generic
   // add-ons', so no index is used twice, and nothing is written unless all ten are there.
@@ -1879,11 +1883,14 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   }
   // A retail effect no Remastered entity matched, that nothing sends a message to, next to an
   // added one: Remastered replaced it.
+  const auto unmatchedEffect = [&](size_t j) {
+    const ScriptObject& o = objects[j];
+    return o.type == kRetailEffect && o.hasPos && matchedObjects.count(j) == 0 && skips.count(o.id) == 0;
+  };
   size_t replacedNear = 0;
   for (size_t j = 0; j < objects.size(); ++j) {
     const ScriptObject& o = objects[j];
-    if (o.type != kRetailEffect || !o.hasPos || matchedObjects.count(j) != 0 || skips.count(o.id) != 0 ||
-        targeted.count(o.id & 0x3FFFFFF) != 0) {
+    if (!unmatchedEffect(j) || targeted.count(o.id & 0x3FFFFFF) != 0) {
       continue;
     }
     for (const Vec3& w : added) {
@@ -1892,6 +1899,79 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
         ++replacedNear;
         break;
       }
+    }
+  }
+  // A volley Remastered moved to a trigger of its own: the added ones one Remastered link
+  // activates, each the mutual nearest of a distinct unmatched retail effect that one retail
+  // sender activates in one state, that nothing else switches and that sends nothing. The
+  // Reactor's Smoke'n'Sparks1-3 (Timer_Explosion3's in retail) fire from the Queen's death
+  // rattle in Remastered (0019F000-02, 3 m from each): both drew.
+  std::map<uint32_t, size_t> switches;  // incoming connections per target id
+  for (const ScriptObject& s : objects) {
+    for (const ScriptObject::Link& l : s.links) {
+      ++switches[l.target & 0x3FFFFFF];
+    }
+  }
+  std::map<uint32_t, size_t> indexOf;
+  for (size_t j = 0; j < objects.size(); ++j) {
+    indexOf.emplace(objects[j].id & 0x3FFFFFF, j);
+  }
+  std::map<size_t, std::tuple<uint32_t, uint32_t>> volleyOf;  // retail effect -> its sender and state
+  for (const ScriptObject& s : objects) {
+    for (const ScriptObject::Link& l : s.links) {
+      const auto j = indexOf.find(l.target & 0x3FFFFFF);
+      if (l.message == 1 && j != indexOf.end() && unmatchedEffect(j->second) && objects[j->second].targets.empty() &&
+          switches[l.target & 0x3FFFFFF] == 1) {
+        volleyOf[j->second] = {s.id, l.state};
+      }
+    }
+  }
+  const auto nearestAdded = [&](const Vec3& at) {
+    size_t best = added.size();
+    for (size_t a = 0; a < added.size(); ++a) {
+      if (best == added.size() || Distance(added[a], at) < Distance(added[best], at)) {
+        best = a;
+      }
+    }
+    return best;
+  };
+  // The added ones one Remastered link activates, by sender and state.
+  std::map<std::tuple<uint32_t, uint32_t>, std::vector<size_t>> addedVolleys;
+  for (size_t a = 0; a < added.size(); ++a) {
+    if (addedDrives[a].size() == 1 && addedDrives[a].front().message == 1) {
+      addedVolleys[{addedDrives[a].front().sender, addedDrives[a].front().state}].push_back(a);
+    }
+  }
+  std::string replacedSwitched;  // " <id>=<added PART>@<its sender>/<state>" per volley effect, for MP_REMASTERED_MISS
+  for (const auto& [drive, group] : addedVolleys) {
+    std::vector<size_t> pairs;  // the retail effect each one of the group replaces
+    std::set<std::tuple<uint32_t, uint32_t>> retailVolleys;
+    for (size_t a : group) {
+      size_t best = objects.size();
+      for (const auto& [j, from] : volleyOf) {
+        if (Distance(added[a], objects[j].pos) < kReplaceDistance &&
+            (best == objects.size() || Distance(added[a], objects[j].pos) < Distance(added[a], objects[best].pos))) {
+          best = j;
+        }
+      }
+      if (best == objects.size() || nearestAdded(objects[best].pos) != a) {
+        pairs.clear();
+        break;
+      }
+      pairs.push_back(best);
+      retailVolleys.insert(volleyOf.at(best));
+    }
+    if (pairs.empty() || retailVolleys.size() != 1 || std::set<size_t>(pairs.begin(), pairs.end()).size() != pairs.size()) {
+      continue;
+    }
+    for (size_t k = 0; k < pairs.size(); ++k) {
+      const size_t j = pairs[k];
+      skips.insert(objects[j].id);
+      ++replacedNear;
+      char text[40];
+      std::snprintf(text, sizeof text, " %08X=%08X@%08X/%u", objects[j].id, addedParts[group[k]], std::get<0>(drive),
+                    std::get<1>(drive));
+      replacedSwitched += text;
     }
   }
   char barrierNote[256] = "";
@@ -2199,6 +2279,9 @@ std::string WriteRoomEffectsOnce(const std::string& name, const Room& room, uint
   std::string summary = line;
   for (const auto& [why, who] : connectedWho) {
     summary += "; left out for " + why + ":" + who;
+  }
+  if (!replacedSwitched.empty() && port::EnvFlag("MP_REMASTERED_MISS")) {
+    summary += "; replaced while switched:" + replacedSwitched;
   }
   if (added.empty() && overrides.empty() && skips.empty() && !group && patterned.empty() && patches.empty() &&
       steams.empty() && actorSlots.empty() && follows.empty()) {
