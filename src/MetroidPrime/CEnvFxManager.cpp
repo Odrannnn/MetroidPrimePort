@@ -14,6 +14,7 @@
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "MetroidPrime/HUD/CSamusHud.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
 #include "MetroidPrime/ScriptObjects/CHUDBillboardEffect.hpp"
 #include "MetroidPrime/ScriptObjects/CScriptTrigger.hpp"
@@ -268,6 +269,12 @@ void CEnvFxManager::MoveWrapCells(int moveX, int moveY) {
 }
 
 void CEnvFxManager::AsyncLoadResources(CStateManager& mgr) {
+#ifdef TARGET_PC
+  // Remastered builds no billboard here: UpdateVisorSplashes 0xf97ebc creates it on demand.
+  if (PortRemasteredSplash()) {
+    return;
+  }
+#endif
   xb68_envRainSplashId = mgr.AllocateUniqueId();
   CHUDBillboardEffect* effect = rs_new CHUDBillboardEffect(
       rstl::optional_object< TToken< CGenDescription > >(*xb58_envRainSplash),
@@ -584,7 +591,14 @@ void CEnvFxManager::UpdateUnderwaterParticles(const CVectorFixed8_8& zVec) {
 void CEnvFxManager::UpdateVisorSplash(CStateManager& mgr, float dt, const CTransform4f& camXf) {
   EEnvFxType fxType = mgr.GetWorld()->GetNeededEnvFx();
 #ifdef TARGET_PC
-  PortUpdateSplashFaceCount(mgr, fxType);
+  if (PortRemasteredSplash()) {
+    if (!PortUpdateRemasteredSplash(mgr, fxType)) {
+      xb54_baseSplashRate = 0.f;
+      return;
+    }
+  } else {
+    PortUpdateSplashFaceCount(mgr, fxType);
+  }
 #endif
   if (xb68_envRainSplashId != kInvalidUniqueId) {
     if (CHUDBillboardEffect* splashEffect =
@@ -630,16 +644,19 @@ void CEnvFxManager::UpdateVisorSplash(CStateManager& mgr, float dt, const CTrans
 // UpdateVisorSplashes 0xf97ebc keeps the splash billboard while the base rate is up, or while
 // it rains outside fluid and the X-Ray visor isn't on (or the player is in or entering the
 // ball), deleting it otherwise; the billboard's ctor and deletion count it for the face
-// reflection. The retail billboard stays for good, so the count follows that condition here.
-void CEnvFxManager::PortUpdateSplashFaceCount(CStateManager& mgr, EEnvFxType fxType) {
+// reflection. With a converted splash the port does the same (PortUpdateRemasteredSplash); the
+// retail billboard stays for good, so its count follows that condition here.
+bool CEnvFxManager::PortSplashAlive(const CStateManager& mgr, EEnvFxType fxType) const {
   const CPlayer* player = mgr.GetPlayer();
-  const bool alive =
-      xb68_envRainSplashId != kInvalidUniqueId &&
-      (xb54_baseSplashRate > 0.f ||
-       (x24_enableSplash && fxType == kEFX_Rain &&
-        mgr.GetCameraManager()->GetFluidCounter() == 0 &&
-        ((player != nullptr && player->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed) ||
-         mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_XRay)));
+  return xb54_baseSplashRate > 0.f ||
+         (x24_enableSplash && fxType == kEFX_Rain &&
+          mgr.GetCameraManager()->GetFluidCounter() == 0 &&
+          ((player != nullptr && player->GetMorphballTransitionState() != CPlayer::kMS_Unmorphed) ||
+           mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_XRay));
+}
+
+void CEnvFxManager::PortUpdateSplashFaceCount(CStateManager& mgr, EEnvFxType fxType) {
+  const bool alive = xb68_envRainSplashId != kInvalidUniqueId && PortSplashAlive(mgr, fxType);
   if (alive != xPortSplashFaceCounted) {
     if (alive) {
       PortFaceReflection::AddBillboard(mgr.PortFaceReflectionManager());
@@ -648,6 +665,42 @@ void CEnvFxManager::PortUpdateSplashFaceCount(CStateManager& mgr, EEnvFxType fxT
     }
     xPortSplashFaceCounted = alive;
   }
+}
+
+bool CEnvFxManager::PortRemasteredSplash() const {
+  return xb58_envRainSplash && **xb58_envRainSplash != nullptr && (**xb58_envRainSplash)->xPortIrnd;
+}
+
+// UpdateVisorSplashes 0xf97ebc up to the rate: false when it returns without setting one. Not
+// alive deletes the billboard (DeleteObjectRequest); alive creates it once the HUD's visor data
+// is valid (CreateHUDBillboardEffect 0xd7e67c, so counted by the face reflection like any
+// billboard), then sets runIndefinitely (+0x240 bit 3) and turns emission on, every frame.
+bool CEnvFxManager::PortUpdateRemasteredSplash(CStateManager& mgr, EEnvFxType fxType) {
+  if (!PortSplashAlive(mgr, fxType)) {
+    if (xb68_envRainSplashId != kInvalidUniqueId) {
+      mgr.DeleteObjectRequest(xb68_envRainSplashId);
+      xb68_envRainSplashId = kInvalidUniqueId;
+    }
+    return false;
+  }
+  CHUDBillboardEffect* effect =
+      TCastToPtr< CHUDBillboardEffect >(mgr.ObjectById(xb68_envRainSplashId));
+  if (effect == nullptr) {
+    if (!CSamusHud::PortExists()) {
+      return false;
+    }
+    xb68_envRainSplashId = mgr.AllocateUniqueId();
+    effect = rs_new CHUDBillboardEffect(
+        rstl::optional_object< TToken< CGenDescription > >(*xb58_envRainSplash),
+        rstl::optional_object< TToken< CElectricDescription > >(), xb68_envRainSplashId, true,
+        rstl::string_l("VisorRainSplashes"), CHUDBillboardEffect::GetNearClipDistance(mgr),
+        CHUDBillboardEffect::GetScaleForPOV(mgr), CColor(1.f, 1.f, 1.f, 1.f),
+        CVector3f(1.f, 1.f, 1.f), CVector3f(0.f, 0.f, 0.f));
+    mgr.AddObject(effect);
+  }
+  effect->SetRunIndefinitely(true);
+  effect->GetParticleGen()->SetParticleEmission(true);
+  return true;
 }
 #endif
 

@@ -77,6 +77,9 @@ public:
   // STRG_Hud index idx on Trilogy, STRG_Main index idx otherwise (0..7, the visor and beam names,
   // match in English).
   static const wchar_t* PortHudStringAt(int idx);
+  // Remastered's CHUDVisorEffectData::IsValid 0xcb0f78: its projection is set only by the
+  // CSamusHudMP1 ctor (Initialize 0xcb0eb4), so it holds once the HUD exists.
+  static bool PortExists();
 #endif
   void ProcessControllerInput(const CFinalInput& input);
   void UpdateStateTransition(float dt, const CStateManager& mgr);

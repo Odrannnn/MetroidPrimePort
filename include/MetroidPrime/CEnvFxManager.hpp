@@ -205,7 +205,11 @@ private:
   // Remastered keeps the rain-splash billboard only while it can splash (UpdateVisorSplashes
   // 0xf97ebc), so only then does the face reflection count it.
   bool xPortSplashFaceCounted;
+  bool PortSplashAlive(const CStateManager& mgr, EEnvFxType fxType) const;
   void PortUpdateSplashFaceCount(CStateManager& mgr, EEnvFxType fxType);
+  // A converted Remastered PART_EnvRainSplash runs Remastered's billboard lifecycle.
+  bool PortRemasteredSplash() const;
+  bool PortUpdateRemasteredSplash(CStateManager& mgr, EEnvFxType fxType);
 #endif
 };
 CHECK_SIZEOF(CEnvFxManager, 0xc58);

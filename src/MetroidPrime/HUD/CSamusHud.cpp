@@ -358,6 +358,10 @@ void CSamusHud::DeferHintMemo(uint strg, uint hintNum, const CHUDMemoParms& info
   }
 }
 
+#ifdef TARGET_PC
+bool CSamusHud::PortExists() { return spSamusHud != nullptr; }
+#endif
+
 void CSamusHud::InternalDisplayHudMemo(const rstl::wstring& text, const CHUDMemoParms& info) {
   SetMessage(text, info);
 }
