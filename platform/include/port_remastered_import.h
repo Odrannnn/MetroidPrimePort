@@ -240,8 +240,8 @@ inline constexpr int kModels = 30;
 // 190: SSZE, a per-particle value without a VMAT too (PSSZ).
 // 195: a swoosh's LWQD (PLWQ).
 // 196: a swoosh's INTR (PSIR).
-// 197: FRMD (PFRM).
-inline constexpr int kEffects = 198;   // SNRD/SNRA (PSRD/PSRA)
+// 197: FRMD (PFRM). 198: a swoosh's SNRD/SNRA (PSRD/PSRA).
+inline constexpr int kEffects = 199;   // OVEC on a planar square or model consumed
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

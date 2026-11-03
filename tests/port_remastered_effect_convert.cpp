@@ -3642,8 +3642,13 @@ void TestShutdownAndPivot() {
               "a POVC with PLCD passes the retail element reader");
   }
   parts = ovec(cnst, 2);
-  CHECK_MSG(parts.size() == 1 && parts[0].dropped.size() == 1 && parts[0].dropped[0] == "OVEC: on primitive 2",
-            "OVEC off a sprite is dropped");
+  {
+    const std::string povc = "POVC";
+    CHECK_MSG(parts.size() == 1 && parts[0].dropped.empty() &&
+                  std::search(parts[0].part.begin(), parts[0].part.end(), povc.begin(), povc.end()) ==
+                      parts[0].part.end(),
+              "OVEC off a sprite is consumed with no POVC");
+  }
 
   const auto blit = [&](uint8_t value) {
     return convert([&](auto& o) {

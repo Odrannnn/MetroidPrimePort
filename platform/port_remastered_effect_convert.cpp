@@ -5435,12 +5435,17 @@ public:
     // OVEC (CreateGPSM 0x25a1c4, var 0x32 at desc+0x388) is a sprite's vector orientation axis:
     // CParticleStaticRenderState 0x28c4f0 makes a sprite vector-oriented when it is authored, ORNT 0
     // too, and the instance writer 0x2b4948 puts its value where the velocity would go. The port-only
-    // POVC, in the port's space. A planar square or model has no vector orientation.
+    // POVC, in the port's space. A planar square or model has no vector orientation: every other
+    // desc+0x388 load (UpdateSpriteRenderState 0x247668, CopyPerSpriteDataToSpriteRenderData
+    // 0x2478bc/0x248324, the instance writer 0x2b45b8/0x2b4948) is on the sprite path, and
+    // CreateNewParticles 0x24aae0 only writes the normalized velocity into its slot (ORNT 1). The
+    // shipped OVEC on a planar square or model is PLCD or a constant (no random draws), so it is
+    // consumed with no effect.
     if (s.part && fourcc == F("OVEC")) {
       std::vector<uint8_t> inner;
       std::string why = "not one element";
       if (s.node.primitiveType != 1) {
-        s.result.dropped.push_back("OVEC: on primitive " + std::to_string(s.node.primitiveType));
+        // Nothing to write.
       } else if (property.value.size() != 1 || !Element(property.value[0], Type::Vector, inner, why)) {
         s.result.dropped.push_back("OVEC: " + why);
       } else {
