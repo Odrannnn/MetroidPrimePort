@@ -1,6 +1,7 @@
 #include "MetroidPrime/Enemies/CSeedling.hpp"
 
 #include "Kyoto/Audio/CSfxManager.hpp"
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Math/CloseEnough.hpp"
 #include "MetroidPrime/CWorld.hpp"
 #include "MetroidPrime/Player/CPlayer.hpp"
@@ -63,10 +64,18 @@ void CSeedling::Render(const CStateManager& mgr) const {
     const int start = x722_24_renderOnlyClusterA ? 0 : x722_25_curNeedleCluster ? 6 : 0;
     const int max = x722_24_renderOnlyClusterA ? 12 : 6;
 
+#ifdef TARGET_PC
+    // Remastered's spike proxies (CSeedlingMP1::CreateSpikeRenderProxies) have no baked
+    // lighting; see CCubeModel::sPortUnbaked.
+    CCubeModel::sPortUnbaked = true;
+#endif
     for (int i = 0; i < max; i++) {
       CTransform4f lctrXf(GetLctrTransform(rstl::string_l(skSpikeLocators[i + start])));
       x6bc_spikeData->Render(mgr, lctrXf, GetActorLights(), CModelFlags::Normal());
     }
+#ifdef TARGET_PC
+    CCubeModel::sPortUnbaked = false;
+#endif
   }
   CWallWalker::Render(mgr);
 }

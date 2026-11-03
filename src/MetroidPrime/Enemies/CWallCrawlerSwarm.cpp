@@ -4,6 +4,7 @@
 #include "Kyoto/Animation/CVertexMorphEffect.hpp"
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "Kyoto/Basics/CCast.hpp"
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Graphics/CGX.hpp"
 #include "Kyoto/Math/CFrustumPlanes.hpp"
 #include "Kyoto/Math/CQuaternion.hpp"
@@ -577,6 +578,11 @@ void CWallCrawlerSwarm::Render(const CStateManager& mgr) const {
     CGraphics::DisableAllLights();
     gpRender->SetAmbientColor(CColor(0.5f, 0.5f, 0.5f, 1.f));
   }
+#ifdef TARGET_PC
+  // Remastered's boid proxies (CWallCrawlerSwarmMP1::CreateBoidRenderProxy) have no baked
+  // lighting; see CCubeModel::sPortUnbaked.
+  CCubeModel::sPortUnbaked = true;
+#endif
   bool thermalHot = mgr.GetThermalDrawFlag() == kTD_Hot;
   CModelFlags flags = CModelFlags::Normal();
   if (mgr.GetPlayerState()->GetActiveVisor(mgr) == CPlayerState::kPV_XRay) {
@@ -641,6 +647,9 @@ void CWallCrawlerSwarm::Render(const CStateManager& mgr) const {
       RenderBoid(boid, drawMask, thermalHot, flags);
     }
   }
+#ifdef TARGET_PC
+  CCubeModel::sPortUnbaked = false;
+#endif
   CGraphics::DisableAllLights();
   DrawTouchBounds();
 }

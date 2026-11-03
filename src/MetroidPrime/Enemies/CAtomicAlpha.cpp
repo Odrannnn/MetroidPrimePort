@@ -1,5 +1,6 @@
 #include "MetroidPrime/Enemies/CAtomicAlpha.hpp"
 
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/Enemies/CPatternedInfo.hpp"
 #include "MetroidPrime/TCastTo.hpp"
@@ -98,6 +99,11 @@ void CAtomicAlpha::Render(const CStateManager& mgr) const {
   }
   CPatterned::Render(mgr);
 
+#ifdef TARGET_PC
+  // Remastered's bomb proxies (CAtomicAlphaMP1::CreateBombRenderProxies) have no baked
+  // lighting; see CCubeModel::sPortUnbaked.
+  CCubeModel::sPortUnbaked = true;
+#endif
   for (int i = 0; i < x6dc_bombLocators.size(); ++i) {
     const float scale = rstl::min_val(
         rstl::max_val(0.f, x6dc_bombLocators[i].x14_scaleTime - x570_bombReappearDelay) /
@@ -109,6 +115,9 @@ void CAtomicAlpha::Render(const CStateManager& mgr) const {
                                    CTransform4f::Scale(scale);
     x690_bombModel.Render(mgr, locatorXf, GetActorLights(), CModelFlags::Normal());
   }
+#ifdef TARGET_PC
+  CCubeModel::sPortUnbaked = false;
+#endif
 }
 
 void CAtomicAlpha::AddToRenderer(const CFrustumPlanes& frustum, const CStateManager& mgr) const {

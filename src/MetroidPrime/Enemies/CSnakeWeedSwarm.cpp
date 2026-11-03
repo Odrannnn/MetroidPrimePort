@@ -5,6 +5,7 @@
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "Kyoto/Basics/CCast.hpp"
 #include "Kyoto/CSimplePool.hpp"
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Math/CFrustumPlanes.hpp"
 #include "Kyoto/Math/CMath.hpp"
@@ -382,10 +383,18 @@ void CSnakeWeedSwarm::AddToRenderer(const CFrustumPlanes& frustum, const CStateM
       CGraphics::DisableAllLights();
       gpRender->SetAmbientColor(CColor::White());
     }
+#ifdef TARGET_PC
+    // Remastered's boid proxies (CSnakeWeedSwarmMP1::CreateBoidRenderProxy) have no baked
+    // lighting; see CCubeModel::sPortUnbaked.
+    CCubeModel::sPortUnbaked = true;
+#endif
     uint index = 0;
     for (AUTO(it, x130_boids.begin()); it != x130_boids.end(); ++it, ++index) {
       RenderBoid(index, *it, posesToBuild);
     }
+#ifdef TARGET_PC
+    CCubeModel::sPortUnbaked = false;
+#endif
     CGraphics::DisableAllLights();
   }
 }
