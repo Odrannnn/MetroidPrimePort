@@ -6644,11 +6644,15 @@ public:
         s.result.dropped.push_back("MTIN: no texture for its material");
         ++s.result.droppedRetail;
       }
-    } else if (s.material != nullptr && !s.electric) {
-      s.result.dropped.push_back("MTIN: the effect has a TEXR");
     }
     const bool customVmat = (s.part || s.swoosh || s.electric) && s.material != nullptr &&
                             Material(*s.material, s.node, s.result, s.swoosh || s.electric, s.electric);
+    // With a TEXR the material still draws: MTIN shaders sample only the material's own textures
+    // (kb topic/header-mtrl-perm048.md), and the TEXR stays the retail-path texture. Only a material
+    // the VMAT can't carry loses it.
+    if (s.material != nullptr && s.texture && !s.electric && !customVmat) {
+      s.result.dropped.push_back("MTIN: the effect has a TEXR");
+    }
     const bool headerVmat =
         !customVmat && s.part && !s.customMaterial && !s.drawsNothing && HeaderMaterial(s.node, s.result);
     const bool vmat = customVmat || headerVmat;

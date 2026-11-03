@@ -4335,13 +4335,16 @@ std::vector<uint8_t> Mati(uint32_t shader, const std::vector<std::pair<const cha
 
 // A root generator whose material is `Fresh(7)`, with a blend mode and sprite centre.
 std::vector<uint8_t> VmatEffect(bool model = false, const EffectGuid& material = Fresh(7), uint32_t pbdm = 2,
-                                float sftd = 0) {
+                                float sftd = 0, bool texr = false) {
   std::vector<uint8_t> out(0x3c, 0);
   std::memcpy(out.data(), "RFRM", 4);
   std::memcpy(out.data() + 0x14, "GENP", 4);
   PutGenerator(out, true);
   PutProperty(out, "MAXP", 1);
   PutConstant(out, 4);
+  if (texr) {
+    PutTexr(out, 0x1234ABCE);
+  }
   PutProperty(out, "PBDM", 1);
   PutConstant(out, pbdm);
   PutProperty(out, "MTIN", 0);
@@ -4387,6 +4390,35 @@ void TestSftdReport() {
   io.materialData = [](const EffectGuid&) { return Mati(0x12345678, {}); };
   parts = ConvertEffect(effect, data.data(), io);
   CHECK_MSG(parts.size() == 1 && dropped(parts[0], "SFTD: no VMAT"), "without a VMAT, SFTD is dropped as no VMAT");
+}
+
+// MTIN beside a TEXR: the VMAT draws the material (its shaders sample only the material's textures),
+// so only a material without a VMAT reports the TEXR drop.
+void TestMtinTexrReport() {
+  const std::vector<uint8_t> data = VmatEffect(false, Fresh(7), 2, 0, true);
+  EffectNode effect;
+  std::string error;
+  CHECK_MSG(ParseEffect(data.data(), data.size(), effect, error), "mtin+texr effect parses");
+  EffectConvertIO io;
+  io.materialTexture = [](const EffectGuid& material) { return material == Fresh(7) ? 0x5EED0007u : 0u; };
+  io.materialData = [](const EffectGuid&) { return Mati(0x461071b8, {{"TCH0", Fresh(8)}}); };
+  io.vfxTexture = [](const EffectGuid&) {
+    FlipbookAtlas atlas;
+    atlas.id = 0x5EED0008;
+    return atlas;
+  };
+  auto dropped = [](const ConvertedPart& part, const std::string& line) {
+    return std::find(part.dropped.begin(), part.dropped.end(), line) != part.dropped.end();
+  };
+  std::vector<ConvertedPart> parts = ConvertEffect(effect, data.data(), io);
+  CHECK_MSG(parts.size() == 1, "one mtin+texr part");
+  if (parts.size() == 1) {
+    CHECK_MSG(!dropped(parts[0], "MTIN: the effect has a TEXR"), "an MTIN the VMAT draws is not dropped for its TEXR");
+  }
+  io.materialData = [](const EffectGuid&) { return Mati(0x12345678, {}); };
+  parts = ConvertEffect(effect, data.data(), io);
+  CHECK_MSG(parts.size() == 1 && dropped(parts[0], "MTIN: the effect has a TEXR"),
+            "without a VMAT, MTIN beside a TEXR is dropped");
 }
 
 // A model particle with a VMAT carries its converted model as VMSH, when the import has the mesh.
@@ -7164,6 +7196,7 @@ int main() {
   TestVmat();
   TestVmsh();
   TestSftdReport();
+  TestMtinTexrReport();
   TestAnimTile();
   TestAtlasTexture();
   TestModelChoice();
