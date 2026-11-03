@@ -2,10 +2,13 @@
 
 #include "port_echoes_suits.h"
 
+#include "port_dread_samus_mod.h"
+
 #include <algorithm>
 #include <bit>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -16,6 +19,7 @@ constexpr uint32_t kCMDL = 0x434D444C;
 constexpr uint32_t kCSKR = 0x43534B52;
 constexpr uint32_t kCINF = 0x43494E46;
 constexpr uint32_t kTXTR = 0x54585452;
+constexpr uint32_t kANCS = 0x414E4353;
 
 std::string Hex(uint32_t id) {
   char text[16];
@@ -233,6 +237,169 @@ bool ConvertSurface(const uint8_t* data, size_t size, const std::vector<uint32_t
   return true;
 }
 
+// A Prime material set taken apart; a material's vertex flags sit after its texture indices.
+struct MaterialSet {
+  std::vector<uint32_t> textures;
+  std::vector<std::vector<uint8_t>> materials;
+};
+
+bool ParseSet(const std::vector<uint8_t>& in, MaterialSet& out, std::string* error) {
+  Reader r{in.data(), in.size()};
+  const uint32_t ntex = r.U32(0);
+  if (r.bad || ntex > in.size() / 4) {
+    return Fail(error, "material set cut short");
+  }
+  out = MaterialSet{};
+  for (uint32_t i = 0; i < ntex; ++i) {
+    out.textures.push_back(r.U32(4 + i * 4));
+  }
+  const size_t count = 4 + size_t(ntex) * 4;
+  const uint32_t nmat = r.U32(count);
+  if (r.bad || nmat > in.size() / 4) {
+    return Fail(error, "material set cut short");
+  }
+  size_t at = count + 4 + size_t(nmat) * 4;
+  uint32_t begin = 0;
+  for (uint32_t i = 0; i < nmat; ++i) {
+    const uint32_t end = r.U32(count + 4 + i * 4);
+    if (r.bad || end < begin || !r.Has(at + begin, end - begin)) {
+      return Fail(error, "material " + std::to_string(i) + " cut short");
+    }
+    out.materials.emplace_back(in.begin() + std::ptrdiff_t(at + begin), in.begin() + std::ptrdiff_t(at + end));
+    Reader m{out.materials.back().data(), out.materials.back().size()};
+    m.U32(8 + size_t(m.U32(4)) * 4);
+    if (m.bad) {
+      return Fail(error, "material " + std::to_string(i) + " has no vertex flags");
+    }
+    begin = end;
+  }
+  return true;
+}
+
+std::vector<uint8_t> WriteSet(const MaterialSet& set) {
+  std::vector<uint8_t> out;
+  Put32(out, uint32_t(set.textures.size()));
+  for (const uint32_t id : set.textures) {
+    Put32(out, id);
+  }
+  Put32(out, uint32_t(set.materials.size()));
+  uint32_t end = 0;
+  for (const auto& material : set.materials) {
+    end += uint32_t(material.size());
+    Put32(out, end);
+  }
+  for (const auto& material : set.materials) {
+    Append(out, material.data(), material.size());
+  }
+  Pad32(out);
+  return out;
+}
+
+size_t VertexFlagsAt(const std::vector<uint8_t>& material) {
+  Reader m{material.data(), material.size()};
+  return 8 + size_t(m.U32(4)) * 4;
+}
+
+uint32_t VertexFlags(const std::vector<uint8_t>& material) {
+  Reader m{material.data(), material.size()};
+  return m.U32(VertexFlagsAt(material));
+}
+
+// The vertex flags of `surface`'s material in `set`.
+bool SurfaceFlags(const std::vector<uint8_t>& surface, const MaterialSet& set, uint32_t& vaf, std::string* error) {
+  Reader r{surface.data(), surface.size()};
+  const uint32_t material = r.U32(0x0C);
+  if (r.bad || material >= set.materials.size()) {
+    return Fail(error, "surface material out of range");
+  }
+  vaf = VertexFlags(set.materials[material]);
+  return true;
+}
+
+// `surface`'s display list (vertex flags `vaf`) rebuilt: each primitive's format through `format`,
+// each index through `index` (attribute 0-10, its value), written 16-bit when `wide`, else at its
+// own width.
+bool RewriteList(std::vector<uint8_t>& surface, uint32_t vaf, bool wide,
+                 const std::function<bool(uint8_t&)>& format,
+                 const std::function<bool(int, uint32_t&)>& index, std::string* error) {
+  Reader r{surface.data(), surface.size()};
+  const uint32_t sizeWord = r.U32(0x10);
+  const uint32_t extra = r.U32(0x1C);
+  const size_t start = (0x2C + size_t(extra) + 31) & ~size_t(31);
+  if (r.bad || start > surface.size()) {
+    return Fail(error, "surface header cut short");
+  }
+  size_t vertexSize = 0;
+  for (int i = 0; i < 11; ++i) {
+    const uint32_t mode = (vaf >> (2 * i)) & 3;
+    if (mode == 1) {
+      return Fail(error, "direct vertex attribute");
+    }
+    vertexSize += mode == 0 ? 0 : mode - 1;
+  }
+  std::vector<uint8_t> list;
+  size_t at = start;
+  while (at < surface.size() && surface[at] != 0) {
+    uint8_t command = surface[at];
+    const uint16_t count = r.U16(at + 1);
+    if (r.bad || !r.Has(at + 3, size_t(count) * vertexSize)) {
+      return Fail(error, "display list cut short");
+    }
+    if (!format(command)) {
+      return Fail(error, "vertex format " + std::to_string(command & 7) + " not supported here");
+    }
+    list.push_back(command);
+    Append(list, surface.data() + at + 1, 2);
+    at += 3;
+    for (uint16_t v = 0; v < count; ++v) {
+      for (int i = 0; i < 11; ++i) {
+        const uint32_t mode = (vaf >> (2 * i)) & 3;
+        if (mode == 0) continue;
+        uint32_t value = mode == 2 ? surface[at] : r.U16(at);
+        at += mode - 1;
+        if (!index(i, value)) {
+          return Fail(error, "vertex index out of range");
+        }
+        if (wide || mode == 3) {
+          if (value > 0xFFFF) return Fail(error, "vertex index past 16 bits");
+          list.push_back(uint8_t(value >> 8));
+        } else if (value > 0xFF) {
+          return Fail(error, "vertex index past 8 bits");
+        }
+        list.push_back(uint8_t(value));
+      }
+    }
+  }
+  list.push_back(0);
+  Pad32(list);
+  surface.resize(start);
+  Append(surface, list.data(), list.size());
+  Set32(surface, 0x10, (sizeWord & 0xFFFF0000) | uint32_t(list.size()));
+  return true;
+}
+
+// Each list of `model` checked to read texture 0 as floats (formats 0 and 1), then its short UVs
+// dropped: CCubeModel binds them only for packed lightmaps, which those formats cannot read.
+bool DropShortUvs(PrimeCmdl& model, const MaterialSet& set, std::string* error) {
+  for (auto& surface : model.surfaces) {
+    uint32_t vaf;
+    if (!SurfaceFlags(surface, set, vaf, error) ||
+        !RewriteList(
+            surface, vaf, false, [](uint8_t& c) { return (c & 7) < 2; }, [](int, uint32_t&) { return true; },
+            error)) {
+      return false;
+    }
+  }
+  Reader r{model.header.data(), model.header.size()};
+  const uint32_t flags = r.U32(8);
+  if (flags & 0x4) {
+    if (model.arrays.size() != 5) return Fail(error, "short UVs flagged without their array");
+    model.arrays.pop_back();
+    Set32(model.header, 8, flags & ~0x4u);
+  }
+  return true;
+}
+
 }  // namespace
 
 bool LzoInflate(const uint8_t* source, size_t sourceLen, uint8_t* dest, size_t& destLen) {
@@ -397,7 +564,44 @@ bool Decompress(const uint8_t* data, size_t size, std::vector<uint8_t>& out, std
   return true;
 }
 
+std::vector<uint8_t> WriteCmdl(const PrimeCmdl& model) {
+  std::vector<std::vector<uint8_t>> sections = model.materialSets;
+  sections.insert(sections.end(), model.arrays.begin(), model.arrays.end());
+  std::vector<uint8_t> offsets;
+  Put32(offsets, uint32_t(model.surfaces.size()));
+  uint32_t end = 0;
+  for (const auto& surface : model.surfaces) {
+    end += uint32_t(surface.size());
+    Put32(offsets, end);
+  }
+  Pad32(offsets);
+  sections.push_back(std::move(offsets));
+  sections.insert(sections.end(), model.surfaces.begin(), model.surfaces.end());
+
+  std::vector<uint8_t> out = model.header;
+  Set32(out, 0x24, uint32_t(sections.size()));
+  Set32(out, 0x28, uint32_t(model.materialSets.size()));
+  for (const auto& section : sections) {
+    Put32(out, uint32_t(section.size()));
+  }
+  Pad32(out);
+  for (const auto& section : sections) {
+    Append(out, section.data(), section.size());
+  }
+  return out;
+}
+
 bool ConvertCmdl(const std::vector<uint8_t>& in, std::vector<uint8_t>& out, std::vector<uint32_t>& textures,
+                 std::string* error) {
+  PrimeCmdl model;
+  if (!ConvertCmdl(in, model, textures, error)) {
+    return false;
+  }
+  out = WriteCmdl(model);
+  return true;
+}
+
+bool ConvertCmdl(const std::vector<uint8_t>& in, PrimeCmdl& model, std::vector<uint32_t>& textures,
                  std::string* error) {
   Reader r{in.data(), in.size()};
   if (r.U32(0) != 0xDEADBABE || r.U32(4) != 4) {
@@ -429,7 +633,7 @@ bool ConvertCmdl(const std::vector<uint8_t>& in, std::vector<uint8_t>& out, std:
     return Fail(error, "CMDL section count does not match its surfaces");
   }
 
-  std::vector<std::vector<uint8_t>> outSections;
+  model = PrimeCmdl{};
   std::vector<uint32_t> vertexFlags;
   for (uint32_t i = 0; i < nms; ++i) {
     std::vector<uint8_t> set;
@@ -440,43 +644,212 @@ bool ConvertCmdl(const std::vector<uint8_t>& in, std::vector<uint8_t>& out, std:
     if (i == 0) {
       vertexFlags = std::move(setFlags);
     }
-    outSections.push_back(std::move(set));
+    model.materialSets.push_back(std::move(set));
   }
   for (uint32_t i = 0; i < arrays; ++i) {
     const auto& [start, length] = sections[nms + i];
-    outSections.emplace_back(in.begin() + std::ptrdiff_t(start), in.begin() + std::ptrdiff_t(start + length));
+    model.arrays.emplace_back(in.begin() + std::ptrdiff_t(start), in.begin() + std::ptrdiff_t(start + length));
   }
-  std::vector<std::vector<uint8_t>> surfaces(nsurf);
+  model.surfaces.resize(nsurf);
   for (uint32_t i = 0; i < nsurf; ++i) {
     const auto& [start, length] = sections[surfaceHeader + 1 + i];
-    if (!ConvertSurface(in.data() + start, length, vertexFlags, surfaces[i], error)) {
+    if (!ConvertSurface(in.data() + start, length, vertexFlags, model.surfaces[i], error)) {
       return false;
     }
   }
-  std::vector<uint8_t> offsets;
-  Put32(offsets, nsurf);
-  uint32_t end = 0;
-  for (const auto& surface : surfaces) {
-    end += uint32_t(surface.size());
-    Put32(offsets, end);
-  }
-  Pad32(offsets);
-  outSections.push_back(std::move(offsets));
-  for (auto& surface : surfaces) {
-    outSections.push_back(std::move(surface));
-  }
-
-  out.assign(in.begin(), in.begin() + 0x2C);
-  Set32(out, 4, 2);
-  for (const auto& section : outSections) {
-    Put32(out, uint32_t(section.size()));
-  }
-  Pad32(out);
-  for (const auto& section : outSections) {
-    Append(out, section.data(), section.size());
-  }
+  model.header.assign(in.begin(), in.begin() + 0x2C);
+  Set32(model.header, 4, 2);
   std::sort(textures.begin(), textures.end());
   textures.erase(std::unique(textures.begin(), textures.end()), textures.end());
+  return true;
+}
+
+bool FloatNormals(PrimeCmdl& model, std::string* error) {
+  Reader h{model.header.data(), model.header.size()};
+  const uint32_t flags = h.U32(8);
+  if (h.bad || model.materialSets.empty() || model.arrays.size() < 4) {
+    return Fail(error, "model has no arrays");
+  }
+  if (!(flags & 0x2)) {
+    return true;
+  }
+  for (const auto& setBytes : model.materialSets) {
+    MaterialSet set;
+    if (!ParseSet(setBytes, set, error)) {
+      return false;
+    }
+    // Every set draws the same lists; checking against each covers the vertex sizes all see.
+    for (auto surface : model.surfaces) {
+      uint32_t vaf;
+      if (!SurfaceFlags(surface, set, vaf, error) ||
+          !RewriteList(
+              surface, vaf, false, [](uint8_t& c) { return (c & 7) == 1; }, [](int, uint32_t&) { return true; },
+              error)) {
+        return false;
+      }
+    }
+  }
+  MaterialSet set;
+  ParseSet(model.materialSets[0], set, error);
+  for (auto& surface : model.surfaces) {
+    uint32_t vaf;
+    SurfaceFlags(surface, set, vaf, error);
+    RewriteList(
+        surface, vaf, false,
+        [](uint8_t& c) {
+          c &= ~7;
+          return true;
+        },
+        [](int, uint32_t&) { return true; }, error);
+  }
+  const std::vector<uint8_t>& shorts = model.arrays[1];
+  Reader n{shorts.data(), shorts.size()};
+  std::vector<uint8_t> floats;
+  for (size_t at = 0; at + 2 <= shorts.size(); at += 2) {
+    const float value = float(int16_t(n.U16(at))) / 16384.f;
+    uint32_t bits;
+    std::memcpy(&bits, &value, 4);
+    Put32(floats, bits);
+  }
+  // Whole normals only: a short array padded to 32 bytes can end mid-normal.
+  floats.resize(floats.size() / 12 * 12);
+  Pad32(floats);
+  model.arrays[1] = std::move(floats);
+  Set32(model.header, 8, flags & ~0x2u);
+  return true;
+}
+
+bool MergeCmdl(PrimeCmdl& a, const PrimeCmdl& b, std::string* error) {
+  if (a.materialSets.size() != 1 || b.materialSets.size() != 1) {
+    return Fail(error, "merge needs one material set each");
+  }
+  MaterialSet setA, setB;
+  if (!ParseSet(a.materialSets[0], setA, error) || !ParseSet(b.materialSets[0], setB, error)) {
+    return false;
+  }
+  PrimeCmdl other = b;
+  if (!DropShortUvs(a, setA, error) || !DropShortUvs(other, setB, error)) {
+    return false;
+  }
+  Reader ha{a.header.data(), a.header.size()};
+  Reader hb{other.header.data(), other.header.size()};
+  const uint32_t flags = ha.U32(8);
+  if (ha.bad || hb.bad || flags != hb.U32(8) || a.arrays.size() != 4 || other.arrays.size() != 4) {
+    return Fail(error, "merged models differ in their vertex layout");
+  }
+  // Positions, normals, colours (both channels), float UVs (textures 0-6).
+  const size_t stride[4] = {12, size_t(flags & 0x2 ? 6 : 12), 4, 8};
+  constexpr int kArrayOf[11] = {0, 1, 2, 2, 3, 3, 3, 3, 3, 3, 3};
+  uint32_t base[4];
+  for (int k = 0; k < 4; ++k) {
+    base[k] = uint32_t(a.arrays[k].size() / stride[k]);
+    a.arrays[k].resize(base[k] * stride[k]);
+    Append(a.arrays[k], other.arrays[k].data(), other.arrays[k].size());
+    Pad32(a.arrays[k]);
+  }
+  const uint32_t materials = uint32_t(setA.materials.size());
+  for (auto& surface : other.surfaces) {
+    uint32_t vaf;
+    if (!SurfaceFlags(surface, setB, vaf, error) ||
+        !RewriteList(
+            surface, vaf, true, [](uint8_t&) { return true; },
+            [&base, &kArrayOf](int attr, uint32_t& value) {
+              value += base[kArrayOf[attr]];
+              return true;
+            },
+            error)) {
+      return false;
+    }
+    Reader r{surface.data(), surface.size()};
+    Set32(surface, 0x0C, r.U32(0x0C) + materials);
+    a.surfaces.push_back(std::move(surface));
+  }
+  const uint32_t textures = uint32_t(setA.textures.size());
+  for (auto& material : setB.materials) {
+    Reader m{material.data(), material.size()};
+    const uint32_t ntex = m.U32(4);
+    for (uint32_t i = 0; i < ntex; ++i) {
+      Set32(material, 8 + i * 4, m.U32(8 + i * 4) + textures);
+    }
+    // Every index 16-bit now, as the rewritten lists are.
+    const size_t at = VertexFlagsAt(material);
+    uint32_t vaf = m.U32(at);
+    for (int i = 0; i < 11; ++i) {
+      if (((vaf >> (2 * i)) & 3) == 2) vaf |= 1u << (2 * i);
+    }
+    Set32(material, at, vaf);
+    setA.materials.push_back(std::move(material));
+  }
+  setA.textures.insert(setA.textures.end(), setB.textures.begin(), setB.textures.end());
+  a.materialSets[0] = WriteSet(setA);
+  for (int i = 0; i < 3; ++i) {
+    const float lo = std::min(ha.F32(0x0C + i * 4), hb.F32(0x0C + i * 4));
+    const float hi = std::max(ha.F32(0x18 + i * 4), hb.F32(0x18 + i * 4));
+    uint32_t bits;
+    std::memcpy(&bits, &lo, 4);
+    Set32(a.header, 0x0C + i * 4, bits);
+    std::memcpy(&bits, &hi, 4);
+    Set32(a.header, 0x18 + i * 4, bits);
+  }
+  return true;
+}
+
+bool RigidSkin(PrimeCmdl& model, uint32_t joint, std::vector<uint8_t>& cskr, std::string* error) {
+  Reader h{model.header.data(), model.header.size()};
+  const uint32_t flags = h.U32(8);
+  if (h.bad || model.arrays.size() < 2 || (flags & 0x3)) {
+    return Fail(error, "rigid skin needs an unskinned model with float normals");
+  }
+  // Eight 12-byte entries fill 96 bytes, so the count stays whole after padding to 32.
+  const size_t count = (std::max(model.arrays[0].size(), model.arrays[1].size()) / 12 + 7) & ~size_t(7);
+  model.arrays[0].resize(count * 12, 0);
+  model.arrays[1].resize(count * 12, 0);
+  Set32(model.header, 8, flags | 0x1);
+  cskr.clear();
+  Put32(cskr, 1);  // groups
+  Put32(cskr, 1);  // weights in the group
+  Put32(cskr, joint);
+  Put32(cskr, 0x3F800000);  // 1.0
+  Put32(cskr, uint32_t(count));
+  Put32(cskr, 0xFFFFFFFF);
+  Put32(cskr, uint32_t(count));
+  Put32(cskr, 0xFFFFFFFF);
+  Put32(cskr, uint32_t(count));
+  return true;
+}
+
+bool MainJoint(const std::vector<uint8_t>& cskr, uint32_t& joint, std::string* error) {
+  Reader r{cskr.data(), cskr.size()};
+  const uint32_t groups = r.U32(0);
+  if (r.bad || groups > cskr.size() / 8) {
+    return Fail(error, "CSKR cut short");
+  }
+  std::vector<std::pair<uint32_t, double>> votes;
+  size_t at = 4;
+  for (uint32_t g = 0; g < groups; ++g) {
+    const uint32_t n = r.U32(at);
+    if (r.bad || !r.Has(at + 4, size_t(n) * 8 + 4)) {
+      return Fail(error, "CSKR group cut short");
+    }
+    const uint32_t vertices = r.U32(at + 4 + size_t(n) * 8);
+    for (uint32_t i = 0; i < n; ++i) {
+      const uint32_t bone = r.U32(at + 4 + i * 8);
+      const double weight = double(r.F32(at + 8 + i * 8)) * vertices;
+      auto same = std::find_if(votes.begin(), votes.end(), [bone](const auto& v) { return v.first == bone; });
+      if (same == votes.end()) {
+        votes.emplace_back(bone, weight);
+      } else {
+        same->second += weight;
+      }
+    }
+    at += 8 + size_t(n) * 8;
+  }
+  if (votes.empty()) {
+    return Fail(error, "CSKR has no weights");
+  }
+  joint = std::max_element(votes.begin(), votes.end(),
+                           [](const auto& x, const auto& y) { return x.second < y.second; })
+              ->first;
   return true;
 }
 
@@ -651,8 +1024,8 @@ bool Import(const Io& io, Result& result, std::string& error) {
   std::map<uint32_t, PortDread::PrimeSkeleton> primeCinfs;
   std::set<uint32_t> textures;
   std::map<uint32_t, std::vector<uint8_t>> written;  // CMDL/CSKR by Prime id, for kCopies
-  const size_t total = std::size(kTargets);
-  for (size_t i = 0; i < total; ++i) {
+  const size_t total = std::size(kTargets) + std::size(kBalls);
+  for (size_t i = 0; i < std::size(kTargets); ++i) {
     const Target& t = kTargets[i];
     if (cancelled()) {
       error = "Cancelled.";
@@ -722,6 +1095,88 @@ bool Import(const Io& io, Result& result, std::string& error) {
       return false;
     }
   }
+  for (size_t i = 0; i < std::size(kBalls); ++i) {
+    const Ball& ball = kBalls[i];
+    if (cancelled()) {
+      error = "Cancelled.";
+      return false;
+    }
+    if (io.progress) io.progress(std::size(kTargets) + i, total);
+    const std::string what = std::string(ball.suit) + (ball.spider ? " Spider Ball" : " Morph Ball");
+    const PortDreadSamus::BallTarget* target = nullptr;
+    for (const auto& t : PortDreadSamus::kBallTargets) {
+      if (t.suit == ball.primeSuit && t.spider == ball.spider) target = &t;
+    }
+    if (target == nullptr) {
+      error = "Internal error: " + what + " has no Prime ball.";
+      return false;
+    }
+    // Prime's ANCS, its character 0 (after the name from byte 14) pointed at the new model and skin.
+    std::vector<uint8_t> ancs, retailSkin;
+    if (!io.retail(kANCS, target->ancs, ancs)) {
+      error = "Prime's ball " + Hex(target->ancs) + " is missing.";
+      return false;
+    }
+    size_t at = 14;
+    while (at < ancs.size() && ancs[at] != 0) ++at;
+    ++at;
+    Reader a{ancs.data(), ancs.size()};
+    const uint32_t skin = a.U32(at + 4);
+    if (a.bad || a.U32(at) != target->cmdl || !io.retail(kCSKR, skin, retailSkin)) {
+      error = "Prime's ball " + Hex(target->ancs) + " is not the one this importer knows.";
+      return false;
+    }
+    const uint32_t modelId = PortModelVariant::Id(target->cmdl, ball.primeSuit);
+    const uint32_t skinId = PortModelVariant::Id(skin, ball.primeSuit);
+    const uint32_t ancsId = PortModelVariant::Id(target->ancs, ball.primeSuit);
+    const uint32_t lowId = PortModelVariant::Id(target->low, ball.primeSuit);
+    for (const uint32_t id : {modelId, skinId, ancsId, lowId}) {
+      if (id == 0 || io.retailId(id)) {
+        error = what + ": output id " + Hex(id) + " is a Prime resource.";
+        return false;
+      }
+    }
+    std::string why;
+    PrimeCmdl model;
+    std::vector<uint32_t> ballTextures;
+    std::vector<uint8_t> cmdl, cskr;
+    if (!io.echoes(kCMDL, ball.echoesCmdl, cmdl)) {
+      error = "The Echoes disc has no " + what + " (" + Hex(ball.echoesCmdl) + "): is it Metroid Prime 2: "
+              "Echoes (USA)?";
+      return false;
+    }
+    if (!ConvertCmdl(cmdl, model, ballTextures, &why)) {
+      error = what + " model " + Hex(ball.echoesCmdl) + ": " + why;
+      return false;
+    }
+    if (ball.caps != 0) {
+      PrimeCmdl caps;
+      if (!io.echoes(kCMDL, ball.caps, cmdl)) {
+        error = "The Echoes disc has no " + what + " caps (" + Hex(ball.caps) + ").";
+        return false;
+      }
+      if (!ConvertCmdl(cmdl, caps, ballTextures, &why) || !MergeCmdl(model, caps, &why)) {
+        error = what + " caps " + Hex(ball.caps) + ": " + why;
+        return false;
+      }
+    }
+    const std::vector<uint8_t> low = WriteCmdl(model);
+    uint32_t joint;
+    if (!MainJoint(retailSkin, joint, &why) || !FloatNormals(model, &why) || !RigidSkin(model, joint, cskr, &why)) {
+      error = what + ": " + why;
+      return false;
+    }
+    Set32(ancs, at, modelId);
+    Set32(ancs, at + 4, skinId);
+    if (!write(Hex(modelId) + ".CMDL", WriteCmdl(model)) || !write(Hex(skinId) + ".CSKR", cskr) ||
+        !write(Hex(lowId) + ".CMDL", low) || !write(Hex(ancsId) + ".ANCS", ancs)) {
+      return false;
+    }
+    textures.insert(ballTextures.begin(), ballTextures.end());
+    log("echoes: " + what + " -> " + Hex(modelId) + " (rigid joint " +
+        std::to_string(joint) + "), " + std::to_string(ballTextures.size()) + " textures");
+    ++result.balls;
+  }
   for (const uint32_t id : textures) {
     if (cancelled()) {
       error = "Cancelled.";
@@ -747,7 +1202,8 @@ bool Import(const Io& io, Result& result, std::string& error) {
     }
   }
   if (io.progress) io.progress(total, total);
-  log("echoes: " + std::to_string(result.converted) + " bodies, " + std::to_string(textures.size()) + " textures");
+  log("echoes: " + std::to_string(result.converted) + " bodies, " + std::to_string(result.balls) + " balls, " +
+      std::to_string(textures.size()) + " textures");
   return true;
 }
 

@@ -251,7 +251,8 @@ void RunEchoes(std::string imagePath, fs::path mods) {
     return;
   }
   const bool placed = MoveEchoesIntoPlace(mods);
-  std::string message = std::to_string(result.converted) + " suit bodies converted";
+  std::string message = std::to_string(result.converted) + " suit bodies and " + std::to_string(result.balls) +
+                        " Morph Balls converted";
   message += placed ? "." : "; it is installed at the next start.";
   Finish(true, message);
 }

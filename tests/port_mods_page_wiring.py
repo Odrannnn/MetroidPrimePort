@@ -66,8 +66,15 @@ def builtin_bodies():
     prime = body[body.index('if (ImGui::CollapsingHeader("Prime Remastered"))'):]
     prime = prime[prime.index("\n") + 1:prime.index('if (StartSection("Mods", "Metroid Dread"))')]
     dread = body[body.index('if (ImGui::CollapsingHeader("Metroid Dread"))'):]
-    dread = dread[dread.index("\n") + 1:]
+    dread = dread[dread.index("\n") + 1:dread.index('if (StartSection("Mods", "Metroid Prime 2: Echoes"))')]
     return text, body, prime, dread
+
+
+def echoes_body():
+    """The Metroid Prime 2: Echoes body, the last section of DrawBuiltinMods."""
+    body = builtin_bodies()[1]
+    echoes = body[body.index('if (ImGui::CollapsingHeader("Metroid Prime 2: Echoes"))'):]
+    return echoes[echoes.index("\n") + 1:]
 
 
 class Wiring(WiringCase):
@@ -181,7 +188,7 @@ class Wiring(WiringCase):
         mods = MODS.read_text()
         # No header inside either section: the import controls and the gallery are drawn straight
         # into the indented body, which ends before the next top-level header.
-        for body_text in (prime, dread):
+        for body_text in (prime, dread, echoes_body()):
             self.assertNotIn("CollapsingHeader", body_text)
             self.assertIn("ImGui::Indent();", body_text)
             self.assertIn("ImGui::Unindent();", body_text)

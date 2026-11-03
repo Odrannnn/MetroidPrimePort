@@ -181,11 +181,138 @@ void TestSkin() {
   CHECK(!ConvertCskr(orphan, from, to, out, nullptr, &error));
 }
 
+// Every body the import writes is one the loader counts as a body (port_echoes_suits_mod.h), so the
+// game leaves out Prime's cannon, boots and visor for it; and every body the loader counts is written.
+void TestBodies() {
+  size_t written = 0;
+  for (const Target& t : kTargets) {
+    CHECK(IsBody(t.cmdl));
+    ++written;
+  }
+  for (const Copy& c : kCopies) {
+    if (c.type == 0x434D444C) {
+      CHECK(IsBody(c.to));
+      ++written;
+    }
+  }
+  CHECK(written == sizeof(kBodies) / sizeof(kBodies[0]));
+}
+
+// A ball-shaped model: short normals and UVs, one material on texture `texture` with 8-bit
+// position, normal and texture 0 indices, one triangle over two vertices.
+PrimeCmdl BallFixture(uint32_t texture, float extent) {
+  PrimeCmdl m;
+  Put32(m.header, 0xDEADBABE);
+  Put32(m.header, 2);
+  Put32(m.header, 0x6);
+  for (int i = 0; i < 3; ++i) PutF(m.header, -extent);
+  for (int i = 0; i < 3; ++i) PutF(m.header, extent);
+  Put32(m.header, 0);
+  Put32(m.header, 0);
+  std::vector<uint8_t> set;
+  Put32(set, 1);
+  Put32(set, texture);
+  Put32(set, 1);
+  Put32(set, 16);  // the material's end
+  Put32(set, 0);   // flags
+  Put32(set, 1);   // textures
+  Put32(set, 0);   // texture index
+  Put32(set, 0x20A);
+  set.resize(64, 0);
+  m.materialSets.push_back(set);
+  std::vector<uint8_t> pos, nrm, uv;
+  for (float v : {0.f, 0.f, 0.f, 1.f, 1.f, 1.f}) PutF(pos, v);
+  for (uint16_t v : {16384, 0, 0, 0, 0xC000, 0}) {
+    nrm.push_back(uint8_t(v >> 8));
+    nrm.push_back(uint8_t(v));
+  }
+  for (float v : {0.f, 0.f, 1.f, 1.f}) PutF(uv, v);
+  for (auto* a : {&pos, &nrm, &uv}) a->resize(32, 0);
+  m.arrays = {pos, nrm, {}, uv, {}};
+  std::vector<uint8_t> surface(0x40, 0);
+  surface.insert(surface.end(), {0x91, 0x00, 0x03, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0});
+  surface.resize(0x60, 0);
+  surface[0x13] = 0x20;  // list size
+  m.surfaces.push_back(surface);
+  return m;
+}
+
+// The Morph Ball steps: a merge, float normals, a rigid skin and the retail ball's main joint.
+void TestBall() {
+  std::string error;
+  PrimeCmdl a = BallFixture(0x11111111, 0.5f);
+  const PrimeCmdl b = BallFixture(0x22222222, 0.75f);
+  REQUIRE_MSG(MergeCmdl(a, b, &error), error);
+  CHECK_EQ(Get32(a.header, 8), 0x2u);  // short UVs dropped
+  CHECK_EQ(a.arrays.size(), size_t(4));
+  CHECK_EQ(a.surfaces.size(), size_t(2));
+  float lo;
+  const uint32_t loBits = Get32(a.header, 0x0C);
+  std::memcpy(&lo, &loBits, 4);
+  CHECK(lo == -0.75f);
+  // b's list: material 1, 16-bit indices past a's 2 positions, 5 normals and 4 UVs.
+  const std::vector<uint8_t>& merged = a.surfaces[1];
+  CHECK_EQ(Get32(merged, 0x0C), 1u);
+  const std::vector<uint8_t> list(merged.begin() + 0x40, merged.begin() + 0x40 + 3 + 9 * 2 + 1);
+  CHECK(list == std::vector<uint8_t>({0x91, 0, 3, 0, 2, 0, 5, 0, 4, 0, 3, 0, 6, 0, 5, 0, 3, 0, 5, 0, 5, 0}));
+  CHECK_EQ(Get32(a.materialSets[0], 0), 2u);
+  CHECK_EQ(Get32(a.materialSets[0], 8), 0x22222222u);
+  CHECK_EQ(Get32(a.materialSets[0], 12), 2u);  // materials
+  CHECK_EQ(Get32(a.materialSets[0], 24 + 16 + 8), 1u);  // b's texture index
+  CHECK_EQ(Get32(a.materialSets[0], 24 + 16 + 12), 0x30Fu);
+
+  std::vector<uint8_t> cskr;
+  CHECK(!RigidSkin(a, 4, cskr, &error));  // short normals
+  REQUIRE_MSG(FloatNormals(a, &error), error);
+  CHECK_EQ(Get32(a.header, 8), 0x0u);
+  CHECK_EQ(a.surfaces[0][0x40], 0x90);
+  CHECK_EQ(a.surfaces[1][0x40], 0x90);
+  CHECK_EQ(Get32(a.arrays[1], 0), 0x3F800000u);
+  CHECK_EQ(Get32(a.arrays[1], 16), 0xBF800000u);
+  CHECK_EQ(a.arrays[1].size() % 12, size_t(8));  // whole normals, padded to 32
+  REQUIRE_MSG(RigidSkin(a, 4, cskr, &error), error);
+  CHECK_EQ(Get32(a.header, 8), 0x1u);
+  const uint32_t count = Get32(cskr, 16);
+  CHECK_EQ(count % 8, 0u);
+  CHECK(a.arrays[0].size() == count * 12 && a.arrays[1].size() == count * 12);
+  CHECK(count * 12 >= 128);
+  CHECK(cskr == [&] {
+    std::vector<uint8_t> want;
+    for (uint32_t v : {1u, 1u, 4u, 0x3F800000u, count, 0xFFFFFFFFu, count, 0xFFFFFFFFu, count}) Put32(want, v);
+    return want;
+  }());
+  const std::vector<uint8_t> out = WriteCmdl(a);
+  CHECK_EQ(Get32(out, 0x24), 8u);  // set, 4 arrays, offsets, 2 surfaces
+  CHECK_EQ(Get32(out, 0x28), 1u);
+
+  // Weight times vertices: joint 4 (0.75 x 10) over joint 5 (1 x 1 + 0.25 x 10), though 5 has
+  // more weight summed over the groups alone.
+  std::vector<uint8_t> retail;
+  Put32(retail, 2);
+  Put32(retail, 1);
+  Put32(retail, 5);
+  PutF(retail, 1.f);
+  Put32(retail, 1);
+  Put32(retail, 2);
+  Put32(retail, 4);
+  PutF(retail, 0.75f);
+  Put32(retail, 5);
+  PutF(retail, 0.25f);
+  Put32(retail, 10);
+  uint32_t joint = 0;
+  REQUIRE_MSG(MainJoint(retail, joint, &error), error);
+  CHECK_EQ(joint, 4u);
+  retail.pop_back();
+  CHECK(!MainJoint(retail, joint, &error));
+}
+
 }  // namespace
 
 int main() {
   TestLzo();
   TestDecompress();
   TestSkin();
+  TestBodies();
+  TestBall();
   return PORT_TEST_RESULT();
 }
