@@ -694,8 +694,15 @@ void SetStackBeams(bool enabled) { StoreSetting(sStackBeams, enabled); }
 
 int WalkSpeed() {
   EnsureInitialized();
-  return sOriginalExperience ? kWalkSpeedDefault : sWalkSpeed;
+  return sOriginalExperience || !sWalkSpeedEnabled ? kWalkSpeedDefault : sWalkSpeed;
 }
+
+bool WalkSpeedEnabled() {
+  EnsureInitialized();
+  return sWalkSpeedEnabled;
+}
+
+void SetWalkSpeedEnabled(bool enabled) { StoreSetting(sWalkSpeedEnabled, enabled); }
 
 void SetWalkSpeed(int percent) {
   EnsureInitialized();

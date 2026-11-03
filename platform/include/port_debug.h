@@ -362,6 +362,10 @@ const int kWalkSpeedMax = 200;
 const int kWalkSpeedDefault = 100;
 int WalkSpeed();
 void SetWalkSpeed(int percent);
+// walk_speed_enabled: whether walk_speed applies (on by default; 100 while off).
+// A custom action bound to it is a sprint switch.
+bool WalkSpeedEnabled();
+void SetWalkSpeedEnabled(bool enabled);
 // The stored 1.00 sequence-break compatibility choice (raw, not the effective
 // policy). Randomizer and Archipelago games force it on at use.
 bool Revision100Compatibility();

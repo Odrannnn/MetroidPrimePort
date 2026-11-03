@@ -16,6 +16,7 @@
 {"Game", "", "Cutscenes", "Show current hint", "hints help stuck next message map marker"},
 {"Game", "", "Cutscenes", "Unlock beam doors once opened", "door wave ice plasma power blue lock stay open"},
 {"Game", "", "Cutscenes", "Stack beams", "beams stack all fire together power ice wave plasma"},
+{"Game", "", "Cutscenes", "Custom walk speed", "movement run sprint toggle samus"},
 {"Game", "", "Cutscenes", "Walk speed", "movement run fast slow strafe velocity samus"},
 {"Game", "", "Cutscenes", "1.00 sequence-break compatibility", "revision v1 1.00 old version sequence break"},
 {"Game", "", "Unlocks", "Hard mode", "difficulty harder"},

@@ -1000,6 +1000,10 @@
   she reaches k times the retail speed in the same time and stops in the same
   time. Jump height, sideways dashes, turning, the grapple and the Morph Ball
   are unchanged; speed carries into a jump. At 100 movement is exactly retail.
+  The Custom walk speed switch above it (`walk_speed_enabled`, on by default)
+  turns it off without losing the value: off is retail speed. Bind a custom
+  action ("Change a setting", Custom walk speed, the other way) to a key to
+  sprint with it.
 - Unlock beam doors once opened (F1 > Game > Cutscenes, `beam_doors_stay_unlocked`,
   off by default and off in the Original experience): a door locked to the Wave,
   Ice, Plasma or Power Beam that you open by breaking its force field becomes a

@@ -2830,13 +2830,18 @@ void CmdRadial() {
 
 void CmdWalkSpeed() {
   if (sCmd.args.size() > 1) {
-    const int value = std::atoi(sCmd.args[1].c_str());
-    if (value < PortDebug::kWalkSpeedMin || value > PortDebug::kWalkSpeedMax) {
-      return Finish("usage: walkspeed [50..200]");
+    const std::string& v = sCmd.args[1];
+    if (v == "on" || v == "off") {
+      PortDebug::SetWalkSpeedEnabled(v == "on");
+    } else {
+      const int value = std::atoi(v.c_str());
+      if (value < PortDebug::kWalkSpeedMin || value > PortDebug::kWalkSpeedMax) {
+        return Finish("usage: walkspeed [50..200|on|off]");
+      }
+      PortDebug::SetWalkSpeed(value);
     }
-    PortDebug::SetWalkSpeed(value);
   }
-  Out("walkspeed %d", PortDebug::WalkSpeed());
+  Out("walkspeed %d (%s)", PortDebug::WalkSpeed(), PortDebug::WalkSpeedEnabled() ? "on" : "off");
   Finish();
 }
 
@@ -4525,7 +4530,7 @@ const CommandSpec kCommands[] = {
     {"radial", CmdRadial, nullptr,
      "radial [beam|visor [x y] | release]  holds a radial menu with its selection (x right, y up); radial_menus"},
     {"walkspeed", CmdWalkSpeed, nullptr,
-     "walkspeed [50..200]        on-foot movement speed in percent (walk_speed); no argument prints it"},
+     "walkspeed [50..200|on|off] on-foot speed in percent (walk_speed, walk_speed_enabled); no argument prints it"},
     {"beamdoors", nullptr, CmdBeamDoors,
      "beamdoors [status|on|off|list [here]|unlock <door index|all>|reset]  the beam doors opened for good\n"
      "                           (beam_doors_stay_unlocked; on/off, unlock restyle the loaded doors)"},
