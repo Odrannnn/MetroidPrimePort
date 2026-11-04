@@ -320,6 +320,8 @@ Prime's, and so do the Varia and Phazon Spider Balls (Echoes has no Varia or Lig
   them. They are skinned onto Prime's skeleton: joints Prime lacks fold into their nearest parent
   Prime has.
 - It replaces the same body models as `dread-samus`: switch one of the two off.
+- A Metroid Prime Trilogy (Wii) image works as the Echoes image: its `MP2` folder holds the same
+  PAKs. Playing from a Trilogy disc, the page has no disc picker: Import reads the running disc.
 - From a terminal: `--import-echoes-suits <Echoes disc image>` (the Prime disc from `MP_DISC`).
 - The first-person arm cannon is Echoes' too, for every suit: Power, Ice, Wave, Plasma and Phazon
   Beam take its Power, Dark, Annihilator, Light and fifth look, moved by Prime's gun animations

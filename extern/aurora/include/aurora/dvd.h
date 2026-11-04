@@ -172,6 +172,9 @@ AuroraDiscImage* aurora_disc_image_open(const char* path, char gameId[6], u8* di
 void aurora_disc_image_list(AuroraDiscImage* image, void (*callback)(u32 index, const char* name, u32 size, void* user),
                             void* user);
 
+/** \brief The FST index of the file at `path` (e.g. "MP2/Metroid1.pak") and its size; -1 if there is no such file. */
+s32 aurora_disc_image_find(AuroraDiscImage* image, const char* path, u32* size);
+
 /**
  * \brief Opens a file of the image by FST index. Read, seek and close it with the aurora_dvd_base_* calls (its
  * failures aren't reported to the read error callback). Close it before the image.

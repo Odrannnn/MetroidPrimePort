@@ -1,5 +1,5 @@
 // The Echoes suits import in the game (port_remastered_import.h, StartEchoesSuitsImport): the user's
-// Metroid Prime 2: Echoes GameCube image and the open disc, through PortEchoesSuits::Import
+// Metroid Prime 2: Echoes GameCube image (or a Trilogy image's MP2 folder) and the open disc, through PortEchoesSuits::Import
 // (port_echoes_suits.h), into <mods>/echoes-suits. Like the Dread Samus import it shares the
 // Remastered import's state, thread and cancel flag; only one of them runs at a time.
 
@@ -46,14 +46,23 @@ public:
     char gameId[6] = {};
     m_image = aurora_disc_image_open(path.c_str(), gameId, nullptr, nullptr);
     if (m_image == nullptr) {
-      error = "Could not open the image (not a GameCube disc image, or unreadable).";
+      error = "Could not open the image (not a GameCube or Wii disc image, or unreadable).";
       return false;
     }
-    if (std::memcmp(gameId, "G2M", 3) != 0) {
-      error = "This is not Metroid Prime 2: Echoes for GameCube (game " + std::string(gameId, 6) + ").";
+    // Metroid Prime Trilogy (R3ME01, R3MP01) carries Echoes' PAKs, the same files as the GameCube
+    // disc's, in its MP2 folder; MP1 and MP3 have PAKs of the same names.
+    const bool trilogy = std::memcmp(gameId, "R3M", 3) == 0;
+    if (!trilogy && std::memcmp(gameId, "G2M", 3) != 0) {
+      error = "This is not Metroid Prime 2: Echoes for GameCube or Metroid Prime Trilogy (game " +
+              std::string(gameId, 6) + ").";
       return false;
     }
-    std::vector<std::pair<uint32_t, uint32_t>> paks;  // index, size
+    struct Pak {
+      uint32_t index;
+      uint32_t size;
+      std::string name;
+    };
+    std::vector<Pak> paks;
     aurora_disc_image_list(
         m_image,
         [](u32 index, const char* name, u32 size, void* user) {
@@ -62,12 +71,15 @@ public:
             std::string ext(name + length - 4);
             for (char& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
             if (ext == ".pak") {
-              static_cast<std::vector<std::pair<uint32_t, uint32_t>>*>(user)->emplace_back(index, size);
+              static_cast<std::vector<Pak>*>(user)->push_back({index, size, name});
             }
           }
         },
         &paks);
-    for (const auto& [index, size] : paks) {
+    for (const auto& [index, size, name] : paks) {
+      if (trilogy && aurora_disc_image_find(m_image, ("MP2/" + name).c_str(), nullptr) != s32(index)) {
+        continue;
+      }
       std::vector<uint8_t> header;
       PortMods::PakTable table;
       size_t needed = 0x10000;

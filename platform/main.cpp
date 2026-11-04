@@ -894,8 +894,8 @@ int main(int argc, char** argv) {
         return result;
     }
     // --import-echoes-suits <image>: the Varia, Dark and Light Suit bodies from the user's own
-    // Metroid Prime 2: Echoes GameCube disc into <mods>/echoes-suits (port_echoes_suits.h), without
-    // starting the game. The Prime disc comes from MP_DISC or the path the game remembers.
+    // Metroid Prime 2: Echoes GameCube disc, or a Metroid Prime Trilogy disc (its MP2 folder), into
+    // <mods>/echoes-suits (port_echoes_suits.h), without starting the game. The Prime disc comes from MP_DISC or the path the game remembers.
     if (argc >= 2 && std::strcmp(argv[1], "--import-echoes-suits") == 0) {
         if (argc != 3) {
             std::fprintf(stderr, "usage: %s %s <Echoes disc image>\n", argv[0], argv[1]);

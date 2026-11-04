@@ -1291,6 +1291,22 @@ void aurora_disc_image_list(AuroraDiscImage* image, void (*callback)(u32 index, 
       &context);
 }
 
+s32 aurora_disc_image_find(AuroraDiscImage* image, const char* path, u32* size) {
+  if (image == nullptr || path == nullptr) {
+    return -1;
+  }
+  NodNodeKind kind = NOD_NODE_KIND_FILE;
+  uint32_t length = 0;
+  const uint32_t index = nod_partition_find_file(image->partition, path, &kind, &length);
+  if (index == NOD_FST_STOP || kind != NOD_NODE_KIND_FILE) {
+    return -1;
+  }
+  if (size != nullptr) {
+    *size = length;
+  }
+  return static_cast<s32>(index);
+}
+
 void* aurora_disc_image_file_open(AuroraDiscImage* image, u32 index) {
   NodHandle* handle = nullptr;
   if (image == nullptr || nod_partition_open_file(image->partition, index, &handle) != NOD_RESULT_OK ||

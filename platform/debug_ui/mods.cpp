@@ -10,6 +10,8 @@
 #include "port_importers.h"
 #include "port_remastered_import.h"
 #include "port_remastered_storage.h"
+#include "port_disc.h"
+#include "port_disc_verify.h"
 #include "port_dread_samus_mod.h"
 #include "port_echoes_suits_mod.h"
 #include "port_remastered_text.h"
@@ -534,7 +536,7 @@ void DrawDreadSamusImport() {
 }
 
 // The Echoes suits import (port_echoes_suits.h): the Varia, Dark and Light Suit bodies from the
-// player's own Metroid Prime 2: Echoes GameCube disc into the echoes-suits mod. Same progress, notes
+// player's own Metroid Prime 2: Echoes GameCube or Metroid Prime Trilogy disc into the echoes-suits mod. Same progress, notes
 // and mods reload as the Dread import, with which it shares the one import worker.
 void DrawEchoesSuitsImport() {
   static char sImage[1024] = "";
@@ -560,37 +562,52 @@ void DrawEchoesSuitsImport() {
     }
   }
   const PortRemastered::ImportState state = PortRemastered::ImportStatus();
-  ImGui::TextWrapped(
-      "Puts the Varia, Dark and Light Suit bodies from your own Metroid Prime 2: Echoes (GameCube) in place of "
-      "Prime's Varia, Gravity and Phazon Suits; the Power Suit stays. Needs the game's disc image. It is the "
-      "echoes-suits mod: switch it off above.");
-  ImGui::BeginDisabled(state.running);
+  // Trilogy's MP2 folder holds Echoes' PAKs: playing from a Trilogy disc, it is the Echoes image.
+  const std::string trilogyDisc = PortDisc::IsTrilogy(PortDisc::Current()) ? PortDiscVerify::ImagePath() : "";
+  if (!trilogyDisc.empty()) {
+    ImGui::TextWrapped(
+        "Puts the Varia, Dark and Light Suit bodies from Metroid Prime 2: Echoes, on this Trilogy disc, in place "
+        "of Prime's Varia, Gravity and Phazon Suits; the Power Suit stays. It is the echoes-suits mod: switch it "
+        "off above.");
+    ImGui::BeginDisabled(state.running);
+    if (ImGui::Button("Import##echoes")) {
+      sStarted = StartEchoesSuitsImport(trilogyDisc) || !state.running;
+    }
+    ImGui::EndDisabled();
+  } else {
+    ImGui::TextWrapped(
+        "Puts the Varia, Dark and Light Suit bodies from your own Metroid Prime 2: Echoes (GameCube) in place of "
+        "Prime's Varia, Gravity and Phazon Suits; the Power Suit stays. Needs the game's disc image, or Metroid "
+        "Prime Trilogy's. It is the echoes-suits mod: switch it off above.");
+    ImGui::BeginDisabled(state.running);
 #if defined(__ANDROID__)
-  if (ImGui::Button("Load Echoes disc image##echoes-image")) {
-    OpenRemasteredDialog(kEchoesPick);
-  }
-  ImGui::SameLine();
-  ImGui::TextUnformatted(sImage[0] == '\0' ? "Metroid Prime 2: Echoes disc image" : RemasteredPickName(sImage).c_str());
-  ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-  ImGui::TextWrapped("Android may close the game while you pick a file. The pick is kept: open this page again.");
-  ImGui::PopStyleColor();
+    if (ImGui::Button("Load Echoes disc image##echoes-image")) {
+      OpenRemasteredDialog(kEchoesPick);
+    }
+    ImGui::SameLine();
+    ImGui::TextUnformatted(sImage[0] == '\0' ? "Metroid Prime 2: Echoes disc image"
+                                             : RemasteredPickName(sImage).c_str());
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("Android may close the game while you pick a file. The pick is kept: open this page again.");
+    ImGui::PopStyleColor();
 #else
-  const ImGuiStyle& style = ImGui::GetStyle();
-  const float avail = ImGui::GetContentRegionAvail().x;
-  const float buttonWidth = ImGui::CalcTextSize("Load Echoes disc image").x + style.FramePadding.x * 2.f;
-  ImGui::SetNextItemWidth(std::max(120.f, std::min(avail * 0.6f, avail - buttonWidth - style.ItemSpacing.x)));
-  ImGui::InputTextWithHint("##echoes-image", "Metroid Prime 2: Echoes disc image", sImage, sizeof(sImage));
-  ImGui::SameLine();
-  if (ImGui::Button("Load Echoes disc image##echoes-image")) {
-    OpenRemasteredDialog(kEchoesPick);
-  }
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float avail = ImGui::GetContentRegionAvail().x;
+    const float buttonWidth = ImGui::CalcTextSize("Load Echoes disc image").x + style.FramePadding.x * 2.f;
+    ImGui::SetNextItemWidth(std::max(120.f, std::min(avail * 0.6f, avail - buttonWidth - style.ItemSpacing.x)));
+    ImGui::InputTextWithHint("##echoes-image", "Metroid Prime 2: Echoes disc image", sImage, sizeof(sImage));
+    ImGui::SameLine();
+    if (ImGui::Button("Load Echoes disc image##echoes-image")) {
+      OpenRemasteredDialog(kEchoesPick);
+    }
 #endif
-  ImGui::BeginDisabled(sImage[0] == '\0');
-  if (ImGui::Button("Import##echoes")) {
-    sStarted = StartEchoesSuitsImport(sImage) || !state.running;
+    ImGui::BeginDisabled(sImage[0] == '\0');
+    if (ImGui::Button("Import##echoes")) {
+      sStarted = StartEchoesSuitsImport(sImage) || !state.running;
+    }
+    ImGui::EndDisabled();
+    ImGui::EndDisabled();
   }
-  ImGui::EndDisabled();
-  ImGui::EndDisabled();
   if (!sStarted) {
     return;
   }
