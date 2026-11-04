@@ -59,6 +59,7 @@ enum RoomTag : uint32_t {
   kTagDock = 14,      // the dock's reference, then per reference its load-other flag
   kTagCinematic = 15, // a running cinematic camera: elapsed time, passed view point, passed target
   kTagMusic = 16,     // music playing at the save: kind (kMusicMidi/kMusicStream), stream file
+  kTagMaterial = 17,  // u32 lo, u32 hi of an enemy's CMaterialList (solid, shootable, targetable)
 };
 
 enum : uint8_t {
@@ -418,6 +419,16 @@ void CaptureObject(CStateManager& mgr, CEntity& ent, RoomObject& obj) {
       w.F32(health->GetKnockBackResistance());
       obj.blocks.push_back({kTagHealth, w.bytes});
     }
+    // The fields block enters the saved AI state directly, so the states before it never
+    // set up their materials (a phased-out Chozo Ghost, a burrowed beetle): the list is
+    // saved as it was and put back over what entering the states set.
+    if (TCastToPtr< CPatterned >(&ent) != nullptr) {
+      const uint64_t m = actor->GetMaterialList().GetValue();
+      BlockWriter w;
+      w.U32(static_cast< uint32_t >(m));
+      w.U32(static_cast< uint32_t >(m >> 32));
+      obj.blocks.push_back({kTagMaterial, w.bytes});
+    }
   }
   CPhysicsActor* physics = TCastToPtr< CPhysicsActor >(&ent);
   const bool isDoor = TCastToPtr< CScriptDoor >(&ent) != nullptr;
@@ -693,6 +704,16 @@ void ApplyObject(CStateManager& mgr, CEntity& ent, const RoomObject& obj, RoomAp
   // the boss restore set up.
   if (fields != nullptr)
     stats.fields += ApplyEntityFields(mgr, ent, fields->data);
+  if (const RoomBlock* b = FindBlock(obj, kTagMaterial)) {
+    BlockReader r(b->data);
+    const uint64_t lo = r.U32();
+    const uint64_t m = lo | (static_cast< uint64_t >(r.U32()) << 32);
+    if (r.ok && actor != nullptr && mgr.ObjectById(ent.GetUniqueId()) == &ent &&
+        !ent.IsInGraveyard() && actor->GetMaterialList().GetValue() != m) {
+      actor->MaterialList() = CMaterialList(m);
+      mgr.UpdateObjectInLists(*actor);
+    }
+  }
   if (CScriptTimer* timer = TCastToPtr< CScriptTimer >(&ent)) {
     if (const RoomBlock* b = FindBlock(obj, kTagTimer)) {
       BlockReader r(b->data);
