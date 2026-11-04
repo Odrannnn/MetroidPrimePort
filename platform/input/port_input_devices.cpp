@@ -438,9 +438,6 @@ void BindPortControls(Profile& p) {
     }
     Bind(p, Action::BeamPrev, Make(Device::MouseWheel, 0, 1));
     Bind(p, Action::BeamNext, Make(Device::MouseWheel, 0, -1));
-    // Locked on, the wheel moves the lock instead (ApplyTargetRows): up to the left.
-    Bind(p, Action::TargetPrev, Make(Device::MouseWheel, 0, 1));
-    Bind(p, Action::TargetNext, Make(Device::MouseWheel, 0, -1));
   }
 
   // Mouse buttons: under mouse aim each does its action (or the beam shift);

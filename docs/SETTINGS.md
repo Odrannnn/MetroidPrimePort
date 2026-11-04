@@ -1024,9 +1024,9 @@
   issue #243): while locked on, a press moves the lock to the visible target
   nearest to the right (Next) or left (Previous) of the current one, wrapping to
   the far side; grapple points are skipped. The actions work only while locked
-  on (input context `lockon`), where their inputs do nothing else: by default
-  the mouse wheel moves the lock (up to the left, down to the right) instead of
-  cycling beams. Off in the Original experience.
+  on (input context `lockon`), where their inputs do nothing else (bound to the
+  mouse wheel, it moves the lock instead of cycling beams). Unbound by default.
+  Off in the Original experience.
 - Walk speed (F1 > Game > Cutscenes, `walk_speed`, 50 to 200 percent, 100 by
   default and 100 in the Original experience): scales how fast Samus moves on
   foot. The top speed, acceleration and friction of walking and strafing (also
