@@ -139,6 +139,21 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
       CTransform4f::Scale(width, 1.f, height);
   CTransform4f model = GetWorldTransform() * local;
 #ifdef TARGET_PC
+  if (mPortLeftEdge != nullptr && mPortLeftEdge->GetIsVisible() && width != 0.f &&
+      height != 0.f) {
+    const rstl::pair< CVector2i, CVector2i >& bounds = xd4_textSupport.GetBounds();
+    const float left = static_cast< float >(bounds.first.GetX());
+    const float right = static_cast< float >(bounds.second.GetX());
+    // The edge in text units, plus a gap like the one Options keeps from its divider.
+    const float edge = (model.GetInverse() * mPortLeftEdge->GetWorldPosition()).GetX() + 12.f;
+    if (left < edge && edge < right) {
+      model = model * CTransform4f::Translate(right, 0.f, 0.f) *
+              CTransform4f::Scale((right - edge) / (right - left), 1.f, 1.f) *
+              CTransform4f::Translate(-right, 0.f, 0.f);
+    }
+  }
+#endif
+#ifdef TARGET_PC
   // Text often runs past the pane: the glyphs are hit too (text y runs down, z up).
   {
     const rstl::pair< CVector2i, CVector2i >& bounds = xd4_textSupport.GetBounds();

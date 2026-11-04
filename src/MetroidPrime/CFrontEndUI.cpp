@@ -1376,6 +1376,13 @@ void CFrontEndUI::SNewFileSelectFrame::ActivateNewGamePopup() {
     x40_tablegroup_popup->GetWorkerWidget(2)->SetIsSelectable(true);
     x40_tablegroup_popup->GetWorkerWidget(2)->SetVisibility(true, kTM_Children);
     x44_model_dash7->SetVisibility(true, kTM_Children);
+#ifdef TARGET_PC
+    // Port: Trilogy's string here is "Hypermode Mode", too long for the slot
+    // GC's "Hard Mode" fits. Squeeze it right of the divider, not over Normal Mode.
+    // (The divider is hidden, and so the squeeze off, in the other popups.)
+    x48_textpane_popupadvance.x0_textPane->PortSetLeftEdge(x44_model_dash7);
+    x48_textpane_popupadvance.x4_textPaneB->PortSetLeftEdge(x44_model_dash7);
+#endif
   } else {
     x48_textpane_popupadvance.SetPairText(rstl::wstring_l(gpStringTable->GetString(0x43)));
     x50_textpane_popupcancel.SetPairText(rstl::wstring_l(gpStringTable->GetString(0x5e)));

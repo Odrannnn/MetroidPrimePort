@@ -43,8 +43,16 @@ public:
   void SetDimensions(const CVector2f& dim, bool initVBO) override;
   void ScaleDimensions(const CVector3f& scale) override;
   void Draw(const CGuiWidgetDrawParms& parms) const override;
+#ifdef TARGET_PC
+  // Port: while `edge` is visible, text running left past it is squeezed
+  // sideways, its right end kept, to start just right of it. Null turns it off.
+  void PortSetLeftEdge(const CGuiWidget* edge) { mPortLeftEdge = edge; }
+#endif
 
 private:
+#ifdef TARGET_PC
+  const CGuiWidget* mPortLeftEdge = nullptr;
+#endif
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
   static bool sDrawPaneRects;
 #endif
