@@ -163,6 +163,10 @@ CInGameGuiManager::CInGameGuiManager(const CStateManager& mgr, CArchitectureQueu
     xc8_inGameGuiDGRPs.push_back(token);
   }
   sPortCurrent = this;
+#ifdef TARGET_PC
+  // A new game state loads UI_HUDMPR1 afresh, with its lights inactive.
+  PortPauseLighting::orderCount = 0;
+#endif
 }
 
 CInGameGuiManager::~CInGameGuiManager() {

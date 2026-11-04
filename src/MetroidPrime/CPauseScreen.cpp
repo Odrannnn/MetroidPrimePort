@@ -24,12 +24,15 @@
 #include "MetroidPrime/CControlMapper.hpp"
 #include "MetroidPrime/Factories/CScannableObjectInfo.hpp"
 #include "MetroidPrime/Player/CGameState.hpp"
+#include "MetroidPrime/Player/CPlayerState.hpp"
+#include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/Tweaks/CTweakGuiColors.hpp"
 #include "MetroidPrime/Tweaks/CTweakPlayerRes.hpp"
 #include "rstl/StringExtras.hpp"
 #include "rstl/math.hpp"
 #include "port_photo.h"
 #ifdef TARGET_PC
+#include "port_pause_lighting.h"
 #include "port_pointer_menu.h"
 #endif
 #include <float.h>
@@ -201,6 +204,12 @@ bool CPauseScreen::CheckLoadComplete(const CStateManager& mgr) {
 CPauseScreenBase* CPauseScreen::BuildPauseSubScreen(ESubScreen screen, const CStateManager& mgr,
                                                     CGuiFrame& frame) const {
   const CStringTable& pauseStrg = *x14_strgPauseScreen.GetObject();
+#ifdef TARGET_PC
+  if (screen == kSS_LogBook || screen == kSS_Options || screen == kSS_Inventory) {
+    PortPauseLighting::EnterScreen(screen == kSS_Inventory,
+        mgr.GetPlayerState()->HasPowerUp(CPlayerState::kIT_PhazonSuit));
+  }
+#endif
   switch (screen) {
   case kSS_LogBook:
     return rs_new CLogBookScreen(mgr, frame, pauseStrg);

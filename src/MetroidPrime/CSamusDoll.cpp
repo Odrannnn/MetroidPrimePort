@@ -385,8 +385,6 @@ void CSamusDoll::Update(float dt, CRandom16& rand) {
 void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
 #ifdef TARGET_PC
   const PortPauseLighting::Scope dollScope(PortPauseLighting::doll, PortPauseLighting::active);
-  const PortPauseLighting::Scope phazonScope(PortPauseLighting::phazon,
-      mgr.GetPlayerState()->HasPowerUp(CPlayerState::kIT_PhazonSuit));
   // Remastered builds the doll's models on the master scene (CSamusDollMP1::TryFinishLoad
   // 0xe78a18, CModelLightingDataMP1::Default), group 0, while the UI area's baked context
   // has its own group (CGameAreaLoader::ContinueLoad 0x3f8ea0, room types mask 0x1b9), so
@@ -439,9 +437,8 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
       GXPortSetShadowCaster(GX_FALSE);
       float worldToView[3][4];
       PortPauseLighting::LightView(worldToView);
-      float lights[48];
-      PortPauseLighting::Lights(worldToView, PortPauseLighting::phazon, lights);
-      GXPortSetRoomLights(lights, 3);
+      float lights[32];
+      GXPortSetRoomLights(lights, PortPauseLighting::Lights(worldToView, lights));
     }
     ~UILights() {
       if (!on) return;

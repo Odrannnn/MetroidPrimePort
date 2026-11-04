@@ -11,7 +11,6 @@
 namespace PortPauseLighting {
 inline bool active = false;
 inline bool doll = false;
-inline bool phazon = false;
 
 // Remastered queues CGuiTextPane to StoreVisorHUDCommand (0xbde370),
 // consumed after pause post and helmet by RenderHUD (0xfa0dac).
@@ -83,34 +82,74 @@ inline void LightView(float out[3][4]) {
   }
 }
 
-// Three 16-float GX room-light records. The quaternion/entity convention is
-// Rz * Ry * Rx; convert Remastered axes to retail (-x,z,y), then to view.
-inline void Lights(const float view[3][4], bool phazonSuit, float out[48]) {
-  constexpr float angles[3][3] = {
+// UI_HUDMPR1 #100..#103 (index 0..3), the inventory's light entities; they
+// start inactive (entity raw[0] = 0). CScene appends a light node to its list
+// when it becomes active and removes it when it goes inactive (0x1d3790,
+// 0x1d0e04); the light cache keeps that order (0x1d11bc, 0x1ff1a4, 0x1ff96c),
+// and the doll takes only the first two unshadowed directionals (0x3ad3cc).
+// So which lights reach the doll depends on activation order.
+inline unsigned char order[4];
+inline int orderCount = 0;
+
+inline void Activate(int light, bool on) {
+  int at = 0;
+  while (at < orderCount && order[at] != light) ++at;
+  if (on && at == orderCount) order[orderCount++] = (unsigned char)light;
+  if (!on && at < orderCount) {
+    std::memmove(order + at, order + at + 1, orderCount - at - 1);
+    --orderCount;
+  }
+}
+
+// Each subscreen's InitializeFrameScreenSpecific emits a data-enum value on
+// UIProxy #95, whose links pick a relay: log book (0xe6aacc) 0xa3236508 ->
+// #96, options (0xe6f4b4) 0x488f0723 -> #98, inventory (0xe76074/0xe760a8)
+// 0x009ca2f0 -> #97, or 0x98203c45 -> #99 with the Phazon Suit. The relays'
+// link order is the activation order; #96 and #98 turn #100..#103 off.
+inline void EnterScreen(bool inventory, bool phazonSuit) {
+  if (!inventory) {
+    for (int i = 0; i < 4; ++i) Activate(i, false);
+  } else if (!phazonSuit) {
+    Activate(2, true), Activate(0, true), Activate(3, false), Activate(1, true);
+  } else {
+    Activate(2, true), Activate(0, false), Activate(3, true), Activate(1, true);
+  }
+}
+
+// Up to two 16-float GX room-light records, in activation order; returns how
+// many. The quaternion/entity convention is Rz * Ry * Rx; convert Remastered
+// axes to retail (-x,z,y), then to view.
+inline int Lights(const float view[3][4], float out[32]) {
+  constexpr float angles[4][3] = {
       {-161.19400024414062f, 59.63199996948242f, 175.1790008544922f},
       {-41.573001861572266f, -19.958999633789062f, 106.84100341796875f},
-      {-22.805999755859375f, -81.56700134277344f, 0.f}};
-  constexpr unsigned colors[3][3] = {
+      {-22.805999755859375f, -81.56700134277344f, 0.f},
+      {-161.19400024414062f, 59.63199996948242f, 175.1790008544922f}};
+  constexpr unsigned colors[4][3] = {
       {0x3f800000, 0x3f7e74b1, 0x3f7481bd},
       {0x3f800000, 0x3e2b50a6, 0x3c2436cb},
-      {0x3f1a946e, 0x3f753751, 0x3f800000}};
-  const float intensity[3] = {phazonSuit ? 2.f : 2.5f, 10.f, 0.25f};
+      {0x3f1a946e, 0x3f753751, 0x3f800000},
+      {0x3f800000, 0x3f7e74b1, 0x3f7481bd}};
+  constexpr float intensity[4] = {2.5f, 10.f, 0.25f, 2.f};
   constexpr double pi = 3.14159265358979323846;
-  std::memset(out, 0, 48 * sizeof(float));
-  for (int i = 0; i < 3; ++i) {
-    const double x = angles[i][0] * pi / 180., y = angles[i][1] * pi / 180.,
-                 z = angles[i][2] * pi / 180.;
+  std::memset(out, 0, 32 * sizeof(float));
+  const int count = orderCount < 2 ? orderCount : 2;
+  for (int i = 0; i < count; ++i) {
+    const int l = order[i];
+    const double x = angles[l][0] * pi / 180., y = angles[l][1] * pi / 180.,
+                 z = angles[l][2] * pi / 180.;
     const double sx = std::sin(x), cx = std::cos(x), sy = std::sin(y), cy = std::cos(y),
                  sz = std::sin(z), cz = std::cos(z);
     // Negative local +Z, with the basis conversion applied.
     const double toLight[3] = {cz * sy * cx + sz * sx, -cy * cx,
                               -sz * sy * cx + cz * sx};
     for (int c = 0; c < 3; ++c) {
-      out[i * 16 + 4 + c] = FloatBits(colors[i][c]) * intensity[i] / float(pi);
+      out[i * 16 + 4 + c] = FloatBits(colors[l][c]) * intensity[l] / float(pi);
       out[i * 16 + 8 + c] = float(view[c][0] * toLight[0] + view[c][1] * toLight[1] +
                                   view[c][2] * toLight[2]);
     }
     out[i * 16 + 14] = 2.f;
   }
+  return count;
 }
 } // namespace PortPauseLighting
