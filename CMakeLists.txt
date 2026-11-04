@@ -1264,6 +1264,7 @@ if(MP_BUILD_TESTS)
             platform/port_remastered_tegra_swizzle.cpp platform/port_remastered_bcdec.cpp
             platform/port_remastered_astc_decode.cpp
             platform/port_room_env_tiles.cpp platform/port_room_geo_file.cpp
+            platform/port_remastered_table.cpp
         INCLUDES platform/include include extern/aurora/include
         DEFINITIONS TARGET_PC VERSION=0
         LIBRARIES mp_test_remastered_convert)
