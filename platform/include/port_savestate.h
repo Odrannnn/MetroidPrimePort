@@ -195,6 +195,8 @@ struct Header {
   int64_t savedAt = 0;
   std::string world;
   std::string room;
+  // The disc that made it (PortDisc::Name: "USA 1.00", "PAL", ...); empty before format 2.
+  std::string disc;
   RoomState roomState;  // optional section after the blob; empty when absent
 };
 std::string Encode(const Header& header, const std::vector< uint8_t >& blob);

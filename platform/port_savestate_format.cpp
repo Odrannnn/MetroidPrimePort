@@ -11,7 +11,11 @@ namespace PortSaveState {
 namespace {
 
 constexpr char kMagic[4] = {'M', 'P', 'S', 'S'};
-constexpr uint32_t kVersion = 1;
+// 2: the disc's name follows the room label. CGameState's stream is laid out
+// from the disc's world save data (PAL's differs), so another disc's state
+// misreads; version 1 carries no name and loads as before.
+constexpr uint32_t kVersion = 2;
+constexpr uint32_t kVersionNoDisc = 1;
 // Game-state blobs are a few hundred bytes; anything past this is not ours.
 constexpr uint32_t kMaxBlob = 1u << 20;
 constexpr uint32_t kMaxLabel = 256;
@@ -582,6 +586,7 @@ std::string Encode(const Header& header, const std::vector< uint8_t >& blob) {
   AppendLE64(out, static_cast< uint64_t >(header.savedAt));
   PutString(out, header.world);
   PutString(out, header.room);
+  PutString(out, header.disc);
   AppendLE32(out, static_cast< uint32_t >(blob.size()));
   out.append(reinterpret_cast< const char* >(blob.data()), blob.size());
   if (!header.roomState.empty())
@@ -593,7 +598,8 @@ bool Decode(const std::string& data, Header& header, std::vector< uint8_t >& blo
   if (data.size() < 8 || std::memcmp(data.data(), kMagic, 4) != 0)
     return false;
   Reader in{data, 4};
-  if (in.U32() != kVersion)
+  const uint32_t version = in.U32();
+  if (version != kVersion && version != kVersionNoDisc)
     return false;
   Header h;
   h.worldId = in.U32();
@@ -607,6 +613,8 @@ bool Decode(const std::string& data, Header& header, std::vector< uint8_t >& blo
   h.savedAt = static_cast< int64_t >(in.U64());
   h.world = in.String();
   h.room = in.String();
+  if (version >= kVersion)
+    h.disc = in.String();
   const uint32_t size = in.U32();
   if (!in.ok || size == 0 || size > kMaxBlob || !in.Need(size))
     return false;

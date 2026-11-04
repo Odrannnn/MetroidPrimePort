@@ -26,6 +26,7 @@ int main() {
   in.savedAt = 1790000000;
   in.world = "Chozo Ruins";
   in.room = "Main Plaza";
+  in.disc = "USA 1.00";
   std::vector< uint8_t > blob(4096, 0);
   for (size_t i = 0; i < 940; ++i)
     blob[i] = static_cast< uint8_t >(i * 7);
@@ -48,6 +49,20 @@ int main() {
     REQUIRE(out.savedAt == in.savedAt);
     REQUIRE(out.world == in.world);
     REQUIRE(out.room == in.room);
+    REQUIRE(out.disc == in.disc);
+    REQUIRE(outBlob == blob);
+  }
+
+  // A format 1 state (no disc after the room) still loads, with no disc.
+  {
+    const size_t discAt = data.find(in.room) + in.room.size();
+    std::string v1 = data.substr(0, discAt) + data.substr(discAt + 4 + in.disc.size());
+    v1[4] = 1;
+    Header out;
+    std::vector< uint8_t > outBlob;
+    REQUIRE(PortSaveState::Decode(v1, out, outBlob));
+    REQUIRE(out.room == in.room);
+    REQUIRE(out.disc.empty());
     REQUIRE(outBlob == blob);
   }
 
@@ -70,7 +85,7 @@ int main() {
     bad[0] = 'X';
     REQUIRE(!PortSaveState::Decode(bad, out, outBlob));
     bad = data;
-    bad[4] = 2;
+    bad[4] = 3;
     REQUIRE(!PortSaveState::Decode(bad, out, outBlob));
     REQUIRE(!PortSaveState::Decode(PortSaveState::Encode(in, {}), out, outBlob));
   }
