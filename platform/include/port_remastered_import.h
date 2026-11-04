@@ -263,7 +263,9 @@ inline constexpr int kModels = 31;
 // 220: a constant true KILL is the port-only PKIL (7f71e94b light); a false one is consumed.
 // 221: ELC2 SSWH swooshes written standalone.
 // 222: CRLN 2d slices are PCRS.
-inline constexpr int kEffects = 227;   // PIRN marks every converted electric
+// 227: PIRN marks every converted electric.
+// 228: a model Remastered keeps under a carried-over id converts as the effect's own (drain debris).
+inline constexpr int kEffects = 228;
 // 20: two rooms matching one area write only the closer match's files, not the later room's.
 // 21: roomenv version 22, the world master's hints driven by its camera volumes (the table in every roomenv).
 // 22: a master's InventoryActivator fired by the camera going under water drives its hints (kSenderCameraWaterItem).

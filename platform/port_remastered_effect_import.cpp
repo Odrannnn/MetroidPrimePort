@@ -1100,7 +1100,7 @@ public:
     return out;
   }
 
-  // The id a Remastered-only model (pak order) is written under, converting
+  // The id a Remastered model (pak order) is written under, converting
   // it the first time; 0 when it cannot be.
   uint32_t Model(const EffectGuid& id) {
     const auto known = m_models.find(id);
@@ -1180,16 +1180,23 @@ public:
   // The retail id for an id as an effect stores it: the disc's own when it
   // was carried over from retail, else a converted texture's or model's.
   uint32_t Stored(const EffectGuid& stored, uint32_t type) {
+    const EffectGuid id = Swap(stored);
+    // Remastered's own model under a carried-over id comes first, converted on its own:
+    // the retail id's CMDL stays the disc's unless a room places it (retailmodels), so
+    // an effect-only model (the drain debris PMDLs, 8C2D2698 and its siblings) would
+    // otherwise draw retail's GC model. Its own conversion keeps Remastered's space,
+    // the one its effect draws it in, where a room-placed one is baked to its placement.
+    if (type == kCmdl && m_io.typeOf(id) == kCmdl) {
+      if (const uint32_t model = Model(id)) {
+        return model;
+      }
+    }
     const std::optional<uint32_t> retail = EffectRetailId(stored);
     if (retail && m_io.retailId(*retail)) {
       return *retail;
     }
-    const EffectGuid id = Swap(stored);
     if (type == kTxtr && m_io.typeOf(id) == kTxtr) {
       return Texture(id);
-    }
-    if (type == kCmdl && m_io.typeOf(id) == kCmdl) {
-      return Model(id);
     }
     // A Remastered-only GENP the import writes under its own id (a room's or port actor's,
     // e.g. an ELSM/ELC2's GPSM/EPSM, ElectricGenps).
