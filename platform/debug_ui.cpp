@@ -162,6 +162,7 @@ bool sLogFile = true;
 std::mutex sRandoMutex;
 PortRandoGen::Settings sRandoSettings;
 float sFirstPersonFov = PortDebug::kFovRetail;
+bool sGunFollowsFov = false;
 float sGunOffset[3] = {};
 int sMsaa = 1;
 int sAnisotropy = 16;

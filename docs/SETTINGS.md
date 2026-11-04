@@ -641,9 +641,13 @@
   16:9. Menus, the credits and other non-aspect-matched frames are unaffected.
 - Field of view (Video > Display and pause Options > Display, persisted as `fov`,
   45-120, retail 55): the first-person camera's vertical FOV. The overlay also
-  shows the horizontal FOV it gives at the current aspect. The arm cannon is
-  drawn at the retail FOV whatever the setting (a view-model FOV), so it keeps
-  its size and place. Shots start where the cannon is drawn and are aimed at
+  shows the horizontal FOV it gives at the current aspect. By default the arm
+  cannon is drawn at the retail FOV whatever the setting (a view-model FOV), so
+  it keeps its size and place. Arm cannon follows FOV (the row below it,
+  persisted as `gun_follows_fov`, default off, off in the original experience)
+  draws it in the world's perspective instead: a wider FOV shows it smaller and
+  further into the corner, as the world around it. Shots then leave the real
+  muzzle as retail's do. With it off, shots start where the cannon is drawn and are aimed at
   where retail's would arrive (the aim target at its depth when assist aimed
   the shot at it, else what lies on retail's line), so they hit what retail's
   hit (#134). Morph ball, cutscene and other scripted cameras keep

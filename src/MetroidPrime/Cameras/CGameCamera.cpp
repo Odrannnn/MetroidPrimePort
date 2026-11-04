@@ -78,15 +78,14 @@ float CGameCamera::VertPlusFov(const float fov, const float aspect) {
   return 2.f * std::atan(std::tan(0.5f * fov * kDegToRad) * kMinAspect / aspect) / kDegToRad;
 }
 
-float CGameCamera::VertPlusGunDrop(const float aspect) {
+float CGameCamera::VertPlusGunDrop(const float gunFov, const float aspect) {
   const float kMinAspect = 4.f / 3.f;
   if (!(aspect > 0.f) || aspect >= kMinAspect) {
     return 0.f;
   }
-  // The gun is drawn at the retail FOV. Its 4:3 bottom edge is at tan(fov/2); the widened one
-  // at tan(fov/2) * (4:3 / aspect).
+  // The gun's 4:3 bottom edge is at tan(fov/2); the widened one at tan(fov/2) * (4:3 / aspect).
   const float kDegToRad = 3.14159265f / 180.f;
-  return std::tan(0.5f * PortDebug::kFovRetail * kDegToRad) * (kMinAspect / aspect - 1.f);
+  return std::tan(0.5f * gunFov * kDegToRad) * (kMinAspect / aspect - 1.f);
 }
 
 float CGameCamera::GetUnwidenedFov() const {

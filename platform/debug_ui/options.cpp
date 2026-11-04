@@ -768,6 +768,13 @@ void SetFirstPersonFov(float degrees) {
   }
 }
 
+bool GunFollowsFov() {
+  EnsureInitialized();
+  return sGunFollowsFov && !sOriginalExperience;
+}
+
+void SetGunFollowsFov(bool enabled) { StoreSetting(sGunFollowsFov, enabled); }
+
 void GunOffset(float out[3]) {
   EnsureInitialized();
   for (int i = 0; i < 3; ++i) {

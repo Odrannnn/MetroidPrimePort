@@ -625,7 +625,7 @@ void CPlayerGun::PortShotFromDrawnMuzzle(const CStateManager& mgr, CTransform4f&
     return;
   }
   const CGameCamera& cam = camMgr->GetCurrentCamera(mgr);
-  if (cam.GetFov() == PortDebug::kFovRetail) {
+  if (!PortDebug::GunAtRetailFov(cam.GetFov())) {
     return;
   }
   const float gunTan = tanf(CGameCamera::VertPlusFov(PortDebug::kFovRetail, cam.GetAspectRatio()) *

@@ -713,7 +713,10 @@ CVector3f CPlayer::PortAnchorGunDown(const CVector3f& pos, CStateManager& mgr) c
   if (!camMgr->IsInFPCamera()) {
     return pos;
   }
-  const float drop = CGameCamera::VertPlusGunDrop(CCameraManager::GetDefaultAspectRatio());
+  const CGameCamera& cam = camMgr->GetCurrentCamera(mgr);
+  const float gunFov =
+      PortDebug::GunFollowsFov() ? cam.GetUnwidenedFov() : PortDebug::kFovRetail;
+  const float drop = CGameCamera::VertPlusGunDrop(gunFov, CCameraManager::GetDefaultAspectRatio());
   if (drop <= 0.f) {
     return pos;
   }
@@ -832,7 +835,7 @@ void CPlayer::UpdateGunTransform(const CVector3f& gunPos, CStateManager& mgr) {
     // RenderGun pass), so the model aims where the point sits under that projection: the
     // same screen spot as the crosshair at the same depth.
     CVector3f toModelAim = toAim;
-    if (mgr.GetCameraManager()->IsInFPCamera() && cam.GetFov() != PortDebug::kFovRetail) {
+    if (mgr.GetCameraManager()->IsInFPCamera() && PortDebug::GunAtRetailFov(cam.GetFov())) {
       const float gunTan =
           tanf(CGameCamera::VertPlusFov(PortDebug::kFovRetail, cam.GetAspectRatio()) * 0.5f *
                (M_PIF / 180.f));

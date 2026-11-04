@@ -300,9 +300,16 @@ void DrawVideoDisplay() {
                        0.017453292f;
     ImGui::SetItemTooltip("Back to the retail 55 deg.");
     ImGui::TextDisabled("About %.0f deg horizontal at this aspect.", hfov);
-    ImGui::SetItemTooltip("First-person vertical FOV (retail 55). The arm cannon stays at the retail\n"
-                          "FOV; morph ball and cutscene cameras are unchanged.");
+    ImGui::SetItemTooltip("First-person vertical FOV (retail 55). Morph ball and cutscene cameras\n"
+                          "are unchanged.");
   }
+  bool gunFollowsFov = sGunFollowsFov;
+  if (ImGui::Checkbox("Arm cannon follows FOV", &gunFollowsFov)) {
+    SetGunFollowsFov(gunFollowsFov);
+  }
+  ImGui::SetItemTooltip("Off: the arm cannon is drawn at the retail 55 deg FOV whatever the field\n"
+                        "of view, so it keeps its size and place. On: it shares the world's\n"
+                        "perspective, so a wider FOV draws it smaller and further into the corner.");
   {
     // Issue #72: PrimeHack-style arm cannon placement.
     float offset[3] = {sGunOffset[0], sGunOffset[1], sGunOffset[2]};

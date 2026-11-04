@@ -132,6 +132,7 @@ extern bool sLogFile;
 extern std::mutex sRandoMutex;
 extern PortRandoGen::Settings sRandoSettings;
 extern float sFirstPersonFov;
+extern bool sGunFollowsFov;
 extern float sGunOffset[3];
 extern int sMsaa;
 extern int sAnisotropy;

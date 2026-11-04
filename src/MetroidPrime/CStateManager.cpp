@@ -3738,7 +3738,7 @@ void CStateManager::DrawWorld() const {
       !PortThirdPerson::Active()) {
     const CGameCamera& gunCam = x870_cameraManager->GetCurrentCamera(*this);
     const CGraphics::CProjectionState gunProj = CGraphics::GetProjectionState();
-    if (gunCam.GetFov() != PortDebug::kFovRetail) {
+    if (PortDebug::GunAtRetailFov(gunCam.GetFov())) {
       const CViewport& gunViewport = CGraphics::GetViewport();
       gpRender->SetPerspective(
           CGameCamera::VertPlusFov(PortDebug::kFovRetail, gunCam.GetAspectRatio()),
@@ -4151,11 +4151,11 @@ void CStateManager::DrawWorld() const {
 #ifdef TARGET_PC
     // Port: with the FOV slider off retail, draw the arm cannon at the retail
     // FOV (a view-model FOV), so a wide view doesn't shrink it or push it off
-    // the screen's corner.
+    // the screen's corner. "Arm cannon follows FOV" keeps the world's projection instead.
     const CGameCamera& gunCam = x870_cameraManager->GetCurrentCamera(*this);
     // Not in third person: its charge fx and grapple beam form on the body, in the world's view.
     const bool gunFov = x870_cameraManager->IsInFPCamera() && !PortThirdPerson::Active() &&
-                        gunCam.GetFov() != PortDebug::kFovRetail;
+                        PortDebug::GunAtRetailFov(gunCam.GetFov());
     const CGraphics::CProjectionState gunProj = CGraphics::GetProjectionState();
     if (gunFov) {
       const CViewport& gunViewport = CGraphics::GetViewport();
