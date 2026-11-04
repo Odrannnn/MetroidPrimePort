@@ -90,6 +90,7 @@ bool FusionLinked() {
 #include <dolphin/os.h>
 
 #include <ctime>
+#include <cwchar>
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1369,7 +1370,23 @@ void CFrontEndUI::SNewFileSelectFrame::ActivateNewGamePopup() {
   PlayAdvanceSfx();
 
   if (NormalModeBeat()) {
+#ifdef TARGET_PC
+    // Port: Trilogy's English string here is "Hypermode Mode", too long for
+    // the slot that fits GC's "Hard Mode"; drop the doubled " Mode".
+    const wchar_t* hard = gpStringTable->GetString(0x66);
+    static const wchar_t kHypermode[] = L"Hypermode Mode";
+    const size_t len = wcslen(hard);
+    const size_t hyperLen = wcslen(kHypermode);
+    // Static: the pane keeps pointing at the text (wstring_l doesn't copy).
+    static std::wstring shortened;
+    if (len >= hyperLen && wcscmp(hard + len - hyperLen, kHypermode) == 0) {
+      shortened.assign(hard, len - wcslen(L" Mode"));
+      hard = shortened.c_str();
+    }
+    x48_textpane_popupadvance.SetPairText(rstl::wstring_l(hard));
+#else
     x48_textpane_popupadvance.SetPairText(rstl::wstring_l(gpStringTable->GetString(0x66)));
+#endif
     x50_textpane_popupcancel.SetPairText(rstl::wstring_l(gpStringTable->GetString(0x5e)));
     x58_textpane_popupextra.SetPairText(rstl::wstring_l(gpStringTable->GetString(0x65)));
 
@@ -1377,8 +1394,8 @@ void CFrontEndUI::SNewFileSelectFrame::ActivateNewGamePopup() {
     x40_tablegroup_popup->GetWorkerWidget(2)->SetVisibility(true, kTM_Children);
     x44_model_dash7->SetVisibility(true, kTM_Children);
 #ifdef TARGET_PC
-    // Port: Trilogy's string here is "Hypermode Mode", too long for the slot
-    // GC's "Hard Mode" fits. Squeeze it right of the divider, not over Normal Mode.
+    // Port: a label still too long for the slot (another language's) is
+    // squeezed right of the divider rather than drawn over Normal Mode.
     // (The divider is hidden, and so the squeeze off, in the other popups.)
     x48_textpane_popupadvance.x0_textPane->PortSetLeftEdge(x44_model_dash7);
     x48_textpane_popupadvance.x4_textPaneB->PortSetLeftEdge(x44_model_dash7);
