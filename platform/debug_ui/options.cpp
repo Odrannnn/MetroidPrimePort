@@ -775,6 +775,19 @@ bool GunFollowsFov() {
 
 void SetGunFollowsFov(bool enabled) { StoreSetting(sGunFollowsFov, enabled); }
 
+float GunFov() {
+  EnsureInitialized();
+  return sOriginalExperience ? kFovRetail : sGunFov;
+}
+
+void SetGunFov(float degrees) {
+  EnsureInitialized();
+  if (std::isfinite(degrees)) {
+    sGunFov = std::clamp(degrees, kFovMin, kFovMax);
+    MarkDirty();
+  }
+}
+
 void GunOffset(float out[3]) {
   EnsureInitialized();
   for (int i = 0; i < 3; ++i) {

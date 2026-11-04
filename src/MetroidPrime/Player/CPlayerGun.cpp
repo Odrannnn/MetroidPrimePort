@@ -612,7 +612,7 @@ void CPlayerGun::PortSnapshotPresentedPose(const CStateManager& mgr) const {
 }
 
 void CPlayerGun::PortShotFromDrawnMuzzle(const CStateManager& mgr, CTransform4f& xf, bool aim) const {
-  // CStateManager's RenderGun pass draws the gun at the retail FOV when the view's differs,
+  // CStateManager's RenderGun pass draws the gun at its own FOV when the view's differs,
   // so on screen the muzzle sits where a world point at the same depth, scaled out from the
   // view axis by the ratio of the two projections, would. Shots start there, so they leave
   // the cannon as drawn; with pointer aim they still head for the pointed point.
@@ -625,10 +625,10 @@ void CPlayerGun::PortShotFromDrawnMuzzle(const CStateManager& mgr, CTransform4f&
     return;
   }
   const CGameCamera& cam = camMgr->GetCurrentCamera(mgr);
-  if (!PortDebug::GunAtRetailFov(cam.GetFov())) {
+  if (!PortDebug::GunOwnFov(cam.GetFov())) {
     return;
   }
-  const float gunTan = tanf(CGameCamera::VertPlusFov(PortDebug::kFovRetail, cam.GetAspectRatio()) *
+  const float gunTan = tanf(CGameCamera::VertPlusFov(PortDebug::GunDrawFov(cam.GetFov()), cam.GetAspectRatio()) *
                             0.5f * (M_PIF / 180.f));
   const float viewTan = tanf(cam.GetRenderFov() * 0.5f * (M_PIF / 180.f));
   if (gunTan <= 0.f || viewTan <= 0.f) {
@@ -1234,6 +1234,14 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   if (sPortRemasteredGun) {
     beamTargetXf = GetGunMotionTransform() * x418_beamLocalXf;
     beamTargetXf.AddTranslation(camTrans);
+  }
+  // The combo streams (Wavebuster, Flamethrower) start at and follow
+  // beamTargetXf every frame: with the gun at its own FOV it starts at the drawn muzzle and
+  // heads where retail's would, or the stream leaves beside the cannon, more so the wider
+  // the view and the further the cannon is offset.
+  if ((sPortRemasteredGun || !x833_29_pointBlankWorldSurface) &&
+      x744_auxWeapon->IsComboFxActive(mgr)) {
+    PortShotFromDrawnMuzzle(mgr, beamTargetXf);
   }
 #endif
 

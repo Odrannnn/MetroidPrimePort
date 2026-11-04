@@ -2498,14 +2498,25 @@ void CmdFov() {
     if (sCmd.args.size() > 2) {
       PortDebug::SetGunFollowsFov(sCmd.args[2] != "0");
     }
-    Out("gun %s", PortDebug::GunFollowsFov() ? "follows fov" : "retail fov");
+    Out("gun %s", PortDebug::GunFollowsFov() ? "follows fov" : "own fov");
+    return Finish();
+  }
+  if (sCmd.args.size() > 1 && sCmd.args[1] == "cannon") {
+    if (sCmd.args.size() > 2) {
+      const float fov = static_cast< float >(std::atof(sCmd.args[2].c_str()));
+      if (!(fov >= PortDebug::kFovMin && fov <= PortDebug::kFovMax)) {
+        return Finish("usage: fov cannon [45..120]   the arm cannon's own FOV (retail 55)");
+      }
+      PortDebug::SetGunFov(fov);
+    }
+    Out("cannon fov %.1f%s", PortDebug::GunFov(), PortDebug::GunFollowsFov() ? " (unused: gun follows fov)" : "");
     return Finish();
   }
   const float fov =
       sCmd.args.size() > 1 ? static_cast< float >(std::atof(sCmd.args[1].c_str())) : 0.f;
   if (!(fov >= PortDebug::kFovMin && fov <= PortDebug::kFovMax)) {
-    return Finish("usage: fov <45..120> | fov gun [0|1]   first-person vertical FOV (retail 55);\n"
-                  "gun 1 draws the arm cannon at it too");
+    return Finish("usage: fov <45..120> | fov gun [0|1] | fov cannon [45..120]   first-person vertical\n"
+                  "FOV (retail 55); gun 1 draws the arm cannon at it too, cannon sets its own FOV");
   }
   PortDebug::SetFirstPersonFov(fov);
   Finish();
@@ -4497,8 +4508,9 @@ const CommandSpec kCommands[] = {
      "keypreset classic|mouse|<saved name>|save <name>   apply or save a keyboard preset (Controls > Remap)"},
     {"padpreset", CmdPadPreset, nullptr,
      "padpreset gamecube|remastered|modern|southpaw|<saved name>|save <name>   apply or save a controller preset"},
-    {"fov", CmdFov, nullptr, "fov <45..120>|gun [0|1]    first-person vertical FOV, as the Options row does;\n"
-                             "                           gun 1: the arm cannon follows it"},
+    {"fov", CmdFov, nullptr, "fov <45..120>|gun [0|1]|cannon [45..120]  first-person vertical FOV, as the\n"
+                             "                           Options row does; gun 1: the arm cannon follows it;\n"
+                             "                           cannon: the arm cannon's own FOV"},
     {"gunoffset", CmdGunOffset, nullptr,
      "gunoffset <r> <f> <u>      arm cannon offset in metres (+-1), as the Video row does"},
     {"pointeraim", CmdPointerAim, nullptr,

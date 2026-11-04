@@ -213,6 +213,7 @@ enum EPortOption {
   kPO_GrappleShoot,
   kPO_GrappleToggle,
   kPO_GunFollowsFov,
+  kPO_GunFov,
 };
 #define PORT_OPTION(opt) static_cast< EGameOption >(opt)
 
@@ -250,6 +251,7 @@ static const SGameOption skPortDisplayOptions[] = {
     {PORT_OPTION(kPO_HudScale), -1, PortDebug::kHudScaleMin, PortDebug::kHudScaleMax, 5.f, kOT_Float},
     {PORT_OPTION(kPO_Fov), -1, PortDebug::kFovMin, PortDebug::kFovMax, 1.f, kOT_Float},
     {PORT_OPTION(kPO_GunFollowsFov), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_GunFov), -1, PortDebug::kFovMin, PortDebug::kFovMax, 1.f, kOT_Float},
     {PORT_OPTION(kPO_AntiAliasing), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_SpeedrunTimer), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_PhotoMode), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
@@ -292,10 +294,13 @@ static const SGameOption skPortControllerOptionsNoAim[] = {
     {PORT_OPTION(kPO_RapidCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {kGO_RestoreDefaults, 35, 0.f, 1.f, 1.f, kOT_RestoreDefaults},
 };
-static const SOptionCategory skPortControllerCategoryNoAim = {14, skPortControllerOptionsNoAim};
+static const SOptionCategory skPortControllerCategoryNoAim = {ARRAY_SIZE(skPortControllerOptionsNoAim), skPortControllerOptionsNoAim};
 static SOptionCategory skPauseOptions[] = {
-    {11, skPortVisorOptions},     {12, skPortDisplayOptions}, {4, skSoundOptions},
-    {15, skPortControllerOptions}, {0, nullptr},
+    {ARRAY_SIZE(skPortVisorOptions), skPortVisorOptions},
+    {ARRAY_SIZE(skPortDisplayOptions), skPortDisplayOptions},
+    {4, skSoundOptions},
+    {ARRAY_SIZE(skPortControllerOptions), skPortControllerOptions},
+    {0, nullptr},
 };
 
 static bool IsPortOption(EGameOption option) { return option > kGO_RestoreDefaults; }
@@ -330,6 +335,8 @@ static const wchar_t* PortOptionTitle(EGameOption option) {
     return L"Field of View";
   case kPO_GunFollowsFov:
     return L"Arm Cannon Follows FOV";
+  case kPO_GunFov:
+    return L"Arm Cannon FOV";
   case kPO_AntiAliasing:
     return L"Anti-Aliasing";
   case kPO_HudScale:
@@ -389,6 +396,8 @@ static int GetPortOption(EGameOption option) {
     return static_cast< int >(PortDebug::FirstPersonFov() + 0.5f);
   case kPO_GunFollowsFov:
     return PortDebug::GunFollowsFov() ? 1 : 0;
+  case kPO_GunFov:
+    return static_cast< int >(PortDebug::GunFov() + 0.5f);
   case kPO_AntiAliasing:
     return PortDebug::Msaa() > 1 ? 1 : 0;
   case kPO_HudScale:
@@ -445,6 +454,7 @@ static bool IsOriginalLocked(EGameOption option) {
   case kPO_RapidCharge:
   case kPO_Fov:
   case kPO_GunFollowsFov:
+  case kPO_GunFov:
   case kPO_AntiAliasing:
   case kPO_HudScale:
   case kPO_HideHelmet:
@@ -506,6 +516,9 @@ static void SetPortOption(EGameOption option, int value) {
     break;
   case kPO_GunFollowsFov:
     PortDebug::SetGunFollowsFov(value > 0);
+    break;
+  case kPO_GunFov:
+    PortDebug::SetGunFov(static_cast< float >(value));
     break;
   case kPO_AntiAliasing:
     PortDebug::SetMsaa(value > 0 ? 4 : 1);
@@ -725,6 +738,7 @@ void CGameOptions::TryRestoreDefaults(const CFinalInput& input, int category, in
         PortDebug::SetHudWide(false);
         PortDebug::SetFirstPersonFov(PortDebug::kFovRetail);
         PortDebug::SetGunFollowsFov(false);
+        PortDebug::SetGunFov(PortDebug::kFovRetail);
         PortDebug::SetMsaa(1);
         PortDebug::SetHudScale(PortDebug::kHudScaleMax);
         PortDebug::SetSpeedrunTimer(false);

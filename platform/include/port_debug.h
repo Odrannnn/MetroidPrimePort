@@ -396,9 +396,10 @@ enum EBootLogos { kBootLogos_Show, kBootLogos_Skippable, kBootLogos_Off };
 EBootLogos BootLogos();
 void SetBootLogos(EBootLogos mode);
 // First-person vertical field of view in degrees (retail 55). The arm cannon is
-// drawn at the retail FOV whatever this is, like a view-model FOV, unless
-// GunFollowsFov: then it shares the world's projection (smaller, further into
-// the corner at a wide FOV). Off in the original experience, where the FOV is 55.
+// drawn at its own FOV (GunFov, retail 55) whatever this is, like a view-model
+// FOV, unless GunFollowsFov: then it shares the world's projection (smaller,
+// further into the corner at a wide FOV). Both are 55 and following is off in
+// the original experience.
 const float kFovRetail = 55.f;
 const float kFovMin = 45.f;
 const float kFovMax = 120.f;
@@ -406,9 +407,12 @@ float FirstPersonFov();
 void SetFirstPersonFov(float degrees);
 bool GunFollowsFov();
 void SetGunFollowsFov(bool enabled);
-// Whether the arm cannon gets its own projection at the retail FOV this frame,
-// for a first-person camera whose FOV is cameraFov.
-inline bool GunAtRetailFov(float cameraFov) { return cameraFov != kFovRetail && !GunFollowsFov(); }
+float GunFov();
+void SetGunFov(float degrees);
+// The FOV the arm cannon is drawn at, for a first-person camera whose FOV is cameraFov.
+inline float GunDrawFov(float cameraFov) { return GunFollowsFov() ? cameraFov : GunFov(); }
+// Whether the arm cannon gets its own projection (at GunDrawFov) this frame.
+inline bool GunOwnFov(float cameraFov) { return GunDrawFov(cameraFov) != cameraFov; }
 // Arm cannon offset from its retail place, in metres along the camera's right,
 // forward and up axes (issue #72, like PrimeHack's). It moves the real gun, so
 // shots leave from the new muzzle. Zero in the original experience.

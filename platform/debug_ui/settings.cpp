@@ -358,6 +358,14 @@ const SettingKey kSettingKeys[] = {
      },
      [](std::ostream& out) { out << sFirstPersonFov; }, false, "45", "72.5"},
     BoolKey< &sGunFollowsFov >("gun_follows_fov"),
+    {"gun_fov",
+     [](const std::string& value) {
+       const float f = static_cast< float >(std::atof(value.c_str()));
+       if (std::isfinite(f) && f >= PortDebug::kFovMin && f <= PortDebug::kFovMax) {
+         sGunFov = f;
+       }
+     },
+     [](std::ostream& out) { out << sGunFov; }, false, "45", "72.5"},
     {"gun_offset",
      [](const std::string& value) {
        float v[3] = {};

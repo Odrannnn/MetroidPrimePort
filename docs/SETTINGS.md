@@ -642,8 +642,11 @@
 - Field of view (Video > Display and pause Options > Display, persisted as `fov`,
   45-120, retail 55): the first-person camera's vertical FOV. The overlay also
   shows the horizontal FOV it gives at the current aspect. By default the arm
-  cannon is drawn at the retail FOV whatever the setting (a view-model FOV), so
-  it keeps its size and place. Arm cannon follows FOV (the row below it,
+  cannon is drawn at its own FOV whatever the setting (a view-model FOV), so
+  it keeps its size and place: Arm cannon FOV (Video > Display and pause
+  Options > Display, persisted as `gun_fov`, 45-120, default the retail 55,
+  retail in the original experience; higher draws it smaller and further into
+  the corner). Arm cannon follows FOV (the row below it,
   persisted as `gun_follows_fov`, default off, off in the original experience)
   draws it in the world's perspective instead: a wider FOV shows it smaller and
   further into the corner, as the world around it. Shots then leave the real

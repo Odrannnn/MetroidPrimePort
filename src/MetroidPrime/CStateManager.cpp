@@ -3742,10 +3742,10 @@ void CStateManager::DrawWorld() const {
       !PortThirdPerson::Active()) {
     const CGameCamera& gunCam = x870_cameraManager->GetCurrentCamera(*this);
     const CGraphics::CProjectionState gunProj = CGraphics::GetProjectionState();
-    if (PortDebug::GunAtRetailFov(gunCam.GetFov())) {
+    if (PortDebug::GunOwnFov(gunCam.GetFov())) {
       const CViewport& gunViewport = CGraphics::GetViewport();
       gpRender->SetPerspective(
-          CGameCamera::VertPlusFov(PortDebug::kFovRetail, gunCam.GetAspectRatio()),
+          CGameCamera::VertPlusFov(PortDebug::GunDrawFov(gunCam.GetFov()), gunCam.GetAspectRatio()),
           static_cast< float >(gunViewport.mWidth), static_cast< float >(gunViewport.mHeight),
           gunCam.GetNearClipDistance(), gunCam.GetFarClipDistance());
     }
@@ -4153,17 +4153,17 @@ void CStateManager::DrawWorld() const {
   if (x84c_player != nullptr) {
 #endif
 #ifdef TARGET_PC
-    // Port: with the FOV slider off retail, draw the arm cannon at the retail
+    // Port: when the arm cannon's FOV differs from the view's, draw it at its own
     // FOV (a view-model FOV), so a wide view doesn't shrink it or push it off
     // the screen's corner. "Arm cannon follows FOV" keeps the world's projection instead.
     const CGameCamera& gunCam = x870_cameraManager->GetCurrentCamera(*this);
     // Not in third person: its charge fx and grapple beam form on the body, in the world's view.
     const bool gunFov = x870_cameraManager->IsInFPCamera() && !PortThirdPerson::Active() &&
-                        PortDebug::GunAtRetailFov(gunCam.GetFov());
+                        PortDebug::GunOwnFov(gunCam.GetFov());
     const CGraphics::CProjectionState gunProj = CGraphics::GetProjectionState();
     if (gunFov) {
       const CViewport& gunViewport = CGraphics::GetViewport();
-      gpRender->SetPerspective(CGameCamera::VertPlusFov(PortDebug::kFovRetail, gunCam.GetAspectRatio()), static_cast< float >(gunViewport.mWidth),
+      gpRender->SetPerspective(CGameCamera::VertPlusFov(PortDebug::GunDrawFov(gunCam.GetFov()), gunCam.GetAspectRatio()), static_cast< float >(gunViewport.mWidth),
                                static_cast< float >(gunViewport.mHeight),
                                gunCam.GetNearClipDistance(), gunCam.GetFarClipDistance());
     }

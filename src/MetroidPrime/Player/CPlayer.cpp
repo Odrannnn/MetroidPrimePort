@@ -714,8 +714,7 @@ CVector3f CPlayer::PortAnchorGunDown(const CVector3f& pos, CStateManager& mgr) c
     return pos;
   }
   const CGameCamera& cam = camMgr->GetCurrentCamera(mgr);
-  const float gunFov =
-      PortDebug::GunFollowsFov() ? cam.GetUnwidenedFov() : PortDebug::kFovRetail;
+  const float gunFov = PortDebug::GunDrawFov(cam.GetUnwidenedFov());
   const float drop = CGameCamera::VertPlusGunDrop(gunFov, CCameraManager::GetDefaultAspectRatio());
   if (drop <= 0.f) {
     return pos;
@@ -831,13 +830,13 @@ void CPlayer::UpdateGunTransform(const CVector3f& gunPos, CStateManager& mgr) {
     }
     CTransform4f aimXf = CTransform4f::LookAt(CVector3f::Zero(), toAim);
     aimXf.SetTranslation(viewGunPos);
-    // With the FOV slider off retail the gun is drawn at the retail FOV (CStateManager's
+    // With the gun at its own FOV, unlike the view's, it is drawn at that FOV (CStateManager's
     // RenderGun pass), so the model aims where the point sits under that projection: the
     // same screen spot as the crosshair at the same depth.
     CVector3f toModelAim = toAim;
-    if (mgr.GetCameraManager()->IsInFPCamera() && PortDebug::GunAtRetailFov(cam.GetFov())) {
+    if (mgr.GetCameraManager()->IsInFPCamera() && PortDebug::GunOwnFov(cam.GetFov())) {
       const float gunTan =
-          tanf(CGameCamera::VertPlusFov(PortDebug::kFovRetail, cam.GetAspectRatio()) * 0.5f *
+          tanf(CGameCamera::VertPlusFov(PortDebug::GunDrawFov(cam.GetFov()), cam.GetAspectRatio()) * 0.5f *
                (M_PIF / 180.f));
       const float viewTan = tanf(cam.GetRenderFov() * 0.5f * (M_PIF / 180.f));
       const CVector3f p = viewXf.TransposeRotate(rayDir * distance);
