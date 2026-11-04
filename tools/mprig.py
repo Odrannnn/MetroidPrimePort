@@ -573,13 +573,16 @@ def start_run(a):
         die(f"--mods {a.mods} is a mod, not a mods dir; pass its parent {Path(a.mods).parent}")
     d = run_dir(name)
     RIG.mkdir(parents=True, exist_ok=True)
-    CACHE.mkdir(exist_ok=True)
     disc = a.disc or cfg["disc"]
     if not disc or not Path(disc).is_file():
         die(f"disc image not found ('{disc}'): set disc in build/rig.ini, MPRIG_DISC or --disc")
     binary = resolve_binary(a.build or cfg["build"])
     if not binary.is_file():
         die(f"binary not found: {binary}")
+    # One pipeline cache per build dir: a branch can change the ShaderConfig layout without bumping
+    # GXPipelineConfigVersion, and its rows then compile to invalid WGSL in another build (abort).
+    cache = CACHE if binary.parent.name == "port-gcc" else RIG / f"cache-{binary.parent.name}"
+    cache.mkdir(exist_ok=True)
     for kv in a.env:
         if "=" not in kv:
             die(f"bad --env '{kv}' (want K=V)")
@@ -700,7 +703,7 @@ def start_run(a):
     else:
         env["MESA_VK_WSI_DEBUG"] = "sw"  # RADV on Xvfb has no DRI3
     env.update({
-        "MP_USER_PATH": str(user), "MP_CACHE_PATH": str(CACHE), "MP_MODS": str(mods),
+        "MP_USER_PATH": str(user), "MP_CACHE_PATH": str(cache), "MP_MODS": str(mods),
         "MP_FAST_BOOT": "0" if getattr(a, "front", False) else "1", "MP_DISABLE_AI_AUDIO": "1", "MP_UPDATE_CHECK": "0", "MP_ASPECT": "16:9", "MP_CONSOLE": str(port),
         "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1",
         # Xvfb presents are CPU copies (MESA_VK_WSI_DEBUG=sw); present one frame in 6. Every frame is
