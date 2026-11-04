@@ -1218,13 +1218,55 @@ int main(int argc, char** argv) {
     // backend instead. SDL_VIDEODRIVER still wins, which is also how anyone who
     // wants Wayland opts back in. macOS has neither backend (its SDL build has
     // no x11 driver, and XQuartz sets DISPLAY), so it is left to SDL's default.
+    //
+    // Launched by Steam, X11 matters for a second reason: Steam Input picks the
+    // active controller layout from the focused window, and it only tracks X11
+    // windows. A Wayland window is never seen taking focus, so Steam keeps its
+    // Desktop layout and the game's own layout (back buttons, gyro) never applies.
+    // Distributions that set SDL_VIDEODRIVER=wayland,x11 system-wide (Garuda's
+    // /etc/environment does) would otherwise land there, so under Steam a list
+    // that allows x11 is narrowed to x11. A list without x11
+    // (SDL_VIDEODRIVER=wayland) is still honoured.
 #if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__APPLE__)
     {
         const char* requested = SDL_GetHint(SDL_HINT_VIDEO_DRIVER);
         const char* x11 = std::getenv("DISPLAY");
         const auto present = [](const char* v) { return v != nullptr && v[0] != '\0'; };
         const bool unnamed = !present(requested);
-        if (unnamed && present(x11)) {
+        // SDL matches driver names case-insensitively, so X11 counts too.
+        const auto named = [](std::string_view name, std::string_view driver) {
+            return name.size() == driver.size() && SDL_strncasecmp(name.data(), driver.data(), driver.size()) == 0;
+        };
+        const auto listsX11 = [&](const char* list) {
+            std::string_view rest = list;
+            while (!rest.empty()) {
+                const size_t comma = rest.find(',');
+                if (named(rest.substr(0, comma), "x11"))
+                    return true;
+                if (comma == std::string_view::npos)
+                    break;
+                rest.remove_prefix(comma + 1);
+            }
+            return false;
+        };
+        // An offscreen or dummy run has no window for Steam Input to focus, so it is left alone.
+        const bool windowless = !unnamed && (named(requested, "offscreen") || named(requested, "dummy"));
+        const bool underSteam =
+            !windowless && (present(std::getenv("SteamAppId")) || present(std::getenv("SteamGameId")));
+        if (!unnamed && underSteam && present(x11) && !named(requested, "x11") && listsX11(requested)) {
+            // Copied first: setting the hint may free the string `requested` points at.
+            const std::string was = requested;
+            // The environment variable outranks a normal-priority hint, hence OVERRIDE.
+            SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "x11", SDL_HINT_OVERRIDE);
+            PortLog::Write("port: launched by Steam, so using SDL's x11 video driver instead of "
+                           "SDL_VIDEODRIVER=%s; Steam Input only applies the game's controller layout "
+                           "to X11 windows. Set SDL_VIDEODRIVER=wayland to keep Wayland.\n",
+                           was.c_str());
+        } else if (!unnamed && underSteam && !listsX11(requested)) {
+            PortLog::Write("port: SDL_VIDEODRIVER=%s under Steam; Steam Input will not see this window "
+                           "focused and keeps its Desktop controller layout.\n",
+                           requested);
+        } else if (unnamed && present(x11)) {
             SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "x11");
             PortLog::Write(
                          "port: using SDL's x11 video driver on %s; its wayland backend hangs on "
