@@ -136,7 +136,8 @@ inline constexpr Copy kCopies[] = {
 // One Morph Ball: Echoes' ball model (static there; `caps`, if not 0, merged into it) as a suit's
 // ball by PortDreadSamus::kBallTargets' variant ids: a copy of Prime's ANCS whose character 0 takes
 // the model skinned rigidly on the joint Prime's ball skin weights most, and the model unskinned
-// as the low-poly ball. Echoes has no Varia or Light Spider Ball; those stay Prime's.
+// as the low-poly ball. Echoes has no Varia or Light Spider Ball (its Spider Ball keeps the suit's
+// ball), so those suits' plain balls are their Spider Balls too, rather than Prime's spider balls.
 struct Ball {
   const char* suit;  // Echoes' ball, for the log
   int primeSuit;     // CPlayerState::EPlayerSuit
@@ -147,7 +148,9 @@ inline constexpr Ball kBalls[] = {
     {"Varia", 2, false, 0xF57D2B74, 0},
     {"Dark", 1, false, 0x07C3C0E0, 0},
     {"Light", 3, false, 0x9BE5CFAD, 0},
+    {"Varia", 2, true, 0xF57D2B74, 0},
     {"Dark", 1, true, 0x6AA79226, 0x5A5C0FEC},
+    {"Light", 3, true, 0x9BE5CFAD, 0},
 };
 
 // The first-person right arm (CGunWeapon::LoadSuitArm, a static model at the gun's elbow): Echoes

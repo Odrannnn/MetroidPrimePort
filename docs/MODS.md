@@ -313,8 +313,9 @@ Under F1 > Mods > Built-in mods > Metroid Prime 2: Echoes: the Varia, Dark and L
 from your own Echoes GameCube disc image (tested with USA `G2ME01`), as Prime's Varia, Gravity and Phazon
 Suits, in cutscenes, the Morph Ball transitions, the third-person camera and the pause screen's
 doll and the first-person arms (right, and the left grapple arm); and their Morph Balls, with the
-Dark Spider Ball as Gravity's Spider Ball. The Power Suit stays
-Prime's, and so do the Varia and Phazon Spider Balls (Echoes has no Varia or Light Spider Ball).
+Dark Spider Ball as Gravity's Spider Ball. Echoes has no Varia or Light Spider Ball (its Spider
+Ball keeps the suit's ball), so the Varia and Phazon Spider Balls are the Varia and Light balls. The
+Power Suit stays Prime's.
 
 - It is the mod `echoes-suits`. Its bodies carry their own arm cannon, so Prime's is not drawn on
   them. They are skinned onto Prime's skeleton: joints Prime lacks fold into their nearest parent

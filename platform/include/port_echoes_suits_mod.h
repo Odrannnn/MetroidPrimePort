@@ -19,7 +19,8 @@ inline constexpr const char* kStampName = ".echoes-suits-version";
 // 4: the first-person arm cannon and its hologram, under variant ids (Cannon).
 // 5: the cannon's Light and Annihilator sets swapped (kGunSets).
 // 6: Dark Samus, one body per skeleton under DarkSamusId/DarkSamusSkinId (kDarkBodies).
-inline constexpr int kVersion = 6;
+// 7: the Varia and Light balls also as the Varia and Phazon Spider Balls.
+inline constexpr int kVersion = 7;
 
 // The first-person arm cannon (CGunWeapon::LoadGunModels: characters 0 and 1 of each beam's ANCS).
 // Echoes' gun and hologram have Prime's ids and are skinned on its own CINF 46ED31E0, the same 50
