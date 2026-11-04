@@ -1845,8 +1845,8 @@ bool Render(const CStateManager& mgr, const CTransform4f& feet, const CActorLigh
   const CModelFlags flags = fade < 1.f ? CModelFlags(CModelFlags::kT_Blend, fade) : CModelFlags::Normal();
   s.body->Touch(mgr, 0);
   s.body->Render(mgr, xf, lights, flags);
-  // Prime's cannon at the hand locator, unless the dread-samus mod's body carries its own.
-  const bool drawGun = s.beamData && !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(s.loadedChar));
+  // Prime's cannon at the hand locator, unless a mod's body carries its own.
+  const bool drawGun = s.beamData && !PortDreadSamus::HasOwnCannon(PortDreadSamus::CutsceneBody(s.loadedChar));
   const CTransform4f gun = drawGun ? xf * s.body->GetScaledLocatorTransform("GUN_LCTR") : xf;
   if (drawGun) {
     s.beamData->Touch(mgr, 0);

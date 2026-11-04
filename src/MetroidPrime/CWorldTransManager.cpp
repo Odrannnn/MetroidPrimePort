@@ -356,7 +356,7 @@ void CWorldTransManager::DrawAllModels() const {
     data.x1c_samusModelData.Render(CModelData::kWM_Normal, samusXf, &lights, CModelFlags::Normal());
     // The Dread Samus body (port_dread_samus_mod.h) carries its own cannon: Prime's is not drawn on it.
     if (!data.x68_beamModelData.IsNull() &&
-        !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(GetSuitCharIdx())))
+        !PortDreadSamus::HasOwnCannon(PortDreadSamus::CutsceneBody(GetSuitCharIdx())))
       data.x68_beamModelData.Render(CModelData::kWM_Normal, samusXf * data.x170_gunXf,
                                      &lights, CModelFlags::Normal());
   }

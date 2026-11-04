@@ -62,10 +62,14 @@ static SObjectTag PortSuitVariantTag(const char* name, int suit) {
                     CMorphBall::PortSuitVariant(tag->GetId(), tag->GetType(), suit));
 }
 
-// Whether the dread-samus mod serves this suit's doll body: one mesh with its own boots, cannon
-// and visor, so the suit's other parts, boots, beam and visor models are not drawn.
+// Whether a mod serves this suit's doll body: one mesh with its own boots and visor, so the suit's
+// other parts, boots and visor models are not drawn.
 static bool PortDreadDoll(int suit) {
   return PortDreadSamus::Replaces(PortDreadSamus::DollBody(suit));
+}
+// Whether that body has its own cannon too (Dread, Dark Samus), so the beam model is not drawn.
+static bool PortDollHasCannon(int suit) {
+  return PortDreadSamus::HasOwnCannon(PortDreadSamus::DollBody(suit));
 }
 #endif
 
@@ -478,7 +482,7 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
       xc8_suitModel0->AnimationData()->SubstituteModelData(backupModel);
     }
 #ifdef TARGET_PC
-    // Port: a Dread body has its own boots, cannon and visor (PortDreadDoll).
+    // Port: a mod's body has its own boots and visor (PortDreadDoll), and maybe cannon.
     const bool portDread = PortDreadDoll(x44_suit);
     if (!portDread)
 #endif
@@ -490,12 +494,16 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
     CGraphics::EnableLight(kLight0);
     CGraphics::SetAmbientColor(CColor(0x00000000));
 #ifdef TARGET_PC
-    if (!portDread) {
+    if (!PortDollHasCannon(x44_suit)) {
 #endif
     CGraphics::SetModelMatrix(gunXf);
     beam->Draw(CModelFlags::AlphaBlended(drawAlpha));
     beam->Draw(CModelFlags::Additive(drawAlpha * itemPulse * x5c_beamPulseFactor)
                    .DepthCompareUpdate(true, false));
+#ifdef TARGET_PC
+    }
+    if (!portDread) {
+#endif
 
     CGraphics::SetModelMatrix(visorXf);
     const float visorT =

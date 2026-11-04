@@ -141,11 +141,15 @@ inline uint32_t DollBody(int suit) {
   }
 }
 
-// Whether a body with its own skinned cannon stands in for a retail body CMDL now: the dread-samus or
-// echoes-suits mod is loaded and serves that id (PortMods). Prime's separate cannon is then not drawn.
+// Whether a one-piece body with its own boots and visor stands in for a retail body CMDL now: the
+// dread-samus or echoes-suits mod is loaded and serves that id (PortMods). Prime's suit parts, boots
+// and visor are then not drawn.
 bool Replaces(uint32_t bodyCmdl);
 // Whether that body is Dread's: it alone has its muzzle at Charge_LCTR and its own skeleton.
 bool ReplacesWithDread(uint32_t bodyCmdl);
+// Whether that body also carries its own cannon (Dread's, or Echoes' Dark Samus; the Echoes suits'
+// bodies end in a bare forearm): Prime's separate cannon is then not drawn on it.
+bool HasOwnCannon(uint32_t bodyCmdl);
 
 // The skin the mod ships for a cutscene body CMDL it serves (CINF 19C53902), 0 for any other. A
 // Remastered install replaces the Samus ANCS and with it the skin ids, so a character's own skin id

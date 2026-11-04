@@ -53,7 +53,8 @@ bool FirstPersonCannonShown();
 // The Prime body CMDLs the mod writes (PortEchoesSuits::kTargets and kCopies): cutscene Varia,
 // Gravity, Phazon, the Tallon Phazon copy, in-game Varia, Gravity, Phazon, then the doll's Varia,
 // Gravity, Phazon. While the mod serves one, PortDreadSamus::Replaces holds for it: Echoes' bodies
-// carry their own cannon, boots and visor.
+// carry their own boots and visor. Not their cannon: the right forearm ends bare, and Prime's
+// cannon is drawn on it (PortDreadSamus::HasOwnCannon).
 inline constexpr uint32_t kBodies[] = {0x776C1A96, 0x57F5C930, 0x2782648E, 0xB333E1D7, 0xE449874A,
                                        0x57489AD3, 0x891E00FD, 0xA602C954, 0x11A5BC8A, 0x5644E7A1};
 inline bool IsBody(uint32_t id) {

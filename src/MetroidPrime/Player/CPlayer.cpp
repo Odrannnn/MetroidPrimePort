@@ -3577,7 +3577,7 @@ bool CPlayer::CanRenderUnsorted(const CStateManager& mgr) const { return false; 
 bool CPlayer::HasTransitionBeamModel() const {
   // The Dread Samus body (port_dread_samus_mod.h) carries its own cannon: Prime's is not drawn on it.
   return !x7f0_ballTransitionBeamModel.null() && !x7f0_ballTransitionBeamModel->IsNull() &&
-         !PortDreadSamus::Replaces(PortDreadSamus::InGameBody(x7cc_transitionSuit));
+         !PortDreadSamus::HasOwnCannon(PortDreadSamus::InGameBody(x7cc_transitionSuit));
 }
 
 void CPlayer::LoadAnimationTokens() {

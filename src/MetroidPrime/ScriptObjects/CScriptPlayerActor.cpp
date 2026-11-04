@@ -215,7 +215,7 @@ void CScriptPlayerActor::Render(const CStateManager& mgr) const {
   CPhysicsActor::Render(mgr);
   // The Dread Samus body (port_dread_samus_mod.h) carries its own cannon: Prime's is not drawn on it.
   const bool gun = HasGunModelData() && HasModelData() &&
-                   !PortDreadSamus::Replaces(PortDreadSamus::CutsceneBody(x2e8_suitRes.GetCharacterNodeId()));
+                   !PortDreadSamus::HasOwnCannon(PortDreadSamus::CutsceneBody(x2e8_suitRes.GetCharacterNodeId()));
   if (gun) {
     const CTransform4f locator =
         GetModelData()->GetScaledLocatorTransform(rstl::string_l(kGunLocator));

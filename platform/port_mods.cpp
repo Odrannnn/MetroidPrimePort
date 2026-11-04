@@ -82,8 +82,11 @@ std::set<uint32_t> sDreadLowBalls;
 std::set<uint32_t> sDreadCannons;  // first-person cannon variants (PortDreadSamus::FirstPersonCannon)
 // The Dread-proportioned CINFs it serves (PortDreadSamus::Skeleton).
 std::set<uint32_t> sDreadSkeletons;
-// The CMDLs the echoes-suits mod serves (PortDreadSamus::Replaces too: its bodies carry their cannon).
+// The CMDLs the echoes-suits mod serves (PortDreadSamus::Replaces too: its bodies carry their boots
+// and visor, though not the suits' cannon).
 std::set<uint32_t> sEchoesBodies;
+// Of those, the ones Dark Samus stands in for: her body carries her cannon (PortDreadSamus::HasOwnCannon).
+std::set<uint32_t> sDarkSamusBodies;
 // The beam ANCS whose Echoes cannon variant it serves (PortEchoesSuits::GunAncs).
 std::set<uint32_t> sEchoesGuns;
 // Whether it serves Dark Samus in place of the suit bodies (PortEchoesSuits::DarkSamusServed).
@@ -459,6 +462,9 @@ bool PortDreadSamus::Replaces(uint32_t bodyCmdl) {
 bool PortDreadSamus::ReplacesWithDread(uint32_t bodyCmdl) {
   return bodyCmdl != 0 && PortMods::sDreadBodies.count(bodyCmdl) != 0;
 }
+bool PortDreadSamus::HasOwnCannon(uint32_t bodyCmdl) {
+  return ReplacesWithDread(bodyCmdl) || (bodyCmdl != 0 && PortMods::sDarkSamusBodies.count(bodyCmdl) != 0);
+}
 bool PortDreadSamus::ReplacesBall(int suit, bool spider) {
   return PortMods::sDreadBalls.count(BallModel(suit, spider)) != 0;
 }
@@ -657,6 +663,7 @@ void Initialize() {
   sDreadLowBalls.clear();
   sDreadSkeletons.clear();
   sEchoesBodies.clear();
+  sDarkSamusBodies.clear();
   sEchoesGuns.clear();
   sDarkSamusServed = false;
   {
@@ -977,9 +984,10 @@ void Initialize() {
           sResourceProviders[{from->type, to}] = provider->second;
         }
       }
-      // Her own cannon, like the Echoes suits': PortDreadSamus::Replaces.
+      // Her own boots, visor and cannon: PortDreadSamus::Replaces, HasOwnCannon.
       if (body.cmdl != 0) {
         sEchoesBodies.insert(body.cmdl);
+        sDarkSamusBodies.insert(body.cmdl);
         ++served;
       }
     }
