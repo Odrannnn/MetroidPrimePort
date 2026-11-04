@@ -218,6 +218,10 @@ const bool CEnergyProjectile::Explode(const CVector3f& pos, const CVector3f& nor
                             CEntityInfo(GetCurrentAreaId(), CEntity::NullConnectionList),
                             rstl::string_l("Projectile collision response"), particleXf, flags,
                             scale, CColor::White());
+#ifdef TARGET_PC
+      static_cast< CExplosion* >(explosion)->xe8_particleGen->PortSetBeamTint(
+          projectile.PortBeamTint());
+#endif
       mgr.AddObject(explosion);
       if (CActor* hit = TCastToPtr< CActor >(mgr.ObjectById(hitActor))) {
         bool hasPlatform = false;
@@ -246,10 +250,15 @@ const bool CEnergyProjectile::Explode(const CVector3f& pos, const CVector3f& nor
     }
     if ((GetAttribField() & (kPA_ComboShot | kPA_Ice)) == (kPA_ComboShot | kPA_Ice)) {
       const TLockedToken< CGenDescription > iceParticle = gpSimplePool->GetObj("IceSpread1");
-      mgr.AddObject(rs_new CIceImpact(iceParticle, mgr.AllocateUniqueId(), GetCurrentAreaId(), true,
-                                      rstl::string_l("Ice spread explosion"), particleXf,
-                                      ((GetThermalFlags() & 2) == 0 ? 1 : 0) | 2,
-                                      CVector3f(1.f, 1.f, 1.f), CColor(1.f, 1.f, 1.f, 1.f)));
+      CIceImpact* const impact =
+          rs_new CIceImpact(iceParticle, mgr.AllocateUniqueId(), GetCurrentAreaId(), true,
+                            rstl::string_l("Ice spread explosion"), particleXf,
+                            ((GetThermalFlags() & 2) == 0 ? 1 : 0) | 2, CVector3f(1.f, 1.f, 1.f),
+                            CColor(1.f, 1.f, 1.f, 1.f));
+#ifdef TARGET_PC
+      impact->PortSetBeamTint(projectile.PortBeamTint());
+#endif
+      mgr.AddObject(impact);
     }
   }
   return done;

@@ -21,6 +21,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "port_beam_colours.h"
 #include "port_debug.h"
 #include "Kyoto/Particles/CParticleElectric2Port.hpp"
 #include "port_fx_debug.h"
@@ -635,6 +636,7 @@ const bool CParticleElectric::Update(double dt) {
 void CParticleElectric::Render() {
 #ifdef TARGET_PC
   PortFx::RenderScope fxScope;
+  PortBeamColours::Scope beamScope(xPortBeamTint);
   if (PortFx::gMuteActive && PortFx::IsMuted(*this)) {
     return;
   }

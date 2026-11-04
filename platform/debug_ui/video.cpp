@@ -21,6 +21,7 @@
 #include "port_gpu_driver.h"
 #include "port_mods.h"
 #include "port_savestate.h"
+#include "port_beam_colours.h"
 #include "port_suit_colours.h"
 
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
@@ -168,6 +169,35 @@ void DrawVideoDisplay() {
     ImGui::SetItemTooltip(
         "Rebuilds the recoloured textures and reloads the mods (a moment; the game\n"
         "carries on). Original experience uses the original colours.");
+  }
+
+  ImGui::SeparatorText("Beam colours");
+  for (int beam = 0; beam < PortBeamColours::kBeamCount; ++beam) {
+    ImGui::PushID(beam);
+    const std::optional< uint32_t > picked = PortBeamColours::Colour(beam);
+    const uint32_t shown = picked ? *picked : PortBeamColours::DefaultColour(beam);
+    float rgb[3] = {float((shown >> 16) & 255) / 255.f, float((shown >> 8) & 255) / 255.f,
+                    float(shown & 255) / 255.f};
+    if (ImGui::ColorEdit3(PortBeamColours::Name(beam), rgb, ImGuiColorEditFlags_NoInputs)) {
+      uint32_t value = 0;
+      for (const float c : rgb) {
+        value = (value << 8) | uint32_t(std::clamp(std::lround(c * 255.f), 0l, 255l));
+      }
+      PortBeamColours::SetColour(beam, value);
+      MarkDirty();
+    }
+    ImGui::SetItemTooltip(
+        "The beam's shots, charge and muzzle effects, their light and the arm cannon's glow\n"
+        "take this colour at once; the cannon's body keeps its own. Whites stay white.\nThe "
+        "thermal visor and Original experience show the original colours.");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!picked);
+    if (ImGui::SmallButton("Reset")) {
+      PortBeamColours::SetColour(beam, std::nullopt);
+      MarkDirty();
+    }
+    ImGui::EndDisabled();
+    ImGui::PopID();
   }
 
   ImGui::SeparatorText("HUD and view");

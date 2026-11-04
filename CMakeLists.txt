@@ -390,6 +390,7 @@ set(MP_PORT_SOURCES
     platform/port_ball_looks.cpp
     platform/port_ball_looks_disc.cpp
     platform/port_disc_reader.cpp
+    platform/port_beam_colours.cpp
     platform/port_suit_colours.cpp
     platform/port_suit_colours_disc.cpp
     platform/port_hints.cpp

@@ -68,6 +68,9 @@ public:
 #ifdef TARGET_PC
   // True when any of the projectile's particle systems came from the Remastered mod.
   bool PortIsRemastered() const;
+  // The beam whose picked colour (port_beam_colours.h) tints the shot, model and particles.
+  void PortSetBeamTint(int beam);
+  int PortBeamTint() const { return mPortBeamTint; }
 #endif
 
   rstl::optional_object< CAABox > GetBounds() const;
@@ -115,6 +118,9 @@ private:
   bool x124_29_AS12 : 1;
   bool x124_30_AS13 : 1;
   bool x124_31_VMD2 : 1;
+#ifdef TARGET_PC
+  int mPortBeamTint = -1;
+#endif
 };
 CHECK_SIZEOF(CProjectileWeapon,
              (VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02 ? 0x140 : 0x128))

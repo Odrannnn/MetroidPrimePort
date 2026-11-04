@@ -35,6 +35,7 @@
 #ifdef TARGET_PC
 #include <dolphin/gx/GXExtra.h>
 
+#include "port_beam_colours.h"
 #include "port_dread_samus_mod.h"
 #include "port_echoes_suits_mod.h"
 #endif
@@ -399,6 +400,17 @@ void CGunWeapon::ActivateCharge(bool enable, bool resetEffect) {
   }
 }
 
+#ifdef TARGET_PC
+// The model CModelData::Render draws for the current visor.
+static const CModel* PortRenderedModel(const CModelData& data, const CStateManager& mgr) {
+  const CModelData::EWhichModel which = CModelData::GetRenderingModel(mgr);
+  if (data.HasAnimation()) {
+    return *data.PickAnimatedModel(which).GetModel();
+  }
+  return data.HasNormalModel() ? *data.PickStaticModel(which) : nullptr;
+}
+
+#endif
 void CGunWeapon::Draw(const bool drawSuitArm, const CStateManager& mgr, const CTransform4f& xf,
                       const CModelFlags& flags, const CActorLights* lights) const {
   if (!x218_26_loaded)
@@ -453,12 +465,28 @@ void CGunWeapon::Draw(const bool drawSuitArm, const CStateManager& mgr, const CT
     if (mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_XRay &&
         !x218_29_drawHologram) {
 #ifdef TARGET_PC
+      // The picked beam colour (port_beam_colours.h) on the gun's glow, never its body: the
+      // surfaces whose textures change with the beam, and Remastered's PBR glow term.
+      const CModelData& gunData = mPortDreadCannon ? *xb0_suitArmModelData : *x10_solidModelData;
+      const CModel* gunModel = PortRenderedModel(gunData, mgr);
+      const bool tint = gunModel != nullptr && mgr.GetThermalDrawFlag() == kTD_Bypass;
+      if (tint) {
+        CCubeModel::PortSetBeamGlow(gunModel->GetCubeModel(), x200_beamId,
+                                    gunModel->PortBeamGlowMask());
+      }
       if (mPortDreadCannon) {
         // The cannon is drawn whether or not the suit arm is: it is the gun model too.
         xb0_suitArmModelData->Render(mgr, cannonXf, lights, flags.UseShaderSet(x20c_shaderIdx));
-      } else
-#endif
+      } else {
+        x10_solidModelData->Render(mgr, xf, lights, flags.UseShaderSet(x20c_shaderIdx));
+      }
+      if (tint) {
+        CCubeModel::PortSetBeamGlow(nullptr, -1, 0);
+        PortBeamColours::Reapply();
+      }
+#else
       x10_solidModelData->Render(mgr, xf, lights, flags.UseShaderSet(x20c_shaderIdx));
+#endif
     } else {
       DrawHologram(mgr, xf, flags);
     }
@@ -660,6 +688,7 @@ void CGunWeapon::SpawnProjectile(const TToken< CWeaponDescription >& weapon, con
     if (x1c0_weaponType == kWT_Plasma) {
       proj->PortSetRemainingRicochetCount(1);
     }
+    proj->Projectile().PortSetBeamTint(x200_beamId);
 #endif
     mgr.AddObject(proj);
     proj->Think(dt, mgr);
@@ -1000,12 +1029,20 @@ void CGunWeapon::EnableFrozenEffect(EFrozenFxType type) {
       break;
     x1b8_frozenGenerator = rs_new CElementGen(x188_frozenEffects[1]);
     x1b8_frozenGenerator->SetGlobalScale(x4_scale);
+#ifdef TARGET_PC
+    // Ice on the gun, not the beam: untinted inside the gun effects' beam colour.
+    x1b8_frozenGenerator->PortSetBeamTint(PortBeamColours::kNoTint);
+#endif
     break;
   case kFFT_Frozen:
     if (x204_frozenEffect == kFFT_Frozen)
       break;
     x1b8_frozenGenerator = rs_new CElementGen(x188_frozenEffects[0]);
     x1b8_frozenGenerator->SetGlobalScale(x4_scale);
+#ifdef TARGET_PC
+    // Ice on the gun, not the beam: untinted inside the gun effects' beam colour.
+    x1b8_frozenGenerator->PortSetBeamTint(PortBeamColours::kNoTint);
+#endif
     break;
   default:
     break;

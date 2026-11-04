@@ -1816,6 +1816,45 @@ TEST_F(GXFifoTest, PBRThermal_PropagatesDedupsAndResets) {
   EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_PBR_THERMAL));
 }
 
+// The colour matrix (GXSetColorMatrix) carries its rows while on and the glow-only mode in w of row 0;
+// a repeat is dropped, a mode change is not, and null is off with zero rows. On and off change the
+// shader config, so they dirty the pipeline; new rows alone only the uniform.
+TEST_F(GXFifoTest, ColorMatrix_PropagatesDedupsAndResets) {
+  EXPECT_FALSE(g_gxState.colorMatrixOn);
+  const f32 rows[3][3] = {{0.f, 1.f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 0.f, 0.5f}};
+  GXSetColorMatrix(rows, GX_FALSE);
+  auto bytes = capture_fifo();
+  EXPECT_TRUE(has_aurora_cmd(bytes, GX_AURORA_SET_COLOR_MATRIX));
+  reset_gx_state();
+  g_gxState.dirty = 0;
+  decode_fifo(bytes);
+  EXPECT_TRUE(g_gxState.colorMatrixOn);
+  EXPECT_NE(g_gxState.dirty & aurora::gx::DirtyPipeline, 0u);
+  EXPECT_EQ(g_gxState.colorMatrix[0], (aurora::Vec4<float>{0.f, 1.f, 0.f, 0.f}));
+  EXPECT_EQ(g_gxState.colorMatrix[2], (aurora::Vec4<float>{1.f, 0.f, 0.5f, 0.f}));
+
+  GXSetColorMatrix(rows, GX_FALSE);
+  EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_COLOR_MATRIX));
+
+  GXSetColorMatrix(rows, GX_TRUE);
+  g_gxState.dirty = 0;
+  decode_fifo(capture_fifo());
+  EXPECT_TRUE(g_gxState.colorMatrixOn);
+  EXPECT_EQ(g_gxState.dirty & aurora::gx::DirtyPipeline, 0u);
+  EXPECT_NE(g_gxState.dirty & aurora::gx::DirtyUniform, 0u);
+  EXPECT_EQ(g_gxState.colorMatrix[0], (aurora::Vec4<float>{0.f, 1.f, 0.f, 1.f}));
+  EXPECT_EQ(g_gxState.colorMatrix[1], (aurora::Vec4<float>{0.f, 0.f, 1.f, 0.f}));
+
+  GXSetColorMatrix(nullptr, GX_FALSE);
+  g_gxState.dirty = 0;
+  decode_fifo(capture_fifo());
+  EXPECT_FALSE(g_gxState.colorMatrixOn);
+  EXPECT_NE(g_gxState.dirty & aurora::gx::DirtyPipeline, 0u);
+  EXPECT_EQ(g_gxState.colorMatrix[0], (aurora::Vec4<float>{}));
+  GXSetColorMatrix(nullptr, GX_FALSE);
+  EXPECT_FALSE(has_aurora_cmd(capture_fifo(), GX_AURORA_SET_COLOR_MATRIX));
+}
+
 // The character backlight's plane, back direction and strengths propagate, a repeat is
 // dropped, and null turns it off (zero strengths).
 TEST_F(GXFifoTest, PBRBacklight_PropagatesAndTurnsOff) {

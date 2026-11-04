@@ -45,6 +45,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "port_beam_colours.h"
 #include "port_debug.h"
 #include "port_fx_debug.h"
 #include "port_vfx_particles.h"
@@ -3013,6 +3014,7 @@ void CElementGen::Render() {
     return;
   }
   PortFx::RenderScope fxScope(x28_loadedGenDesc->xPortUnfogged);
+  PortBeamColours::Scope beamScope(xPortBeamTint);
   CPortParticleDepthBias portDepthBias(*this, x28_loadedGenDesc->xPortDepthBias,
                                        x28_loadedGenDesc->xPortDepthBiasUsesDepthRange);
 #endif
@@ -5118,18 +5120,29 @@ int CElementGen::GetEmitterTime() const { return x74_curFrame; }
 bool CElementGen::SystemHasLight() const { return x308_lightType != kLT_None; }
 
 CLight CElementGen::GetLight() const {
+#ifdef TARGET_PC
+  // A beam effect's light takes the picked beam colour too.
+  CColor lclr = x30c_LCLR;
+  if (xPortBeamTint >= 0) {
+    float rgb[3] = {lclr.GetRed(), lclr.GetGreen(), lclr.GetBlue()};
+    PortBeamColours::TintRgb(xPortBeamTint, rgb);
+    lclr = CColor(rgb[0], rgb[1], rgb[2], lclr.GetAlpha());
+  }
+#else
+  const CColor& lclr = x30c_LCLR;
+#endif
   switch (x308_lightType) {
   case kLT_Directional: {
     return CLight::BuildDirectional(
         x320_LDIR.AsNormalized(),
-        CColor(x30c_LCLR.GetRed() * x310_LINT, x30c_LCLR.GetGreen() * x310_LINT,
-               x30c_LCLR.GetBlue() * x310_LINT, x30c_LCLR.GetAlpha() * x310_LINT));
+        CColor(lclr.GetRed() * x310_LINT, lclr.GetGreen() * x310_LINT,
+               lclr.GetBlue() * x310_LINT, lclr.GetAlpha() * x310_LINT));
   }
   case kLT_Spot: {
     CLight spotLight =
         CLight::BuildSpot(x314_LOFF, x320_LDIR.AsNormalized(),
-                          CColor(x30c_LCLR.GetRed() * x310_LINT, x30c_LCLR.GetGreen() * x310_LINT,
-                                 x30c_LCLR.GetBlue() * x310_LINT, x30c_LCLR.GetAlpha() * x310_LINT),
+                          CColor(lclr.GetRed() * x310_LINT, lclr.GetGreen() * x310_LINT,
+                                 lclr.GetBlue() * x310_LINT, lclr.GetAlpha() * x310_LINT),
                           x334_LSLA);
     float quad = x32c_falloffType == kFT_Quadratic ? x330_LFOR : 0.f;
     float linear = x32c_falloffType == kFT_Linear ? x330_LFOR : 0.f;
@@ -5141,7 +5154,7 @@ CLight CElementGen::GetLight() const {
     float quad = x32c_falloffType == kFT_Quadratic ? x330_LFOR : 0.f;
     float linear = x32c_falloffType == kFT_Linear ? x330_LFOR : 0.f;
     float constant = x32c_falloffType == kFT_Constant ? 1.f : 0.f;
-    return CLight::BuildCustom(x314_LOFF, CVector3f(1.f, 0.f, 0.f), x30c_LCLR, constant, linear,
+    return CLight::BuildCustom(x314_LOFF, CVector3f(1.f, 0.f, 0.f), lclr, constant, linear,
                                quad, x310_LINT, 0.f, 0.f);
   }
   }

@@ -3487,6 +3487,16 @@ void PbrGen::patchSource() {
       cut(fmt::format("textureSampleLevel({}, pbr_cube_samp, pbr_vuv, 0.0)", t), "(vec4f(0.3, 0.2, 0.6, 0.5) + pbr_vuv.xyzx * 0.01)");
     }
   }
+  if (config.colorMatrix) {
+    // GXSetColorMatrix's glow-only mode (w of row 0): the matrix on the glow term alone, every addition to it
+    // made; the lit surface keeps its colour. The full mode is applied to the shaded colour later.
+    const size_t at = find_anchor(source, "      let pbr_out = max(pbr_lo + pbr_glow, vec3f(0.0))");
+    source.insert(at, R"""(      if (ubuf.color_matrix[0].w > 0.5) {
+          pbr_glow = vec3f(dot(ubuf.color_matrix[0].xyz, pbr_glow), dot(ubuf.color_matrix[1].xyz, pbr_glow),
+                           dot(ubuf.color_matrix[2].xyz, pbr_glow));
+      }
+)""");
+  }
 }
 
 // ShaderConfig::pbrPlain and pbrNoDebug (pbr_static_flags): the runtime tests they stand for become
@@ -5057,6 +5067,15 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
   if (info.usesPTTexMtx.any()) {
     uniBufAttrs += fmt::format("\n    postmtx: array<mat3x4f, {}>,", MaxPTTexMtx);
   }
+  if (info.usesColorMatrix) {
+    // GXSetColorMatrix: the shaded colour, before fog and the HDR conversion. The glow-only mode (w of
+    // row 0) is applied by the PBR source to its glow term; a non-PBR draw takes nothing from it.
+    fragmentFn += "\n    // Colour matrix"
+                  "\n    if (ubuf.color_matrix[0].w < 0.5) {"
+                  "\n        prev = vec4f(dot(ubuf.color_matrix[0].xyz, prev.rgb), dot(ubuf.color_matrix[1].xyz, prev.rgb),"
+                  "\n                     dot(ubuf.color_matrix[2].xyz, prev.rgb), prev.a);"
+                  "\n    }";
+  }
   if (info.usesFog) {
     uniformPre +=
         "\n"
@@ -5144,6 +5163,9 @@ fn vf_apply_hdr(c: vec4f, fog: vec4f, w: f32) -> vec4f {
   }
   if (info.usesAlphaRef) {
     uniBufAttrs += "\n    alpha_ref: vec4u,"; // the alpha compare references (pipeline_alpha_ref)
+  }
+  if (info.usesColorMatrix) {
+    uniBufAttrs += "\n    color_matrix: array<vec4f, 3>,"; // GXSetColorMatrix's rows
   }
   // HDR PBR light above 1 is light, not a TEV byte overflow: only its alpha wraps.
   const bool hdrPbrColor = config.sceneHdr && pbrEmitted;

@@ -2,6 +2,7 @@
 #include "MetroidPrime/CStateManager.hpp"
 #include "port_actor_shadow.h"
 #include "port_apclient.h"
+#include "port_beam_colours.h"
 #include "port_beam_doors.h"
 #include "port_collision_view.h"
 #include "port_debug.h"
@@ -3680,6 +3681,11 @@ void CStateManager::DrawWorld() const {
   uint mask;
   bool thermal = visor == CPlayerState::kPV_Thermal;
   uint targetMask;
+#ifdef TARGET_PC
+  // The thermal visor draws beams in its own palette: no picked colours for the whole frame,
+  // the gun drawn after the world included.
+  PortBeamColours::SetSuppressed(thermal);
+#endif
   if (thermal) {
     xf34_thermalFlag = kTD_Cold;
     mask = 0x34;

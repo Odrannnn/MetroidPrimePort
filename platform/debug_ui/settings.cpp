@@ -16,6 +16,7 @@
 #include "port_input_devices.h"
 #include "port_gci.h"
 #include "port_discord.h"
+#include "port_beam_colours.h"
 #include "port_suit_colours.h"
 #include "port_dread_samus_mod.h"
 #include "port_echoes_suits_mod.h"
@@ -97,6 +98,17 @@ void WriteSuitColours(std::ostream& out) {
   out << PortSuitColours::PicksKey(Suit);
 }
 
+// beam_colour_<beam>: "RRGGBB", or empty for the beam's own.
+template < int Beam >
+void ReadBeamColour(const std::string& value) {
+  PortBeamColours::SetColour(Beam, PortSuitColours::ParseColour(value));
+}
+
+template < int Beam >
+void WriteBeamColour(std::ostream& out) {
+  out << PortSuitColours::FormatColour(PortBeamColours::Colour(Beam));
+}
+
 // A key that is one bool: read with ParseBool, written as 1 or 0, sampled with both.
 template < bool* Flag >
 constexpr SettingKey BoolKey(const char* key) {
@@ -140,6 +152,11 @@ const SettingKey kSettingKeys[] = {
      "-,-,2050FF,FFE0C0"},
     {"suit_colour_dread_varia", &ReadSuitColours< 10 >, &WriteSuitColours< 10 >, true, "FF4000,-,-", "-,2050FF,FFE0C0"},
     {"suit_colour_dread_phazon", &ReadSuitColours< 11 >, &WriteSuitColours< 11 >, true, "FF4000,-", "-,2050FF"},
+    {"beam_colour_power", &ReadBeamColour< 0 >, &WriteBeamColour< 0 >, true, "33FF66", "FF00FF"},
+    {"beam_colour_ice", &ReadBeamColour< 1 >, &WriteBeamColour< 1 >, true, "33FF66", "FF00FF"},
+    {"beam_colour_wave", &ReadBeamColour< 2 >, &WriteBeamColour< 2 >, true, "33FF66", "FF00FF"},
+    {"beam_colour_plasma", &ReadBeamColour< 3 >, &WriteBeamColour< 3 >, true, "33FF66", "FF00FF"},
+    {"beam_colour_phazon", &ReadBeamColour< 4 >, &WriteBeamColour< 4 >, true, "33FF66", "FF00FF"},
     BoolKey< &sAutoAim >("auto_aim"),
     {"scan_speed",
      [](const std::string& value) {

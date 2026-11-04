@@ -1955,6 +1955,27 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.pbrThermal = value;
       g_gxState.dirty |= DirtyUniform;
     }
+  } else if (subCmd == GX_AURORA_SET_COLOR_MATRIX) {
+    const u32 mode = reader.read<u32>();
+    const bool on = mode != 0;
+    std::array<Vec4<float>, 3> rows{};
+    for (auto& row : rows) {
+      const f32 r = reader.read<f32>();
+      const f32 g = reader.read<f32>();
+      const f32 b = reader.read<f32>();
+      row = {r, g, b, 0.f};
+    }
+    rows[0].w() = mode == 2 ? 1.f : 0.f; // glow only
+    if (g_gxState.colorMatrixOn != on || g_gxState.colorMatrix != rows) {
+      // On or off is ShaderConfig::colorMatrix: two draws with the same TEV state either side of
+      // the switch would otherwise share the first one's pipeline.
+      if (g_gxState.colorMatrixOn != on) {
+        g_gxState.dirty |= DirtyPipeline;
+      }
+      g_gxState.colorMatrixOn = on;
+      g_gxState.colorMatrix = rows;
+      g_gxState.dirty |= DirtyUniform;
+    }
   } else if (subCmd == GX_AURORA_SET_PBR_MATERIAL) {
     for (Vec4<float>* v :
          {&g_gxState.pbrEmissive, &g_gxState.pbrBacklight, &g_gxState.pbrLayer, &g_gxState.pbrLayerHeight,

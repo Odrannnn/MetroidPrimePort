@@ -323,6 +323,10 @@ public:
   // The override's x and y as they are: the hot world's global (1.0, 0.2509804).
   static void PortSetThermalOverrideConstants(float x, float y);
   static void PortClearThermalOverride();
+  // Port: the first-person gun's beam colour (port_beam_colours.h) while `model` draws: the
+  // materials in `mask` (CModel::PortBeamGlowMask) take the beam's matrix, a PBR surface on its
+  // glow term alone, the rest none. A null model ends it.
+  static void PortSetBeamGlow(const CCubeModel* model, int beam, uint64_t mask);
   // The override as it is now, to put back after a nested one (PortRestoreThermalOverride).
   static void PortGetThermalOverride(bool& on, float& x, float& y);
   static void PortRestoreThermalOverride(bool on, float x, float y);

@@ -17,6 +17,7 @@
 #ifdef TARGET_PC
 #include <dolphin/gx/GXExtra.h>
 #include "port_icy_assets.h"
+#include "port_beam_colours.h"
 #include "port_pbr_record.h"
 #include "port_room_env.h"
 #include "port_visor_mesh.h"
@@ -36,6 +37,12 @@ static bool sPortBindPose = false;
 static float sPortProbePos[3];
 static PortRoomEnv::Selection sPortCameraEnv;
 static bool sPortCameraCube = false;
+// PortSetBeamGlow: the gun model whose glow surfaces take the beam's colour matrix.
+static struct {
+  const CCubeModel* model = nullptr;
+  int beam = -1;
+  uint64_t mask = 0;
+} sPortBeamGlow;
 bool CCubeModel::sUsingPackedLightmaps = false;
 
 inline uint GetMaterialOffset(const uchar* materialData, const int idx) {
@@ -1016,6 +1023,16 @@ void CCubeModel::DrawSurface(const CCubeSurface& surface, const CModelFlags& mod
   // paths PortPBRAllowed rejects.
   const bool pbr = icy || inventory || (outside && (fadeBlend || (material.IsFlagSet(kStateFlag_PortPBR) &&
                                                                   CCubeMaterial::PortPBRAllowed(drawFlags))));
+  if (sPortBeamGlow.model == this) {
+    const uint idx = surface.GetMaterialIndex();
+    float rows[3][3];
+    if (!icy && !inventory && (pbr || (idx < 64 && ((sPortBeamGlow.mask >> idx) & 1) != 0)) &&
+        PortBeamColours::Matrix(sPortBeamGlow.beam, rows)) {
+      GXSetColorMatrix(rows, pbr ? GX_TRUE : GX_FALSE);
+    } else {
+      GXSetColorMatrix(nullptr, GX_FALSE);
+    }
+  }
   // A fading model is shaded as it is at full alpha.
   const CModelFlags& lookFlags = fadeBlend ? opaqueFlags : drawFlags;
   const bool sortedDraw = !icy && ((inventory ? modelFlags : lookFlags).GetTrans() >= CModelFlags::kT_Blend ||
@@ -1601,6 +1618,12 @@ void CCubeModel::PortSetThermalOverrideConstants(const float x, const float y) {
 }
 
 void CCubeModel::PortClearThermalOverride() { sPortThermalOverride.on = false; }
+
+void CCubeModel::PortSetBeamGlow(const CCubeModel* model, const int beam, const uint64_t mask) {
+  sPortBeamGlow.model = model;
+  sPortBeamGlow.beam = beam;
+  sPortBeamGlow.mask = mask;
+}
 
 void CCubeModel::PortGetThermalOverride(bool& on, float& x, float& y) {
   on = sPortThermalOverride.on;

@@ -16,6 +16,10 @@
 #include <Kyoto/Graphics/CGraphics.hpp>
 #include <Kyoto/IObjectStore.hpp>
 #include <Kyoto/TToken.hpp>
+
+#ifdef TARGET_PC
+#include <algorithm>
+#endif
 static bool sIsTextureTimeoutEnabled = true;
 uint CModel::sTotalMemory = 0;
 CModel* CModel::sThisFrameList = nullptr;
@@ -386,3 +390,62 @@ void CModel::RemapData(uchar* data) {
 }
 
 void CModel::UpdateLastFrame() const { x38_lastFrame = CGraphics::GetFrameCounter(); }
+
+#ifdef TARGET_PC
+uint64_t CModel::PortBeamGlowMask() const {
+  // A set's data: the texture count and ids, the material count, each material's end offset,
+  // then the materials, each its flags, texture count and indices into the set's ids.
+  struct Set {
+    const uchar* data;
+    uint ids;
+    uint count;
+    const uchar* offsets;
+    const uchar* materials;
+  };
+  const auto read = [](const uchar* at) { return CBasics::SwapBytes(*reinterpret_cast< const uint* >(at)); };
+  const auto view = [&](const SShader& shader) {
+    Set set;
+    set.data = shader.x10_data;
+    set.ids = read(set.data);
+    set.count = read(set.data + 4 + set.ids * 4);
+    set.offsets = set.data + 8 + set.ids * 4;
+    set.materials = set.offsets + set.count * 4;
+    return set;
+  };
+  const auto same = [&](const Set& a, const Set& b, uint idx) {
+    const uchar* ma = a.materials + (idx != 0 ? read(a.offsets + (idx - 1) * 4) : 0);
+    const uchar* mb = b.materials + (idx != 0 ? read(b.offsets + (idx - 1) * 4) : 0);
+    const uint na = read(ma + 4);
+    if (na != read(mb + 4)) {
+      return false;
+    }
+    for (uint k = 0; k < na; ++k) {
+      const uint ia = read(ma + 8 + k * 4);
+      const uint ib = read(mb + 8 + k * 4);
+      if (ia >= a.ids || ib >= b.ids || read(a.data + 4 + ia * 4) != read(b.data + 4 + ib * 4)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  uint64_t mask = 0;
+  if (x18_matSets.size() < 2 || x18_matSets[0].x10_data == nullptr) {
+    return mask;
+  }
+  const Set first = view(x18_matSets[0]);
+  const int last = std::min(static_cast< int >(x18_matSets.size()) - 1, 3);
+  for (int i = 1; i <= last; ++i) {
+    if (x18_matSets[i].x10_data == nullptr) {
+      continue;
+    }
+    const Set other = view(x18_matSets[i]);
+    const uint count = std::min({first.count, other.count, 64u});
+    for (uint idx = 0; idx < count; ++idx) {
+      if (!same(first, other, idx)) {
+        mask |= uint64_t(1) << idx;
+      }
+    }
+  }
+  return mask;
+}
+#endif

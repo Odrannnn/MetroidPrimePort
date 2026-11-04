@@ -622,6 +622,16 @@
   none): they take the picked hue, keeping their shading. Kept in `generated/suit-colours/dread_<suit>/`
   (remade when the picks or the import change). The Phazon Suit's Dread cannon is Gravity's,
   so it takes Gravity's colours.
+- Beam colours (Video > Display "Beam colours", a picker each; persisted as
+  `beam_colour_power`, `beam_colour_ice`, `beam_colour_wave`, `beam_colour_plasma`,
+  `beam_colour_phazon`, each `RRGGBB`; unset by default; ignored under Original experience).
+  A beam's shots and their impacts, its charge and muzzle effects, its combo (Super
+  Missile for Power, Ice Spreader, Wave Buster, Flamethrower), the lights they cast and the
+  glow seeping from the arm cannon's gaps take the picked colour at draw time, no reload;
+  the cannon's body and plain missiles keep theirs. The beam's own colour is turned to the
+  pick's hue, saturation scaled to it, brightness by its value, so whites and greys stay
+  as they are. On the retail cannon the glow is the materials that change between the
+  beams; on the Remastered one, its emissive term. The thermal visor shows the originals.
 - `MP_HUD_WIDE=0|1` (Video > Display, persisted as `hud_wide`, default on): widescreen HUD. The
   aspect-matched in-game HUD frames keep each element's shape but move it away
   from the screen centre, so edge elements (scan panels, energy bar, map) reach

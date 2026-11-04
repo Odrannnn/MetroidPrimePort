@@ -429,6 +429,10 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
     info.usesAlphaRef = true;
     info.uniformSize += sizeof(Vec4<u32>);
   }
+  if (config.colorMatrix) {
+    info.usesColorMatrix = true;
+    info.uniformSize += sizeof(g_gxState.colorMatrix);
+  }
   info.uniformSize = gfx::align_uniform(info.uniformSize);
   if (info.uniformSize > MaxUniformSize) {
     Log.fatal("Uniform size exceeds maximum: {} > {}", info.uniformSize, MaxUniformSize);
@@ -661,6 +665,11 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
   }
   if (info.usesAlphaRef) {
     buf.append(Vec4<u32>{g_gxState.alphaCompare.ref0, g_gxState.alphaCompare.ref1, 0, 0});
+  }
+  if (info.usesColorMatrix) {
+    for (const auto& v : g_gxState.colorMatrix) {
+      buf.append(v);
+    }
   }
 }
 

@@ -1,5 +1,7 @@
 #include "MetroidPrime/Weapons/CWaveBuster.hpp"
 
+#include "MetroidPrime/Player/CPlayerState.hpp"
+
 #include "Collision/CCollidableAABox.hpp"
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "Kyoto/Graphics/CGX.hpp"
@@ -20,6 +22,7 @@
 
 #ifdef TARGET_PC
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "port_beam_colours.h"
 #include "port_debug.h"
 #include "port_synthetic_effect.h"
 #endif
@@ -115,6 +118,8 @@ CWaveBuster::CWaveBuster(const TToken< CWeaponDescription >& desc, EWeaponType t
 #endif
 #ifdef TARGET_PC
   PortSetOwnPresentation();
+  // Its light comes from this generator; Render's scope does not cover GetLight.
+  x390_busterLightGen->PortSetBeamTint(CPlayerState::kBI_Wave);
   xPortBusterVar[0] = x384_busterSwoosh1Gen->PortGetRealHandle(PortBusterGuid(0));
   xPortBusterVar[1] = x388_busterSwoosh2Gen->PortGetRealHandle(PortBusterGuid(1));
 #endif
@@ -391,6 +396,10 @@ void CWaveBuster::AddToRenderer(const CFrustumPlanes& planes, const CStateManage
 }
 
 void CWaveBuster::Render(const CStateManager& mgr) const {
+#ifdef TARGET_PC
+  // The player's Wave combo, in the picked Wave colour (port_beam_colours.h).
+  PortBeamColours::Scope beamScope(CPlayerState::kBI_Wave);
+#endif
   RenderSwooshes();
   RenderElectricSpiral();
 #ifdef TARGET_PC

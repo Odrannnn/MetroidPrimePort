@@ -50,6 +50,10 @@ public:
   u32 PortShutdownMode() const {
     return xPortInheritedShutdownMode >= 0 ? u32(xPortInheritedShutdownMode) : PortOwnShutdownMode();
   }
+  // The beam whose picked colour tints this effect (port_beam_colours.h): -1 = none of its own,
+  // so a child drawn inside its parent's Render takes the parent's; kNoTint = never. Not copied.
+  int xPortBeamTint = -1;
+  void PortSetBeamTint(int beam) { xPortBeamTint = beam; }
 #endif
   virtual ~CParticleGen() = 0;
   virtual const bool Update(double) = 0;

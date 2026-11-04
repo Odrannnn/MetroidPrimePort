@@ -1,4 +1,5 @@
 #include "MetroidPrime/Player/CPlayerGun.hpp"
+#include "port_beam_colours.h"
 #include "port_debug.h"
 #include "port_power_charge_release.h"
 #include "port_room_env.h"
@@ -859,6 +860,9 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
 
   if (x832_25_chargeEffectVisible &&
       (x38c_muzzleEffectVisTimer > 0.f || x32c_chargePhase > kCP_AnimAndSfx)) {
+#ifdef TARGET_PC
+    PortBeamColours::Scope beamScope(x72c_currentBeam->PortBeamId());
+#endif
     x72c_currentBeam->DrawMuzzleFx(mgr);
   }
 
@@ -874,7 +878,13 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   if (IsWeaponStateSet(0x10)) {
     x744_auxWeapon->RenderMuzzleFx();
   }
-  x72c_currentBeam->PreRenderGunFx(mgr, offsetWorldXf);
+  {
+#ifdef TARGET_PC
+    // The beam's own muzzle, smoke and charge effects (port_beam_colours.h).
+    PortBeamColours::Scope beamScope(x72c_currentBeam->PortBeamId());
+#endif
+    x72c_currentBeam->PreRenderGunFx(mgr, offsetWorldXf);
+  }
   const bool drawSuitArm = !x740_grappleArm->IsGrappling() &&
                            mgr.GetPlayer()->GetGunHolsterState() == CPlayer::kGH_Drawn;
   x73c_gunMotion->Draw(mgr, offsetWorldXf);
@@ -969,7 +979,14 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   CTransform4f oldViewMtx2(CGraphics::GetViewMatrix());
   CGraphics::SetViewPointMatrix(offsetWorldXf.GetInverse() * oldViewMtx2);
   gpRender->SetModelMatrix(CTransform4f::Identity());
+#ifdef TARGET_PC
+  {
+    PortBeamColours::Scope beamScope(x72c_currentBeam->PortBeamId());
+    x72c_currentBeam->PostRenderGunFx(mgr, offsetWorldXf);
+  }
+#else
   x72c_currentBeam->PostRenderGunFx(mgr, offsetWorldXf);
+#endif
 #ifdef TARGET_PC
   PortRenderFlashes(kPortFirstChargeFlash, kPortFlashCount);
 #endif
@@ -1846,6 +1863,9 @@ void CPlayerGun::ActivateCombo(CStateManager& mgr) {
       TCachedToken< CGenDescription >& cachedXferEffect = x72c_currentBeam->x160_xferEffect;
       if (cachedXferEffect.TryCache()) {
         x77c_comboXferGen = rs_new CElementGen(cachedXferEffect);
+#ifdef TARGET_PC
+        x77c_comboXferGen->PortSetBeamTint(x72c_currentBeam->PortBeamId());
+#endif
         x77c_comboXferGen->SetGlobalScale(kScaleVector);
       }
 
@@ -1882,6 +1902,9 @@ void CPlayerGun::EnableChargeFx(CPlayerState::EChargeStage, CStateManager& mgr) 
   x800_auxMuzzleGenerators[x320_currentAuxBeam] =
       rs_new CElementGen(x7c0_auxMuzzleEffects[x320_currentAuxBeam]);
   x800_auxMuzzleGenerators[x320_currentAuxBeam]->SetParticleEmission(true);
+#ifdef TARGET_PC
+  x800_auxMuzzleGenerators[x320_currentAuxBeam]->PortSetBeamTint(x320_currentAuxBeam);
+#endif
 }
 
 #ifdef TARGET_PC
@@ -2396,7 +2419,15 @@ void CPlayerGun::PortUpdateFlashes(float dt, const CVector3f& scale) {
 }
 
 void CPlayerGun::PortRenderFlashes(int first, int end) const {
+  // The beam each flash belongs to (PortInitFlashes): a plain missile has none, the Super
+  // Missile is Power's combo, then the Ice combo and the five charge flashes.
+  static const int kBeam[kPortFlashCount] = {
+      PortBeamColours::kNoTint, CPlayerState::kBI_Power, CPlayerState::kBI_Ice,
+      CPlayerState::kBI_Power,  CPlayerState::kBI_Ice,   CPlayerState::kBI_Wave,
+      CPlayerState::kBI_Plasma, CPlayerState::kBI_Phazon,
+  };
   for (int i = first; i < end; ++i) {
+    PortBeamColours::Scope beamScope(kBeam[i]);
     mPortFlashGens[i].Render();
   }
 }
@@ -2413,6 +2444,9 @@ void CPlayerGun::PortRenderMuzzleFxAt(const CStateManager& mgr, const CTransform
   }
   if (x832_25_chargeEffectVisible &&
       (x38c_muzzleEffectVisTimer > 0.f || x32c_chargePhase > kCP_AnimAndSfx)) {
+#ifdef TARGET_PC
+    PortBeamColours::Scope beamScope(x72c_currentBeam->PortBeamId());
+#endif
     x72c_currentBeam->DrawMuzzleFx(mgr);
   }
   PortRenderFlashes(0, kPortFirstChargeFlash);
@@ -2472,6 +2506,9 @@ void CPlayerGun::InitMuzzleData() {
         'PART', gpTweakGunRes->GetAuxMuzzleResId(static_cast< CPlayerState::EBeamId >(i)))));
     CElementGen* gen = rs_new CElementGen(x7c0_auxMuzzleEffects[i]);
     gen->SetParticleEmission(false);
+#ifdef TARGET_PC
+    gen->PortSetBeamTint(i);
+#endif
     x800_auxMuzzleGenerators.push_back(gen);
   }
 }

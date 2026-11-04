@@ -356,6 +356,10 @@ extern "C" {
 // Payload:
 //   f32 x, f32 y, f32 blended, u32 on
 #define GX_AURORA_SET_PBR_THERMAL 0x0073
+// Port extension: a 3x3 matrix on the colour of the following draws (see GXSetColorMatrix).
+// Payload:
+//   u32 mode (0 off, 1 on, 2 glow only), f32 rows[3][3] (all zero when off)
+#define GX_AURORA_SET_COLOR_MATRIX 0x0074
 
 #define GX2_SET_POLYGON_OFFSET 0x1000
 

@@ -19,6 +19,10 @@
 #include <MetaRender/CCubeRenderer.hpp>
 #include <Weapons/CCollisionResponseData.hpp>
 
+#ifdef TARGET_PC
+#include "port_beam_colours.h"
+#endif
+
 uint CProjectileWeapon::skGlobalSeed = 99;
 
 // Weapon descriptions give velocity and gravity per 1/60 s frame, and Update
@@ -447,10 +451,26 @@ void CProjectileWeapon::Render() const {
         CTransform4f::Scale(x98_scale.GetX(), x98_scale.GetY(), x98_scale.GetZ());
     CGraphics::SetModelMatrix(worldXf * x14_localToWorldXf * localXf * scaleXf * x44_localXf);
     CLight light = CLight::BuildLocalAmbient(CVector3f::Zero(), xc8_ambientLightColor);
+#ifdef TARGET_PC
+    PortBeamColours::Scope beamScope(mPortBeamTint);
+#endif
     (*x108_model)->Draw(CModelFlags(CModelFlags::kT_Opaque, 1.f));
   }
 }
 
+#ifdef TARGET_PC
+void CProjectileWeapon::PortSetBeamTint(int beam) {
+  mPortBeamTint = beam;
+  CParticleGen* gens[] = {xfc_APSMGen, x100_APS2Gen, x104_, x118_swoosh1, x11c_swoosh2,
+                          x120_swoosh3};
+  for (CParticleGen* gen : gens) {
+    if (gen != nullptr) {
+      gen->PortSetBeamTint(beam);
+    }
+  }
+}
+
+#endif
 void CProjectileWeapon::AddToRenderer() const {
   if (xfc_APSMGen)
     IWeaponRenderer::GetRenderer()->AddParticleGen(*xfc_APSMGen);
