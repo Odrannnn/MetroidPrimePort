@@ -441,6 +441,9 @@ std::string LastMessage();
 bool Tick(CStateManager& mgr);
 // CMainFlow, before the next game loads: swaps in the loaded game state.
 void InstallPending();
+// CMFGameLoader: whether the game it loads is a state being put back (a state or
+// resume load, a mod reload), which shows no new game's intro text.
+bool LoadPlacing();
 // CMainFlow: whether the front end (title screen, file select) is the flow.
 void SetInFrontEnd(bool inFrontEnd);
 // CFrontEndUI, each tick: true (once) when a reload was asked for in the

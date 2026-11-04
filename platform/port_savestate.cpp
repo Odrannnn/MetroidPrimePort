@@ -952,6 +952,8 @@ void InstallPending() {
   sPlacePending = true;
 }
 
+bool LoadPlacing() { return sPlacePending; }
+
 namespace {
 
 // Logs why quick resume is (not) taking snapshots, once per change of reason.

@@ -38,6 +38,7 @@
 #include <cstdio>
 #include "MetroidPrime/CScriptLayerManager.hpp"
 #include "port_room_env.h"
+#include "port_savestate.h"
 #include "MetroidPrime/HUD/CSamusHud.hpp"
 #include <dolphin/gx/GXExtra.h>
 
@@ -533,8 +534,11 @@ CMFGameLoader::CMFGameLoader()
     }
   }
   CAssetId worldId = gpGameState->CurrentWorldAssetId();
+  // PC: not for a state load into the hangar, which would show the new game's
+  // "Unidentified distress beacon" text on every reload there.
   if (worldId == skDefaultWorld.GetId() &&
-      gpGameState->GetCurrentWorldState().GetCurrentArea() == TAreaId(0)) {
+      gpGameState->GetCurrentWorldState().GetCurrentArea() == TAreaId(0) &&
+      !PortSaveState::LoadPlacing()) {
     const SObjectTag* tag = gpResourceFactory->GetResourceIdByName("STRG_IntroLevelLoad");
     if (tag) {
       CWorldTransManager& trans = *gpGameState->WorldTransitionManager();
