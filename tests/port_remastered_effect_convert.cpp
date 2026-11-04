@@ -3060,7 +3060,8 @@ void TestInheritedMotion() {
   const auto has = [](const ConvertedPart& part, const char* fourcc) {
     return std::search(part.part.begin(), part.part.end(), fourcc, fourcc + 4) != part.part.end();
   };
-  // With the import's spreadDefault, an absent ITPE is Remastered's default 1, flagged 0x100, and noted.
+  // With the import's spreadDefault, an absent ITPE is Remastered's default 1, flagged 0x100; exact, so
+  // not noted as approximated.
   {
     EffectConvertIO io;
     io.spreadDefault = true;
@@ -3076,10 +3077,7 @@ void TestInheritedMotion() {
     Retail flagged;
     flagged.f("GPSM").f("TEXR").f("CNST").f("CNST").w(0x1234ABCD).f("PITP").f("CNST").w(0x100).end();
     CHECK_MSG(parts.size() == 1 && parts[0].part == flagged.bytes, "no ITPE under XFMD 2 is PITP 0x100");
-    CHECK_MSG(parts.size() == 1 &&
-                  std::count(parts[0].approximated.begin(), parts[0].approximated.end(),
-                             std::string("ITPE: absent, Remastered's default 1")) == 1,
-              "the default is noted");
+    CHECK_MSG(parts.size() == 1 && parts[0].approximated.empty(), "the default is exact");
     parts = spread(3);
     CHECK_MSG(parts.size() == 1 && !has(parts[0], "PITP"), "no ITPE under XFMD 3 writes nothing");
   }

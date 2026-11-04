@@ -7291,10 +7291,12 @@ public:
       AppendBE32(s.out, F("CNST"));
       AppendBE32(s.out, 0);
     }
-    // No ITPE: Remastered's default 1, where the system's translation change is decoded.
+    // No ITPE: Remastered's default 1 (desc ctor 0x290c10), exact where the system's translation
+    // change is decoded. The other shipped cases cannot spread in Remastered either: XFMD 4 with
+    // no EMVR gives vec 0x12 a zero, and every shipped PART under XFMD 1 or 4 with an EMVR emits
+    // at most one particle a tick (the spread needs two).
     if (s.part && m_io.spreadDefault && !s.itpe && (m_xfmd == 2 || m_xfmd == 5) && !(m_xfmd == 5 && m_pofs == 2)) {
       s.spreadMode = int(m_xfmd == 5 ? (m_pofs == 1 ? 2 : 1) : 0) | kSpreadDefault;
-      m_approximated.push_back("ITPE: absent, Remastered's default 1");
     }
     if (s.spreadMode >= 0) {
       AppendBE32(s.out, F("PITP"));
