@@ -336,7 +336,9 @@ inline constexpr int kEffects = 228;
 // 84: roomfx v18, FishCloudMP1's swim properties (speed variance, turning, darting, wobble).
 // 85: an actor with the room's own model on a retail Actor whose model the table carries over
 // stands in for it (Research Lab Hydra's force field).
-inline constexpr int kRooms = 85;
+// 86: a room's fog hints its own Relays switch from the camera water (FluidRelayLinks) get those
+// links (the Reflecting Pool's water fogs were dropped as unlinked).
+inline constexpr int kRooms = 86;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).

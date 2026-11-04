@@ -299,6 +299,34 @@ uint32_t FluidSender(const Room& room, const std::map<int, std::vector<const Con
   return PortRoomEnv::kSenderCameraWater;
 }
 
+// The fluid senders (FluidSender) that fire the Relay `relay`, directly or through more Relays,
+// as links acting `act`: a room's own copy of a master's water fog chain (the Reflecting Pool's
+// CameraWaterStateProxy -> InventoryActivator -> Relay -> fog hint), walked as MasterScripts does.
+static void FluidRelayLinks(const Room& room, const std::map<int, std::vector<const Connection*>>& incoming,
+                            int relay, uint8_t act, std::vector<int>& seen, std::vector<PortRoomGeo::Link>& links) {
+  const std::vector<Component>& comps = room.Components();
+  const auto in = incoming.find(relay);
+  if (in == incoming.end()) {
+    return;
+  }
+  for (const Connection* c : in->second) {
+    if (c->action != kActionRelayFire) {
+      continue;
+    }
+    const Component& sender = comps[c->sender];
+    int state = 0;
+    const uint32_t fluid = FluidSender(room, incoming, *c, state);
+    if (fluid != 0) {
+      links.push_back({fluid, uint8_t(state), act});
+    } else if (sender.type == kRelay && c->event == kEventRelayFired && sender.entity >= 0 && seen.size() < 6 &&
+               std::find(seen.begin(), seen.end(), sender.entity) == seen.end()) {
+      seen.push_back(sender.entity);
+      FluidRelayLinks(room, incoming, sender.entity, act, seen, links);
+      seen.pop_back();
+    }
+  }
+}
+
 // A TriggerMP1's box: centred on the entity, `scale` across, turned Rz * Ry * Rx, in GameCube
 // axes (gc[i] = kSign[i] * remastered[kAxis[i]], MulR2G); axes[3 * i..] is the box's axis i.
 void CameraBox(const Vec3& pos, const Vec3& rot, const Vec3& scale, float centre[3], float half[3], float axes[9]) {
@@ -1932,6 +1960,20 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
             miss(sender, *c, c->action, depth);
           }
           continue;
+        }
+        // A Relay of Remastered's own that the camera water fires (FluidRelayLinks); one that
+        // nothing fluid fires is the script's, below.
+        if (depth == 0 && hintEntities.count(entity) != 0 && !transition && sender.type == kRelay &&
+            c->event == kEventRelayFired && sender.entity >= 0) {
+          const uint8_t relayAct = act(c->action);
+          const size_t before = links.size();
+          std::vector<int> relaySeen{entity, sender.entity};
+          if (relayAct != 0) {
+            FluidRelayLinks(room, incoming, sender.entity, relayAct, relaySeen, links);
+          }
+          if (links.size() != before) {
+            continue;
+          }
         }
         // A light that switches itself off as a backward play reaches its start (PointLightData::offAtStart).
         if (light && depth == 0 && sender.entity == e.entity && c->event == kEventLightReachedStart) {
