@@ -2886,6 +2886,35 @@ void CmdWalkSpeed() {
   Finish();
 }
 
+void CmdBeamSwitch() {
+  if (sCmd.args.size() > 1) {
+    const int value = std::atoi(sCmd.args[1].c_str());
+    if (sCmd.args.size() > 2 || value < PortDebug::kBeamSwitchSpeedMin ||
+        value > PortDebug::kBeamSwitchSpeedMax) {
+      return Finish("usage: beamswitch [100..400]");
+    }
+    PortDebug::SetBeamSwitchSpeed(value);
+  }
+  Out("beamswitch %d", PortDebug::BeamSwitchSpeed());
+  Finish();
+}
+
+void CmdBeamSwitchFire() {
+  BoolSettingCmd("beamswitchfire", PortDebug::BeamSwitchFire, PortDebug::SetBeamSwitchFire);
+}
+
+// As a press of the Next/Previous target action: while locked on, the lock moves
+// to the next target right (next) or left (prev) on screen, wrapping around.
+void CmdTarget() {
+  if (sCmd.args.size() != 2 || (sCmd.args[1] != "next" && sCmd.args[1] != "prev")) {
+    return Finish("usage: target next|prev");
+  }
+  PortDebug::RequestTargetCycle(sCmd.args[1] == "next" ? 1 : -1);
+  Out(PortDebug::OriginalExperience() ? "target switch requested (off under original experience)"
+                                      : "target switch requested");
+  Finish();
+}
+
 void CmdSunShadow() {
   if (sCmd.args.size() > 1) {
     const std::string& v = sCmd.args[1];
@@ -4556,6 +4585,12 @@ const CommandSpec kCommands[] = {
      "mapui [0|1]                 the map's extra legend entries and the Mark room prompt"},
     {"stackbeams", CmdStackBeams, nullptr,
      "stackbeams [0|1]           every shot also fires the other owned beams' projectiles (stack_beams)"},
+    {"beamswitch", CmdBeamSwitch, nullptr,
+     "beamswitch [100..400]      beam change speed in percent (beam_switch_speed); no argument prints it"},
+    {"beamswitchfire", CmdBeamSwitchFire, nullptr,
+     "beamswitchfire [0|1]       the new beam fires once its wipe ends, before the cannon opens (beam_switch_fire)"},
+    {"target", CmdTarget, nullptr,
+     "target next|prev           while locked on, lock the next target right (next) or left (prev) on screen"},
     {"seamlesspickups", CmdSeamlessPickups, nullptr,
      "seamlesspickups [0|1]      pickups without control lock, cutscene or message box (seamless_pickups)"},
     {"aimlockon", CmdAimLockOn, nullptr,

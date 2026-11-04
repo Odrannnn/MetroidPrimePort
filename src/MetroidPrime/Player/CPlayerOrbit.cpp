@@ -350,6 +350,23 @@ void CPlayer::UpdateOrbitSelection(const CFinalInput& input, CStateManager& mgr)
     x33c_orbitNextTargetId = kInvalidUniqueId;
     return;
   }
+#ifdef TARGET_PC
+  // Issue #243: Next/Previous target while locked on switches the way a fresh lock does.
+  if (x304_orbitState == kOS_OrbitObject) {
+    if (const int dir = PortDebug::TakeTargetCycle()) {
+      const TUniqueId id = PortCycleOrbitTarget(dir, mgr);
+      if (id != kInvalidUniqueId) {
+        SetOrbitTargetId(id, mgr);
+        if (ValidateAimTargetId(GetOrbitTargetId(), mgr)) {
+          SetAimTargetId(GetOrbitTargetId());
+        }
+        SetOrbitState(kOS_OrbitObject, mgr);
+        UpdateOrbitPosition(gpTweakPlayer->GetOrbitNormalDistance(x308_orbitType), mgr);
+        return;
+      }
+    }
+  }
+#endif
   if (ControlMapper::GetPressInput(ControlMapper::kC_OrbitObject, input) &&
       x33c_orbitNextTargetId != kInvalidUniqueId) {
     SetOrbitTargetId(x33c_orbitNextTargetId, mgr);
@@ -1035,6 +1052,58 @@ void CPlayer::UpdateOrbitableObjects(CStateManager& mgr) {
   FindOrbitableObjects(nearList, x364_offScreenOrbitObjects, x330_orbitZoneMode, x334_orbitType,
                        mgr, false);
 }
+
+#ifdef TARGET_PC
+// Issue #243: the visible lock-on target next to the current one in screen x, right for
+// dir > 0 and left otherwise, wrapping to the far side. Grapple points stay out (they
+// change the orbit into a grapple); kInvalidUniqueId when there is no other target.
+TUniqueId CPlayer::PortCycleOrbitTarget(int dir, CStateManager& mgr) const {
+  const CActor* const cur = TCastToConstPtr< CActor >(mgr.GetObjectById(x310_orbitTargetId));
+  if (!cur) {
+    return kInvalidUniqueId;
+  }
+  const CFirstPersonCamera* const fpCamera = mgr.GetCameraManager()->GetFirstPersonCamera();
+  const float side = dir > 0 ? 1.f : -1.f;
+  const float curX = fpCamera->ConvertToScreenSpace(cur->GetOrbitPosition(mgr)).GetX() * side;
+  const CVector3f eyePosition = GetEyePosition();
+  TUniqueId nextId = kInvalidUniqueId;
+  TUniqueId wrapId = kInvalidUniqueId;
+  float nextX = 0.f;
+  float wrapX = 0.f;
+  for (AUTO(it, x344_nearbyOrbitObjects.begin()); it != x344_nearbyOrbitObjects.end(); ++it) {
+    if (*it == x310_orbitTargetId) {
+      continue;
+    }
+    const CActor* const act = TCastToConstPtr< CActor >(mgr.GetObjectById(*it));
+    if (!act || TCastToConstPtr< CScriptGrapplePoint >(act)) {
+      continue;
+    }
+    const CVector3f orbitPosition = act->GetOrbitPosition(mgr);
+    const CVector3f screen = fpCamera->ConvertToScreenSpace(orbitPosition);
+    if (screen.GetZ() < 0.f || CMath::AbsF(screen.GetX()) > 1.f || CMath::AbsF(screen.GetY()) > 1.f) {
+      continue;
+    }
+    const float x = screen.GetX() * side;
+    const bool ahead = x > curX;
+    if (ahead ? (nextId != kInvalidUniqueId && x >= nextX)
+              : (wrapId != kInvalidUniqueId && x >= wrapX)) {
+      continue;
+    }
+    const CVector3f eyeToOrbit = orbitPosition - eyePosition;
+    if (!PortOrbitLineOfSight(mgr, eyePosition, eyeToOrbit, eyeToOrbit.Magnitude(), act)) {
+      continue;
+    }
+    if (ahead) {
+      nextId = act->GetUniqueId();
+      nextX = x;
+    } else {
+      wrapId = act->GetUniqueId();
+      wrapX = x;
+    }
+  }
+  return nextId != kInvalidUniqueId ? nextId : wrapId;
+}
+#endif
 
 TUniqueId CPlayer::FindOrbitTargetId(CStateManager& mgr) {
   return FindBestOrbitableObject(x354_onScreenOrbitObjects, x330_orbitZoneMode, mgr);

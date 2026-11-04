@@ -692,6 +692,24 @@ bool StackBeams() {
 
 void SetStackBeams(bool enabled) { StoreSetting(sStackBeams, enabled); }
 
+int BeamSwitchSpeed() {
+  EnsureInitialized();
+  return sOriginalExperience ? kBeamSwitchSpeedDefault : sBeamSwitchSpeed;
+}
+
+void SetBeamSwitchSpeed(int percent) {
+  EnsureInitialized();
+  sBeamSwitchSpeed = std::clamp(percent, kBeamSwitchSpeedMin, kBeamSwitchSpeedMax);
+  MarkDirty();
+}
+
+bool BeamSwitchFire() {
+  EnsureInitialized();
+  return sBeamSwitchFire && !sOriginalExperience;
+}
+
+void SetBeamSwitchFire(bool enabled) { StoreSetting(sBeamSwitchFire, enabled); }
+
 bool SeamlessPickups() {
   EnsureInitialized();
   return sSeamlessPickups && !sOriginalExperience;

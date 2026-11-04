@@ -93,6 +93,7 @@ enum Context : uint16_t {
   kCtxMap = 1 << 2,
   kCtxMenu = 1 << 3,
   kCtxScan = 1 << 4,
+  kCtxLockOn = 1 << 5, // with gameplay, while locked on to an object
   kCtxLayer1 = 1 << 8,
   kCtxLayer2 = 1 << 9,
   kCtxLayer3 = 1 << 10,
@@ -185,6 +186,8 @@ enum class ActionKind : uint8_t {
   X(VisorMenu, Digital, "visor_menu", "Trilogy visor radial selector (hold)")                      \
   X(Dodge, Digital, "dodge", "Dodge (with strafe)") \
   X(Grapple, Digital, "grapple", "Grapple (at a grapple point)")                                   \
+  X(TargetNext, Digital, "target_next", "Next target (locked on)")                                 \
+  X(TargetPrev, Digital, "target_prev", "Previous target (locked on)")                             \
   X(MapRotateUp, HalfAxis, "map_rotate_up", "Map rotate up")                                       \
   X(MapRotateDown, HalfAxis, "map_rotate_down", "Map rotate down")                                 \
   X(MapRotateLeft, HalfAxis, "map_rotate_left", "Map rotate left")                                 \

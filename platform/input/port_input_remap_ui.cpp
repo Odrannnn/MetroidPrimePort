@@ -64,7 +64,7 @@ constexpr SContextInfo kContexts[] = {
     {PortInput::kCtxMap, "Map"},           {PortInput::kCtxMenu, "Menus"},
     {PortInput::kCtxScan, "Scan Visor"},   {PortInput::kCtxLayer1, "Layer 1"},
     {PortInput::kCtxLayer2, "Layer 2"},    {PortInput::kCtxLayer3, "Layer 3"},
-    {PortInput::kCtxLayer4, "Layer 4"},
+    {PortInput::kCtxLayer4, "Layer 4"},    {PortInput::kCtxLockOn, "Locked on"},
 };
 
 constexpr const char* kFamilies[] = {"Keyboard & mouse", "Controller", "Touch"};
@@ -771,6 +771,10 @@ void DrawAdvancedEditor(const Binding& parsed, bool inputsOk) {
     ImGui::TextDisabled("Works only on the map screen, where its inputs do nothing else.");
     return;
   }
+  if (PortInput::IsTargetRow(sDraft.action)) {
+    ImGui::TextDisabled("Works only while locked on, where its inputs do nothing else.");
+    return;
+  }
   bool everywhere = sDraft.contexts == PortInput::kCtxAll;
   if (ImGui::Checkbox("Works everywhere", &everywhere)) {
     sDraft.contexts = everywhere ? PortInput::kCtxAll : PortInput::kCtxGameplay;
@@ -1287,7 +1291,8 @@ const std::vector<SGroup>& Groups() {
         // The C-stick is the right stick: twin-stick aim, classic beam picks, map panning.
         {"Move and aim",
          {Action::MainUp, Action::MainDown, Action::MainLeft, Action::MainRight, Action::CUp, Action::CDown,
-          Action::CLeft, Action::CRight, Action::Dodge, Action::Grapple},
+          Action::CLeft, Action::CRight, Action::Dodge, Action::Grapple, Action::TargetNext,
+          Action::TargetPrev},
          true},
         // Direct picks work in every scheme; the GameCube inputs behind them are listed above.
         {"Beams",

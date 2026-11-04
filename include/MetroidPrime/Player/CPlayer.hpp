@@ -401,6 +401,8 @@ public:
 #ifdef TARGET_PC
   // Trilogy's lock fade in [0, 1] (player +0x11A4): 0 free, 1 fully locked.
   float PortTriOrbitFade() const;
+  // Issue #243: the lock-on target beside the current one on screen (dir > 0 right).
+  TUniqueId PortCycleOrbitTarget(int dir, CStateManager& mgr) const;
 #endif
   void UpdateOrbitPreventionTimer(float dt);
   void UpdateGunAlpha();

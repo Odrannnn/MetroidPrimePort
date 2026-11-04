@@ -252,6 +252,13 @@ const MapRow* FindMapRow(Action a);
 // map for the other bindings on their inputs.
 void ApplyMapRows(Profile& profile);
 
+// The target rows (Next/Previous target, issue #243): only while locked on, where
+// their inputs do nothing else (the wheel's beam cycling, by default). Before a poll:
+// scopes them to lock-on (layers are dropped) and blocks lock-on for the other
+// bindings on their inputs.
+bool IsTargetRow(Action a);
+void ApplyTargetRows(Profile& profile);
+
 // The touch overlay's stock buttons and signals (TouchControlsView's C_* ids,
 // kTouchTurbo, kTouchMapTap, kTouchMenuBack):
 // fixed GameCube actions in all three layouts (default, GameCube, twin stick), not

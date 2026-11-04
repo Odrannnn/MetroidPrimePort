@@ -438,6 +438,9 @@ void BindPortControls(Profile& p) {
     }
     Bind(p, Action::BeamPrev, Make(Device::MouseWheel, 0, 1));
     Bind(p, Action::BeamNext, Make(Device::MouseWheel, 0, -1));
+    // Locked on, the wheel moves the lock instead (ApplyTargetRows): up to the left.
+    Bind(p, Action::TargetPrev, Make(Device::MouseWheel, 0, 1));
+    Bind(p, Action::TargetNext, Make(Device::MouseWheel, 0, -1));
   }
 
   // Mouse buttons: under mouse aim each does its action (or the beam shift);
@@ -578,6 +581,10 @@ uint16_t GameContexts() {
     if (morph == CPlayer::kMS_Morphed || morph == CPlayer::kMS_Morphing) return PortInput::kCtxMorphBall;
   }
   uint16_t contexts = PortInput::kCtxGameplay;
+  if (const CPlayer* player = mgr->GetPlayer();
+      player != nullptr && player->GetOrbitState() == CPlayer::kOS_OrbitObject && !PortDebug::OriginalExperience()) {
+    contexts |= PortInput::kCtxLockOn;
+  }
   const CPlayerState* state = mgr->GetPlayerState();
   if (state != nullptr && state->GetCurrentVisor() == CPlayerState::kPV_Scan) {
     contexts |= PortInput::kCtxScan;
@@ -686,6 +693,8 @@ void RouteDirectActions(const PortInput::Output& out) {
   PushCyclePick(false, visorDir != 0 ? CycleTarget(false, visorDir) : visorPick);
   if (out.Pressed(Action::SpringBall)) PortDebug::RequestSpringBall();
   if (out.Pressed(Action::Dodge)) PortDebug::RequestDodge();
+  if (out.Pressed(Action::TargetNext)) PortDebug::RequestTargetCycle(1);
+  if (out.Pressed(Action::TargetPrev)) PortDebug::RequestTargetCycle(-1);
   PortDebug::SetGrappleHeld(out.Held(Action::Grapple));
 }
 
@@ -1252,6 +1261,7 @@ SPoll Poll(unsigned mouseHeld, bool focused) {
   ApplyMenuButtons(next);
   PortInput::ApplyBallButtons(next);
   PortInput::ApplyMapRows(next);
+  PortInput::ApplyTargetRows(next);
   const uint16_t contexts = GameContexts();
   ApplyTwinStickFreeAim(next, contexts);
   if (!sInit || next != sProfile) {

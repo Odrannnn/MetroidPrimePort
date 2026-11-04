@@ -310,6 +310,15 @@ const SettingKey kSettingKeys[] = {
     BoolKey< &sSkippableCutscenes >("skippable_cutscenes"),
     BoolKey< &sBeamDoorsStayUnlocked >("beam_doors_stay_unlocked"),
     BoolKey< &sStackBeams >("stack_beams"),
+    {"beam_switch_speed",
+     [](const std::string& value) {
+       const int s = std::atoi(value.c_str());
+       if (s >= PortDebug::kBeamSwitchSpeedMin && s <= PortDebug::kBeamSwitchSpeedMax) {
+         sBeamSwitchSpeed = s;
+       }
+     },
+     [](std::ostream& out) { out << sBeamSwitchSpeed; }, false, "100", "400"},
+    BoolKey< &sBeamSwitchFire >("beam_switch_fire"),
     BoolKey< &sSeamlessPickups >("seamless_pickups"),
     BoolKey< &sWalkSpeedEnabled >("walk_speed_enabled"),
     {"walk_speed",

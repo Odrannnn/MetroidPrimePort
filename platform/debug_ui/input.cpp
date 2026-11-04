@@ -53,6 +53,8 @@ std::atomic<int> sBeamRequest{-1};
 std::atomic<uint64_t> sBeamRequestUntilNs{0};
 std::atomic<uint64_t> sSpringRequestUntilNs{0};
 std::atomic<uint64_t> sDodgeRequestUntilNs{0};
+std::atomic<uint64_t> sTargetCycleUntilNs{0};
+std::atomic<int> sTargetCycleDir{0};
 std::atomic<bool> sGrappleHeld{false};
 std::atomic<uint64_t> sGrappleHoldUntilNs{0};
 constexpr uint64_t kWheelRequestNs = 120'000'000;
@@ -947,6 +949,17 @@ void RequestDodge() { sDodgeRequestUntilNs.store(SDL_GetTicksNS() + kWheelReques
 bool TakeDodgeRequest() {
   const uint64_t until = sDodgeRequestUntilNs.exchange(0);
   return SDL_GetTicksNS() < until && !OriginalExperience();
+}
+
+void RequestTargetCycle(int dir) {
+  sTargetCycleDir.store(dir > 0 ? 1 : -1);
+  sTargetCycleUntilNs.store(SDL_GetTicksNS() + kWheelRequestNs);
+}
+
+int TakeTargetCycle() {
+  const uint64_t until = sTargetCycleUntilNs.exchange(0);
+  if (SDL_GetTicksNS() >= until || OriginalExperience()) return 0;
+  return sTargetCycleDir.load();
 }
 
 void SetGrappleHeld(bool held) { sGrappleHeld.store(held, std::memory_order_relaxed); }

@@ -179,6 +179,9 @@ public:
   void HandleBeamChange(const CFinalInput&, CStateManager&);
 #ifdef TARGET_PC
   void PortSwitchToOwnedBeam(CStateManager&);
+  // Port: the time scale of a beam change (PortDebug::BeamSwitchSpeed) while one runs
+  // (weapon state 0x8), else 1.
+  float PortBeamSwitchScale() const;
 #endif
   void SetPhazonBeamMorph(bool);
   void HandlePhazonBeamChange(CStateManager&);
