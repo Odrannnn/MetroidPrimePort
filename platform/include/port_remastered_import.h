@@ -162,7 +162,10 @@ inline constexpr int kTextures = 5;
 // 32: retail CMDL 607C35E7 (the rubble mounds of Mine Security Station) leaves the table: its
 //     partner 05a716b1 is the stations' white AreaLight dome; the room names the carried-over
 //     10000000-...-607c35e7 instead, which then places per object.
-inline constexpr int kModels = 32;
+// 33: so do 7E9028D7 (Frigate hologram grids), DDA8738A (00p_ice_connect), FC49F290 and 95413951
+//     (model particles): Remastered's rooms and GENPs name their carried-over models, and the
+//     partners are other rooms' models.
+inline constexpr int kModels = 33;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.
