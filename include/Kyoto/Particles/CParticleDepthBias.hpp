@@ -26,7 +26,12 @@ public:
       const rstl::optional_object< CAABox > bounds = gen.GetBounds();
       if (bounds) {
         next.bias = bias;
-        next.depth = (CGraphics::GetViewMatrix() * bounds->GetCenterPoint()).GetY();
+        // Distance in front of the camera along its forward axis: CalculateProjMatrixDepthBias
+        // 0x22a604 takes dot(centre - T, forward column) of the device context's camera transform
+        // (ctx+0x22c). The view matrix here is the camera's world transform (SetViewPointMatrix),
+        // so multiplying the centre by it would not give a view-space depth.
+        const CTransform4f& camera = CGraphics::GetViewMatrix();
+        next.depth = CVector3f::Dot(bounds->GetCenterPoint() - camera.GetTranslation(), camera.GetForward());
         if (usesDepthRange) {
           next.rangeSpan =
               PortParticleMath::RemasteredDepthRangeSpan(CGraphics::GetDepthNear(), CGraphics::GetDepthFar());
