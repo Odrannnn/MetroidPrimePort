@@ -326,6 +326,10 @@ Prime's, and so do the Varia and Phazon Spider Balls (Echoes has no Varia or Lig
   (the two guns share one skeleton). "Echoes arm cannon in first person"
   (`echoes_first_person_cannon`, on by default; console `echoescannon 0|1`) switches it, from the
   next beam selected.
+- "Play as Dark Samus" (`echoes_dark_samus`, off by default; console `darksamus 0|1`) puts Echoes'
+  Dark Samus body in place of every suit's, in third person, cutscenes and the pause screen, from
+  the next mod reload. Her skeleton and bind pose are Echoes Samus's, so she is fitted like the
+  suits. The first-person arm and the Morph Ball stay the suit's (Echoes has neither for her).
 
 ## Texture packs
 

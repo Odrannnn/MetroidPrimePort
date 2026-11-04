@@ -86,6 +86,9 @@ std::set<uint32_t> sDreadSkeletons;
 std::set<uint32_t> sEchoesBodies;
 // The beam ANCS whose Echoes cannon variant it serves (PortEchoesSuits::GunAncs).
 std::set<uint32_t> sEchoesGuns;
+// Whether it serves Dark Samus in place of the suit bodies (PortEchoesSuits::DarkSamusServed).
+bool sDarkSamusServed = false;
+bool sPlayAsDarkSamus = false;  // the setting echoes_dark_samus
 // thermal.lut: the thermal visor's heat gradient (port_thermal.h).
 std::string sThermalLut;
 // envfx.bin: Remastered's EnvironmentFX textures (port_envfx_assets.h).
@@ -475,6 +478,9 @@ namespace {
 bool sEchoesCannonShown = true;
 }
 void PortEchoesSuits::SetFirstPersonCannonShown(bool shown) { sEchoesCannonShown = shown; }
+void PortEchoesSuits::SetPlayAsDarkSamus(bool on) { PortMods::sPlayAsDarkSamus = on; }
+bool PortEchoesSuits::PlayAsDarkSamus() { return PortMods::sPlayAsDarkSamus; }
+bool PortEchoesSuits::DarkSamusServed() { return PortMods::sDarkSamusServed; }
 bool PortEchoesSuits::FirstPersonCannonShown() { return sEchoesCannonShown; }
 uint32_t PortEchoesSuits::GunAncs(uint32_t ancs) {
   return sEchoesCannonShown && PortMods::sEchoesGuns.count(ancs) != 0 ? Cannon(ancs) : ancs;
@@ -652,6 +658,7 @@ void Initialize() {
   sDreadSkeletons.clear();
   sEchoesBodies.clear();
   sEchoesGuns.clear();
+  sDarkSamusServed = false;
   {
     std::lock_guard<std::mutex> lock(sEffectIdsMutex);
     sEffectIdMapPath.clear();
@@ -946,6 +953,39 @@ void Initialize() {
     for (auto& [id, path] : native) {
       sNativeTextures[id] = std::move(path);
       sResourceProviders[{0x54585452, id}] = PathString(modDir);
+    }
+  }
+
+  // Dark Samus (PortEchoesSuits::kDarkBodies): the Echoes import's fit for each skeleton under
+  // every suit body of it, over whichever mod served that body, when the setting is on.
+  if (sPlayAsDarkSamus) {
+    const auto echoes = [&](uint32_t type, uint32_t id) -> const LooseResource* {
+      const auto it = loose.find({type, id});
+      return it != loose.end() && it->second.mod == PortEchoesSuits::kModName ? &it->second : nullptr;
+    };
+    size_t served = 0;
+    for (const auto& body : PortEchoesSuits::kDarkBodies) {
+      const LooseResource* cmdl = echoes(0x434D444Cu, PortEchoesSuits::DarkSamusId(body.cinf));      // 'CMDL'
+      const LooseResource* cskr = echoes(0x43534B52u, PortEchoesSuits::DarkSamusSkinId(body.cinf));  // 'CSKR'
+      if (cmdl == nullptr || cskr == nullptr) continue;
+      for (const auto& [from, to] : {std::pair{cmdl, body.cmdl}, std::pair{cskr, body.cskr}}) {
+        if (to == 0) continue;
+        LooseResource resource = *from;
+        resource.id = to;
+        loose[{resource.type, to}] = std::move(resource);
+        if (const auto provider = sResourceProviders.find({from->type, from->id}); provider != sResourceProviders.end()) {
+          sResourceProviders[{from->type, to}] = provider->second;
+        }
+      }
+      // Her own cannon, like the Echoes suits': PortDreadSamus::Replaces.
+      if (body.cmdl != 0) {
+        sEchoesBodies.insert(body.cmdl);
+        ++served;
+      }
+    }
+    sDarkSamusServed = served != 0;
+    if (sDarkSamusServed) {
+      PortLog::Write("mods: %s serves Dark Samus as %zu Samus body model(s)\n", PortEchoesSuits::kModName, served);
     }
   }
 

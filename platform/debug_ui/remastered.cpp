@@ -398,6 +398,25 @@ void DrawBuiltinMods() {
     }
     ItemHelp("Off keeps Prime's own arm cannon in first person; the Echoes Suit bodies stay. Applies the next "
              "time a beam is selected.");
+    bool dark = PortEchoesSuits::PlayAsDarkSamus();
+    if (ImGui::Checkbox("Play as Dark Samus", &dark)) {
+      PortEchoesSuits::SetPlayAsDarkSamus(dark);
+      MarkDirty();
+    }
+    ItemHelp("Dark Samus's body in place of every suit's, in third person, cutscenes and the pause screen. "
+             "The first-person arm and the Morph Ball stay the suit's.");
+    // A stale import has no Dark Samus to serve: its own note asks for the re-import.
+    const auto echoes = std::find_if(status.mods.begin(), status.mods.end(), [](const PortMods::ModInfo& m) {
+      return m.name == PortEchoesSuits::kModName;
+    });
+    if (echoes != status.mods.end() && echoes->enabled && !ModImportStale(status, PortEchoesSuits::kModName) &&
+        dark != PortEchoesSuits::DarkSamusServed()) {
+      ImGui::TextColored(ThemeWarnColor(), "Reload the mods to apply.");
+      ImGui::SameLine();
+      if (ImGui::SmallButton("Reload mods##echoes")) {
+        PortSaveState::RequestModReload();
+      }
+    }
     ImGui::SeparatorText("Import");
     DrawEchoesSuitsImport();
     ImGui::Unindent();

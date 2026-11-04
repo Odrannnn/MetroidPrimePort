@@ -188,8 +188,23 @@ void TestBodies() {
   size_t written = 0;
   for (const Target& t : kTargets) {
     const bool arm = std::string(t.skeleton) == "grapple";
+    if (std::string(t.suit) == "Dark Samus") {
+      CHECK(!IsBody(t.cmdl) && t.cmdl == DarkSamusId(t.cinf) && t.cskr == DarkSamusSkinId(t.cinf));
+      continue;
+    }
     CHECK(IsBody(t.cmdl) == !arm);
     written += arm ? 0 : 1;
+  }
+  // Dark Samus is written on each skeleton kDarkBodies names, and covers every body the mod writes.
+  for (const DarkBody& b : kDarkBodies) {
+    bool converted = false;
+    for (const Target& t : kTargets) converted |= std::string(t.suit) == "Dark Samus" && t.cinf == b.cinf;
+    CHECK(converted);
+  }
+  for (const uint32_t body : kBodies) {
+    bool dark = false;
+    for (const DarkBody& b : kDarkBodies) dark |= b.cmdl == body;
+    CHECK(dark);
   }
   for (const Arm& a : kArms) {
     CHECK(!IsBody(a.cmdl));

@@ -2958,6 +2958,18 @@ void CmdEchoesCannon() {
   Finish();
 }
 
+void CmdDarkSamus() {
+  const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
+  if (value == "0" || value == "1") {
+    PortEchoesSuits::SetPlayAsDarkSamus(value == "1");
+  } else if (!value.empty()) {
+    return Finish("usage: darksamus [0|1]");
+  }
+  Out("darksamus %d (served %d)", PortEchoesSuits::PlayAsDarkSamus() ? 1 : 0,
+      PortEchoesSuits::DarkSamusServed() ? 1 : 0);
+  Finish();
+}
+
 void CmdReveal() {
   const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
   if (value != "0" && value != "1") {
@@ -4509,6 +4521,9 @@ const CommandSpec kCommands[] = {
     {"echoescannon", CmdEchoesCannon, nullptr,
      "echoescannon [0|1]  the Echoes arm cannon in first person (echoes_first_person_cannon), from the "
      "next beam selected; prints it"},
+    {"darksamus", CmdDarkSamus, nullptr,
+     "darksamus [0|1]     play as Echoes' Dark Samus (echoes_dark_samus), from the next mod reload; prints it "
+     "and whether this load serves her"},
     {"interp", CmdInterp, nullptr,
      "interp [actor|pose|particle|all <0|1>]   frame interpolation settings (F1 Video > Frame rate)"},
     {"present", CmdPresent, nullptr,

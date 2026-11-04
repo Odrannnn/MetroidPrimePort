@@ -113,6 +113,14 @@ inline constexpr Target kTargets[] = {
     {"Varia", "grapple", 0x463D7A4E, 0x2D12D598, 0xD07D1BD9, 0x00A6EC53, 0x6B894385, 0x516F4445},
     {"Dark", "grapple", 0x078B71CB, 0x6CA4DE1D, 0xD07D1BD9, 0xCBFA3FF6, 0xA0D59020, 0x516F4445},
     {"Light", "grapple", 0xBACC46C8, 0xD1E3E91E, 0xD07D1BD9, 0xD6FF0F4E, 0xBDD0A098, 0x516F4445},
+    // Dark Samus (kDarkBodies): ANCS 2B513FD9's Dark_Samus on CINF 4ABC8A50, Echoes Samus's
+    // joints and bind pose less the face and GRAPPLE_LCTR.
+    {"Dark Samus", "cine50", 0xD2C3805B, 0xB9EC2F8D, 0x4ABC8A50, DarkSamusId(0x19C53902), DarkSamusSkinId(0x19C53902),
+     0x19C53902},
+    {"Dark Samus", "game20", 0xD2C3805B, 0xB9EC2F8D, 0x4ABC8A50, DarkSamusId(0xA496DA02), DarkSamusSkinId(0xA496DA02),
+     0xA496DA02},
+    {"Dark Samus", "doll49", 0xD2C3805B, 0xB9EC2F8D, 0x4ABC8A50, DarkSamusId(0xF76E70A6), DarkSamusSkinId(0xF76E70A6),
+     0xF76E70A6},
 };
 // Copies the mod also serves (port_dread_samus.h): the cutscene Varia skin under ANCS 863C1B6A's
 // 8C72FDAC, and the cutscene Phazon body under Tallon ANCS BAD39B59's B333E1D7.

@@ -470,6 +470,8 @@ const SettingKey kSettingKeys[] = {
     {"echoes_first_person_cannon",
      [](const std::string& value) { PortEchoesSuits::SetFirstPersonCannonShown(ParseBool(value)); },
      [](std::ostream& out) { WriteBool(out, PortEchoesSuits::FirstPersonCannonShown()); }, false, "0", "1"},
+    {"echoes_dark_samus", [](const std::string& value) { PortEchoesSuits::SetPlayAsDarkSamus(ParseBool(value)); },
+     [](std::ostream& out) { WriteBool(out, PortEchoesSuits::PlayAsDarkSamus()); }, false, "0", "1"},
     BoolKey< &sVsyncEnabled >("vsync"),
     BoolKey< &sFullscreen >("fullscreen"),
     BoolKey< &sOverlayWindowed >("overlay_windowed"),
