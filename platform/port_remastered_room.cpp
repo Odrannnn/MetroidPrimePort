@@ -2528,10 +2528,16 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     }
     if (ownModel) {
       const Vec3 w = Apply(area.xf, MulR2G(pos));
-      if (std::none_of(carriedActors.begin(), carriedActors.end(),
-                       [&](const ScriptObject* o) { return MaxAbs(o->pos, w) < kRetailActorNear; })) {
+      const auto carried = std::find_if(carriedActors.begin(), carriedActors.end(),
+                                        [&](const ScriptObject* o) { return MaxAbs(o->pos, w) < kRetailActorNear; });
+      if (carried == carriedActors.end()) {
         continue;
       }
+      const uint8_t* model = r.room.Bytes(prop->second);
+      char line[160];
+      std::snprintf(line, sizeof line, "  %s: retail actor %08X at (%.1f, %.1f, %.1f) draws the room's own %02x%02x%02x%02x",
+                    r.name.c_str(), (*carried)->id, w[0], w[1], w[2], model[3], model[2], model[1], model[0]);
+      Log(line);
       ++ownModels;
     }
     const bool standsIn = synthetic || ownModel;
@@ -2835,7 +2841,8 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     }
   }
   if (!m_syntheticEntities.empty() || !standins.empty()) {
-    Log("  " + r.name + ": " + std::to_string(standins.size()) + " of " + std::to_string(m_syntheticEntities.size()) +
+    const size_t synthetics = size_t(std::count_if(standins.begin(), standins.end(), [](const Standin& s) { return !s.own; }));
+    Log("  " + r.name + ": " + std::to_string(synthetics) + " of " + std::to_string(m_syntheticEntities.size()) +
         " Remastered stand-in actors drawn, " + std::to_string(standinHidden) + " retail actors hidden");
   }
   if (ownModels != 0) {
