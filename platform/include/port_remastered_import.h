@@ -116,7 +116,8 @@ namespace ImportStage {
 // 92: LambertFx lights with the baked probe x BLCM like VFX_Model_Base, not the flat (zero) ambient.
 // 93: cc3e88af (the Omega fight's healing nodules) is kShaderPhazon's skinned twin and draws as kind 21.
 // 94: 9b752e5e (Research Lab Hydra's ForceField_DX11) is 6c1a4768's twin and draws as kind 14.
-inline constexpr int kConverter = 94;
+// 95: cd033236 (the skies' flow-map clouds) draws as kind 49, its flow mask TCH0 in slot 3.
+inline constexpr int kConverter = 95;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.

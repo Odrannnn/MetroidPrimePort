@@ -203,6 +203,7 @@ constexpr uint32_t kShaderSimpleGlass = 0x084A8DB5;
 // fresnel on the vertex colour, TCH0 at a time-scrolled, tangent-parallaxed uv, TCH1 at the bent normal and the
 // blurred screen copy, bent by NMAP and the normal.
 constexpr uint32_t kShaderCrystal = 0x54B4021F;
+constexpr uint32_t kShaderSkyFlow = 0xCD033236;
 // FB2BC671 and DF3E3423 (the ids as the reports print them), the ChozoGhost's X-ray materials, static and skinned
 // (kind 31, kb material/fb2bc671.md, df3e3423.md).
 constexpr uint32_t kShaderXrayStatic = 0xFB2BC671;
@@ -387,6 +388,7 @@ std::string ShaderRole(uint32_t shader) {
   add(shader == kShaderDualGlass, "dual-glass");
   add(shader == kShaderSimpleGlass, "simple-glass");
   add(shader == kShaderCrystal, "crystal");
+  add(shader == kShaderSkyFlow, "sky-flow");
   add(shader == kShaderInventoryGlass, "inventory-glass");
   add(shader == kShaderInventoryAdd, "inventory-add");
   add(IsXrayGhost(shader), "xray-ghost");
@@ -783,6 +785,15 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
       set(kEmissive, tch[0]->texture);
       out.maps[kEmissive].detail = out.maps[kEmissive].has;
     }
+  } else if (shader == kShaderSkyFlow && tch[0] && cch[0] && cch[0]->color[1] > 0.0 && !out.maps[kEmissive].has) {
+    // The flow mask TCH0 rides in the emissive slot as kind 24's does. CCH0 is (strength, period
+    // in seconds, angle of the flow's world direction about up); the period goes as its inverse.
+    out.kind = 49;
+    set(kEmissive, tch[0]->texture);
+    out.maps[kEmissive].detail = out.maps[kEmissive].has;
+    out.kindParam[0] = 1.0 / ShortestDouble(cch[0]->color[1]);  // the game multiplies it by the time
+    out.kindParam[1] = ShortestDouble(cch[0]->color[0]);
+    out.kindParam[2] = ShortestDouble(cch[0]->color[2]);
   } else if ((shader == kShaderDetail || shader == kShaderDetailTinted) && tch[0]) {
     out.kind = 2;
     set(kBase, tch[0]->texture, &out.layer[kBase]);
@@ -1748,7 +1759,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
                                              "frozen-shell", "matcap-shell", "boundary-shield", "pickup",
                                              "holo",         "holo-refl",    "hologram",     "gun-fx", "vertex-blend", "phazon", "projected-blend", "decal-alpha", "phazon-pool", "phazon-veins",
                                              "inventory-glass", "inventory-add", "unlit-cube", "unlit-vertex", "unlit-matcap", "unlit-add",
-                                             "simple-glass", "crystal"};
+                                             "simple-glass", "crystal", "sky-flow"};
     for (const char* name : kKindRoles) {
       if (out.role.find(name) != std::string::npos) {
         out.reason += std::string("fallback: ") + name + " shader without its maps/params (or blend); ";
@@ -1766,7 +1777,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
   const bool iceSingleLayerMapsBound = out.kind == 28 && !out.layered && out.maps[kBase].has && out.maps[kMr].has &&
                                        out.maps[kNormal].has && out.maps[kEmissive].has;
   if (out.kind != 3 && out.kind != 10 && !(out.kind >= 16 && out.kind <= 18) && out.kind != 45 && out.kind != 24 && out.kind != 27 &&
-      out.kind != 34 && out.kind != 36 && out.kind != 37 && out.kind != 38 && out.kind != 39 && out.kind != 41 && !out.layered && !iceSingleLayerMapsBound) {
+      out.kind != 34 && out.kind != 36 && out.kind != 37 && out.kind != 38 && out.kind != 39 && out.kind != 41 && out.kind != 49 && !out.layered && !iceSingleLayerMapsBound) {
     if (out.kind != 0) {
       out.reason += std::string("demoted ") + KindName(out.kind) + " to standard: not layered; ";
     }

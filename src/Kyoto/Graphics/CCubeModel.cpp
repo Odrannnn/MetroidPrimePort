@@ -693,13 +693,13 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
   PortApplyKindParam(sPortKindSlot, sPortKindValue, values);
   // A liquid's surface (kinds 5 and 6) moves: its first parameter is a rate, and the
   // shader gets the phase. So do falling water (kind 7), the beam glow (9) and the
-  // Waste Disposal tank's distortion (11), the Frigate's force fields (14) and the Phazon3 stone (21); glass (8) does not
-  // move.
+  // Waste Disposal tank's distortion (11), the Frigate's force fields (14), the Phazon3 stone (21) and the sky's
+  // flow (49); glass (8) does not move.
   if ((values[13] > 4.5f && values[13] < 7.5f) || (values[13] > 8.5f && values[13] < 9.5f) ||
       (values[13] > 10.5f && values[13] < 11.5f) || (values[13] > 13.5f && values[13] < 15.5f) || (values[13] > 17.5f && values[13] < 18.5f) ||
       (values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 28.5f && values[13] < 29.5f) ||
        (values[13] > 31.5f && values[13] < 32.5f) || (values[13] > 42.5f && values[13] < 46.5f) ||
-      (values[13] > 47.5f && values[13] < 48.5f)) {
+      (values[13] > 47.5f && values[13] < 49.5f)) {
     // The Phazon3 stone and the PhazonPool blister read Remastered's scene clock (stops while paused, wraps at 15120 s).
     values[15] *= ((values[13] > 20.5f && values[13] < 22.5f) || (values[13] > 31.5f && values[13] < 32.5f))
                       ? CGraphics::GetSimTime()
@@ -718,6 +718,17 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
     shield[21] = view.Get12();
     shield[22] = -view.Get11();
     shield[23] = view.Get13();
+  }
+  // The sky's flow (kind 49) pushes its clouds along Remastered world (sin a, 0, cos a), times the
+  // strength, in view space: GameCube (-sin a, cos a, 0) through the view's rotation, as
+  // (right, up, -forward). The record holds the strength and the angle a.
+  if (pk == aurora::PbrKind::SkyFlow) {
+    const f32 k = values[16];
+    const f32 sa = -std::sin(values[17]);
+    const f32 ca = std::cos(values[17]);
+    values[16] = k * (sa * view.Get00() + ca * view.Get10());
+    values[17] = k * (sa * view.Get02() + ca * view.Get12());
+    values[18] = -k * (sa * view.Get01() + ca * view.Get11());
   }
   // EnergyField's VS supplies Remastered world X/Y, not GameCube world X/Y:
   // the converter's R2G is (-x,z,y). These rows undo that change of basis.

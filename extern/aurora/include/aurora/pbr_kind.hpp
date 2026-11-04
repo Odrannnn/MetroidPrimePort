@@ -60,6 +60,7 @@ enum class PbrKind : uint8_t {
   ChozoLore = 46,      // Chozo Lore
   Icy = 47,            // the frozen actor overlay (CCubeModel's RenderIcy path, no record)
   Crystal = 48,        // 54b4021f, Monitor Station's crystals: unlit layers and a blurred screen copy
+  SkyFlow = 49,        // cd033236, the sky's flow-map clouds: BCLR pushed along a world direction by TCH0
 };
 
 // The kind a float (pbr_layer.y, a record's values[13]) holds, as gx.cpp builds it into the key.
@@ -117,6 +118,7 @@ constexpr const char* PbrKindName(PbrKind k) {
   case PbrKind::RouteHologram: return "route-hologram";
   case PbrKind::ChozoLore: return "chozo-lore";
   case PbrKind::Crystal: return "crystal";
+  case PbrKind::SkyFlow: return "sky-flow";
   default: return "kind?";
   }
 }

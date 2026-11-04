@@ -52,7 +52,7 @@ int PbrMode(const RemMaterial& m);
 // or glass, whose first three floats are a tint.
 bool ExposedGlow(const RemMaterial& m) {
   return !m.glowLinear && m.maps[kEmissive].has && m.kind != 7 && m.kind != 20 &&
-         m.kind != 8 && m.kind != 11 && m.kind != 14 && m.kind != 21 && m.kind != 24;
+         m.kind != 8 && m.kind != 11 && m.kind != 14 && m.kind != 21 && m.kind != 24 && m.kind != 49;
 }
 
 // A glow strength of a kind below 5 (the parallax's inside), exposed at run time like the
