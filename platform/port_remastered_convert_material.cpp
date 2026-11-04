@@ -245,6 +245,8 @@ constexpr ShaderTwin kShaderTwins[] = {
     {0xB1637667, 0x131ED7F0}, {0x3EA28466, 0xC78982B4},
     // 63fa0a93 (ForceField) has 8 perms fewer than 6c1a4768; the ones it has are the same code.
     {0x63FA0A93, kShaderBoundaryShield},
+    // 9b752e5e (ForceField_DX11, Research Lab Hydra's field 603d908b) ships only perm 002, the same code and bindings.
+    {0x9B752E5E, kShaderBoundaryShield},
     // Same fragment perms; the vertex perms differ only in an input attribute's location.
     {0x156E5E53, kShaderPhazonPool}, {0xEBFFBA88, 0x131ED7F0}, {0x9D7E74C7, kShaderUnlitAdd},
     {0x0A2CAF60, kShaderUnlitAdd}, {0x6F1F0438, kShaderUnlitAdd},

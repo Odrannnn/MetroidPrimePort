@@ -115,7 +115,8 @@ namespace ImportStage {
 // 91: the skinned twins f07e9761 (of 98f0556d) and 3ef54cc4, 35acebd7 (of 4bc890c1) route to their family.
 // 92: LambertFx lights with the baked probe x BLCM like VFX_Model_Base, not the flat (zero) ambient.
 // 93: cc3e88af (the Omega fight's healing nodules) is kShaderPhazon's skinned twin and draws as kind 21.
-inline constexpr int kConverter = 93;
+// 94: 9b752e5e (Research Lab Hydra's ForceField_DX11) is 6c1a4768's twin and draws as kind 14.
+inline constexpr int kConverter = 94;
 // What a converted texture holds: port_remastered_image/txtr/dds/astc, and Converter's Get and
 // Cube. Each converted texture is kept across imports under its tag and this number, so a
 // kConverter bump re-imports the models without converting their textures again.
