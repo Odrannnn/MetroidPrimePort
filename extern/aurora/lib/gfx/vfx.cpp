@@ -86,7 +86,8 @@ struct Uniform {
   // ColorTex: x = the map's alpha exponent (ParticleSprite-style header materials raise it to 2.2), 0 = none.
   // ParticleLit: y = 1 lights the vertex colour in the vertex stage (DrawDesc::litPerVertex).
   float misc3[4];
-  float pad[24];
+  float colorMatrix[3][4]; // GXSetColorMatrix's rows, identity while off or glow only
+  float pad[12];
   // IceChargeCollisionLit: Remastered's clustered light block, c5[0..2] then 32 records of 20 floats, at
   // ClusterBlockOffset (after every field above, so no earlier recipe's offsets move). Zero elsewhere.
   float cluster[ClusterBlockFloats];
@@ -98,7 +99,7 @@ static_assert(offsetof(Uniform, ice) == 416);
 // The block starts at ClusterBlockOffset, where the ShaderSource's 14 vec4f of padding put it, and fills
 // the rest of the uniform: 163 vec4f. The lit block takes the padding's first 7 vec4f.
 static_assert(offsetof(Uniform, lit) == 544 && offsetof(Uniform, cluster) == ClusterBlockOffset);
-static_assert(544 + 7 * 16 + sizeof(Uniform::misc3) + sizeof(Uniform::pad) == ClusterBlockOffset && ClusterBlockFloats == 163 * 4 &&
+static_assert(544 + 7 * 16 + sizeof(Uniform::misc3) + sizeof(Uniform::colorMatrix) + sizeof(Uniform::pad) == ClusterBlockOffset && ClusterBlockFloats == 163 * 4 &&
               UniformSize == 3376);
 
 // ---- Array textures ----
@@ -231,7 +232,10 @@ struct U {
   lit5: vec4f,
   lit6: vec4f,
   misc3: vec4f,
-  padCluster: array<vec4f, 6>,
+  cm0: vec4f,
+  cm1: vec4f,
+  cm2: vec4f,
+  padCluster: array<vec4f, 3>,
   cluster: array<vec4f, 163>,
 }
 @group(0) @binding(0) var<uniform> u: U;
@@ -998,6 +1002,8 @@ R"(  } else if ((FEAT & 524288u) != 0u) {
   if ((FEAT & 4u) != 0u) {
     x = max(0.0, x - src(in, 0));
   }
+  // GXSetColorMatrix (identity while off): the effect's own colour, before it scales the scene copy.
+  rgb = vec3f(dot(u.cm0.xyz, rgb), dot(u.cm1.xyz, rgb), dot(u.cm2.xyz, rgb));
   if ((FEAT & 32768u) != 0u) {
     // VFX_FrameBuffer_Indirect_* (cc155f99 = 04276ae1, d955396d; perms 000_0 and 016_0): the scene
     // copy at this pixel, offset by the warp map's (d * 0.99609375 - 0.5) x CCH0.xy x near / view
@@ -2018,6 +2024,11 @@ static void draw_prims(const DrawDesc& desc, const Vertex* verts, uint32_t verte
   u.misc2[3] = desc.depthSoften;
   u.misc3[0] = desc.alphaGamma;
   u.misc3[1] = desc.litPerVertex ? 1.f : 0.f;
+  for (int r = 0; r < 3; ++r) {
+    for (int c = 0; c < 3; ++c) {
+      u.colorMatrix[r][c] = gx.colorMatrixOn && gx.colorMatrix[0].w() == 0.f ? gx.colorMatrix[r][c] : (r == c ? 1.f : 0.f);
+    }
+  }
   // The scene copy this draw may read: this frame's, taken earlier in it, of the target it draws into.
   // After the post, the visor copy (no depth), of the display output it draws into.
   const size_t frameSlot = current_frame_slot();

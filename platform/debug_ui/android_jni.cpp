@@ -484,6 +484,8 @@ Java_org_metroidprime_port_MetroidPrimeActivity_nativeRemasteredPicked(JNIEnv* e
       PortDebug::sFlaahgraPick = chars;
     } else if (which == PortDebug::kDreadPick) {
       PortDebug::sDreadPick = chars;
+    } else if (which == PortDebug::kEchoesPick) {
+      PortDebug::sEchoesPick = chars;
     } else {
       PortDebug::sRemasteredPicks.emplace_back(int(which), chars);
     }

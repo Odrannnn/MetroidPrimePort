@@ -53,6 +53,10 @@ public:
   CIceImpact(const TLockedToken< CGenDescription >& particle, TUniqueId uid, TAreaId aid,
              bool active, const rstl::string& name, const CTransform4f& xf, uint flags,
              const CVector3f& scale, const CColor& color);
+#ifdef TARGET_PC
+  // The picked Ice beam colour (port_beam_colours.h) on all three gens.
+  void PortSetBeamTint(int beam);
+#endif
 
 private:
   struct SImpactSphere {

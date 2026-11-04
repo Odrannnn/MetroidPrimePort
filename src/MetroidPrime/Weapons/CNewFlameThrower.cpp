@@ -2,6 +2,7 @@
 #include "MetroidPrime/Weapons/CWeaponAssetInfo.hpp"
 #include "port_debug.h"
 #ifdef TARGET_PC
+#include "port_beam_colours.h"
 #include "port_synthetic_effect.h"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
 #include "MetroidPrime/Cameras/CGameCamera.hpp"
@@ -236,6 +237,9 @@ void CNewFlameThrower::AddToRenderer(const CFrustumPlanes& planes, const CStateM
 
 void CNewFlameThrower::Render(const CStateManager& mgr) const {
   if (GetActive()) {
+#ifdef TARGET_PC
+    PortBeamColours::Scope beamScope(CPlayerState::kBI_Plasma);
+#endif
     x36c_swooshCenterGen->Render();
     x370_swooshFireGen->Render();
     CElementGen* gens[5];
@@ -306,6 +310,10 @@ void CNewFlameThrower::CreateFlameParticles(CStateManager& mgr) {
   x360_secondarySmokeGen = rs_new CElementGen(x31c_secondarySmoke);
   x364_secondaryFireGen = rs_new CElementGen(x328_secondaryFire);
   x368_secondarySparksGen = rs_new CElementGen(x334_secondarySparks);
+#ifdef TARGET_PC
+  // The player's Plasma combo: its light takes the picked Plasma colour (port_beam_colours.h).
+  x358_mainFireGen->PortSetBeamTint(CPlayerState::kBI_Plasma);
+#endif
   x36c_swooshCenterGen = rs_new CParticleSwoosh(x340_swooshCenter, 0);
   x36c_swooshCenterGen->SetRenderGaps(true);
   x370_swooshFireGen = rs_new CParticleSwoosh(x34c_swooshFire, 0);
@@ -636,6 +644,11 @@ void CNewFlameThrower::UpdateLights(CStateManager& mgr) {
           CParticleGlobals::SetEmitterTime(time);
           CColor value = CColor::Yellow();
           color->GetValue(time, value);
+#ifdef TARGET_PC
+          float rgb[3] = {value.GetRed(), value.GetGreen(), value.GetBlue()};
+          PortBeamColours::TintRgb(CPlayerState::kBI_Plasma, rgb);
+          value = CColor(rgb[0], rgb[1], rgb[2], value.GetAlpha());
+#endif
           lightData.SetColor(value);
         }
         if (CRealElement* intensity = x304_mainFire->xf4_LINT) {

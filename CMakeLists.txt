@@ -370,6 +370,8 @@ set(MP_PORT_SOURCES
     platform/port_remastered_import_remastered.cpp
     platform/port_dread_samus_import.cpp
     platform/port_dread_samus.cpp
+    platform/port_echoes_suits_import.cpp
+    platform/port_echoes_suits.cpp
     platform/port_dread_pkg.cpp
     platform/port_dread_bcmdl.cpp
     platform/port_dread_bsmat.cpp
@@ -389,6 +391,7 @@ set(MP_PORT_SOURCES
     platform/port_ball_looks.cpp
     platform/port_ball_looks_disc.cpp
     platform/port_disc_reader.cpp
+    platform/port_beam_colours.cpp
     platform/port_suit_colours.cpp
     platform/port_suit_colours_disc.cpp
     platform/port_hints.cpp
@@ -1588,6 +1591,12 @@ if(MP_BUILD_TESTS)
         LIBRARIES mp_test_remastered_convert ZLIB::ZLIB ${CMAKE_THREAD_LIBS_INIT}
         TIMEOUT 600)
     # --- end Dread Samus import ---
+    # The Echoes suits conversion: LZO, PAK segments, CINF and skin joint mapping on hand-built data.
+    mp_port_test(port_echoes_suits_tests
+        SOURCES tests/port_echoes_suits.cpp platform/port_echoes_suits.cpp platform/port_dread_reskin.cpp
+            platform/port_dread_bcmdl.cpp
+        INCLUDES platform/include
+        LIBRARIES ZLIB::ZLIB)
     # Every port_settings.ini key reads back as written (platform/debug_ui/settings.cpp,
     # kSettingKeys); the game binary checks itself and exits before starting.
     add_test(NAME port_settings_roundtrip COMMAND metroid_prime_port --settings-selftest)

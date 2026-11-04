@@ -269,6 +269,12 @@ void GXSetPBRModelModulation(const f32 diffuse[4], const f32 incan[4], f32 cover
 // alpha is 1, or base.a^2 * vertex alpha where `blended` (a material drawn with a blend, not alpha
 // tested). Stays in effect until turned off; off is neutral.
 void GXSetPBRThermal(GXBool on, f32 x, f32 y, GXBool blended);
+// Port extension: the following draws' colour goes through `rows` (rgb' = rows * rgb) where their
+// shading leaves it, before fog, the HDR conversion and the blend; the alpha is unchanged. Both GX
+// draws and aurora::gfx::vfx draws take it. Null turns it off, which is neutral. Depth-only passes,
+// the actor shadow decal and the silhouette shell ignore it. With glowOnly the matrix acts on a PBR
+// draw's glow term alone (its emissive and incandescence) and leaves every other draw unchanged.
+void GXSetColorMatrix(const f32 rows[3][3], GXBool glowOnly);
 
 // Port extension: Remastered's bloom and colour grade at the end of the HDR scene (GXPortSceneHdr;
 // see lib/gfx/bloom.cpp). Light above `threshold` (exposed luminance) blooms, tints 0 to 3 weight

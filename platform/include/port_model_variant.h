@@ -15,7 +15,7 @@ namespace PortModelVariant {
 // `key` picks the look: the suit (CPlayerState::EPlayerSuit) for Samus, the
 // weapon type for the beam troopers. The id of a variant that is
 // also a retail resource's is never written, so it cannot shadow one.
-inline uint32_t Id(uint32_t retail, int key) {
+constexpr uint32_t Id(uint32_t retail, int key) {
   uint32_t h = port::kFnv32Basis;
   const auto mix = [&h](uint32_t v) {
     for (int i = 0; i < 4; ++i) {

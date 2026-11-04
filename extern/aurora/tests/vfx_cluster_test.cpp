@@ -127,10 +127,10 @@ TEST(VfxCluster, BlockAndMaskAreDeclaredForTheLitFeature) {
   config.features = IceChargeCollisionLit;
   const std::string source = pipeline_source(config);
   // The block: 14 vec4f after the pre-block fields. lit0..lit6 (AMBS, the probe's mean/lobe/lobes and
-  // BLCM) take the first seven, misc3 (the colour map's alpha gamma) the eighth, the rest is padding, then 163 vec4f of cluster, which is
+  // BLCM) take the first seven, misc3 (the colour map's alpha gamma) the eighth, cm0..cm2 (GXSetColorMatrix's rows) the next three, the rest is padding, then 163 vec4f of cluster, which is
   // ClusterBlockFloats / 4 — the layout vfx.cpp's static_asserts pin to the C++ struct.
   EXPECT_NE(source.find("cluster: array<vec4f, 163>"), std::string::npos);
-  EXPECT_NE(source.find("lit6: vec4f,\n  misc3: vec4f,\n  padCluster: array<vec4f, 6>"), std::string::npos);
+  EXPECT_NE(source.find("lit6: vec4f,\n  misc3: vec4f,\n  cm0: vec4f,\n  cm1: vec4f,\n  cm2: vec4f,\n  padCluster: array<vec4f, 3>"), std::string::npos);
   // The mask, at its own binding, R32Uint (texture_2d<u32>).
   EXPECT_NE(source.find("@binding(12) var clusterMask: texture_2d<u32>"), std::string::npos);
   EXPECT_NE(source.find("textureLoad(clusterMask"), std::string::npos);

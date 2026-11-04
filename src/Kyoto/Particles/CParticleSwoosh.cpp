@@ -21,6 +21,7 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "port_beam_colours.h"
 #include "port_debug.h"
 #include <climits>
 #include "port_fx_debug.h"
@@ -810,6 +811,7 @@ bool CParticleSwoosh::IsSystemDeletable() const {
 void CParticleSwoosh::Render() {
 #ifdef TARGET_PC
   PortFx::RenderScope fxScope(x1c_desc->xPortUnfogged);
+  PortBeamColours::Scope beamScope(xPortBeamTint);
   // CreateSWSH never reads DBSO: a swoosh keeps CParticleDescription's default (0x288314), on.
   CPortParticleDepthBias portDepthBias(*this, x1c_desc->xPortDepthBias, true);
   if (PortFx::gMuteActive && PortFx::IsMuted(*this)) {

@@ -83,6 +83,10 @@ public:
     }
     return nullptr;
   }
+  // Port: the materials (bit = index, the first 64) whose textures differ between the first
+  // material set and any of the next three: the gun's beam glow, which the four beams' sets
+  // swap while sharing the body (port_beam_colours.h). 0 with a single set.
+  uint64_t PortBeamGlowMask() const;
 #endif
 
   void UnlockTextures() {

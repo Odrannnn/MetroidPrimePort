@@ -21,6 +21,7 @@
 #include "port_third_person.h"
 #include "port_third_person_body.h"
 #include "port_dread_samus_mod.h"
+#include "port_echoes_suits_mod.h"
 #include "port_gci.h"
 #include "port_photo.h"
 #include "port_pointer.h"
@@ -3021,6 +3022,29 @@ void CmdDreadCannon() {
   Finish();
 }
 
+void CmdEchoesCannon() {
+  const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
+  if (value == "0" || value == "1") {
+    PortEchoesSuits::SetFirstPersonCannonShown(value == "1");
+  } else if (!value.empty()) {
+    return Finish("usage: echoescannon [0|1]");
+  }
+  Out(PortEchoesSuits::FirstPersonCannonShown() ? "echoescannon 1" : "echoescannon 0");
+  Finish();
+}
+
+void CmdDarkSamus() {
+  const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
+  if (value == "0" || value == "1") {
+    PortEchoesSuits::SetPlayAsDarkSamus(value == "1");
+  } else if (!value.empty()) {
+    return Finish("usage: darksamus [0|1]");
+  }
+  Out("darksamus %d (served %d)", PortEchoesSuits::PlayAsDarkSamus() ? 1 : 0,
+      PortEchoesSuits::DarkSamusServed() ? 1 : 0);
+  Finish();
+}
+
 void CmdReveal() {
   const std::string value = sCmd.args.size() > 1 ? sCmd.args[1] : "";
   if (value != "0" && value != "1") {
@@ -4571,6 +4595,12 @@ const CommandSpec kCommands[] = {
     {"visorfx", CmdHelmetVisorFx, nullptr, ""},
     {"dreadcannon", CmdDreadCannon, nullptr,
      "dreadcannon [0|1]   the Dread arm cannon in first person (dread_first_person_cannon); prints it"},
+    {"echoescannon", CmdEchoesCannon, nullptr,
+     "echoescannon [0|1]  the Echoes arm cannon in first person (echoes_first_person_cannon), from the "
+     "next beam selected; prints it"},
+    {"darksamus", CmdDarkSamus, nullptr,
+     "darksamus [0|1]     play as Echoes' Dark Samus (echoes_dark_samus), from the next mod reload; prints it "
+     "and whether this load serves her"},
     {"interp", CmdInterp, nullptr,
      "interp [actor|pose|particle|all <0|1>]   frame interpolation settings (F1 Video > Frame rate)"},
     {"present", CmdPresent, nullptr,

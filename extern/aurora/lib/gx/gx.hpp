@@ -448,6 +448,9 @@ struct GXState {
   Vec4<float> pbrModelCoverage{1.f, 0.f, 0.f, 0.f};
   // GX_AURORA_SET_PBR_THERMAL: x, y, blended (1 / 0), w 1 while on (all zero when off)
   Vec4<float> pbrThermal{};
+  // GX_AURORA_SET_COLOR_MATRIX: the rows (w unused) while on
+  bool colorMatrixOn = false;
+  std::array<Vec4<float>, 3> colorMatrix{};
   std::array<Vec4<float>, 8> pbrShield{}; // GX_AURORA_SET_PBR_SHIELD: CCH0..6, then AUVI xyz + DIFC.w
   // GX_AURORA_SET_PBR_LIGHT_HDR, per light: colour (rgb, falloff + 1; w 0 = off), then
   // (view position, r0), then (r1, specular roughness widen, cone scale, cone bias), then
@@ -667,7 +670,11 @@ struct ShaderConfig {
   // GX_AURORA_PORT_ACTOR_SHADOW decal: the draw is a receiver redrawn as Remastered's actor shadow
   // decal (multiplies the frame by the shadow, shadowUniform holds its view-space planes). The old
   // padding byte, so other configs keep their bytes and cache keys.
-  u8 actorDecal = 0;
+  u8 actorDecal : 1 = 0;
+  // GX_AURORA_SET_COLOR_MATRIX on a draw that writes colour: the color_matrix uniform on the shaded
+  // colour. A bit of the actorDecal byte, so a config with it off keeps its bytes and cache keys.
+  u8 colorMatrix : 1 = 0;
+  u8 actorDecalSpare : 6 = 0; // named, so the byte has no padding bits (unique object representations)
   std::array<AttrConfig, MaxVtxAttr> attrs;
   std::array<TevSwap, MaxTevSwap> tevSwapTable;
   std::array<TevStage, MaxTevStages> tevStages;
@@ -750,6 +757,7 @@ struct ShaderInfo {
   bool usesShell : 1 = false;
   bool usesPbrThermal : 1 = false; // ShaderConfig::pbrThermal: the pbr_thermal uniform
   bool usesAlphaRef : 1 = false;   // an alpha compare reference is AlphaRefUniform: the alpha_ref uniform
+  bool usesColorMatrix : 1 = false; // ShaderConfig::colorMatrix: the color_matrix uniform
   bool shellScene : 1 = false; // the shell's colour pass: texture slot 2 holds the scene copy     // ShaderConfig::shell: the shell uniforms; colour: the scene copy on slot 2
 };
 struct BindGroupRanges {

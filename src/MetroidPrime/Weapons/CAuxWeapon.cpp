@@ -245,6 +245,12 @@ void CAuxWeapon::LaunchMissile(float dt, const bool underwater, bool charged, in
       rstl::optional_object< TLockedToken< CGenDescription > >(),
       CSfxManager::kInternalInvalidSfxId, false);
   if (projectile) {
+#ifdef TARGET_PC
+    // A combo is its beam's shot (the Super Missile is Power's); a plain missile has no beam.
+    if (charged) {
+      static_cast< CEnergyProjectile* >(projectile)->Projectile().PortSetBeamTint(currentBeam);
+    }
+#endif
     mgr.AddObject(projectile);
     projectile->Think(dt, mgr);
   }
@@ -282,6 +288,9 @@ void CAuxWeapon::CreateFlameThrower(const CTransform4f& xf, CStateManager& mgr, 
   flame->Think(dt, mgr);
   flame->Fire(xf, mgr, false);
   x24_muzzleFxGen = rs_new CElementGen(xc_flameMuzzle);
+#ifdef TARGET_PC
+  x24_muzzleFxGen->PortSetBeamTint(CPlayerState::kBI_Plasma);
+#endif
   x7c_comboSfx = NWeaponTypes::play_sfx(SFXsam_a_placofir_lp_00, false, true, 0x4a);
   mgr.CameraManager()->AddCameraShaker(CCameraShakeData::skHardRecoil, false);
   mgr.PlayerState()->SetFiringComboBeam(true);
@@ -302,6 +311,9 @@ void CAuxWeapon::CreateWaveBusterBeam(uint attribs, TUniqueId target, const CTra
                          x70_waveBusterId, kInvalidAreaId, x6c_playerId, target, attribs);
   mgr.AddObject(*beam);
   x24_muzzleFxGen = rs_new CElementGen(x18_busterMuzzle);
+#ifdef TARGET_PC
+  x24_muzzleFxGen->PortSetBeamTint(CPlayerState::kBI_Wave);
+#endif
   x7c_comboSfx = NWeaponTypes::play_sfx(SFXsam_a_wavcofir_lp_00, false, true, 0x4a);
   mgr.CameraManager()->AddCameraShaker(CCameraShakeData::skSoftRecoil, false);
   mgr.PlayerState()->SetFiringComboBeam(true);

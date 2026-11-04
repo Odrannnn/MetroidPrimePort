@@ -4625,11 +4625,12 @@ bool ApplyPendingImport() {
   if (ImportStatus().running) {
     return false;
   }
-  const bool dread = ApplyPendingDreadImport();
+  // Both run: | does not stop at the first that moved.
+  const bool samus = ApplyPendingDreadImport() | ApplyPendingEchoesImport();
   if (staging.empty()) {
-    return dread;
+    return samus;
   }
-  return MoveIntoPlace(staging) || dread;
+  return MoveIntoPlace(staging) || samus;
 }
 
 void RemoveLegacyImport() {

@@ -913,6 +913,29 @@ void GXSetPBRThermal(GXBool on, f32 x, f32 y, GXBool blended) {
   GX_WRITE_U32(now.on);
 }
 
+void GXSetColorMatrix(const f32 rows[3][3], GXBool glowOnly) {
+  struct Write {
+    u32 on;
+    f32 rows[3][3];
+  };
+  static LastPBRWrite<Write> sLast;
+  Write now{};
+  if (rows != nullptr) {
+    now.on = glowOnly ? 2 : 1;
+    std::memcpy(now.rows, rows, sizeof(now.rows));
+  }
+  if (sLast.repeats(now)) {
+    return;
+  }
+  GX_WRITE_AURORA(GX_AURORA_SET_COLOR_MATRIX);
+  GX_WRITE_U32(now.on);
+  for (const auto& row : now.rows) {
+    for (f32 v : row) {
+      GX_WRITE_F32(v);
+    }
+  }
+}
+
 void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 top, f32 bindScale, f32 bindOffset) {
   struct Write {
     f32 values[11];

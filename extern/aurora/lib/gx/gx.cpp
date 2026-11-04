@@ -692,6 +692,8 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     strip_to_flat_shading(sc);
     sc.shadow = false;
   }
+  config.shaderConfig.colorMatrix = g_gxState.colorMatrixOn && !drawId && config.shaderConfig.depthOnly == 0 &&
+                                    shell == 0 && config.shaderConfig.actorDecal == 0;
   // Field by field: an aggregate assignment would copy the 2.7 KB shader config twice more on
   // every pipeline switch. Every field outside shaderConfig is written here.
   config.version = GXPipelineConfigVersion;

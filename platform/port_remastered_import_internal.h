@@ -137,6 +137,8 @@ void Finish(bool ok, const std::string& message);
 int DefaultThreads();
 // A finished Dread Samus import still staged, moved into <mods>/dread-samus (port_dread_samus_import.cpp).
 bool ApplyPendingDreadImport();
+// The same for the Echoes suits import, into <mods>/echoes-suits (port_echoes_suits_import.cpp).
+bool ApplyPendingEchoesImport();
 void SetMessage(const std::string& message);
 void SetStepProgress(size_t done, size_t total);
 void AddLine(const std::string& line);

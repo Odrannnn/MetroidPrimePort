@@ -15,6 +15,7 @@
 #include "port_mods.h"
 #include "port_remastered_import.h"
 #include "port_dread_samus_mod.h"
+#include "port_echoes_suits_mod.h"
 #include "port_remastered_text.h"
 #include "port_discord.h"
 #include "port_savestate.h"
@@ -744,6 +745,7 @@ std::vector<std::pair<int, std::string>> sRemasteredPicks;
 std::string sPalLanguagesPick;
 std::string sFlaahgraPick;
 std::string sDreadPick;
+std::string sEchoesPick;
 
 #if defined(__ANDROID__)
 // Not SDL_ShowOpenFileDialog: Android often kills the game behind the picker
@@ -799,6 +801,8 @@ void OpenRemasteredDialog(int which) {
         sFlaahgraPick = files[0];
       } else if (which == kDreadPick) {
         sDreadPick = files[0];
+      } else if (which == kEchoesPick) {
+        sEchoesPick = files[0];
       } else {
         sRemasteredPicks.emplace_back(which, files[0]);
       }
@@ -907,19 +911,32 @@ bool StartRemasteredImport(const std::string& image, const std::string& keys) {
   return true;
 }
 
-bool StartDreadSamusImport(const std::string& image, const std::string& keys) {
-  if (!PortRemastered::StartDreadSamusImport(image, keys)) {
-    return false;
-  }
-  sImportModName = PortDreadSamus::kModName;
+// A started Dread or Echoes import: its old files are replaced at the end, so nothing of the mods
+// may be open meanwhile.
+static void WatchModImport(const char* modName) {
+  sImportModName = modName;
   sImportWatched = true;
-  // Its old files are replaced at the end: nothing of the mods may be open meanwhile.
   const PortMods::Status& status = PortMods::CurrentStatus();
   if (std::any_of(status.mods.begin(), status.mods.end(), [](const PortMods::ModInfo& mod) { return mod.enabled; })) {
     PortMods::SetSuspended(true);
     ReloadUntilDone();
     sImportUnloadedMods = true;
   }
+}
+
+bool StartDreadSamusImport(const std::string& image, const std::string& keys) {
+  if (!PortRemastered::StartDreadSamusImport(image, keys)) {
+    return false;
+  }
+  WatchModImport(PortDreadSamus::kModName);
+  return true;
+}
+
+bool StartEchoesSuitsImport(const std::string& image) {
+  if (!PortRemastered::StartEchoesSuitsImport(image)) {
+    return false;
+  }
+  WatchModImport(PortEchoesSuits::kModName);
   return true;
 }
 

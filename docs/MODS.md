@@ -307,6 +307,30 @@ camera.
 
 See [`docs/DREAD_SAMUS.md`](DREAD_SAMUS.md) for the import and its limits.
 
+### Metroid Prime 2: Echoes suits
+
+Under F1 > Mods > Built-in mods > Metroid Prime 2: Echoes: the Varia, Dark and Light Suit bodies
+from your own Echoes GameCube disc image (tested with USA `G2ME01`), as Prime's Varia, Gravity and Phazon
+Suits, in cutscenes, the Morph Ball transitions, the third-person camera and the pause screen's
+doll and the first-person arms (right, and the left grapple arm); and their Morph Balls, with the
+Dark Spider Ball as Gravity's Spider Ball. The Power Suit stays
+Prime's, and so do the Varia and Phazon Spider Balls (Echoes has no Varia or Light Spider Ball).
+
+- It is the mod `echoes-suits`. Its bodies carry their own arm cannon, so Prime's is not drawn on
+  them. They are skinned onto Prime's skeleton: joints Prime lacks fold into their nearest parent
+  Prime has.
+- It replaces the same body models as `dread-samus`: switch one of the two off.
+- From a terminal: `--import-echoes-suits <Echoes disc image>` (the Prime disc from `MP_DISC`).
+- The first-person arm cannon is Echoes' too, for every suit: Power, Ice, Wave, Plasma and Phazon
+  Beam take its Power, Dark, Annihilator, Light and fifth look, moved by Prime's gun animations
+  (the two guns share one skeleton). "Echoes arm cannon in first person"
+  (`echoes_first_person_cannon`, on by default; console `echoescannon 0|1`) switches it, from the
+  next beam selected.
+- "Play as Dark Samus" (`echoes_dark_samus`, off by default; console `darksamus 0|1`) puts Echoes'
+  Dark Samus body in place of every suit's, in third person, cutscenes and the pause screen, from
+  the next mod reload. Her skeleton and bind pose are Echoes Samus's, so she is fitted like the
+  suits. The first-person arm and the Morph Ball stay the suit's (Echoes has neither for her).
+
 ## Texture packs
 
 Texture packs replace the game's textures with Aurora-format images named

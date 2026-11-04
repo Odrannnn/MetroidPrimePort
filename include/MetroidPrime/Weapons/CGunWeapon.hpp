@@ -166,6 +166,7 @@ public:
   void DrawHologram(const CStateManager& mgr, const CTransform4f& xf,
                     const CModelFlags& flags) const;
 #ifdef TARGET_PC
+  CPlayerState::EBeamId PortBeamId() const { return x200_beamId; }
   void PortDrawHologramTransition(const CStateManager& mgr, const CTransform4f& xf,
                                   const CVector3f& normal, const CVector3f& point,
                                   const CModelFlags& flags, const CActorLights* lights) const;

@@ -12,6 +12,7 @@
 #include "port_paths.h"
 #include "port_mods.h"
 #include "port_dread_samus_mod.h"
+#include "port_echoes_suits_mod.h"
 #include "port_remastered_import.h"
 #include "port_remastered_text.h"
 #include "port_savestate.h"
@@ -216,11 +217,11 @@ void DrawRemasteredRoomModels(bool geoReady) {
 
 namespace {
 // Whether a built-in mod's import is older than this build. port_mods marks an import made by the
-// Remastered importer on its ModInfo; the Dread import keeps its own stamp instead (port_dread_samus_mod.h),
-// which the loader reports among the status messages.
-bool DreadImportStale(const PortMods::Status& status) {
-  return std::any_of(status.messages.begin(), status.messages.end(), [](const std::string& message) {
-    return message.find(PortDreadSamus::kModName) != std::string::npos &&
+// Remastered importer on its ModInfo; the Dread and Echoes imports keep their own stamps instead
+// (port_dread_samus_mod.h, port_echoes_suits_mod.h), which the loader reports among the status messages.
+bool ModImportStale(const PortMods::Status& status, const char* modName) {
+  return std::any_of(status.messages.begin(), status.messages.end(), [modName](const std::string& message) {
+    return message.find(modName) != std::string::npos &&
            message.find("imported by an older version") != std::string::npos;
   });
 }
@@ -332,7 +333,7 @@ void DrawRemasteredParts() {
 }
 } // namespace
 
-// The port's own mods, each with its import: Prime Remastered's models and Dread's Samus.
+// The port's own mods, each with its import: Prime Remastered's models, Dread's Samus and Echoes' suits.
 void DrawBuiltinMods() {
   ImGui::SeparatorText("Built-in mods");
   const PortMods::Status& status = PortMods::CurrentStatus();
@@ -371,7 +372,8 @@ void DrawBuiltinMods() {
   // A sibling of the Prime section, at the same level: neither import sits under the other.
   if (ImGui::CollapsingHeader("Metroid Dread")) {
     ImGui::Indent();
-    DrawBuiltinModToggle(PortDreadSamus::kModName, "Use the Dread Suit models", DreadImportStale(status));
+    DrawBuiltinModToggle(PortDreadSamus::kModName, "Use the Dread Suit models",
+                         ModImportStale(status, PortDreadSamus::kModName));
     bool cannon = PortDreadSamus::FirstPersonCannonShown();
     if (ImGui::Checkbox("Dread arm cannon in first person", &cannon)) {
       PortDreadSamus::SetFirstPersonCannonShown(cannon);
@@ -380,6 +382,43 @@ void DrawBuiltinMods() {
     ItemHelp("Off keeps Prime's own arm cannon in first person; the Dread Suit bodies stay. Applies at once.");
     ImGui::SeparatorText("Import");
     DrawDreadSamusImport();
+    ImGui::Unindent();
+  }
+  if (StartSection("Mods", "Metroid Prime 2: Echoes")) {
+    ImGui::SetNextItemOpen(true);
+  }
+  if (ImGui::CollapsingHeader("Metroid Prime 2: Echoes")) {
+    ImGui::Indent();
+    DrawBuiltinModToggle(PortEchoesSuits::kModName, "Use the Echoes Suit models",
+                         ModImportStale(status, PortEchoesSuits::kModName));
+    bool cannon = PortEchoesSuits::FirstPersonCannonShown();
+    if (ImGui::Checkbox("Echoes arm cannon in first person", &cannon)) {
+      PortEchoesSuits::SetFirstPersonCannonShown(cannon);
+      MarkDirty();
+    }
+    ItemHelp("Off keeps Prime's own arm cannon in first person; the Echoes Suit bodies stay. Applies the next "
+             "time a beam is selected.");
+    bool dark = PortEchoesSuits::PlayAsDarkSamus();
+    if (ImGui::Checkbox("Play as Dark Samus", &dark)) {
+      PortEchoesSuits::SetPlayAsDarkSamus(dark);
+      MarkDirty();
+    }
+    ItemHelp("Dark Samus's body in place of every suit's, in third person, cutscenes and the pause screen. "
+             "The first-person arm and the Morph Ball stay the suit's.");
+    // A stale import has no Dark Samus to serve: its own note asks for the re-import.
+    const auto echoes = std::find_if(status.mods.begin(), status.mods.end(), [](const PortMods::ModInfo& m) {
+      return m.name == PortEchoesSuits::kModName;
+    });
+    if (echoes != status.mods.end() && echoes->enabled && !ModImportStale(status, PortEchoesSuits::kModName) &&
+        dark != PortEchoesSuits::DarkSamusServed()) {
+      ImGui::TextColored(ThemeWarnColor(), "Reload the mods to apply.");
+      ImGui::SameLine();
+      if (ImGui::SmallButton("Reload mods##echoes")) {
+        PortSaveState::RequestModReload();
+      }
+    }
+    ImGui::SeparatorText("Import");
+    DrawEchoesSuitsImport();
     ImGui::Unindent();
   }
 }

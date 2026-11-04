@@ -155,6 +155,17 @@ CIceImpact::CIceImpact(const TLockedToken< CGenDescription >& particle, TUniqueI
 
 CIceImpact::~CIceImpact() {}
 
+#ifdef TARGET_PC
+void CIceImpact::PortSetBeamTint(int beam) {
+  CElementGen* gens[] = {xe8_elementGen.get(), xPortWallGen.get(), xPortCeilingGen.get()};
+  for (CElementGen* gen : gens) {
+    if (gen != nullptr) {
+      gen->PortSetBeamTint(beam);
+    }
+  }
+}
+#endif
+
 void CIceImpact::CalculateRenderBounds() {
   rstl::optional_object< CAABox > bounds = xe8_elementGen->GetBounds();
 #ifdef TARGET_PC
