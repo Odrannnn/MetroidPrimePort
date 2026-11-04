@@ -3844,6 +3844,26 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         AddLine(std::string("hud/") + kHudDiscName + ": cannot write");
       }
     }
+    // The pause backdrop multiplies the game's frame by TXTR_MapLightQuarter, which
+    // CPauseScreenBackgroundMP1 (0xe7c5bc) loads by name as CPauseScreenBlur does;
+    // Remastered's is far darker than the disc's (B8C7B566).
+    {
+      std::vector<uint8_t> raw;
+      TxtrImage decoded;
+      std::string lightError;
+      if (!remastered.ReadTextureNamed("TXTR_MapLightQuarter", raw, lightError) ||
+          !DecodeTxtr(raw.data(), raw.size(), decoded, lightError)) {
+        AddLine("TXTR_MapLightQuarter: " + lightError);
+      } else {
+        Image image;
+        image.width = int(decoded.width);
+        image.height = int(decoded.height);
+        image.rgba = std::move(decoded.rgba);
+        if (!converter.WriteTexture(0xB8C7B566, std::move(image))) {
+          AddLine("TXTR_MapLightQuarter: cannot write");
+        }
+      }
+    }
     // The map screen's compass, which the game draws itself (port_map_icons.h).
     int compassModels = 0;
     for (const auto& [name, id] : {std::pair<const char*, uint32_t>{"CMDL_MapCompassShell", PortMapIcons::kCompassShell},

@@ -350,7 +350,7 @@ inline constexpr int kText = 2;
 // 10: shell.bin, the silhouette-shell textures (port_shell_file.h).
 // 18: hud/.disc, the disc the frames were rebuilt from (kHudDiscName).
 // 19: icy.bin, the frozen-enemy material (port_icy_file.h).
-inline constexpr int kHud = 19;        // port_remastered_hud, port_remastered_map, envfx.bin, shell.bin, icy.bin
+inline constexpr int kHud = 20;        // port_remastered_hud, port_remastered_map, envfx.bin, shell.bin, icy.bin
 inline constexpr int kMovies = 0;      // port_remastered_movie
 inline constexpr int kGallery = 0;     // the gallery pictures (port_gallery)
 }  // namespace ImportStage

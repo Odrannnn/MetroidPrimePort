@@ -87,6 +87,10 @@ public:
   // under the given id: for models the game places itself, like the map's compass.
   bool ConvertModel(const Model& model, uint32_t id, HudCounts& counts, std::string& error);
 
+  // A picture written under the given id, as the frames' are: for a disc texture
+  // the game loads by name, like the pause backdrop's TXTR_MapLightQuarter.
+  bool WriteTexture(uint32_t id, Image image);
+
   // Model widgets, by lower-case name, whose pictures are multiplied by a colour
   // (RGBA, 0..1) in the frames converted after this.
   using Tint = std::array<float, 4>;

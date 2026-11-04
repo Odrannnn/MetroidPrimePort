@@ -1059,6 +1059,22 @@ bool HudConverter::LoadMaterial(std::string& error) {
   return true;
 }
 
+bool HudConverter::WriteTexture(uint32_t id, Image image) {
+  if (!m_io.write || image.width <= 0 || image.height <= 0) {
+    return false;
+  }
+  const int w = std::clamp(NextPow2(image.width), 8, kNativeSize);
+  const int h = std::clamp(NextPow2(image.height), 8, kNativeSize);
+  if (w != image.width || h != image.height) {
+    image = Resize(image, w, h, MapKind::Colour);
+  }
+  const int edge = std::max(w, h);
+  const int sw = edge <= kStubSize ? w : std::max(8, w * kStubSize / edge);
+  const int sh = edge <= kStubSize ? h : std::max(8, h * kStubSize / edge);
+  return (edge <= kStubSize || m_io.write(Hex8(id) + ".dds", EncodeDds(image, ColourDdsFormat(), false, MapKind::Colour))) &&
+         m_io.write(Hex8(id) + ".TXTR", EncodeTxtrRgba8(edge > kStubSize ? Resize(image, sw, sh, MapKind::Colour) : image, 8, MapKind::Colour));
+}
+
 std::optional<uint32_t> HudConverter::Texture(const ModelUuid& id, HudCounts& counts, const std::string& owner,
                                               const Tint& tint, bool squareAlpha) {
   const std::tuple<ModelUuid, Tint, bool> key{id, tint, squareAlpha};
@@ -1083,17 +1099,8 @@ std::optional<uint32_t> HudConverter::Texture(const ModelUuid& id, HudCounts& co
       image.rgba[i] = uint8_t(std::lround(image.rgba[i] * (squareAlpha && i % 4 == 3 ? std::sqrt(factor) : factor)));
     }
   }
-  const int w = std::clamp(NextPow2(image.width), 8, kNativeSize);
-  const int h = std::clamp(NextPow2(image.height), 8, kNativeSize);
-  if (w != image.width || h != image.height) {
-    image = Resize(image, w, h, MapKind::Colour);
-  }
-  const int edge = std::max(w, h);
-  const int sw = edge <= kStubSize ? w : std::max(8, w * kStubSize / edge);
-  const int sh = edge <= kStubSize ? h : std::max(8, h * kStubSize / edge);
   const uint32_t tid = NewId(m_nextTexture);
-  if ((edge > kStubSize && !m_io.write(Hex8(tid) + ".dds", EncodeDds(image, ColourDdsFormat(), false, MapKind::Colour))) ||
-      !m_io.write(Hex8(tid) + ".TXTR", EncodeTxtrRgba8(edge > kStubSize ? Resize(image, sw, sh, MapKind::Colour) : image, 8, MapKind::Colour))) {
+  if (!WriteTexture(tid, std::move(image))) {
     if (m_io.log) {
       m_io.log(owner + ": texture " + IdToString(id) + ": cannot write");
     }
