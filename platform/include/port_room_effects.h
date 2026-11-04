@@ -493,6 +493,12 @@ bool Enabled();
 // Around CGameArea::LoadScriptObjects: reads the area's file.
 void BeginArea(uint32_t mrea);
 void EndArea();
+// Around CStateManager::GenerateObject: a copy a script Generator makes of a template is
+// loaded as the area loaded it (the same override, patches, hidden flag...), so the lookups
+// below answer from the file the area kept. Nothing is skipped or added. False (and nothing
+// to end) when the area has no file or an area is loading.
+bool BeginGenerate(uint32_t mrea);
+void EndGenerate();
 // Whether the retail object `eid` is one the area being loaded leaves out.
 bool Skips(uint32_t eid);
 // Whether the retail Effect `eid` in the area being loaded is created hidden (File::hidden).

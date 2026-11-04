@@ -2638,8 +2638,12 @@ rstl::pair< TEditorId, TUniqueId > CStateManager::GenerateObject(const TEditorId
 #ifdef TARGET_PC
     // Only script generators set the generating flag (a boss's own spawns do not):
     // a save state brings such a copy back from the template it was made from.
+    // The copy takes the area's room effects (override, patches...) as the template did.
+    const bool roomEffects = PortRoomEffects::BeginGenerate(area->GetAreaAssetId());
     const rstl::pair< TEditorId, TUniqueId > made =
         LoadScriptObject(TAreaId(areaId), build.first->x0_type, build.first->x8_length, stream);
+    if (roomEffects)
+      PortRoomEffects::EndGenerate();
     if (xf94_26_generatingObject && made.second != kInvalidUniqueId)
       PortSaveState::NoteGenerated(*this, made.second.value);
     return made;

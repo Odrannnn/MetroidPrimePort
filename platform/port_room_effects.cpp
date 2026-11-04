@@ -35,6 +35,8 @@ bool sLoading = false;
 uint32_t sMrea = 0;
 File sFile;
 std::set<uint32_t> sSkips;
+std::map<uint32_t, File> sKept;  // by MREA: each loaded area's file, for its generated copies
+bool sGenerating = false;
 std::map<uint32_t, std::vector<Spawned>> sSpawned;  // by MREA
 std::map<uint32_t, size_t> sSkipped;                // by MREA
 size_t sPatched = 0;                                // property patches applied, this area
@@ -240,6 +242,7 @@ void BeginArea(uint32_t mrea) {
   sPatched = 0;
   sFile = {};
   sSkips.clear();
+  sKept.erase(mrea);
   sSpawned.erase(mrea);
   sSkipped.erase(mrea);
   sDriven.erase(mrea);
@@ -280,13 +283,38 @@ void EndArea() {
     PortLog::Write("room effects: %08X: %zu of %zu particle property patch(es) applied\n", sMrea, sPatched,
                    sFile.patches.size());
   }
+  if (sLoading) {
+    sKept[sMrea] = std::move(sFile);
+  }
   sLoading = false;
   sFile = {};
   sSkips.clear();
 }
 
+bool BeginGenerate(uint32_t mrea) {
+  const auto kept = sKept.find(mrea);
+  if (sLoading || kept == sKept.end()) {
+    return false;
+  }
+  sLoading = true;
+  sGenerating = true;
+  sMrea = mrea;
+  std::swap(sFile, kept->second);
+  return true;
+}
+
+void EndGenerate() {
+  if (!sGenerating) {
+    return;
+  }
+  std::swap(sFile, sKept[sMrea]);
+  sFile = {};
+  sLoading = false;
+  sGenerating = false;
+}
+
 bool Skips(uint32_t eid) {
-  if (!sLoading || sSkips.count(eid & 0x3FFFFFF) == 0) {
+  if (!sLoading || sGenerating || sSkips.count(eid & 0x3FFFFFF) == 0) {
     return false;
   }
   ++sSkipped[sMrea];
@@ -366,7 +394,9 @@ bool HasPatches(uint32_t eid) {
 
 size_t ApplyPatches(uint32_t eid, uint8_t* props, size_t size, bool (*canBuild)(uint32_t part)) {
   const size_t n = sLoading ? ApplyPatches(sFile.patches, eid, props, size, canBuild) : 0;
-  sPatched += n;
+  if (!sGenerating) {
+    sPatched += n;
+  }
   return n;
 }
 
@@ -384,7 +414,7 @@ std::vector< SPortExternalVar > ExternalVars(const std::vector< Variable >& vars
 }
 
 void LoadLayer(CStateManager& mgr, int area, uint32_t layer, std::vector<uint32_t>& ids) {
-  if (!sLoading) {
+  if (!sLoading || sGenerating) {
     return;
   }
   for (const Layer& l : sFile.layers) {
