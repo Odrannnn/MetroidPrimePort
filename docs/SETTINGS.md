@@ -400,7 +400,9 @@
   point; grapple points follow Toggle Grapple) latches it held and the next press
   lets go. With nothing
   to lock on, L is a plain hold (strafe while held). The latch also lets go by
-  itself when its lock ends (target dead or out of range). Sticky
+  itself when its lock ends (target dead or out of range). So does an L binding
+  whose trigger is Toggle (F1 Remap), once it has locked on or grappled; one that
+  never locked stays on until pressed again. Sticky
   Charge (`sticky_charge`, off by default, needs the Charge Beam): holding fire
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
