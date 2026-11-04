@@ -41,6 +41,7 @@
 {"Controls", "Options", "Buttons", "Toggle Lock-On", "lock on target toggle hold"},
 {"Controls", "Options", "Buttons", "Toggle Grapple", "grapple swing toggle hold latch"},
 {"Controls", "Options", "Buttons", "Shoot While Grappling", "grapple swing shoot fire cannon beam"},
+{"Controls", "Options", "Buttons", "Shoot in Scan Visor", "scan visor shoot fire cannon beam missile"},
 {"Controls", "Options", "Buttons", "Aim Lock-On", "lock on target crosshair aim priority nearest"},
 {"Controls", "Options", "Buttons", "Sticky Charge", "charge beam hold fire"},
 {"Controls", "Options", "Buttons", "Remastered charge (rapid fire)", "rapid fire autofire charge remastered"},

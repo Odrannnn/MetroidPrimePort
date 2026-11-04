@@ -792,6 +792,11 @@ inline bool wants_per_pixel_light(const ShaderConfig& config) noexcept {
   }
   return false;
 }
+// perPixelLight as build_pipeline_config leaves it: an actor decal and a shell draw are stripped to
+// flat shading (strip_to_flat_shading clears it while their colour channels stay lit).
+inline bool config_per_pixel_light(const ShaderConfig& config) noexcept {
+  return config.actorDecal == 0 && config.shell == 0 && wants_per_pixel_light(config);
+}
 // How a draw writes GXSetDstAlpha's constant alpha (the pipeline's blend constant). None: alpha as blended
 // (no dst alpha, or a zero one, or the fallback below). Replace: the shader writes alpha 1 and the blend takes
 // the constant times it. DualSource: as Replace, the TEV alpha going to the colour blend as the second source,

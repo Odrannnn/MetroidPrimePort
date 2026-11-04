@@ -1459,6 +1459,10 @@ static void queue_cached_row(ShaderType type, uint32_t configVersion, CreateFn&&
     // its fog type and references.
     config.shaderConfig.fogType = gx::pipeline_fog_type(config.shaderConfig.fogType);
     config.shaderConfig.alphaCompare = gx::pipeline_alpha_compare(config.shaderConfig.alphaCompare);
+    // A row recorded at the other aurora_set_per_pixel_lighting setting (the embedded seed is
+    // recorded with it off) misses every lit draw, so each room's first visit drops them while they
+    // build. main.cpp sets it before the cache loads, so the row takes the running one.
+    config.shaderConfig.perPixelLight = gx::config_per_pixel_light(config.shaderConfig) ? 1 : 0;
     // Left in the database, and built by find_pipeline on the first draw that wants it.
     if (g_config.pipelineCacheSkipPbr && config.shaderConfig.pbr != 0) {
       ++stats.pbr;

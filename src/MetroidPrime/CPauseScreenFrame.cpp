@@ -214,6 +214,7 @@ enum EPortOption {
   kPO_GrappleToggle,
   kPO_GunFollowsFov,
   kPO_GunFov,
+  kPO_ScanShoot,
 };
 #define PORT_OPTION(opt) static_cast< EGameOption >(opt)
 
@@ -270,6 +271,7 @@ static const SGameOption skPortControllerOptions[] = {
     {PORT_OPTION(kPO_LockOnToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_GrappleToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_GrappleShoot), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_ScanShoot), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_AimLockOn), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_StickyCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_RapidCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
@@ -289,6 +291,7 @@ static const SGameOption skPortControllerOptionsNoAim[] = {
     {PORT_OPTION(kPO_LockOnToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_GrappleToggle), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_GrappleShoot), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
+    {PORT_OPTION(kPO_ScanShoot), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_AimLockOn), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_StickyCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_RapidCharge), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
@@ -321,6 +324,8 @@ static const wchar_t* PortOptionTitle(EGameOption option) {
     return L"Toggle Lock-On";
   case kPO_GrappleShoot:
     return L"Shoot While Grappling";
+  case kPO_ScanShoot:
+    return L"Shoot in Scan Visor";
   case kPO_GrappleToggle:
     return L"Toggle Grapple";
   case kPO_SpiderToggle:
@@ -382,6 +387,8 @@ static int GetPortOption(EGameOption option) {
     return PortDebug::LockOnToggle() ? 1 : 0;
   case kPO_GrappleShoot:
     return PortDebug::GrappleShoot() ? 1 : 0;
+  case kPO_ScanShoot:
+    return PortDebug::ScanShoot() ? 1 : 0;
   case kPO_GrappleToggle:
     return PortDebug::GrappleToggle() ? 1 : 0;
   case kPO_SpiderToggle:
@@ -447,6 +454,7 @@ static bool IsOriginalLocked(EGameOption option) {
   case kPO_FastMorph:
   case kPO_LockOnToggle:
   case kPO_GrappleShoot:
+  case kPO_ScanShoot:
   case kPO_GrappleToggle:
   case kPO_SpiderToggle:
   case kPO_AimLockOn:
@@ -495,6 +503,9 @@ static void SetPortOption(EGameOption option, int value) {
     break;
   case kPO_GrappleShoot:
     PortDebug::SetGrappleShoot(value > 0);
+    break;
+  case kPO_ScanShoot:
+    PortDebug::SetScanShoot(value > 0);
     break;
   case kPO_GrappleToggle:
     PortDebug::SetGrappleToggle(value > 0);
@@ -752,6 +763,7 @@ void CGameOptions::TryRestoreDefaults(const CFinalInput& input, int category, in
         PortDebug::SetLockOnToggle(false);
         PortDebug::SetSpiderToggle(false);
         PortDebug::SetGrappleShoot(true);
+        PortDebug::SetScanShoot(false);
         PortDebug::SetGrappleToggle(false);
         PortDebug::SetAimLockOn(false);
         PortDebug::SetStickyCharge(false);

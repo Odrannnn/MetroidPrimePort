@@ -1297,6 +1297,13 @@ bool GrappleShoot() {
 
 void SetGrappleShoot(bool enabled) { StoreSetting(sInput.grappleShoot, enabled); }
 
+bool ScanShoot() {
+  EnsureInitialized();
+  return sInput.scanShoot && !sOriginalExperience;
+}
+
+void SetScanShoot(bool enabled) { StoreSetting(sInput.scanShoot, enabled); }
+
 bool GrappleToggle() {
   EnsureInitialized();
   return sInput.grappleToggle && !sOriginalExperience;

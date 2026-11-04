@@ -65,6 +65,7 @@ struct Settings {
   bool fastMorph = false;
   bool lockOnToggle = false;
   bool grappleShoot = true;
+  bool scanShoot = false;
   bool grappleToggle = false;
   bool spiderToggle = false;
   bool aimLockOn = false;

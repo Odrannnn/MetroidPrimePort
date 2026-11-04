@@ -1300,6 +1300,9 @@ int main(int argc, char** argv) {
     PortDebug::BeginDriverWorkarounds(userFolder, dawnEnableToggles, dawnDisableToggles);
     config.dawnEnableToggles = dawnEnableToggles.c_str();
     config.dawnDisableToggles = dawnDisableToggles.c_str();
+    // Before aurora_initialize loads the pipeline cache: its rows take the running per-pixel
+    // lighting, so the seed's lit pipelines build at boot instead of on each room's first draw.
+    aurora_set_per_pixel_lighting(PortDebug::PerPixelLighting());
     aurora_initialize(argc, argv, &config);
     // The settings file, JSON and the logs read and write numbers with the C
     // library, in the "C" format. A toolkit loaded with the window (a GTK

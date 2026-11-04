@@ -702,6 +702,10 @@ void SetLockOnToggle(bool enabled);
 // the grapple beam holds a grapple point.
 bool GrappleShoot();
 void SetGrappleShoot(bool enabled);
+// Shoot in Scan Visor (issue #243): the arm cannon stays out, fires and charges in
+// the Scan Visor, and a fire press no longer switches to the Combat Visor.
+bool ScanShoot();
+void SetScanShoot(bool enabled);
 bool GrappleToggle();
 void SetGrappleToggle(bool enabled);
 // Toggle Spider Ball (issue #243): an R press that attaches the spider ball

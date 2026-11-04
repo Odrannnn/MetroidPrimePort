@@ -419,6 +419,11 @@
   while the grapple beam holds a grapple point, so it can fire mid-swing. Off, the
   cannon is put away as in the original game. Off under Original Experience.
   Console: `grappleshoot`.
+- Shoot in Scan Visor (Controls > Options > Buttons and pause Options > Controller,
+  persisted as `scan_shoot`, off by default, issue #243): the arm cannon stays out in
+  the Scan Visor and Fire, Missile and charge work there; scanning stays on the Scan
+  bind. Off, a fire or missile press switches to the Combat Visor as in the original
+  game. Off under Original Experience. Console: `scanshoot`.
 - Toggle Grapple (Controls > Options > Buttons and pause Options > Controller,
   persisted as `grapple_toggle`, off by default, issue #243): an L press at a grapple
   point grapples as the Grapple key does, held until the next L press or a jump,

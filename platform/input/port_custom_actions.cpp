@@ -154,6 +154,8 @@ constexpr BoolSetting kBoolSettings[] = {
      &PortDebug::SetGrappleToggle},
     {"grapple_shoot", "Shoot While Grappling", "Controls > Options > Buttons", &PortDebug::GrappleShoot,
      &PortDebug::SetGrappleShoot},
+    {"scan_shoot", "Shoot in Scan Visor", "Controls > Options > Buttons", &PortDebug::ScanShoot,
+     &PortDebug::SetScanShoot},
     {"aim_lock_on", "Aim Lock-On", "Controls > Options > Buttons", &PortDebug::AimLockOn,
      &PortDebug::SetAimLockOn},
     {"sticky_charge", "Sticky Charge", "Controls > Options > Buttons", &PortDebug::StickyCharge,

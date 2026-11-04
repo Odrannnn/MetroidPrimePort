@@ -581,12 +581,15 @@ void CPlayer::UpdateGunState(const CFinalInput& input, CStateManager& mgr) {
 
 #ifdef TARGET_PC
     const bool grappleHolsters = x3b8_grappleState != kGS_None && !PortDebug::GrappleShoot();
+    const bool scanHolsters = !PortDebug::ScanShoot();
 #else
     const bool grappleHolsters = x3b8_grappleState != kGS_None;
+    const bool scanHolsters = true;
 #endif
     if (grappleHolsters ||
-        mgr.GetPlayerState()->GetCurrentVisor() == CPlayerState::kPV_Scan ||
-        mgr.GetPlayerState()->GetTransitioningVisor() == CPlayerState::kPV_Scan) {
+        (scanHolsters &&
+         (mgr.GetPlayerState()->GetCurrentVisor() == CPlayerState::kPV_Scan ||
+          mgr.GetPlayerState()->GetTransitioningVisor() == CPlayerState::kPV_Scan))) {
       needsDraw = false;
     }
 
@@ -1239,7 +1242,14 @@ void CPlayer::UpdateVisorState(const CFinalInput& input, float dt, CStateManager
       x3a8_scanState == kSS_NotScanning) {
 
     const CPlayerState::EPlayerVisor currentVisor = playerState->GetTransitioningVisor();
-    if (currentVisor == CPlayerState::kPV_Scan &&
+#ifdef TARGET_PC
+    // scan_shoot: the Scan Visor keeps the arm cannon out, so a shot fires from it
+    // rather than switching to the Combat Visor.
+    const bool scanHolsters = !PortDebug::ScanShoot();
+#else
+    const bool scanHolsters = true;
+#endif
+    if (currentVisor == CPlayerState::kPV_Scan && scanHolsters &&
         (ControlMapper::GetPressInput(ControlMapper::kC_FireOrBomb, input) ||
          ControlMapper::GetPressInput(ControlMapper::kC_MissileOrPowerBomb, input)) &&
         playerState->HasPowerUp(CPlayerState::kIT_CombatVisor)) {
@@ -1257,7 +1267,7 @@ void CPlayer::UpdateVisorState(const CFinalInput& input, float dt, CStateManager
         CPlayerState::EPlayerVisor visor = static_cast< CPlayerState::EPlayerVisor >(i);
         if (currentVisor != visor) {
           playerState->StartTransitionToVisor(visor);
-          if (visor == CPlayerState::kPV_Scan) {
+          if (visor == CPlayerState::kPV_Scan && scanHolsters) {
             HolsterGun(mgr);
           } else {
             DrawGun(mgr);
@@ -1567,7 +1577,12 @@ void CPlayer::UpdateCinematicState(CStateManager& mgr) {
           break;
         case kMS_Unmorphed:
           SetCameraState(kCS_FirstPerson, mgr);
+#ifdef TARGET_PC
+          if (mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan ||
+              PortDebug::ScanShoot()) {
+#else
           if (mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan) {
+#endif
             ForceGunOrientation(GetTransform(), mgr);
             DrawGun(mgr);
           }
@@ -3044,6 +3059,9 @@ void CPlayer::RenderGun(const CStateManager& mgr, const CVector3f& pos) const {
   }
 
   bool isInScanVisor = mgr.GetPlayerState()->GetActiveVisor(mgr) == CPlayerState::kPV_Scan;
+#ifdef TARGET_PC
+  isInScanVisor = isInScanVisor && !PortDebug::ScanShoot();
+#endif
   float visorTransitionFactor = mgr.GetPlayerState()->GetVisorTransitionFactor();
   bool tmp = isInScanVisor && visorTransitionFactor >= 1.f;
   if (tmp != true &&

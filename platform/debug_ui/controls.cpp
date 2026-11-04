@@ -85,6 +85,12 @@ void DrawControlsOptions() {
   }
   ItemHelp("The arm cannon stays out while you grapple, so you can fire mid-swing. Off: the cannon "
            "is put away, as in the original game.");
+  bool scanShoot = sInput.scanShoot;
+  if (ImGui::Checkbox("Shoot in Scan Visor", &scanShoot)) {
+    SetScanShoot(scanShoot);
+  }
+  ItemHelp("The arm cannon stays out in the Scan Visor and fires and charges as in the others. Off: "
+           "the cannon is put away and firing switches to the Combat Visor, as in the original game.");
   bool aimLockOn = sInput.aimLockOn;
   if (ImGui::Checkbox("Aim Lock-On", &aimLockOn)) {
     SetAimLockOn(aimLockOn);

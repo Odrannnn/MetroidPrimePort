@@ -409,11 +409,20 @@ void CPlayerGun::AddToRenderer(const CFrustumPlanes& frustum, const CStateManage
 void CPlayerGun::PreRender(CStateManager& mgr, const CFrustumPlanes& frustum,
                            const CVector3f& camPos) {
   const CPlayerState& playerState = *mgr.GetPlayerState();
-  if (playerState.GetCurrentVisor() == CPlayerState::kPV_Scan) {
+#ifdef TARGET_PC
+  // scan_shoot: the cannon drawn in the Scan Visor is lit as in the Combat Visor.
+  const bool scanShoot = PortDebug::ScanShoot();
+#else
+  const bool scanShoot = false;
+#endif
+  if (playerState.GetCurrentVisor() == CPlayerState::kPV_Scan && !scanShoot) {
     return;
   }
 
   CPlayerState::EPlayerVisor activeVisor = playerState.GetActiveVisor(mgr);
+  if (activeVisor == CPlayerState::kPV_Scan && scanShoot) {
+    activeVisor = CPlayerState::kPV_Combat;
+  }
   switch (activeVisor) {
   case CPlayerState::kPV_Thermal: {
     float rgb =
@@ -2636,8 +2645,14 @@ void CPlayerGun::UpdateWeaponFire(float dt, CPlayerState& playerState, CStateMan
 #else
             player.GetGrappleState() == CPlayer::kGS_None &&
 #endif
+#ifdef TARGET_PC
+            (PortDebug::ScanShoot() ||
+             (mgr.GetPlayerState()->GetTransitioningVisor() != CPlayerState::kPV_Scan &&
+              mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan)) &&
+#else
             mgr.GetPlayerState()->GetTransitioningVisor() != CPlayerState::kPV_Scan &&
             mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan &&
+#endif
             (x2ec_lastFireButtonStates & 0x1) != 0 && !chargeRequested) {
           x832_28_readyForShot = true;
           pressedStates |= 0x1;
@@ -2995,7 +3010,12 @@ void CPlayerGun::TakeDamage(bool bigStrike, bool notFromMetroid, CStateManager& 
   }
 
   if (hasStrikeAngle || bigStrike) {
+#ifdef TARGET_PC
+    if (mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan ||
+        PortDebug::ScanShoot()) {
+#else
     if (mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_Scan) {
+#endif
       x73c_gunMotion->PlayPasAnim(SamusGun::kAS_Struck, mgr, angle, bigStrike);
       if ((bigStrike && notFromMetroid) || x833_31_inFreeLook)
         x740_grappleArm->EnterStruck(mgr, angle, bigStrike, !x833_31_inFreeLook);
@@ -3636,7 +3656,11 @@ void CPlayerGun::ProcessGunMorph(float dt, CStateManager& mgr) {
       ReturnArmAndGunToDefault(mgr, false);
     }
     if (x834_28_requestImmediateRecharge || (x2ec_lastFireButtonStates & 0x1) != 0) {
+#ifdef TARGET_PC
+      if (playerState->GetCurrentVisor() != CPlayerState::kPV_Scan || PortDebug::ScanShoot()) {
+#else
       if (playerState->GetCurrentVisor() != CPlayerState::kPV_Scan) {
+#endif
         x32c_chargePhase = kCP_ChargeRequested;
 #ifdef TARGET_PC
         PortStartRapidCharge();
