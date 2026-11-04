@@ -13,6 +13,7 @@
 #include "MetaRender/CCubeRenderer.hpp"
 #include "Collision/CollisionUtil.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
+#include "Kyoto/Graphics/CCubeModel.hpp"
 #ifdef TARGET_PC
 #include "port_dread_samus_mod.h"
 #endif
@@ -386,6 +387,11 @@ void CSamusDoll::Draw(const CStateManager& mgr, float alpha) {
   const PortPauseLighting::Scope dollScope(PortPauseLighting::doll, PortPauseLighting::active);
   const PortPauseLighting::Scope phazonScope(PortPauseLighting::phazon,
       mgr.GetPlayerState()->HasPowerUp(CPlayerState::kIT_PhazonSuit));
+  // Remastered builds the doll's models on the master scene (CSamusDollMP1::TryFinishLoad
+  // 0xe78a18, CModelLightingDataMP1::Default), group 0, while the UI area's baked context
+  // has its own group (CGameAreaLoader::ContinueLoad 0x3f8ea0, room types mask 0x1b9), so
+  // HasProbeData (0x1c6bbc) fails and the doll has no baked light, only the UI lights.
+  const PortPauseLighting::Scope unbakedScope(CCubeModel::sPortUnbaked, PortPauseLighting::active);
 #endif
   if (!IsLoaded()) {
     return;
