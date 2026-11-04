@@ -2899,10 +2899,6 @@ void CmdBeamSwitch() {
   Finish();
 }
 
-void CmdBeamSwitchFire() {
-  BoolSettingCmd("beamswitchfire", PortDebug::BeamSwitchFire, PortDebug::SetBeamSwitchFire);
-}
-
 // As a press of the Next/Previous target action: while locked on, the lock moves
 // to the next target right (next) or left (prev) on screen, wrapping around.
 void CmdTarget() {
@@ -4587,8 +4583,6 @@ const CommandSpec kCommands[] = {
      "stackbeams [0|1]           every shot also fires the other owned beams' projectiles (stack_beams)"},
     {"beamswitch", CmdBeamSwitch, nullptr,
      "beamswitch [100..400]      beam change speed in percent (beam_switch_speed); no argument prints it"},
-    {"beamswitchfire", CmdBeamSwitchFire, nullptr,
-     "beamswitchfire [0|1]       the new beam fires once its wipe ends, before the cannon opens (beam_switch_fire)"},
     {"target", CmdTarget, nullptr,
      "target next|prev           while locked on, lock the next target right (next) or left (prev) on screen"},
     {"seamlesspickups", CmdSeamlessPickups, nullptr,

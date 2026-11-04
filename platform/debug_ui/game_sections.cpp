@@ -107,12 +107,6 @@ void DrawCutscenesSection() {
   }
   ItemHelp("How fast the arm cannon changes beams: 200% changes in half the time. 100% is the "
            "original.");
-  bool beamSwitchFire = sBeamSwitchFire;
-  if (ImGui::Checkbox("Fire during beam switch", &beamSwitchFire)) {
-    SetBeamSwitchFire(beamSwitchFire);
-  }
-  ItemHelp("The new beam fires as soon as it is in hand, without waiting for the cannon to finish "
-           "opening.");
   bool walkSpeedEnabled = sWalkSpeedEnabled;
   if (ImGui::Checkbox("Custom walk speed", &walkSpeedEnabled)) {
     SetWalkSpeedEnabled(walkSpeedEnabled);

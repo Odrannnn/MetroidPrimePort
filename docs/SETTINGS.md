@@ -1018,10 +1018,6 @@
   the arm cannon's beam change (the wipe out, the swap and the wipe in) that
   much faster, so a shot can follow sooner. Only the beam change is sped up;
   the Phazon Beam's change and everything else run at the normal rate.
-- Fire during beam switch (F1 > Game > Cutscenes, `beam_switch_fire`, off by
-  default and off in the Original experience; issue #243): the new beam can fire
-  as soon as it is swapped in, while the arm cannon is still finishing its
-  change animation, instead of after it.
 - Next/Previous target (Controls, actions `target_next` and `target_prev`;
   issue #243): while locked on, a press moves the lock to the visible target
   nearest to the right (Next) or left (Previous) of the current one, wrapping to

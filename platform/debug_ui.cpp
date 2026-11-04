@@ -135,7 +135,6 @@ bool sSkippableCutscenes = false;
 bool sBeamDoorsStayUnlocked = false;
 bool sStackBeams = false;
 int sBeamSwitchSpeed = PortDebug::kBeamSwitchSpeedDefault;
-bool sBeamSwitchFire = false;
 bool sSeamlessPickups = false;
 bool sWalkSpeedEnabled = true;
 int sWalkSpeed = PortDebug::kWalkSpeedDefault;

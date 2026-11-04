@@ -318,7 +318,6 @@ const SettingKey kSettingKeys[] = {
        }
      },
      [](std::ostream& out) { out << sBeamSwitchSpeed; }, false, "100", "400"},
-    BoolKey< &sBeamSwitchFire >("beam_switch_fire"),
     BoolKey< &sSeamlessPickups >("seamless_pickups"),
     BoolKey< &sWalkSpeedEnabled >("walk_speed_enabled"),
     {"walk_speed",

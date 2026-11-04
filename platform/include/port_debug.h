@@ -360,11 +360,6 @@ const int kBeamSwitchSpeedMax = 400;
 const int kBeamSwitchSpeedDefault = 100;
 int BeamSwitchSpeed();
 void SetBeamSwitchSpeed(int percent);
-// beam_switch_fire (CPlayerGun::ProcessGunMorph): the new beam fires as soon as its
-// wipe ends, without waiting for the into-beam animation. Off by default, and off in
-// the Original experience.
-bool BeamSwitchFire();
-void SetBeamSwitchFire(bool enabled);
 // seamless_pickups: picking up an item keeps control and plays no cutscene
 // (randomprime's pickup patches, as AP games load rooms, minus the Artifact
 // Temple totem switches), and the item's message box shows as a HUD memo

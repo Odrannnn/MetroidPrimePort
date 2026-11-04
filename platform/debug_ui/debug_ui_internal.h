@@ -113,7 +113,6 @@ extern bool sSkippableCutscenes;
 extern bool sBeamDoorsStayUnlocked;
 extern bool sStackBeams;
 extern int sBeamSwitchSpeed;
-extern bool sBeamSwitchFire;
 extern bool sSeamlessPickups;
 extern bool sWalkSpeedEnabled;
 extern int sWalkSpeed;

@@ -3646,16 +3646,6 @@ void CPlayerGun::ProcessGunMorph(float dt, CStateManager& mgr) {
     }
     x832_30_requestReturnToDefault = false;
     x338_nextState = kNS_SetupBeam;
-#ifdef TARGET_PC
-    // beam_switch_fire: kNS_SetupBeam's work now, not when the into-beam animation ends;
-    // the animation plays on until a shot replaces it.
-    if (PortDebug::BeamSwitchFire()) {
-      x390_cooldown = x72c_currentBeam->GetWeaponInfo().x0_coolDown;
-      DisableWeaponState(0x8);
-      ResetToBeam();
-      x338_nextState = kNS_StatusQuo;
-    }
-#endif
     break;
   default:
     break;

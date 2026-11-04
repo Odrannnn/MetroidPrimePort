@@ -703,13 +703,6 @@ void SetBeamSwitchSpeed(int percent) {
   MarkDirty();
 }
 
-bool BeamSwitchFire() {
-  EnsureInitialized();
-  return sBeamSwitchFire && !sOriginalExperience;
-}
-
-void SetBeamSwitchFire(bool enabled) { StoreSetting(sBeamSwitchFire, enabled); }
-
 bool SeamlessPickups() {
   EnsureInitialized();
   return sSeamlessPickups && !sOriginalExperience;
