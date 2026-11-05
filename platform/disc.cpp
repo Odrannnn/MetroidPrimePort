@@ -166,6 +166,19 @@ const char* Name(Version version) {
   return "unknown";
 }
 
+const char* GameCode(Version version) {
+  switch (version) {
+  case Version::Usa100:
+  case Version::Usa101:
+  case Version::Usa102: return "GM8E01";
+  case Version::Pal: return "GM8P01";
+  case Version::Trilogy: return "R3ME01";
+  case Version::TrilogyPal: return "R3MP01";
+  case Version::Unknown: break;
+  }
+  return "unknown";
+}
+
 bool IsAccepted(Version version) {
   return version == Version::Usa100 || version == Version::Usa101 || version == Version::Usa102 ||
          version == Version::Pal || IsTrilogy(version);

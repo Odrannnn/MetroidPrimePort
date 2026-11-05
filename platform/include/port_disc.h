@@ -33,6 +33,8 @@ Version Identify(const char* id6, unsigned diskNumber, unsigned revision);
 Version Current();
 // "USA 1.00", "PAL", ...
 const char* Name(Version version);
+// Its six-character game id: "GM8E01", "GM8P01", "R3ME01", ...
+const char* GameCode(Version version);
 // Whether the port accepts this disc: USA 1.00, 1.01, 1.02 and PAL.
 bool IsAccepted(Version version);
 // Whether the data is the PAL revision's (PAL, Trilogy): its string table
