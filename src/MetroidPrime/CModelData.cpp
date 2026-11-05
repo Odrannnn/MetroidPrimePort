@@ -652,22 +652,32 @@ void CModelData::Render(const CStateManager& mgr, const CTransform4f& xf,
 }
 
 bool CModelData::IsLoaded(int shaderIdx) const {
+#ifdef TARGET_PC
+  // A Remastered heat model (one retail lacks) loads when it is first drawn, like retail's own
+  // visor models; waiting for it here would hold the arm cannon back until the visor shows it
+  // (CGunWeapon::Update needs the suit arm loaded before it draws the gun).
+  const bool checkXRay = true;
+  const bool checkInfra = !xPortInfraHdrOnly;
+#else
+  const bool checkXRay = true;
+  const bool checkInfra = true;
+#endif
   if (HasAnimation()) {
     const CAnimData& animData = *xc_animData;
     if (!animData.GetModelData()->GetModel()->IsLoaded(shaderIdx))
       return false;
     CSkinnedModel* xrayModel = animData.GetXRayModel();
     CSkinnedModel* infraModel = animData.GetInfraModel();
-    if (xrayModel != nullptr && !xrayModel->GetModel()->IsLoaded(shaderIdx))
+    if (checkXRay && xrayModel != nullptr && !xrayModel->GetModel()->IsLoaded(shaderIdx))
       return false;
-    if (infraModel != nullptr && !infraModel->GetModel()->IsLoaded(shaderIdx))
+    if (checkInfra && infraModel != nullptr && !infraModel->GetModel()->IsLoaded(shaderIdx))
       return false;
   }
   if (x1c_normalModel && !(*x1c_normalModel)->IsLoaded(shaderIdx))
     return false;
-  if (x2c_xrayModel && !(*x2c_xrayModel)->IsLoaded(shaderIdx))
+  if (checkXRay && x2c_xrayModel && !(*x2c_xrayModel)->IsLoaded(shaderIdx))
     return false;
-  if (x3c_infraModel && !(*x3c_infraModel)->IsLoaded(shaderIdx))
+  if (checkInfra && x3c_infraModel && !(*x3c_infraModel)->IsLoaded(shaderIdx))
     return false;
   return true;
 }
