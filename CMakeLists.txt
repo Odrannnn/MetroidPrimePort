@@ -508,6 +508,16 @@ if(NOT ANDROID)
     target_link_libraries(remastered_effect_tool PRIVATE astcenc ${CMAKE_THREAD_LIBS_INIT})
     set_target_properties(remastered_effect_tool PROPERTIES EXCLUDE_FROM_ALL ON)
 endif()
+# Which GX pipeline-cache key fields never change the pipeline, and the seed rewrite
+# (tools/pipeline_key_audit.cpp). Not built by default: --target pipeline_key_audit.
+if(NOT ANDROID AND NOT IOS)
+    add_executable(pipeline_key_audit EXCLUDE_FROM_ALL tools/pipeline_key_audit.cpp)
+    target_include_directories(pipeline_key_audit PRIVATE extern/aurora/lib)
+    target_compile_definitions(pipeline_key_audit PRIVATE WEBGPU_DAWN)
+    target_link_libraries(pipeline_key_audit PRIVATE aurora::core aurora::gx aurora::gd aurora::si aurora::vi
+        aurora::pad aurora::mtx aurora::os aurora::dvd aurora::card absl::btree absl::flat_hash_map sqlite3
+        Tracy::TracyClient PNG::PNG)
+endif()
 if(NOT ANDROID)
     # Developer tool too: flattens real models' ANUV programs (tools/anuv_check.py).
     add_executable(port_remastered_anuv_tool

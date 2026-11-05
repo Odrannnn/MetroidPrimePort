@@ -548,7 +548,8 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   // From the pass being recorded (the replayed FIFO's), so an offscreen pass or the next frame's
   // LDR scene never takes an HDR pipeline.
   config.shaderConfig.sceneHdr = gfx::scene_hdr_pass_active();
-  config.shaderConfig.fogType = pipeline_fog_type(g_gxState.fog.type);
+  // Keyed by pipeline_fog below, once drawId, actorDecal and shell are known.
+  config.shaderConfig.fogType = static_cast<u8>(g_gxState.fog.type);
   config.shaderConfig.fogRangeEnabled = g_gxState.fog.rangeEnabled;
   config.shaderConfig.pbr = g_gxState.pbr;
   if (g_gxState.pbr != 0) {
@@ -643,7 +644,6 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
       };
     }
   }
-  config.shaderConfig.perPixelLight = wants_per_pixel_light(config.shaderConfig);
   for (u8 i = 0; i < g_gxState.numTexGens; ++i) {
     config.shaderConfig.tcgs[i] = g_gxState.tcgs[i];
   }
@@ -665,10 +665,6 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   // depth-only pass stays one).
   const bool drawId = g_gxState.drawIdMode && !depthOnly;
   config.shaderConfig.drawId = drawId;
-  if (drawId) {
-    config.shaderConfig.fogType = GX_FOG_NONE;
-    config.shaderConfig.fogRangeEnabled = false;
-  }
   config.shaderConfig.volFog = drawId ? VolFogNone : vol_fog_mode(depthOnly);
   config.shaderConfig.shadow = g_gxState.shadowCaster && g_gxState.shadowActive && config.shaderConfig.lineMode == 0;
   if (g_gxState.actorDecal && config.shaderConfig.shadow && !drawId && !depthOnly) {
@@ -692,6 +688,10 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     strip_to_flat_shading(sc);
     sc.shadow = false;
   }
+  pipeline_fog(config.shaderConfig);
+  // After the channels are pruned: a lit channel no stage reads asks for no per-pixel lighting.
+  pipeline_unused_inputs(config.shaderConfig);
+  config.shaderConfig.perPixelLight = config_per_pixel_light(config.shaderConfig) ? 1 : 0;
   config.shaderConfig.colorMatrix = g_gxState.colorMatrixOn && !drawId && config.shaderConfig.depthOnly == 0 &&
                                     shell == 0 && config.shaderConfig.actorDecal == 0;
   // Field by field: an aggregate assignment would copy the 2.7 KB shader config twice more on
@@ -715,7 +715,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   config.blendFacSrc = blendFactor(g_gxState.blendFacSrc);
   config.blendFacDst = blendFactor(g_gxState.blendFacDst);
   config.blendOp = g_gxState.blendOp;
-  config.dstAlpha = hasAlpha && g_gxState.alphaUpdate ? g_gxState.dstAlpha : UINT32_MAX;
+  config.dstAlpha = hasAlpha && g_gxState.alphaUpdate ? pipeline_dst_alpha(g_gxState.dstAlpha) : UINT32_MAX;
   config.polygonOffsetBits = std::bit_cast<uint32_t>(polygonOffset);
   config.polygonOffsetScaleBits = std::bit_cast<uint32_t>(polygonOffsetScale);
   config.polygonOffsetClampBits = std::bit_cast<uint32_t>(g_gxState.clamp);

@@ -1455,10 +1455,13 @@ static void queue_cached_row(ShaderType type, uint32_t configVersion, CreateFn&&
       ++stats.incompatible;
       return;
     }
-    // A row recorded before the fog curve and the alpha compare references moved to uniforms names
-    // its fog type and references.
-    config.shaderConfig.fogType = gx::pipeline_fog_type(config.shaderConfig.fogType);
+    // A row recorded before the fog curve, the alpha compare references, the dst alpha constant and
+    // the texgen matrices moved to uniforms (or the blend constant) names them.
+    gx::pipeline_fog(config.shaderConfig);
+    config.dstAlpha = gx::pipeline_dst_alpha(config.dstAlpha);
     config.shaderConfig.alphaCompare = gx::pipeline_alpha_compare(config.shaderConfig.alphaCompare);
+    // A row recorded before unused channels, texgens and stage channels were reset (as the draw now is).
+    gx::pipeline_unused_inputs(config.shaderConfig);
     // A row recorded at the other aurora_set_per_pixel_lighting setting (the embedded seed is
     // recorded with it off) misses every lit draw, so each room's first visit drops them while they
     // build. main.cpp sets it before the cache loads, so the row takes the running one.
