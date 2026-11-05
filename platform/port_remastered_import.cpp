@@ -3142,7 +3142,7 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         std::string uuid;
         std::string orient[9], offset[3];
         RetailPlacement& p = retailPlacements.emplace_back();
-        in >> uuid >> std::hex >> p.retail >> p.mrea >> p.object >> std::dec >> p.ok >> p.entity;
+        in >> uuid >> std::hex >> p.retail >> p.mrea >> p.object >> std::dec >> p.ok >> p.entity >> p.animated;
         for (std::string& value : orient) {
           in >> value;
         }
@@ -3196,8 +3196,8 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     }
     for (const RetailPlacement& p : retailPlacements) {
       char line[256];
-      std::snprintf(line, sizeof(line), "r %s %08X %08X %08X %d %d", UuidText(p.model).c_str(), p.retail, p.mrea,
-                    p.object, int(p.ok), p.entity);
+      std::snprintf(line, sizeof(line), "r %s %08X %08X %08X %d %d %d", UuidText(p.model).c_str(), p.retail, p.mrea,
+                    p.object, int(p.ok), p.entity, int(p.animated));
       std::string text = line;
       for (int i = 0; i < 12; ++i) {
         std::snprintf(line, sizeof(line), " %a", i < 9 ? p.orient[i / 3][i % 3] : p.offset[i - 9]);
@@ -3216,8 +3216,9 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
   // replaces its retail model when the retail objects paired with their entities (RetailPlacement)
   // all found it at one transform: "paired", or "partial" when other objects naming it are in an
   // area whose count of them differs from its room's entities. One whose placements differ
-  // ("per-instance": Remastered moved some of its objects on their own), or that no object paired
-  // with ("unpaired"), stays retail. reports/retailmodels.tsv lists each with its placements. Other
+  // ("per-instance": Remastered moved some of its objects on their own) converts in model space
+  // and is placed per object, unless a placement is mirrored; one no object paired with
+  // ("unpaired") stays retail. reports/retailmodels.tsv lists each with its placements. Other
   // assets share the id prefix (textures, effects), so only Remastered's models count.
   {
     std::sort(retailPlacements.begin(), retailPlacements.end(), [](const RetailPlacement& a, const RetailPlacement& b) {
@@ -3303,8 +3304,8 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
       const auto table = inTable.find(first->retail);
       const bool perInstance = ok != last && !agree;
       const char* status = ok == last                  ? "unpaired"
-                           : perInstance && !all       ? "per-instance unplaced"
                            : perInstance && table != inTable.end() ? "per-instance table"
+                           : perInstance && !all       ? "per-instance unplaced"
                            : perInstance               ? "per-instance"
                            : table != inTable.end()    ? "table"
                            : all                       ? "paired"
@@ -3353,7 +3354,7 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
         ++orientSpread[decade(maxOrient)];
         ++offsetSpread[decade(maxOffset)];
         mirrored += flips;
-        if (all && flips != 0 && table == inTable.end()) {
+        if (flips != 0 && table == inTable.end()) {
           // No runtime path for it (below) and no single placement to bake: it stays retail.
           --statusCount[status];
           ++statusCount["per-instance mirrored"];
@@ -3363,10 +3364,11 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
                       maxOrient, maxOffset, flips);
         spreadReport += line;
       }
-      if (perInstance && all && flips == 0 && table == inTable.end()) {
+      if (perInstance && flips == 0 && table == inTable.end()) {
         // Remastered moved some of this model's objects on their own: the model converts once,
-        // untransformed, and each object's draw goes through its own placement. A mirrored
-        // placement stays out: the baked conversion swaps its winding, a runtime one could not.
+        // untransformed, and each paired object's draw goes through its own placement; an
+        // unplaced one ("per-instance unplaced") draws it as converted. A mirrored placement
+        // stays out: the baked conversion swaps its winding, a runtime one could not.
         RetailModel& m = retailModels.emplace_back();
         std::copy(first->model.begin(), first->model.end(), m.uuid.begin());
         m.retail = first->retail;

@@ -3325,10 +3325,26 @@ void Writer::PairRetailModels(const RoomData& r, const Area& area) {
           out.animated = ancs != 0 && ancs != 0xffffffffu;
         }
       }
+      // When the counts differ (Remastered added or dropped some, or keeps one entity for a
+      // retail Platform and Actor on the same spot), the entity is the one standing where the
+      // object does, within kRetailActorNear as WriteGeometry leaves such entities to the
+      // retail object; an object with none keeps the retail model.
+      const Placed* found = nullptr;
+      if (named.size() == placed.size()) {
+        found = &placed[n];
+      } else {
+        double nearest = kRetailActorNear;
+        for (const Placed& p : placed) {
+          if (const double d = MaxAbs(p.pos, o.pos); d < nearest) {
+            nearest = d;
+            found = &p;
+          }
+        }
+      }
       double basis[3][3], inverse[3][3];
       EditorBasis(o.rot, o.scale, basis);
-      if (named.size() == placed.size() && Invert3(basis, inverse)) {
-        const Placed& p = placed[n];
+      if (found != nullptr && Invert3(basis, inverse)) {
+        const Placed& p = *found;
         out.ok = true;
         out.entity = p.entity;
         for (int i = 0; i < 3; ++i) {

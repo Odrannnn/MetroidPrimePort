@@ -341,7 +341,12 @@ inline constexpr int kEffects = 229;
 // stands in for it (Research Lab Hydra's force field).
 // 86: a room's fog hints its own Relays switch from the camera water (FluidRelayLinks) get those
 // links (the Reflecting Pool's water fogs were dropped as unlinked).
-inline constexpr int kRooms = 86;
+// 87: a retail model's objects in an area whose entity count differs pair with the entity standing
+// where they do, and a per-instance model some of whose objects stay unpaired converts in model space
+// too (1131 placements of 24 models drew the retail model; 21 placements of 2 models still do).
+// 88: the stage record keeps each retail placement's animated flag (a reused rooms stage lost it,
+// and the retail models stage converted animation sets' models).
+inline constexpr int kRooms = 88;
 inline constexpr int kRoomModels = 1;  // the rooms' own models and their levels of detail
 // kText: port_remastered_text, and the font (port_remastered_font).
 // 2: text/.disc, the disc the tables were merged from (kTextDiscName).
