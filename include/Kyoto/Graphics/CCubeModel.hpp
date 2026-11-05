@@ -165,6 +165,7 @@ public:
   // The beam's charge, 0 to 1, which the Ice Beam cannon's frost shell (kind 12) dissolves
   // with: Remastered's DisintegrationAmount. At 0 the shell is not drawn.
   static void PortSetChargeShell(float amount);
+  static void PortSetGunHeat(float level);
   // While active, every model drawn outside the thermal visor is a frozen enemy's body, drawn as
   // Remastered's RenderIcy (kind 47, 0xfc4794) in place of its materials: dirGC is the freeze
   // direction in the game's world, t the seconds since the freeze, darkening the actor's ice

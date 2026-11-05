@@ -169,12 +169,17 @@ public:
   // Render 0xd2d94c draws its X-ray pass with model 4 too. CPatterned sets it for a frozen,
   // not burning enemy.
   static bool sPortDrawFrozen;
+  // The infra (thermal) model is a Remastered one, drawn only in the HDR scene; without HDR the
+  // thermal passes draw the normal model, as retail has no infra model there.
+  void PortSetInfraHdrOnly() { xPortInfraHdrOnly = true; }
 
 private:
+  bool PortInfraHidden() const;
   int PortSlot(EWhichModel which) const;
   CAABox PortLocalBounds() const;
   float xPortCorrection[3][12];
   uchar xPortCorrected = 0;  // bit n: slot n (normal, xray, infra) has a correction
+  bool xPortInfraHdrOnly = false;
 #endif
 };
 CHECK_SIZEOF(CModelData, 0x4c)

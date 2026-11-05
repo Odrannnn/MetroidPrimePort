@@ -204,6 +204,9 @@ constexpr uint32_t kShaderSimpleGlass = 0x084A8DB5;
 // blurred screen copy, bent by NMAP and the normal.
 constexpr uint32_t kShaderCrystal = 0x54B4021F;
 constexpr uint32_t kShaderSkyFlow = 0xCD033236;
+// C928A6C5 MDL_ThermalHeatMask (kind 50, kb material/c928a6c5.md): the thermal-visor-only copies of the arm cannon,
+// drawn in the thermal hot pass alone. TCH0 the heat mask, CCH0/CCH1 its params, the vertex colour's red the heat.
+constexpr uint32_t kShaderThermalHeatMask = 0xC928A6C5;
 // FB2BC671 and DF3E3423 (the ids as the reports print them), the ChozoGhost's X-ray materials, static and skinned
 // (kind 31, kb material/fb2bc671.md, df3e3423.md).
 constexpr uint32_t kShaderXrayStatic = 0xFB2BC671;
@@ -228,6 +231,9 @@ constexpr ShaderTwin kShaderTwins[] = {
     {0x81B8E136, 0xA978D507},
     // 1ac34e37 (Core_Phazon_Mat) is 07acff46's skinned copy, as the others.
     {0x1AC34E37, kShaderPhazonPool},
+    // 1826e69d (Thermal_Suit, the <Suit>Arm_Thermal and grapple thermal models) is c928a6c5's static copy: the
+    // same fragment perms byte for byte, the vertex perms without the bone fetch.
+    {0x1826E69D, kShaderThermalHeatMask},
     // cc3e88af is cc96c27d's skinned copy (its fragment perms 006/042/054 are cc96c27d's 018/042/078; the vertex
     // perms add the bone fetch and pass the vertex colour through raw): the Omega fight's healing nodules.
     {0xCC3E88AF, kShaderPhazon},
@@ -389,6 +395,7 @@ std::string ShaderRole(uint32_t shader) {
   add(shader == kShaderSimpleGlass, "simple-glass");
   add(shader == kShaderCrystal, "crystal");
   add(shader == kShaderSkyFlow, "sky-flow");
+  add(shader == kShaderThermalHeatMask, "thermal-heat-mask");
   add(shader == kShaderInventoryGlass, "inventory-glass");
   add(shader == kShaderInventoryAdd, "inventory-add");
   add(IsXrayGhost(shader), "xray-ghost");
@@ -1079,6 +1086,17 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
       }
     }
     out.kindParam[0] = out.shieldRows[31];  // the runtime may replace it with the live variable
+  } else if (shader == kShaderThermalHeatMask && tch[0] && cch[0] && cch[1]) {
+    out.kind = 50;
+    // CCH0 and CCH1 are rows 0 and 1; the mask TCH0 rides in the MR slot, raw, and the vertex colour is read as it is.
+    for (int r = 0; r < 2; ++r) {
+      for (int i = 0; i < 4; ++i) {
+        out.shieldRows[r * 4 + i] = ShortestDouble(cch[r]->color[i]);
+      }
+    }
+    set(kMr, tch[0]->texture);
+    out.maps[kMr].raw = true;
+    out.vcolor = true;
   } else if (shader == kShaderXrayMap && out.maps[kBase].has && out.maps[kNormal].has && tch[0] && cch[0] && cch[1]) {
     out.kind = 33;
     // 65e90e82, the X-ray visor's map material: CCH0/CCH1 are rows 0 and 1 as kind 31's, DIFC row 2 (rgba, default 1),
@@ -1655,6 +1673,13 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
     out.height = 0.0;
     out.backlight = out.backlightTop = 0.0;
   }
+  if (out.kind == 50) {
+    // One map, drawn by the thermal hot pass alone (kind 50 there): nothing of the lit surface is read.
+    out.layered = out.cutout = out.tinted = out.mask = out.unlit = false;
+    out.height = 0.0;
+    out.emissive = 0.0;
+    out.backlight = out.backlightTop = 0.0;
+  }
   if (out.kind == 33) {
     // As kind 31, but TCH0 stays in the MR slot and the ICAN map is always read.
     out.layered = out.blended = true;
@@ -1759,7 +1784,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
                                              "frozen-shell", "matcap-shell", "boundary-shield", "pickup",
                                              "holo",         "holo-refl",    "hologram",     "gun-fx", "vertex-blend", "phazon", "projected-blend", "decal-alpha", "phazon-pool", "phazon-veins",
                                              "inventory-glass", "inventory-add", "unlit-cube", "unlit-vertex", "unlit-matcap", "unlit-add",
-                                             "simple-glass", "crystal", "sky-flow"};
+                                             "simple-glass", "crystal", "sky-flow", "thermal-heat-mask"};
     for (const char* name : kKindRoles) {
       if (out.role.find(name) != std::string::npos) {
         out.reason += std::string("fallback: ") + name + " shader without its maps/params (or blend); ";
@@ -1777,7 +1802,7 @@ RemMaterial ReadMaterial(const ModelMaterial& mat, const ConvertOptions& opt) {
   const bool iceSingleLayerMapsBound = out.kind == 28 && !out.layered && out.maps[kBase].has && out.maps[kMr].has &&
                                        out.maps[kNormal].has && out.maps[kEmissive].has;
   if (out.kind != 3 && out.kind != 10 && !(out.kind >= 16 && out.kind <= 18) && out.kind != 45 && out.kind != 24 && out.kind != 27 &&
-      out.kind != 34 && out.kind != 36 && out.kind != 37 && out.kind != 38 && out.kind != 39 && out.kind != 41 && out.kind != 49 && !out.layered && !iceSingleLayerMapsBound) {
+      out.kind != 34 && out.kind != 36 && out.kind != 37 && out.kind != 38 && out.kind != 39 && out.kind != 41 && out.kind != 49 && out.kind != 50 && !out.layered && !iceSingleLayerMapsBound) {
     if (out.kind != 0) {
       out.reason += std::string("demoted ") + KindName(out.kind) + " to standard: not layered; ";
     }

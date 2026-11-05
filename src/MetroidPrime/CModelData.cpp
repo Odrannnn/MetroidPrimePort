@@ -559,6 +559,10 @@ const TLockedToken< CModel >& CModelData::PickStaticModel(EWhichModel which) con
   switch (which) {
   case kWM_Thermal:
   case kWM_ThermalHot:
+#ifdef TARGET_PC
+    if (PortInfraHidden())
+      break;
+#endif
     if (x3c_infraModel)
       return *x3c_infraModel;
     break;
@@ -577,6 +581,10 @@ CSkinnedModel& CModelData::PickAnimatedModel(EWhichModel which) const {
   switch (which) {
   case kWM_Thermal:
   case kWM_ThermalHot:
+#ifdef TARGET_PC
+    if (PortInfraHidden())
+      break;
+#endif
     model = xc_animData->GetInfraModel();
     break;
   case kWM_XRay:
@@ -612,6 +620,10 @@ bool CModelData::HasModel(EWhichModel which) const {
       return xc_animData->GetXRayModel() != nullptr;
     case kWM_Thermal:
     case kWM_ThermalHot:
+#ifdef TARGET_PC
+      if (PortInfraHidden())
+        return false;
+#endif
       return xc_animData->GetInfraModel() != nullptr;
     default:
       return false;
@@ -624,6 +636,10 @@ bool CModelData::HasModel(EWhichModel which) const {
     return x2c_xrayModel;
   case kWM_Thermal:
   case kWM_ThermalHot:
+#ifdef TARGET_PC
+    if (PortInfraHidden())
+      return false;
+#endif
     return x3c_infraModel;
   default:
     return false;
@@ -665,11 +681,13 @@ int CModelData::GetNumMaterialSets() const {
 }
 
 #ifdef TARGET_PC
+bool CModelData::PortInfraHidden() const { return xPortInfraHdrOnly && !CCubeMaterial::sPortSceneHdr; }
+
 int CModelData::PortSlot(EWhichModel which) const {
   switch (which) {
   case kWM_Thermal:
   case kWM_ThermalHot:
-    return x3c_infraModel ? 2 : 0;
+    return x3c_infraModel && !PortInfraHidden() ? 2 : 0;
   case kWM_XRay:
     return x2c_xrayModel ? 1 : 0;
   default:

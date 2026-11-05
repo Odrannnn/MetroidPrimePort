@@ -28,4 +28,9 @@ constexpr uint32_t Id(uint32_t retail, int key) {
   return h;
 }
 
+// The look Remastered draws as model 3 (the thermal hot pass): the arm
+// cannon's heat mask (a beam's gun character) and the suit arm's
+// <Suit>Arm_Thermal (a retail arm CMDL).
+constexpr int kThermalLook = 3;
+
 } // namespace PortModelVariant

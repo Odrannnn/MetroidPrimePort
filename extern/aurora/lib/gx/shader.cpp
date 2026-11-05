@@ -1173,6 +1173,20 @@ void PbrGen::vertexOutputs() {
                                  vtx_attr(config, GX_VA_CLR0));
     }
   }
+  if (config.pbrKind == PbrKind::ThermalHeatMask) {
+    // c928a6c5's vertex stage takes the heat per vertex (kb material/c928a6c5.md): with r the
+    // colour's red, c0 = CCH0 and c1 = CCH1 (shield rows 0-1),
+    //   o = (h + s (1 - h)) c0.y, h = r c0.x, s = clamp(c0.z c1.y, 0, 1) r,
+    // quadratic in r once the gun's heat (c1.y) is up, so it is interpolated, not r. A model
+    // without colours reads the missing attribute's default red, 0 (as kind 9's).
+    vtxOutAttrs += fmt::format("\n    @location({}) pbr_vthm: f32,", vtxOutIdx++);
+    vtxXfrAttrs += fmt::format(
+        "\n    let pbr_thr = {};"
+        "\n    let pbr_thh = pbr_thr * ubuf.pbr_shield[0].x;"
+        "\n    let pbr_ths = clamp(ubuf.pbr_shield[0].z * ubuf.pbr_shield[1].y, 0.0, 1.0) * pbr_thr;"
+        "\n    out.pbr_vthm = (pbr_thh + pbr_ths * (1.0 - pbr_thh)) * ubuf.pbr_shield[0].y;",
+        config.attrs[GX_VA_CLR0].attrType != GX_NONE ? vtx_attr(config, GX_VA_CLR0) + ".r" : std::string("0.0"));
+  }
   if (config.pbrKind == PbrKind::HoloGlassB) {
     // And takes the depth factor per vertex: the near plane over the view depth, capped by
     // vp_c1[0].x (shield row 4 y and z).
@@ -3665,7 +3679,21 @@ void PbrGen::patchSceneHdr() {
          fmt::format("let pbr_xw = {} * pbr_xv3.w;\n", xbase) +
          "          pbr_keep = pbr_xw * pbr_xscene;\n"
          "          pbr_vfw = vec3f(1.0) - pbr_xw;\n          pbr_vfk = true;");
-    if (config.pbrThermal && !layered) {
+    if (config.pbrThermal && !layered && config.pbrKind == PbrKind::ThermalHeatMask) {
+      // c928a6c5 MDL_ThermalHeatMask (kb material/c928a6c5.md), the arm cannon's thermal model:
+      // its own heat, not Model_ThermalOverride. c0 = CCH0, c1 = CCH1 (pbr_shield rows 0-1), the
+      // mask TCH0 in map 1, the vertex stage's heat o (pbr_vthm), c1.y the gun's heat (HTRN). Then
+      //   t = clamp(clamp(mask.r (1 + c1.y), 0, 1) c0.w + o, 0, 1), rgb = t (1 - c1.x) + c1.x,
+      // alpha mask.a, times the inverse exposure, which the HDR scene's exposure cancels.
+      put("prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);",
+          fmt::format("prev = vec4f(pbr_lin + pbr_pass + pbr_keep, pbr_alpha);\n"
+                      "      let thm_c0 = ubuf.pbr_shield[0];\n"
+                      "      let thm_c1 = ubuf.pbr_shield[1];\n"
+                      "      let thm_mask = {0};\n"
+                      "      let thm_t = clamp(clamp(thm_mask.r * (1.0 + thm_c1.y), 0.0, 1.0) * thm_c0.w + in.pbr_vthm, 0.0, 1.0);\n"
+                      "      prev = vec4f(vec3f(thm_t * (1.0 - thm_c1.x) + thm_c1.x), thm_mask.a);",
+                      sampled(1, "vec4f(0.0)")));
+    } else if (config.pbrThermal && !layered) {
       // The thermal visor's hot pass (GXSetPBRThermal): Remastered draws a mesh whose shader has no
       // thermal technique with 02c254b6 Model_ThermalOverride (kb topic/thermal-model-render.md),
       // which binds the mesh's own BCLR (no DIFC) and rebuilds the normal from its normal map:

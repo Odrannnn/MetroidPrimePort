@@ -1308,6 +1308,25 @@ void CPlayerGun::Update(float grappleSwingT, float cameraBobT, float dt, CStateM
   }
 
   UpdateGunLight(beamWorldXf, mgr);
+#ifdef TARGET_PC
+  // Port: Remastered's thermal gun (MDL_ThermalHeatMask) glows with the gun's heat, the
+  // HTRN "Heat_Transition_Set" variable on its CCH1.y. CPlayerGunMP1::UpdateGunHeatVisual
+  // 0xc9659c: the larger of the rapid-fire smoke timer / 2 and the charge fraction while
+  // charging; once both are 0 the last level falls at 0.5 per second (unscaled dt). It
+  // feeds the infra model only in the thermal visor, the one place that model draws.
+  {
+    static float sHeatLevel = 0.f;
+    float level = CMath::Clamp(0.f, x380_shotSmokeTimer * 0.5f, 1.f);
+    if (x834_24_charging && x340_chargeBeamFactor > level) {
+      level = x340_chargeBeamFactor;
+    }
+    if (CMath::AbsF(level) < 1e-5f) {
+      level = rstl::max_val(sHeatLevel - dt * 0.5f, 0.f);
+    }
+    sHeatLevel = level;
+    CCubeModel::PortSetGunHeat(sHeatLevel);
+  }
+#endif
   ProcessGunMorph(switchDt, mgr);
   if (x835_26_phazonBeamMorphing) {
     ProcessPhazonGunMorph(advDt, mgr);

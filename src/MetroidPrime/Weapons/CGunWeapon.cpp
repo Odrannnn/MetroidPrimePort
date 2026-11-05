@@ -35,9 +35,14 @@
 #ifdef TARGET_PC
 #include <dolphin/gx/GXExtra.h>
 
+#include "Kyoto/Animation/CAnimCharacterSet.hpp"
+#include "Kyoto/CResFactory.hpp"
+#include "Kyoto/CSimplePool.hpp"
+
 #include "port_beam_colours.h"
 #include "port_dread_samus_mod.h"
 #include "port_echoes_suits_mod.h"
+#include "port_model_variant.h"
 #endif
 
 const char* const CGunWeapon::skMuzzleNames[10] = {
@@ -159,6 +164,21 @@ void CGunWeapon::LoadGunModels(CStateManager& mgr) {
   LoadSuitArm(mgr);
   x10_solidModelData->SetSortThermal(true);
   x60_holoModelData->SetSortThermal(true);
+#ifdef TARGET_PC
+  // Remastered draws the gun in the thermal hot pass with a model of its own (MDL_ThermalHeatMask,
+  // kb material/c928a6c5.md), which the import writes as a look of the beam's character. Echoes'
+  // cannon has none.
+  if (ancsId == x214_ancsId) {
+    const CAssetId variant = PortModelVariant::Id(x214_ancsId, PortModelVariant::kThermalLook);
+    if (gpResourceFactory->GetResourceTypeById(variant) == 'ANCS') {
+      TToken< CAnimCharacterSet > look = gpSimplePool->GetObj(SObjectTag('ANCS', variant));
+      const CCharacterInfo& info = (*look)->GetCharacterSet().GetCharacterList()[0].second;
+      x10_solidModelData->SetInfraModel(
+          rstl::pair< CAssetId, CAssetId >(info.GetModelId(), info.GetSkinRulesId()));
+      x10_solidModelData->PortSetInfraHdrOnly();
+    }
+  }
+#endif
   x100_gunController = rs_new CGunController(*x10_solidModelData);
 }
 
@@ -432,8 +452,9 @@ void CGunWeapon::Draw(const bool drawSuitArm, const CStateManager& mgr, const CT
     const CColor mulColor(a, a, a, a);
     CColor addColor(static_cast< uchar >(0x40), 0x40, 0x40, 0x40);
 #ifdef TARGET_PC
-    // Remastered's hot gun takes the thermal override with a = 1, b = 0.
-    CCubeModel::PortSetThermalOverride(1.f, 0.f);
+    // Remastered's CGunWeaponMP1::Draw (0xca271c) draws the hot gun and arm with
+    // SModelThermalParams::DefaultOverride (0xfa738c) of a = the flags' alpha, b = 64/255.
+    CCubeModel::PortSetThermalOverride(a, 0.2509804f);
 #endif
     if (x218_29_drawHologram) {
       DrawHologram(mgr, xf, flags);
@@ -624,7 +645,7 @@ void CGunWeapon::PortDrawHologramTransition(const CStateManager& mgr, const CTra
     const float a = flags.GetColorRef().GetAlpha();
     CModelFlags useFlags(CModelFlags::kT_Opaque, 1.0f);
 #ifdef TARGET_PC
-    CCubeModel::PortSetThermalOverride(1.f, 0.f);
+    CCubeModel::PortSetThermalOverride(a, 0.2509804f); // as Draw's
 #endif
     xb0_suitArmModelData->RenderThermal(xf, CColor(a, a, a, a),
                                         CColor(static_cast< uchar >(0x40), 0x40, 0x40, 0x40),
@@ -1012,6 +1033,18 @@ void CGunWeapon::LoadSuitArm(CStateManager& mgr) {
   xb0_suitArmModelData = CStaticRes(armId, x4_scale);
 #endif
   xb0_suitArmModelData->SetSortThermal(true);
+#ifdef TARGET_PC
+  // Remastered draws the arm in the thermal hot pass with <Suit>Arm_Thermal (shader 1826e69d,
+  // c928a6c5's static twin; the Power arm's is plain PBR, drawn with the thermal override),
+  // which the import writes as a look of the retail arm. The Fusion arms have none.
+  if (!mPortDreadCannon) {
+    const CAssetId variant = PortModelVariant::Id(armId, PortModelVariant::kThermalLook);
+    if (gpResourceFactory->GetResourceTypeById(variant) == 'CMDL') {
+      xb0_suitArmModelData->SetInfraModel(rstl::pair< CAssetId, CAssetId >(variant, 0));
+      xb0_suitArmModelData->PortSetInfraHdrOnly();
+    }
+  }
+#endif
   x218_28_suitArmLocked = false;
   x13c_armCharacter.Unlock();
 }

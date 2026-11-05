@@ -267,6 +267,7 @@ f32 sPortKindValue = 0.f;
 bool sPortSky = false;
 f32 sPortSkyGain[3];
 f32 sPortChargeShell = 0.f;
+f32 sPortGunHeat = 0.f;
 // The frozen enemy's icy pass (PortSetIcy): the freeze direction in the game's world and the
 // seconds since the freeze, and the actor's ice darkening. Remastered's RenderIcy material maps,
 // bound to maps 0-2.
@@ -419,6 +420,8 @@ void CCubeModel::PortTakeThermalSkipCounts(unsigned& cold, unsigned& hotDropped)
 }
 
 void CCubeModel::PortSetChargeShell(const f32 amount) { sPortChargeShell = amount; }
+
+void CCubeModel::PortSetGunHeat(const f32 level) { sPortGunHeat = level; }
 
 void CCubeModel::PortSetIcy(const bool active, const f32 dirGC[3], const f32 t, const f32 darkening) {
   sPortIcy.active = active;
@@ -690,6 +693,10 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
     values[0] *= pulse;
     values[1] *= pulse;
     values[2] *= pulse;
+  }
+  if (pk == aurora::PbrKind::ThermalHeatMask) {
+    // CCH1.y: the HTRN gun heat (CGunWeaponMP1::SetHeatVisualLevel).
+    shield[5] = sPortGunHeat;
   }
   for (const SPortPBROverride& entry : sPortPBROverrides) {
     if (entry.model == this && entry.material == idx) {

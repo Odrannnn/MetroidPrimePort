@@ -61,6 +61,7 @@ enum class PbrKind : uint8_t {
   Icy = 47,            // the frozen actor overlay (CCubeModel's RenderIcy path, no record)
   Crystal = 48,        // 54b4021f, Monitor Station's crystals: unlit layers and a blurred screen copy
   SkyFlow = 49,        // cd033236, the sky's flow-map clouds: BCLR pushed along a world direction by TCH0
+  ThermalHeatMask = 50, // c928a6c5 (static 1826e69d), the gun's and arms' thermal models: own heat, hot pass only
 };
 
 // The kind a float (pbr_layer.y, a record's values[13]) holds, as gx.cpp builds it into the key.
@@ -119,6 +120,7 @@ constexpr const char* PbrKindName(PbrKind k) {
   case PbrKind::ChozoLore: return "chozo-lore";
   case PbrKind::Crystal: return "crystal";
   case PbrKind::SkyFlow: return "sky-flow";
+  case PbrKind::ThermalHeatMask: return "thermal-heat-mask";
   default: return "kind?";
   }
 }
@@ -153,6 +155,7 @@ constexpr bool IsShieldKind(PbrKind k) {
   case PbrKind::RouteHologram:
   case PbrKind::ChozoLore:
   case PbrKind::Crystal:
+  case PbrKind::ThermalHeatMask:
     return true;
   default:
     return false;
