@@ -170,7 +170,9 @@ inline constexpr int kTextures = 5;
 // 34: the arm cannon's thermal models (MDL_ThermalHeatMask, kind 50) are imported as look 3 of the
 //     Power, Wave, Plasma and Phazon beams' ANCSs, and the suit arms' <Suit>Arm_Thermal (its
 //     static twin 1826e69d; PowerArm_Thermal is plain PBR) as look 3 of the retail arm CMDLs.
-inline constexpr int kModels = 34;
+// 35: so are the grapple arm's: grappleArm.CHPR's Thermal subcharacter as look 3 of the grapple
+//     ANCS (rebinding Varia's pair), GrappleGear/GrapNoz1/GrapNoz2_Thermal of the retail CMDLs.
+inline constexpr int kModels = 35;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.

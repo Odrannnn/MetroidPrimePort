@@ -4,7 +4,9 @@
 #ifdef TARGET_PC
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
+#include "Kyoto/CResFactory.hpp"
 #include "port_debug.h"
+#include "port_model_variant.h"
 #include "port_room_env.h"
 #include "port_third_person_body.h"
 #endif
@@ -52,6 +54,17 @@ static const CPlayerState::EPlayerSuit suitIndices[] = {
     CPlayerState::kPS_Power,       CPlayerState::kPS_Gravity,     CPlayerState::kPS_Varia,
     CPlayerState::kPS_Phazon,      CPlayerState::kPS_FusionPower, CPlayerState::kPS_FusionGravity,
     CPlayerState::kPS_FusionVaria, CPlayerState::kPS_FusionPhazon};
+
+#ifdef TARGET_PC
+static void PortSetThermalPart(CModelData& model, const char* name) {
+  const CAssetId variant = PortModelVariant::Id(NWeaponTypes::get_asset_id_from_name(name),
+                                                PortModelVariant::kThermalLook);
+  if (gpResourceFactory->GetResourceTypeById(variant) == 'CMDL') {
+    model.SetInfraModel(rstl::pair< CAssetId, CAssetId >(variant, 0));
+    model.PortSetInfraHdrOnly();
+  }
+}
+#endif
 
 float CGrappleArm::kPhaseDelta = 0.875f;
 float CGrappleArm::kAmplitudeX = 0.25f;
@@ -111,6 +124,14 @@ CGrappleArm::CGrappleArm(const CVector3f& scale)
   xa0_grappleGearModel.SetSortThermal(true);
   xec_grapNoz1Model.SetSortThermal(true);
   x138_grapNoz2Model.SetSortThermal(true);
+#ifdef TARGET_PC
+  // Remastered's CGrappleArmMP1::Render draws GrappleGear/GrapNoz1/GrapNoz2_Thermal in the thermal
+  // visor (shader 1826e69d, kb material/c928a6c5.md), which the import writes as looks of the
+  // retail CMDLs.
+  PortSetThermalPart(xa0_grappleGearModel, kGrappleGear);
+  PortSetThermalPart(xec_grapNoz1Model, kGrappleNoz1);
+  PortSetThermalPart(x138_grapNoz2Model, kGrappleNoz2);
+#endif
 
   kPhaseDelta = gpTweakPlayer->GetGrappleBeamAnglePhaseDelta();
   kAmplitudeX = gpTweakPlayer->GetGrappleBeamXWaveAmplitude();
@@ -710,6 +731,29 @@ void CGrappleArm::LoadSuitPoll() {
     x0_grappleArmModel =
         CModelData(CAnimRes(gpTweakGunRes->x8_grappleArm, x3a8_loadedSuit, x31c_scale, 41, false));
     x0_grappleArmModel->SetSortThermal(true);
+#ifdef TARGET_PC
+    // Remastered draws every suit's arm in the thermal visor with grappleArm.CHPR's Thermal
+    // subcharacter (MDL_ThermalHeatMask), which the import writes as look 3 of the grapple ANCS:
+    // a copy of it whose one rebound character carries the model.
+    const CAssetId variant =
+        PortModelVariant::Id(gpTweakGunRes->x8_grappleArm, PortModelVariant::kThermalLook);
+    if (gpResourceFactory->GetResourceTypeById(variant) == 'ANCS') {
+      TToken< CAnimCharacterSet > look = gpSimplePool->GetObj(SObjectTag('ANCS', variant));
+      const CCharacterSet& lookSet = (*look)->GetCharacterSet();
+      const CCharacterSet& baseSet = (*x184_grappleArm)->GetCharacterSet();
+      for (int i = 0; i < lookSet.GetCharacterList().size() &&
+                      i < baseSet.GetCharacterList().size();
+           ++i) {
+        const CCharacterInfo& info = lookSet.GetCharacterList()[i].second;
+        if (info.GetModelId() != baseSet.GetCharacterList()[i].second.GetModelId()) {
+          x0_grappleArmModel->SetInfraModel(
+              rstl::pair< CAssetId, CAssetId >(info.GetModelId(), info.GetSkinRulesId()));
+          x0_grappleArmModel->PortSetInfraHdrOnly();
+          break;
+        }
+      }
+    }
+#endif
     x328_gunController = rs_new CGunController(*x0_grappleArmModel);
     x3b2_29_suitLoading = false;
   }
