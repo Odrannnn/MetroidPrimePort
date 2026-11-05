@@ -905,6 +905,18 @@ void CFluidPlaneCPU::RenderSetup(const CStateManager& mgr, float alpha, const CT
 
   CGX::SetNumTevStages(static_cast< u8 >(nextStage));
   int lastStage = nextStage - 1;
+#ifdef TARGET_PC
+  // Only the last stage's alpha (K0.a) reaches the output and no colour input reads an alpha
+  // register, so the earlier stages' alpha is dead; retail leaves whatever the previous draw set
+  // there, and each leftover combination keyed its own pipeline, a miss that hides the water while
+  // it compiles. One fixed value keeps a fluid setup to one pipeline.
+  for (int i = 0; i < lastStage; ++i) {
+    CGX::SetTevAlphaIn(static_cast< GXTevStageID >(i), GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO,
+                       GX_CA_ZERO);
+    CGX::SetTevAlphaOp(static_cast< GXTevStageID >(i), GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, true,
+                       GX_TEVPREV);
+  }
+#endif
   CGX::SetTevAlphaIn(static_cast< GXTevStageID >(lastStage), GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO,
                      GX_CA_KONST);
   CGX::SetTevAlphaOp(static_cast< GXTevStageID >(lastStage), GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1,
