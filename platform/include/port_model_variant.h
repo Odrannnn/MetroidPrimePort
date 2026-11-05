@@ -33,4 +33,8 @@ constexpr uint32_t Id(uint32_t retail, int key) {
 // <Suit>Arm_Thermal (a retail arm CMDL).
 constexpr int kThermalLook = 3;
 
+// The look Remastered draws in the X-ray visor where retail has no X-ray model
+// (the grapple arm's <Part>_XRAY CMDLs).
+constexpr int kXRayLook = 4;
+
 } // namespace PortModelVariant

@@ -5,6 +5,7 @@
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/Player/CPlayerGun.hpp"
 #include "Kyoto/CResFactory.hpp"
+#include "Kyoto/Graphics/CCubeMaterial.hpp"
 #include "port_debug.h"
 #include "port_model_variant.h"
 #include "port_room_env.h"
@@ -62,6 +63,14 @@ static void PortSetThermalPart(CModelData& model, const char* name) {
   if (gpResourceFactory->GetResourceTypeById(variant) == 'CMDL') {
     model.SetInfraModel(rstl::pair< CAssetId, CAssetId >(variant, 0));
     model.PortSetInfraHdrOnly();
+  }
+}
+
+static void PortSetXRayPart(CModelData& model, const char* name) {
+  const CAssetId variant = PortModelVariant::Id(NWeaponTypes::get_asset_id_from_name(name),
+                                                PortModelVariant::kXRayLook);
+  if (gpResourceFactory->GetResourceTypeById(variant) == 'CMDL') {
+    model.SetXRayModel(rstl::pair< CAssetId, CAssetId >(variant, 0));
   }
 }
 #endif
@@ -131,6 +140,10 @@ CGrappleArm::CGrappleArm(const CVector3f& scale)
   PortSetThermalPart(xa0_grappleGearModel, kGrappleGear);
   PortSetThermalPart(xec_grapNoz1Model, kGrappleNoz1);
   PortSetThermalPart(x138_grapNoz2Model, kGrappleNoz2);
+  // In X-ray it draws their _XRAY CMDLs (shader dfc2a7dc), looks 4 of the same.
+  PortSetXRayPart(xa0_grappleGearModel, kGrappleGear);
+  PortSetXRayPart(xec_grapNoz1Model, kGrappleNoz1);
+  PortSetXRayPart(x138_grapNoz2Model, kGrappleNoz2);
 #endif
 
   kPhaseDelta = gpTweakPlayer->GetGrappleBeamAnglePhaseDelta();
@@ -188,6 +201,35 @@ void CGrappleArm::Render(const CStateManager& mgr, const CVector3f& pos, const C
     const PortRoomEnv::ProbeOverrideScope probeScope(probeXyz);
 #endif
     const CTransform4f xf = CTransform4f::Translate(pos) * x220_xf * x2e0_auxXf;
+#ifdef TARGET_PC
+    // Remastered's CGrappleArmMP1::Render (0xc7f308) in X-ray draws the arm once as its X-ray
+    // model (grappleArm.CHPR's Skeleton, the retail skeleton's replacement) and the gear and
+    // nozzles as their _XRAY CMDLs, all AlphaBlended(1.0).WithOtherFlags(0x20): depth first
+    // (kF_DrawNormal), then the blend. No 0.25 arm pass. HDR scene only.
+    if (CCubeMaterial::sPortSceneHdr && x50_grappleArmSkeletonModel &&
+        mgr.GetPlayerState()->GetCurrentVisor() == CPlayerState::kPV_XRay) {
+      const CModelFlags xrayFlags(CModelFlags::AlphaBlended(1.f),
+                                  CModelFlags::kF_DepthCompare | CModelFlags::kF_DepthUpdate |
+                                      CModelFlags::kF_DrawNormal);
+      if (x3a4_rainSplashGenerator.get() && x3a4_rainSplashGenerator->IsRaining()) {
+        CSkinnedModel::SetPointGeneratorFunc(x3a4_rainSplashGenerator.get(), PointGenerator);
+      }
+      RenderXRayModel(mgr, xf, xrayFlags);
+      if (x3a4_rainSplashGenerator.get() && x3a4_rainSplashGenerator->IsRaining()) {
+        CSkinnedModel::ClearPointGeneratorFunc();
+        x3a4_rainSplashGenerator->Draw(xf);
+      }
+      if (mgr.GetPlayerState()->HasPowerUp(CPlayerState::kIT_GrappleBeam)) {
+        xa0_grappleGearModel.Render(CModelData::kWM_XRay, xf * x250_grapLocatorXf, nullptr,
+                                    xrayFlags);
+        xec_grapNoz1Model.Render(CModelData::kWM_XRay, xf * x280_grapNozLoc1Xf, nullptr,
+                                 xrayFlags);
+        x138_grapNoz2Model.Render(CModelData::kWM_XRay, xf * x2b0_grapNozLoc2Xf, nullptr,
+                                  xrayFlags);
+      }
+      return;
+    }
+#endif
     if (x50_grappleArmSkeletonModel) {
       RenderXRayModel(mgr, xf, flags);
     }
@@ -203,9 +245,20 @@ void CGrappleArm::Render(const CStateManager& mgr, const CVector3f& pos, const C
       x3a4_rainSplashGenerator->Draw(xf);
     }
     if (mgr.GetPlayerState()->HasPowerUp(CPlayerState::kIT_GrappleBeam)) {
+#ifdef TARGET_PC
+      // The parts' X-ray models are Remastered's (PortSetXRayPart): retail X-ray keeps the normal.
+      CModelData::EWhichModel which = CModelData::GetRenderingModel(mgr);
+      if (which == CModelData::kWM_XRay) {
+        which = CModelData::kWM_Normal;
+      }
+      xa0_grappleGearModel.Render(which, xf * x250_grapLocatorXf, useLights, useFlags);
+      xec_grapNoz1Model.Render(which, xf * x280_grapNozLoc1Xf, useLights, useFlags);
+      x138_grapNoz2Model.Render(which, xf * x2b0_grapNozLoc2Xf, useLights, useFlags);
+#else
       xa0_grappleGearModel.Render(mgr, xf * x250_grapLocatorXf, useLights, useFlags);
       xec_grapNoz1Model.Render(mgr, xf * x280_grapNozLoc1Xf, useLights, useFlags);
       x138_grapNoz2Model.Render(mgr, xf * x2b0_grapNozLoc2Xf, useLights, useFlags);
+#endif
     }
   }
 }
