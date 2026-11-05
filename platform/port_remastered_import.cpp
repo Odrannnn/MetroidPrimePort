@@ -3276,7 +3276,9 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     for (auto first = retailPlacements.begin(); first != retailPlacements.end();) {
       const auto last = std::find_if(first, retailPlacements.end(),
                                      [&](const RetailPlacement& p) { return p.retail != first->retail; });
-      if (!remastered.HasModel(first->model)) {
+      // A retail skin's id names a model too: the X-ray SMDL, which the table pairs with the
+      // retail CMDL before that skin.
+      if (!remastered.HasModel(first->model) || !retail.HasResource(kCMDL, first->retail)) {
         first = last;
         continue;
       }
@@ -3303,7 +3305,8 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
           ok != last && std::all_of(first, last, [&](const RetailPlacement& p) { return !p.ok || same(p, *ok); });
       const auto table = inTable.find(first->retail);
       const bool perInstance = ok != last && !agree;
-      const char* status = ok == last                  ? "unpaired"
+      const char* status = ok == last && table != inTable.end() ? "table"
+                           : ok == last                ? "unpaired"
                            : perInstance && table != inTable.end() ? "per-instance table"
                            : perInstance && !all       ? "per-instance unplaced"
                            : perInstance               ? "per-instance"
