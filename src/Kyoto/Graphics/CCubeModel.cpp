@@ -268,6 +268,7 @@ bool sPortSky = false;
 f32 sPortSkyGain[3];
 f32 sPortChargeShell = 0.f;
 f32 sPortGunHeat = 0.f;
+bool sPortGunHeatOn = false;
 // The frozen enemy's icy pass (PortSetIcy): the freeze direction in the game's world and the
 // seconds since the freeze, and the actor's ice darkening. Remastered's RenderIcy material maps,
 // bound to maps 0-2.
@@ -422,6 +423,8 @@ void CCubeModel::PortTakeThermalSkipCounts(unsigned& cold, unsigned& hotDropped)
 void CCubeModel::PortSetChargeShell(const f32 amount) { sPortChargeShell = amount; }
 
 void CCubeModel::PortSetGunHeat(const f32 level) { sPortGunHeat = level; }
+
+void CCubeModel::PortApplyGunHeat(const bool on) { sPortGunHeatOn = on; }
 
 void CCubeModel::PortSetIcy(const bool active, const f32 dirGC[3], const f32 t, const f32 darkening) {
   sPortIcy.active = active;
@@ -694,8 +697,8 @@ f32 CCubeModel::PortSetPBRMaterial(const int idx, const f32 fade, const bool fad
     values[1] *= pulse;
     values[2] *= pulse;
   }
-  if (pk == aurora::PbrKind::ThermalHeatMask) {
-    // CCH1.y: the HTRN gun heat (CGunWeaponMP1::SetHeatVisualLevel).
+  if (pk == aurora::PbrKind::ThermalHeatMask && sPortGunHeatOn) {
+    // CCH1.y: the HTRN gun heat (CGunWeaponMP1::SetHeatVisualLevel, the gun's model 3 only).
     shield[5] = sPortGunHeat;
   }
   for (const SPortPBROverride& entry : sPortPBROverrides) {

@@ -467,7 +467,13 @@ void CGunWeapon::Draw(const bool drawSuitArm, const CStateManager& mgr, const CT
 #endif
     else {
       CModelFlags useFlags(CModelFlags::kT_Opaque, 1.0f);
+#ifdef TARGET_PC
+      CCubeModel::PortApplyGunHeat(true);
+#endif
       x10_solidModelData->RenderThermal(xf, mulColor, addColor, useFlags);
+#ifdef TARGET_PC
+      CCubeModel::PortApplyGunHeat(false);
+#endif
     }
 
 #ifdef TARGET_PC
