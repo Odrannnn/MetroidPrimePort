@@ -182,6 +182,12 @@ void DrawDifficultySection() {
 void DrawUnlocksSection() {
   ImGui::SeparatorText("Unlocks");
   const bool locked = BeginOriginalLocked();
+  bool hardMode = sUnlockHardMode;
+  if (ImGui::Checkbox("Hard mode", &hardMode)) {
+    SetUnlockHardMode(hardMode);
+  }
+  ImGui::SetItemTooltip("Offered when starting a file, as after finishing the game.");
+  ImGui::SameLine();
   bool fusionSuit = sUnlockFusionSuit;
   if (ImGui::Checkbox("Fusion Suit", &fusionSuit)) {
     SetUnlockFusionSuit(fusionSuit);

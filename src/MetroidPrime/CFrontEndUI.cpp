@@ -69,7 +69,7 @@ namespace {
 // Suit also needs normal mode beaten, so its unlock implies that too.
 bool NormalModeBeat() {
 #ifdef TARGET_PC
-  if (PortDebug::UnlockFusionSuit()) {
+  if (PortDebug::UnlockHardMode() || PortDebug::UnlockFusionSuit()) {
     return true;
   }
 #endif

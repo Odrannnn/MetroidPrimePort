@@ -147,6 +147,7 @@ extern PortDebug::EGraphicsBackend sGraphicsBackend;
 extern PortDebug::EGraphicsBackend sGraphicsBackendAtStart;
 extern std::string sGpuDriver;
 extern std::string sGpuDriverAtStart;
+extern bool sUnlockHardMode;
 extern float sDamageTakenMult;
 extern float sDamageDealtMult;
 extern int sStorageClamp;

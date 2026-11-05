@@ -24,6 +24,7 @@
 {"Game", "", "Difficulty", "Damage taken", "difficulty hard harder easy easier health enemy multiplier"},
 {"Game", "", "Difficulty", "Damage dealt", "difficulty hard harder easy easier enemy weapon beam multiplier"},
 {"Game", "", "Difficulty", "Reset difficulty", "difficulty default normal multiplier"},
+{"Game", "", "Unlocks", "Hard mode", "difficulty harder"},
 {"Game", "", "Unlocks", "Fusion Suit", "fusion unlock suit"},
 {"Game", "", "Unlocks", "Wear Fusion Suit", "fusion suit switch toggle wear change equip"},
 {"Game", "", "Unlocks", "Image galleries", "gallery pictures art unlock"},

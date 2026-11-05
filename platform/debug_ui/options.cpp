@@ -994,6 +994,13 @@ void SetProjectedShadows(bool enabled) {
   }
 }
 
+bool UnlockHardMode() {
+  EnsureInitialized();
+  return sUnlockHardMode && !sOriginalExperience;
+}
+
+void SetUnlockHardMode(bool enabled) { StoreSetting(sUnlockHardMode, enabled); }
+
 float DamageTakenMultiplier() {
   EnsureInitialized();
   return sOriginalExperience ? 1.f : sDamageTakenMult;

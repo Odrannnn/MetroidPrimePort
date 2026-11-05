@@ -523,6 +523,8 @@ void DriverWorkaroundsStarted();
 // Extras normally earned by finishing the game (or, for the Fusion Suit, by a
 // GBA link to Metroid Fusion). They only change what the title screen offers;
 // nothing is written into the save's persistent flags.
+bool UnlockHardMode();
+void SetUnlockHardMode(bool enabled);
 bool UnlockFusionSuit();
 // Custom difficulty (F1 > Game > Difficulty, `damage_taken` / `damage_dealt`):
 // multipliers on the damage the player takes and the damage the arm cannon's

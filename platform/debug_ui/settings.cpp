@@ -441,6 +441,7 @@ const SettingKey kSettingKeys[] = {
     BoolKey< &sPerPixelLighting >("per_pixel_lighting"),
     BoolKey< &sSunShadows >("sun_shadows"),
     BoolKey< &sProjectedShadows >("projected_shadows"),
+    BoolKey< &sUnlockHardMode >("unlock_hard_mode"),
     {"damage_taken",
      [](const std::string& value) {
        const float f = std::strtof(value.c_str(), nullptr);

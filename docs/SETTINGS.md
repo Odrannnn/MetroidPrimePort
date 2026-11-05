@@ -1322,9 +1322,10 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   combos; bombs and power bombs aren't scaled, as on Hard). They apply on top of
   a Hard file's own x2 and x0.5, take effect on the next hit, and read 1 under
   Original experience. "Reset difficulty" puts both back to 1.
-- Unlocks (F1 > Game > Unlocks, persisted as `unlock_fusion_suit`,
-  `unlock_galleries`, both off by default): offer what finishing the game
-  unlocks without finishing it. The Fusion Suit adds its Disabled/Enabled row under Metroid Fusion Connection
+- Unlocks (F1 > Game > Unlocks, persisted as `unlock_hard_mode`, `unlock_fusion_suit`,
+  `unlock_galleries`, all off by default): offer what finishing the game
+  unlocks without finishing it. Hard mode adds Normal/Hard to a new file; the
+  Fusion Suit adds its Disabled/Enabled row under Metroid Fusion Connection
   Bonuses (retail needs a GBA link) and implies normal mode beaten; galleries
   opens all four image galleries. The save's own flags are never written, so
   switching an unlock off locks the extra again (switching the Fusion Suit off
