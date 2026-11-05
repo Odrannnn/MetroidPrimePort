@@ -182,7 +182,8 @@ PortDebug::EGraphicsBackend sGraphicsBackendAtStart = PortDebug::kGraphicsBacken
 // Setting `gpu_driver`: an installed custom Vulkan driver's id (port_gpu_driver.h), "" = the system's.
 std::string sGpuDriver;
 std::string sGpuDriverAtStart;
-bool sUnlockHardMode = false;
+float sDamageTakenMult = 1.f;
+float sDamageDealtMult = 1.f;
 // Setting `storage_clamp`: -1 auto (aurora decides), 0 off, 1 on; read once when shaders are first made.
 int sStorageClamp = -1;
 int sStorageClampAtStart = -1;

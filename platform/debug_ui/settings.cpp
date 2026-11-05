@@ -441,7 +441,22 @@ const SettingKey kSettingKeys[] = {
     BoolKey< &sPerPixelLighting >("per_pixel_lighting"),
     BoolKey< &sSunShadows >("sun_shadows"),
     BoolKey< &sProjectedShadows >("projected_shadows"),
-    BoolKey< &sUnlockHardMode >("unlock_hard_mode"),
+    {"damage_taken",
+     [](const std::string& value) {
+       const float f = std::strtof(value.c_str(), nullptr);
+       if (std::isfinite(f) && f >= PortDebug::kDamageMultMin && f <= PortDebug::kDamageMultMax) {
+         sDamageTakenMult = f;
+       }
+     },
+     [](std::ostream& out) { out << sDamageTakenMult; }, false, "0.5", "3"},
+    {"damage_dealt",
+     [](const std::string& value) {
+       const float f = std::strtof(value.c_str(), nullptr);
+       if (std::isfinite(f) && f >= PortDebug::kDamageMultMin && f <= PortDebug::kDamageMultMax) {
+         sDamageDealtMult = f;
+       }
+     },
+     [](std::ostream& out) { out << sDamageDealtMult; }, false, "0.5", "3"},
     BoolKey< &sUnlockFusionSuit >("unlock_fusion_suit"),
     BoolKey< &sUnlockGalleries >("unlock_galleries"),
     {"storage_clamp",

@@ -202,7 +202,7 @@ void DrawOriginalSection() {
   }
   ItemHelp("Plays the game as on the GameCube: 4:3, 60 Hz, no mods, retail HUD and cutscenes, and "
            "none of the gameplay extras (spring ball, fast morph, charge and lock-on options, "
-           "turbo fire, unlocks). Other settings return when it's turned off. Controls, cheats, "
+           "turbo fire, custom difficulty, unlocks). Other settings return when it's turned off. Controls, cheats, "
            "save states, the randomizer, Archipelago and the timer still work.");
 }
 
@@ -210,6 +210,7 @@ void DrawGameTab() {
   DrawOriginalSection();
   DrawGameSection();
   DrawCutscenesSection();
+  DrawDifficultySection();
   DrawUnlocksSection();
   DrawGameAudio();
   DrawLanguageSection();

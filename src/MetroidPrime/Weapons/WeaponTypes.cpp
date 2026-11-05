@@ -17,6 +17,8 @@
 
 #include "rstl/set.hpp"
 
+#include "port_debug.h"
+
 namespace NWeaponTypes {
 
 CAssetId get_asset_id_from_name(const char* name) {
@@ -173,6 +175,10 @@ CDamageInfo get_shot_damage(const CDamageInfo& shotParam, CStateManager& mgr) {
   CDamageInfo result = shotParam;
   if (gpGameState->GetHardMode()) {
     result.MultiplyDamage(gpGameState->GetHardModeWeaponMultiplier());
+  }
+  const float custom = PortDebug::DamageDealtMultiplier();
+  if (custom != 1.f) {
+    result.MultiplyDamage(custom);
   }
   return result;
 }

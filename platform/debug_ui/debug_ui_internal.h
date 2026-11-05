@@ -147,7 +147,8 @@ extern PortDebug::EGraphicsBackend sGraphicsBackend;
 extern PortDebug::EGraphicsBackend sGraphicsBackendAtStart;
 extern std::string sGpuDriver;
 extern std::string sGpuDriverAtStart;
-extern bool sUnlockHardMode;
+extern float sDamageTakenMult;
+extern float sDamageDealtMult;
 extern int sStorageClamp;
 extern int sStorageClampAtStart;
 extern bool sStorageClampEnvFromSetting;
@@ -472,6 +473,7 @@ void DrawBuiltinMods();
 
 // game_sections.cpp
 void DrawCutscenesSection();
+void DrawDifficultySection();
 void DrawUnlocksSection();
 void DrawSpeedrunSection();
 void DrawDiscordSection();

@@ -152,15 +152,36 @@ void WearFusionSuit(CStateManager& mgr, bool wearing) {
   }
 }
 
+void DrawDifficultySection() {
+  ImGui::SeparatorText("Difficulty");
+  const bool locked = BeginOriginalLocked();
+  float taken = sDamageTakenMult;
+  if (ImGui::SliderFloat("Damage taken", &taken, kDamageMultMin, kDamageMultMax, "x%.2f",
+                         ImGuiSliderFlags_AlwaysClamp)) {
+    SetDamageTakenMultiplier(taken);
+  }
+  ItemHelp("Multiplies the damage Samus takes. A Hard file's own x2 applies on top. Ctrl+click "
+           "to type a value.");
+  float dealt = sDamageDealtMult;
+  if (ImGui::SliderFloat("Damage dealt", &dealt, kDamageMultMin, kDamageMultMax, "x%.2f",
+                         ImGuiSliderFlags_AlwaysClamp)) {
+    SetDamageDealtMultiplier(dealt);
+  }
+  ItemHelp("Multiplies the damage of beams, charge shots, missiles and charge combos (not bombs, "
+           "as on Hard). A Hard file's own x0.5 applies on top. Ctrl+click to type a value.");
+  ImGui::BeginDisabled(sDamageTakenMult == 1.f && sDamageDealtMult == 1.f);
+  if (ImGui::Button("Reset difficulty")) {
+    SetDamageTakenMultiplier(1.f);
+    SetDamageDealtMultiplier(1.f);
+  }
+  ImGui::EndDisabled();
+  ImGui::SetItemTooltip("Both back to x1, the file's own difficulty.");
+  EndOriginalLocked(locked);
+}
+
 void DrawUnlocksSection() {
   ImGui::SeparatorText("Unlocks");
   const bool locked = BeginOriginalLocked();
-  bool hardMode = sUnlockHardMode;
-  if (ImGui::Checkbox("Hard mode", &hardMode)) {
-    SetUnlockHardMode(hardMode);
-  }
-  ImGui::SetItemTooltip("Offered when starting a file, as after finishing the game.");
-  ImGui::SameLine();
   bool fusionSuit = sUnlockFusionSuit;
   if (ImGui::Checkbox("Fusion Suit", &fusionSuit)) {
     SetUnlockFusionSuit(fusionSuit);
