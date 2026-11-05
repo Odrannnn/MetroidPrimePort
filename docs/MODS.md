@@ -344,7 +344,8 @@ Texture packs replace the game's textures with Aurora-format images named
   one (`<executable dir>/textures`); both are the layer under your pack, and whatever else a build
   carries inside the executable is only the button-prompt icons.
 - **Your own pack:** put it in `user_textures` in the [user folder](#installing-mods), or wherever
-  `MP_USER_TEXTURES` points, so updates never touch it. It is layered over the folder above, with
+  `MP_USER_TEXTURES` points, so updates never touch it; the game creates the folder on start,
+  as it does `mods/`. It is layered over the folder above, with
   the same folder rules. The overlay's Mods page has a Reload button.
   Its Import texture pack .zip button extracts a `.zip`'s `.png`/`.dds` files (keeping its
   folders) over the current pack, which is swapped in once the copy finishes.
