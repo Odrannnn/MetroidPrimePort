@@ -674,7 +674,11 @@ void CGunWeapon::PortDrawHologramTransition(const CStateManager& mgr, const CTra
     return;
   const CTransform4f armXf =
       xf * x10_solidModelData->GetScaledLocatorTransform(rstl::string_l(skElbowLocator));
-  if (mgr.GetThermalDrawFlag() == kTD_Hot && x200_beamId != CPlayerState::kBI_Ice) {
+  // Remastered's DrawUpperArmForTransition (0xca2a3c) renders the arm for the visor at the elbow
+  // in every case, no Ice exception: in thermal that is the heat model's DefaultOverride command,
+  // which CModelData::Render picks in the HDR scene.
+  if (mgr.GetThermalDrawFlag() == kTD_Hot && x200_beamId != CPlayerState::kBI_Ice &&
+      !CCubeMaterial::sPortSceneHdr) {
     const float a = flags.GetColorRef().GetAlpha();
     CModelFlags useFlags(CModelFlags::kT_Opaque, 1.0f);
 #ifdef TARGET_PC
