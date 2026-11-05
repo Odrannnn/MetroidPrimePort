@@ -136,6 +136,9 @@ public:
   void AcceptScriptMsg(EScriptObjectMessage, TUniqueId, CStateManager&) override;
   void PreRender(CStateManager&, const CFrustumPlanes&) override;
   void AddToRenderer(const CFrustumPlanes&, const CStateManager&) const override;
+#ifdef TARGET_PC
+  void PortAddThermalColdNode(const CFrustumPlanes&, const CStateManager&) const override;
+#endif
   void Render(const CStateManager&) const override;
   rstl::optional_object< CAABox > GetTouchBounds() const override { return x1c8_touchBounds; }
 #ifdef TARGET_PC

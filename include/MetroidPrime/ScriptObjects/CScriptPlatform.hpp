@@ -56,6 +56,7 @@ public:
   void Render(const CStateManager&) const override;
 #ifdef TARGET_PC
   void AddToRenderer(const CFrustumPlanes&, const CStateManager&) const override;
+  void PortAddThermalColdNode(const CFrustumPlanes&, const CStateManager&) const override;
   void PortSetBarrierController(TUniqueId uid) { xPortBarrierController = uid; }
 #endif
   CHealthInfo* HealthInfo(CStateManager&) override;

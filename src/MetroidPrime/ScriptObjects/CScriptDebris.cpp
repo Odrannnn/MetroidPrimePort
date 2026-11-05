@@ -418,6 +418,15 @@ void CScriptDebris::AddToRenderer(const CFrustumPlanes& frustum, const CStateMan
   }
 }
 
+#ifdef TARGET_PC
+void CScriptDebris::PortAddThermalColdNode(const CFrustumPlanes& frustum,
+                                           const CStateManager& mgr) const {
+  if (HasModelData() && x270_curTime < x274_duration) {
+    CActor::PortAddThermalColdNode(frustum, mgr);
+  }
+}
+#endif
+
 ENTITY_ACCEPT_IMPL(CScriptDebris)
 
 void CScriptDebris::CollidedWith(const TUniqueId& id, const CCollisionInfoList& list,

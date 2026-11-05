@@ -112,6 +112,12 @@ public:
   // Port: draws the base model as a caster into the current projected actor shadow map.
   void PortRenderActorShadowCaster(const CStateManager& mgr) const;
   void PortConfigureShadow(const CStateManager& mgr);
+  // Port: in the thermal visor's cold pass, a hot-only actor's share of Remastered's cold bins:
+  // the normal node its hot-pass AddToRenderer queues through EnsureRendered
+  // (CModelData::PortDrawThermalColdNode). Overrides keep their AddToRenderer's gate.
+  virtual void PortAddThermalColdNode(const CFrustumPlanes& planes,
+                                      const CStateManager& mgr) const;
+  void PortThermalColdNode() const;
 #endif
   void CreateShadowIfNeeded();
 

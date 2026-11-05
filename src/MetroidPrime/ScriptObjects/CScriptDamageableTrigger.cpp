@@ -229,6 +229,16 @@ void CScriptDamageableTrigger::AddToRenderer(const CFrustumPlanes&,
   EnsureRendered(mgr, GetTranslation() - x244_faceTranslate, GetSortingBounds(mgr));
 }
 
+#ifdef TARGET_PC
+void CScriptDamageableTrigger::PortAddThermalColdNode(const CFrustumPlanes&,
+                                                      const CStateManager&) const {
+  if (x300_26_outOfFrustum) {
+    return;
+  }
+  PortThermalColdNode();
+}
+#endif
+
 void CScriptDamageableTrigger::Render(const CStateManager& mgr) const {
   bool drawFace = true;
 #ifdef TARGET_PC

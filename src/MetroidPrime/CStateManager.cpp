@@ -4087,6 +4087,32 @@ void CStateManager::DrawWorld() const {
     }
 #ifdef TARGET_PC
     if (portThermalScene) {
+      // Remastered draws the cold pass after the whole scene is queued, so the normal node a
+      // hot-only actor queues in the hot pass (RenderUnsortedParts 0xfa71c4) lands in the cold
+      // bins too. Draw those nodes here, with the hot pass's thermal flag for its gates.
+      unsigned coldNodes = 0;
+      xf34_thermalFlag = kTD_Hot;
+      for (int i = 0; i < areas.size(); ++i) {
+        const TAreaId id = areas[i]->GetId();
+        for (const CActor** it = thermalActors.begin(); it != thermalActors.end(); ++it) {
+          const CActor* actor = *it;
+          if ((actor->GetThermalFlags() & 1) == 0 &&
+              (actor->GetCurrentAreaId() == id ||
+               (actor->GetCurrentAreaId() == kInvalidAreaId && id == visAreaId))) {
+            CPortActorRenderScope presented(*actor);
+            actor->PortAddThermalColdNode(frustum, *this);
+            ++coldNodes;
+          }
+        }
+      }
+      xf34_thermalFlag = kTD_Cold;
+      static const bool sColdNodeLog = port::EnvFlag("MP_VISORMESH_LOG");
+      if (sColdNodeLog && CGraphics::GetFrameCounter() % 60 == 0) {
+        fprintf(stderr, "visor-mesh: frame %u thermal cold nodes: actors %u, drawn %u\n",
+                static_cast< uint >(CGraphics::GetFrameCounter()), coldNodes,
+                CModelData::sPortThermalColdNodes);
+      }
+      CModelData::sPortThermalColdNodes = 0;
       CCubeMaterial::sPortPBRThermal = CCubeMaterial::kPT_None;
       CCubeModel::PortSetThermalPass(PortVisorMesh::kTP_None);
     }

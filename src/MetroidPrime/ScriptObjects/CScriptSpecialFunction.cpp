@@ -176,6 +176,15 @@ void CScriptSpecialFunction::AddToRenderer(const CFrustumPlanes&, const CStateMa
   }
 }
 
+#ifdef TARGET_PC
+void CScriptSpecialFunction::PortAddThermalColdNode(const CFrustumPlanes&,
+                                                    const CStateManager&) const {
+  if (GetActive() && xe8_function == kSF_FogVolume && x1e4_30_ && !PortRoomEnv::FogOwnsRoom()) {
+    PortThermalColdNode();
+  }
+}
+#endif
+
 void CScriptSpecialFunction::PreRender(CStateManager&, const CFrustumPlanes& frustum) {
   switch (xe8_function) {
   case kSF_FogVolume:

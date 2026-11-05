@@ -713,6 +713,14 @@ void CScriptPlatform::AddToRenderer(const CFrustumPlanes& planes, const CStateMa
   if (owner && owner->PortBarrierCovers(GetUniqueId(), mgr)) return;
   CPhysicsActor::AddToRenderer(planes, mgr);
 }
+
+void CScriptPlatform::PortAddThermalColdNode(const CFrustumPlanes& planes,
+                                             const CStateManager& mgr) const {
+  const CScriptSpecialFunction* owner =
+      TCastToConstPtr<CScriptSpecialFunction>(mgr.GetObjectById(xPortBarrierController));
+  if (owner && owner->PortBarrierCovers(GetUniqueId(), mgr)) return;
+  CActor::PortAddThermalColdNode(planes, mgr);
+}
 #endif
 
 void CScriptPlatform::Render(const CStateManager& mgr) const {

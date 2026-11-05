@@ -283,6 +283,17 @@ void CEnergyProjectile::AddToRenderer(const CFrustumPlanes& frustum,
   EnsureRendered(mgr);
 }
 
+#ifdef TARGET_PC
+void CEnergyProjectile::PortAddThermalColdNode(const CFrustumPlanes& frustum,
+                                               const CStateManager&) const {
+  const rstl::optional_object< CAABox > bounds = GetProjectile().GetBounds();
+  if (bounds.valid() && !frustum.BoxInFrustumPlanes(bounds)) {
+    return;
+  }
+  PortThermalColdNode();
+}
+#endif
+
 void CEnergyProjectile::Render(const CStateManager& mgr) const {
   const CPlayerState::EPlayerVisor visor = mgr.GetPlayerState()->GetActiveVisor(mgr);
   if (visor == CPlayerState::kPV_Combat && (HasAttrib(kPA_Charged) || HasAttrib(kPA_ComboShot))) {

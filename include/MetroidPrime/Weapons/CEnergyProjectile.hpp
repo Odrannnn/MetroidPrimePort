@@ -31,6 +31,9 @@ public:
 
   // CActor
   void AddToRenderer(const CFrustumPlanes&, const CStateManager&) const override;
+#ifdef TARGET_PC
+  void PortAddThermalColdNode(const CFrustumPlanes&, const CStateManager&) const override;
+#endif
   void Render(const CStateManager&) const override;
   void Touch(CActor&, CStateManager&) override;
 

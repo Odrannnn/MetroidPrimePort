@@ -30,6 +30,9 @@ public:
 
   // CActor
   void AddToRenderer(const CFrustumPlanes& frustum, const CStateManager& mgr) const override;
+#ifdef TARGET_PC
+  void PortAddThermalColdNode(const CFrustumPlanes&, const CStateManager&) const override;
+#endif
   void Render(const CStateManager& mgr) const override;
   rstl::optional_object< CAABox > GetTouchBounds() const override;
   void Touch(CActor& actor, CStateManager& mgr) override;

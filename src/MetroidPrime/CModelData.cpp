@@ -736,6 +736,28 @@ void CModelData::PortPlace(uint mrea, uint editorId) {
   }
 }
 
+unsigned CModelData::sPortThermalColdNodes = 0;
+
+void CModelData::PortDrawThermalColdNode(const CTransform4f& xf, const CActorLights* lights,
+                                         const CModelFlags& flags) const {
+  // RenderUnsortedParts' own gate: these queue no node.
+  if (x14_25_sortThermal || HasAnimation() || !x1c_normalModel ||
+      flags.GetTrans() > CModelFlags::kT_Four) {
+    return;
+  }
+  gpRender->SetModelMatrix(PortScaledXf(kWM_ThermalHot, xf));
+  if (lights != nullptr) {
+    lights->ActivateLights();
+  } else {
+    CGraphics::DisableAllLights();
+    gpRender->SetAmbientColor(x18_ambientColor);
+  }
+  PickStaticModel(kWM_ThermalHot)->DrawUnsortedParts(flags);
+  gpRender->SetAmbientColor(CColor::White());
+  CGraphics::DisableAllLights();
+  ++sPortThermalColdNodes;
+}
+
 CTransform4f CModelData::PortScaledXf(EWhichModel which, const CTransform4f& xf) const {
   const CTransform4f scaledXf = xf * CTransform4f::Scale(x0_scale);
   const int slot = PortSlot(which);

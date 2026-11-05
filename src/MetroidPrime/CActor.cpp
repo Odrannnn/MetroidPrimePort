@@ -365,6 +365,20 @@ void CActor::EnsureRendered(const CStateManager& mgr) const {
   EnsureRendered(mgr, pos, bounds);
 }
 
+#ifdef TARGET_PC
+void CActor::PortAddThermalColdNode(const CFrustumPlanes&, const CStateManager& mgr) const {
+  if (HasModelData() && !GetPreRenderClipped() && !CanRenderUnsorted(mgr)) {
+    PortThermalColdNode();
+  }
+}
+
+void CActor::PortThermalColdNode() const {
+  if (GetModelData()) {
+    GetModelData()->PortDrawThermalColdNode(GetTransform(), GetActorLights(), GetModelFlags());
+  }
+}
+#endif
+
 void CActor::DrawTouchBounds() const {}
 
 bool CActor::CanRenderUnsorted(const CStateManager& mgr) const {

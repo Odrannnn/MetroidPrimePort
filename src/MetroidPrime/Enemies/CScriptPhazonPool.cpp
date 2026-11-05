@@ -272,6 +272,14 @@ void CScriptPhazonPool::AddToRenderer(const CFrustumPlanes& frustum,
   CActor::EnsureRendered(mgr);
 }
 
+#ifdef TARGET_PC
+void CScriptPhazonPool::PortAddThermalColdNode(const CFrustumPlanes& frustum,
+                                               const CStateManager& mgr) const {
+  CActor::PortAddThermalColdNode(frustum, mgr);
+  PortThermalColdNode();
+}
+#endif
+
 void CScriptPhazonPool::UpdateInhabitants(CStateManager& mgr) {
   AUTO(it, mInhabitants.begin());
   while (it != mInhabitants.end()) {

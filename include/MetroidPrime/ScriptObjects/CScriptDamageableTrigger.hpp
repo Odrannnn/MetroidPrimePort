@@ -34,6 +34,9 @@ public:
                                                          const CWeaponMode&, int) const override;
   void Render(const CStateManager& mgr) const override;
   void AddToRenderer(const CFrustumPlanes& frustum, const CStateManager& mgr) const override;
+#ifdef TARGET_PC
+  void PortAddThermalColdNode(const CFrustumPlanes&, const CStateManager&) const override;
+#endif
   void PreRender(CStateManager& mgr, const CFrustumPlanes& frustum) override;
   const CDamageVulnerability* GetDamageVulnerability() const override;
   CHealthInfo* HealthInfo(CStateManager&) override;

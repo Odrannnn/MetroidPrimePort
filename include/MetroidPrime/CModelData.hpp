@@ -159,6 +159,12 @@ public:
   void PortPlace(uint mrea, uint editorId);
   // xf * scale, then the static model `which` picks' correction when it has one.
   CTransform4f PortScaledXf(EWhichModel which, const CTransform4f& xf) const;
+  // The thermal cold pass's draw of the node RenderUnsortedParts(kWM_ThermalHot) queues for a
+  // model without sort thermal: Remastered queues it as a normal scene node (0xfa71c4), which
+  // the cold pass draws too (bit-22 filter), before the hot pass draws its bit-19 meshes.
+  void PortDrawThermalColdNode(const CTransform4f& xf, const CActorLights* lights,
+                               const CModelFlags& flags) const;
+  static unsigned sPortThermalColdNodes; // draws, for the MP_VISORMESH_LOG line
   // PORT: Remastered's frozen model (CActorParametersMP1 +0x80, property 0x0364A97A, bound by
   // SetFrozenModel 0xc4f980): the character's ice model when a mod replaced it with a
   // Remastered (PBR) one, else null. Remastered draws it posed, without the ice overlay's
