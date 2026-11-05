@@ -567,6 +567,10 @@ const TLockedToken< CModel >& CModelData::PickStaticModel(EWhichModel which) con
       return *x3c_infraModel;
     break;
   case kWM_XRay:
+#ifdef TARGET_PC
+    if (PortXRayHidden())
+      break;
+#endif
     if (x2c_xrayModel)
       return *x2c_xrayModel;
     break;
@@ -588,6 +592,10 @@ CSkinnedModel& CModelData::PickAnimatedModel(EWhichModel which) const {
     model = xc_animData->GetInfraModel();
     break;
   case kWM_XRay:
+#ifdef TARGET_PC
+    if (PortXRayHidden())
+      break;
+#endif
     model = xc_animData->GetXRayModel();
     break;
   default:
@@ -617,6 +625,10 @@ bool CModelData::HasModel(EWhichModel which) const {
     case kWM_Normal:
       return true;
     case kWM_XRay:
+#ifdef TARGET_PC
+      if (PortXRayHidden())
+        return false;
+#endif
       return xc_animData->GetXRayModel() != nullptr;
     case kWM_Thermal:
     case kWM_ThermalHot:
@@ -633,6 +645,10 @@ bool CModelData::HasModel(EWhichModel which) const {
   case kWM_Normal:
     return x1c_normalModel;
   case kWM_XRay:
+#ifdef TARGET_PC
+    if (PortXRayHidden())
+      return false;
+#endif
     return x2c_xrayModel;
   case kWM_Thermal:
   case kWM_ThermalHot:
@@ -653,10 +669,10 @@ void CModelData::Render(const CStateManager& mgr, const CTransform4f& xf,
 
 bool CModelData::IsLoaded(int shaderIdx) const {
 #ifdef TARGET_PC
-  // A Remastered heat model (one retail lacks) loads when it is first drawn, like retail's own
-  // visor models; waiting for it here would hold the arm cannon back until the visor shows it
-  // (CGunWeapon::Update needs the suit arm loaded before it draws the gun).
-  const bool checkXRay = true;
+  // A Remastered X-ray or heat model (one retail lacks) loads when it is first drawn, like
+  // retail's own visor models; waiting for it here would hold the arm cannon back until the
+  // visor shows it (CGunWeapon::Update needs the suit arm loaded before it draws the gun).
+  const bool checkXRay = !xPortXRayHdrOnly;
   const bool checkInfra = !xPortInfraHdrOnly;
 #else
   const bool checkXRay = true;
@@ -692,6 +708,7 @@ int CModelData::GetNumMaterialSets() const {
 
 #ifdef TARGET_PC
 bool CModelData::PortInfraHidden() const { return xPortInfraHdrOnly && !CCubeMaterial::sPortSceneHdr; }
+bool CModelData::PortXRayHidden() const { return xPortXRayHdrOnly && !CCubeMaterial::sPortSceneHdr; }
 
 int CModelData::PortSlot(EWhichModel which) const {
   switch (which) {
@@ -699,7 +716,7 @@ int CModelData::PortSlot(EWhichModel which) const {
   case kWM_ThermalHot:
     return x3c_infraModel && !PortInfraHidden() ? 2 : 0;
   case kWM_XRay:
-    return x2c_xrayModel ? 1 : 0;
+    return x2c_xrayModel && !PortXRayHidden() ? 1 : 0;
   default:
     return 0;
   }

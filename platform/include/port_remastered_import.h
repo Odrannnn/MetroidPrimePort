@@ -173,7 +173,9 @@ inline constexpr int kTextures = 5;
 // 35: so are the grapple arm's: grappleArm.CHPR's Thermal subcharacter as look 3 of the grapple
 //     ANCS (rebinding Varia's pair), GrappleGear/GrapNoz1/GrapNoz2_Thermal of the retail CMDLs.
 // 36: and their GrappleGear/GrapNoz1/GrapNoz2_XRAY as look 4 (PortModelVariant::kXRayLook).
-inline constexpr int kModels = 36;
+// 37: the arm cannon's X-ray models (9d82dc5e, Phazon's 998992d7) as look 4 of the five beams' ANCSs,
+//     and <Suit>Arm_XRay as look 4 of the retail arms.
+inline constexpr int kModels = 37;
 // 63: ELPS reads its CNST surface flag; the system tween is 0 only at a 0x1000000 lifetime.
 // 62: NEGT, CRCV, SPEV, ELPS, ROTV, PNCV, KEYF, SLTW, CRLN octaves, KESP, one-stop GRAD, PAP0/9,
 //     ADV9 and IAV0..3 are converted; PLNV counts come from MAXP.

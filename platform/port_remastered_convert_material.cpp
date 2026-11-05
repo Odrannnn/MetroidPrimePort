@@ -285,6 +285,14 @@ constexpr ShaderTwin kShaderTwins[] = {
     // 74c655e4: 084a8db5 plus the CCH1 tint on the bent room and a second output, 1 - CCH1 x (1 - vertex
     // alpha), as 2f95a061's (SimpleGlassTinted below); kb material/74c655e4.md.
     {0x74C655E4, kShaderSimpleGlass},
+    // ac620b1d (gun_sides_XRAY_mat, the arm cannon's X-ray models 9d82dc5e and 998992d7): 65e90e82's fragment math
+    // (perm 002_0 folded side by side: rim, depth fade, ICAN mux, -2 TCH0, the same alpha) with ICAN read on the
+    // texcoord set its TexCoordIndex names (c5[3].x) where 65e90e82 reads set 0; the port samples each map on its
+    // authored set, so both draw the same. The vertex perms add the bone fetch; kb material/ac620b1d.md.
+    {0xAC620B1D, 0x65E90E82 /* kShaderXrayMap */},
+    // f88778c9 (the Varia/Gravity/Phazon <Suit>Arm_XRay): 65e90e82's fragment perms verbatim (002, 018, 042 folded),
+    // 0c0b6119's static vertex shader in place of its bone fetch; kb material/f88778c9.md.
+    {0xF88778C9, 0x65E90E82 /* kShaderXrayMap */},
 };
 bool SimpleGlassTinted(uint32_t shader) { return shader == 0x74C655E4; }
 // kb topic/shader-twins.md "ColorUnlit-white": out = base x CCH0.x, alpha base.a; no vertex colour, no CCH1.x.

@@ -172,14 +172,18 @@ public:
   // The infra (thermal) model is a Remastered one, drawn only in the HDR scene; without HDR the
   // thermal passes draw the normal model, as retail has no infra model there.
   void PortSetInfraHdrOnly() { xPortInfraHdrOnly = true; }
+  // The same for a Remastered X-ray model: without HDR the X-ray visor draws the normal model.
+  void PortSetXRayHdrOnly() { xPortXRayHdrOnly = true; }
 
 private:
   bool PortInfraHidden() const;
+  bool PortXRayHidden() const;
   int PortSlot(EWhichModel which) const;
   CAABox PortLocalBounds() const;
   float xPortCorrection[3][12];
   uchar xPortCorrected = 0;  // bit n: slot n (normal, xray, infra) has a correction
   bool xPortInfraHdrOnly = false;
+  bool xPortXRayHdrOnly = false;
 #endif
 };
 CHECK_SIZEOF(CModelData, 0x4c)

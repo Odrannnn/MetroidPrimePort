@@ -22,6 +22,7 @@
 #include "Kyoto/Animation/CVertexMorphEffect.hpp"
 #include "Kyoto/Audio/CSfxManager.hpp"
 #include "Kyoto/CDependencyGroup.hpp"
+#include "Kyoto/Graphics/CCubeMaterial.hpp"
 #include "Kyoto/Graphics/CGraphics.hpp"
 #include "Kyoto/Graphics/CCubeModel.hpp"
 #include "Kyoto/Graphics/CModel.hpp"
@@ -176,6 +177,16 @@ void CGunWeapon::LoadGunModels(CStateManager& mgr) {
       x10_solidModelData->SetInfraModel(
           rstl::pair< CAssetId, CAssetId >(info.GetModelId(), info.GetSkinRulesId()));
       x10_solidModelData->PortSetInfraHdrOnly();
+    }
+    // In X-ray it draws the beam's X-ray model (9d82dc5e, Phazon's 998992d7; shaders ac620b1d,
+    // a6dc7b40), the X-ray character of its CHPR, imported as look 4 of the same ANCS.
+    const CAssetId xray = PortModelVariant::Id(x214_ancsId, PortModelVariant::kXRayLook);
+    if (gpResourceFactory->GetResourceTypeById(xray) == 'ANCS') {
+      TToken< CAnimCharacterSet > look = gpSimplePool->GetObj(SObjectTag('ANCS', xray));
+      const CCharacterInfo& info = (*look)->GetCharacterSet().GetCharacterList()[0].second;
+      x10_solidModelData->SetXRayModel(
+          rstl::pair< CAssetId, CAssetId >(info.GetModelId(), info.GetSkinRulesId()));
+      x10_solidModelData->PortSetXRayHdrOnly();
     }
   }
 #endif
@@ -489,6 +500,22 @@ void CGunWeapon::Draw(const bool drawSuitArm, const CStateManager& mgr, const CT
 #endif
   } else {
     /* Cold Draw */
+#ifdef TARGET_PC
+    // Remastered's CGunWeaponMP1::Draw (0xca22c0) has no hologram in X-ray: outside a beam
+    // change it renders the solid gun for the visor, so its X-ray model, with the static
+    // Normal().SetWriteZBufferBeforeRender(true, true) (0x4b23af4; kF_DrawNormal is the depth
+    // prepass) and no beam glow. HDR scene only; retail X-ray keeps the hologram.
+    if (CCubeMaterial::sPortSceneHdr && !x218_29_drawHologram && !mPortDreadCannon &&
+        mgr.GetPlayerState()->GetCurrentVisor() == CPlayerState::kPV_XRay) {
+      x10_solidModelData->Render(
+          mgr, xf, lights,
+          CModelFlags(CModelFlags::kT_Opaque, 0,
+                      static_cast< CModelFlags::EFlags >(CModelFlags::kF_DepthCompare |
+                                                         CModelFlags::kF_DepthUpdate |
+                                                         CModelFlags::kF_DrawNormal),
+                      CColor::White()));
+    } else
+#endif
     if (mgr.GetPlayerState()->GetCurrentVisor() != CPlayerState::kPV_XRay &&
         !x218_29_drawHologram) {
 #ifdef TARGET_PC
@@ -1048,6 +1075,13 @@ void CGunWeapon::LoadSuitArm(CStateManager& mgr) {
     if (gpResourceFactory->GetResourceTypeById(variant) == 'CMDL') {
       xb0_suitArmModelData->SetInfraModel(rstl::pair< CAssetId, CAssetId >(variant, 0));
       xb0_suitArmModelData->PortSetInfraHdrOnly();
+    }
+    // In X-ray it draws <Suit>Arm_XRay (the +0x2a8 slot; shader f88778c9, the Power arm's
+    // 24703d2a plain PBR) with the caller's flags, imported as look 4 of the retail arm.
+    const CAssetId xray = PortModelVariant::Id(armId, PortModelVariant::kXRayLook);
+    if (gpResourceFactory->GetResourceTypeById(xray) == 'CMDL') {
+      xb0_suitArmModelData->SetXRayModel(rstl::pair< CAssetId, CAssetId >(xray, 0));
+      xb0_suitArmModelData->PortSetXRayHdrOnly();
     }
   }
 #endif
