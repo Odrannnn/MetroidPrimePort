@@ -28,10 +28,11 @@
 // display-encoded EFB, on the decoded colour, and re-encodes it.
 // Remastered draws the whole X-ray world into a 0.7-scale HDR target and blends it back to the
 // full-resolution frame (xray_blend_upscale 0xfb4500, a plain textured quad), tone mapping after
-// that: pass 1 here therefore writes the unclamped level E (it can go negative, the depth fade
-// subtracts) at 0.7 of the frame, sampling the full-resolution frame at each target pixel's
-// centre (the nearest of the pixels the world was rasterised to), and a second pass filters it
-// up bilinearly in that HDR domain.
+// that: pass 1 here therefore writes the level E at 0.7 of the frame, sampling the full-resolution
+// frame at each target pixel's centre (the nearest of the pixels the world was rasterised to), and
+// a second pass filters it up bilinearly in that HDR domain. The target takes the main frame's
+// format, R11G11B10F (kb topic/auto-exposure-average.md), which has no sign: where the depth fade
+// pulls E below 0 the store keeps 0, so the sky and far geometry go black, as Remastered shows.
 // Pass A reads the HDR scene's exposed linear light as it is and blends the level back into it as
 // it is (kb topic/visor-hdr-pipeline.md): the post's tonemap applies the curve once. Outside the
 // HDR scene there is no pass A.
@@ -40,7 +41,7 @@ namespace {
 Module Log("aurora::gfx::xray");
 using webgpu::g_device;
 
-// Signed, unclamped light: the depth fade subtracts, and the filtering up happens before the curve.
+// HDR light, unclamped above; the filtering up happens before the curve.
 constexpr wgpu::TextureFormat LevelFormat = wgpu::TextureFormat::RGBA16Float;
 
 constexpr const char* Source = R"(
@@ -101,12 +102,12 @@ fn fs_distort(in: VertexOutput) -> @location(0) vec4f {
   let c = pow(x, vec3f(u.p[0].x));
   let sel = select(c * u.p[0].y, vec3f(1.0) - c * u.p[0].y, u.p[1].w < 0.0);
   let e = sel * abs(u.p[1].w) - vec3f(a * u.p[4].y);
-  return vec4f(e, 1.0);
+  // Remastered's R11G11B10F target stores a negative level as 0.
+  return vec4f(max(e, vec3f(0.0)), 1.0);
 }
 
-// Pass 1b: the low-resolution level, filtered up and blended back as the HDR scene holds it (signed,
-// unclamped); the post's tonemap applies the curve, which like Remastered's takes a negative level
-// through the toe cubic (pale; kb topic/xray-post-shader-00089f0.md).
+// Pass 1b: the low-resolution level, filtered up and blended back as the HDR scene holds it; the
+// post's tonemap applies the curve.
 fn enc(e: vec3f) -> vec3f { return e; }
 
 @fragment
