@@ -1617,6 +1617,9 @@ if(MP_BUILD_TESTS)
     # dependency-free Python and skip themselves when python3 is absent.
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME port_recomplauncher
+            COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/port_recomplauncher.py)
+        set_tests_properties(port_recomplauncher PROPERTIES TIMEOUT 30 LABELS port)
         add_test(NAME port_android_save_dialog_title
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/port_android_save_dialog_title.py
                     ${CMAKE_CURRENT_SOURCE_DIR})

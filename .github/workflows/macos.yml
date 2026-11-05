@@ -135,6 +135,8 @@ jobs:
           cp ffmpeg-min/out/ffmpeg-build.txt dist/licenses/ffmpeg-build.txt
           cp "$(brew --prefix openssl@3)/LICENSE.txt" dist/licenses/openssl.txt 2>/dev/null ||
             curl -fsSL -o dist/licenses/openssl.txt https://raw.githubusercontent.com/openssl/openssl/openssl-3.5/LICENSE.txt
+          python3 tools/write_recomplauncher.py --platform macos dist/recomplauncher.json
+          cp docs/RECOMPLAUNCHER.md dist/RECOMPLAUNCHER.md
           cp docs/NATIVE_PORT.md dist/README.md
           cp docs/SETTINGS.md dist/SETTINGS.md
           cp docs/MODS.md dist/MODS.md

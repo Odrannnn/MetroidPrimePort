@@ -69,6 +69,13 @@ and 1.02 (`GM8E01`), PAL (`GM8P01`) and Trilogy (USA `R3ME01` and PAL `R3MP01`),
 
 Press **F1** for every setting.
 
+## RecompLauncher
+
+Desktop release archives include a project-owned `recomplauncher.json` for disc selection,
+video settings and save backups. On Linux, choose the tarball or AppImage tarball; a
+standalone AppImage still needs the launcher's fallback profile. See
+[RecompLauncher integration](docs/RECOMPLAUNCHER.md) for supported packages and limits.
+
 ## Building
 
 CMake 3.25+, Ninja and a C++20 toolchain; a normal clone is enough. The
