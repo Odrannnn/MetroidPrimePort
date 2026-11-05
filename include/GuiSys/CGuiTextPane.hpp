@@ -7,6 +7,10 @@
 
 #include "Kyoto/SObjectTag.hpp"
 
+#ifdef TARGET_PC
+#include "port_pointer_math.h"
+#endif
+
 class IObjectStore;
 class CSimplePool;
 class CColor;
@@ -47,11 +51,24 @@ public:
   // Port: while `edge` is visible, text running left past it is squeezed
   // sideways, its right end kept, to start just right of it. Null turns it off.
   void PortSetLeftEdge(const CGuiWidget* edge) { mPortLeftEdge = edge; }
+  // Port: the transform Draw puts the text in (text x right, z up; before any left-edge squeeze).
+  CTransform4f PortTextModel() const;
+  // Port: a second text drawn after this pane's own with its look, one line below, its left end
+  // at world x `left` (CFrontEndUI's Exit Game legend). Its glyphs' GUI rect goes to *hit each
+  // draw. Null text turns it off.
+  void PortSetCompanion(CGuiTextSupport* text, float left, PortPointerMath::Rect* hit) {
+    mPortCompanion = text;
+    mPortCompanionLeft = left;
+    mPortCompanionHit = hit;
+  }
 #endif
 
 private:
 #ifdef TARGET_PC
   const CGuiWidget* mPortLeftEdge = nullptr;
+  CGuiTextSupport* mPortCompanion = nullptr;
+  float mPortCompanionLeft = 0.f;
+  PortPointerMath::Rect* mPortCompanionHit = nullptr;
 #endif
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
   static bool sDrawPaneRects;

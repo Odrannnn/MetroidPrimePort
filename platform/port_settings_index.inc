@@ -126,6 +126,7 @@
 {"Controls", "Remap", "", "Controller bindings for", "controller bindings profile device"},
 {"Controls", "Remap", "", "Separate menu buttons", "menu buttons standard layout"},
 {"Controls", "Remap", "", "Point and click menus", "pointer mouse touch tap click menu map cursor"},
+{"Controls", "Remap", "", "Exit Game on the main menu", "exit quit close main menu hold z"},
 {"Controls", "Remap", "", "Reset", "reset defaults bindings"},
 {"Controls", "Remap", "", "Reset...", "reset defaults bindings profile"},
 {"Controls", "Remap", "", "Chord window (ms)", "combo simultaneous press timing"},

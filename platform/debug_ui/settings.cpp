@@ -195,6 +195,7 @@ const SettingKey kSettingKeys[] = {
     BoolKey< &sCrosshairXRay >("crosshair_xray"),
     BoolKey< &sCrosshairThermal >("crosshair_thermal"),
     BoolKey< &sMenuStandardButtons >("menu_standard_buttons"),
+    BoolKey< &sMenuExit >("menu_exit"),
     {"pointer_menus", [](const std::string& value) { PortPointer::SetEnabled(ParseBool(value)); },
      [](std::ostream& out) { WriteBool(out, PortPointer::Enabled()); }, false, "1", "0"},
     {"map_swap_fingers", [](const std::string& value) { PortPointer::SetMapSwapFingers(ParseBool(value)); },

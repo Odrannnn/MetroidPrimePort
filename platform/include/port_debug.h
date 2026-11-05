@@ -288,6 +288,13 @@ bool CrosshairInVisor(int visor);
 // Menus and the map read a remapped pad's standard buttons (F1 Controls > Remap).
 bool MenuStandardButtons();
 void SetMenuStandardButtons(bool enabled);
+// The main menu's "Exit Game" legend (F1 Controls > Remap; `MP_MENU_EXIT`): holding Z, or a
+// finger or mouse button on the legend, for kMenuExitHoldSeconds quits.
+const float kMenuExitHoldSeconds = 1.5f;
+bool MenuExit();
+void SetMenuExit(bool enabled);
+// Saves the settings and asks the main loop to shut down, as closing the window does.
+void RequestQuit();
 void SetMapSwapFingers(bool swap); // the map_swap_fingers setting; read with PortPointer::MapSwapFingers()
 void SetPointerMenus(bool enabled); // the pointer_menus setting; read with PortPointer::Enabled()
 // Hide the helmet frame (the visor rim and its glow and lights).

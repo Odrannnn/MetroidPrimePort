@@ -94,6 +94,7 @@ int sSfxBoost = PortDebug::kVolumeBoostDefault;
 bool sSecondaryCrosshairs = true;
 // A remapped pad drives menus and the map with its standard buttons (issue #57).
 bool sMenuStandardButtons = true;
+bool sMenuExit = true;
 // Index into kPromptGlyphs; 0 = follow the input in use. Atomic: PortPrompts reads it off the UI thread.
 std::atomic< int > sPromptGlyphs{0};
 bool sShowShaderCompilation = true;
@@ -522,6 +523,7 @@ void EnsureInitialized() {
     }
   }
   sMenuStandardButtons = port::EnvFlag("MP_MENU_STANDARD_BUTTONS", sMenuStandardButtons);
+  sMenuExit = port::EnvFlag("MP_MENU_EXIT", sMenuExit);
   PortPointer::SetEnabled(port::EnvFlag("MP_POINTER_MENUS", PortPointer::Enabled()));
   PortPointer::SetMapSwapFingers(port::EnvFlag("MP_MAP_SWAP_FINGERS", PortPointer::MapSwapFingers()));
   PortInput::ApplyEnvOverrides();

@@ -546,6 +546,8 @@ float ScanSpeed() {
 
 bool MenuStandardButtons() { return Loaded(sMenuStandardButtons); }
 void SetMenuStandardButtons(bool enabled) { StoreSetting(sMenuStandardButtons, enabled); }
+bool MenuExit() { return Loaded(sMenuExit); }
+void SetMenuExit(bool enabled) { StoreSetting(sMenuExit, enabled); }
 
 void SetPointerMenus(bool enabled) {
   EnsureInitialized();

@@ -2141,6 +2141,11 @@ void Draw() {
   ImGui::EndDisabled();
   ImGui::SetItemTooltip("On: on the map one finger pans and two fingers rotate. Off: one finger rotates and two "
                         "fingers pan. Twist and pinch are unchanged; the mouse is not affected.");
+  ImGui::SameLine();
+  bool menuExit = PortDebug::MenuExit();
+  if (ImGui::Checkbox("Exit Game on the main menu", &menuExit)) PortDebug::SetMenuExit(menuExit);
+  ImGui::SetItemTooltip("On: the main menu shows \"Exit Game\" under its Select legend. Holding Z, or a finger\n"
+                        "or mouse button on it, for 1.5 seconds quits the game.");
   ImGui::Separator();
 
   const bool editorOnTop = sEditing != kEditNone && !sEditRowShown;

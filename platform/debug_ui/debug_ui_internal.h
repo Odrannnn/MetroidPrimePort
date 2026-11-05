@@ -84,6 +84,7 @@ extern int sSfxBoost;
 void ApplyVolumeBoosts();
 extern bool sSecondaryCrosshairs;
 extern bool sMenuStandardButtons;
+extern bool sMenuExit;
 extern std::atomic< int > sPromptGlyphs; // index into kPromptGlyphs
 inline constexpr const char* kPromptGlyphs[] = {"auto",   "xbox",     "playstation",
                                                 "switch", "gamecube", "keyboard"};

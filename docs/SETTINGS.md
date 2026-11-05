@@ -541,6 +541,10 @@
   Android the gameplay touch buttons hide, leaving a back button. Escape pauses, backs out
   of menus (resuming from the pause screen's top level) and closes the map while this is
   on, outside Original experience.
+  "Exit Game on the main menu" (on by default; `menu_exit=`, `MP_MENU_EXIT`) shows "Exit
+  Game" with the Z button's prompt under the main menu's Select legend. Holding Z (not
+  with Start, the F1 chord), or a finger or mouse button on the legend, for 1.5 s fills its
+  letters orange and quits as F1 > Game > Exit game does; sliding off lets go.
   It binds any action to an input or a chord of up to four
   (hold the first ones, press the last; or "Any order" within the chord window). The editor's
   Advanced section holds the typed input text, the trigger (press, tap, hold, double tap,

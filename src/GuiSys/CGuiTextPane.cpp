@@ -111,6 +111,19 @@ CGuiTextPane::CGuiTextPane(const CGuiWidgetParms& parms, CSimplePool* sp, const 
 
 CGuiTextPane::~CGuiTextPane() {}
 
+#ifdef TARGET_PC
+CTransform4f CGuiTextPane::PortTextModel() const {
+  const float* vtxBuf = GetVtxBuf();
+  const CVector2f dimensions = GetDimensions();
+  const int extentX = GetTextSupport().GetTextBoundingWidth();
+  const int extentY = GetTextSupport().GetTextBoundingHeight();
+  return GetWorldTransform() *
+         CTransform4f::Translate(CVector3f(vtxBuf[0], vtxBuf[1], vtxBuf[2]) + GetPivot()) *
+         CTransform4f::Scale(extentX == 0 ? 0.f : dimensions.GetX() / extentX, 1.f,
+                             extentY == 0 ? 0.f : dimensions.GetY() / extentY);
+}
+#endif
+
 void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
 #if VERSION >= VERSION_GM8P_00 && VERSION != VERSION_GM8E_02
   if (sDrawPaneRects) {
@@ -139,6 +152,34 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
       CTransform4f::Scale(width, 1.f, height);
   CTransform4f model = GetWorldTransform() * local;
 #ifdef TARGET_PC
+  // The companion's model: one line below this one (side by side it runs into this text),
+  // its glyphs' left end at the world x it was given.
+  CTransform4f companionModel = model;
+  const bool drawCompanion = mPortCompanion != nullptr && width != 0.f && height != 0.f;
+  if (drawCompanion) {
+    const rstl::pair< CVector2i, CVector2i >& bounds = mPortCompanion->GetBounds();
+    const CVector3f origin = model.GetTranslation();
+    const float left =
+        (model.GetInverse() * CVector3f(mPortCompanionLeft, origin.GetY(), origin.GetZ())).GetX();
+    const float pitch = 1.25f * static_cast< float >(bounds.second.GetY() - bounds.first.GetY());
+    companionModel = model * CTransform4f::Translate(
+                                 left - static_cast< float >(bounds.first.GetX()), 0.f, -pitch);
+    if (mPortCompanionHit != nullptr) {
+      *mPortCompanionHit = PortPointerMath::Rect();
+      const float x0 = static_cast< float >(bounds.first.GetX());
+      const float y0 = static_cast< float >(bounds.first.GetY());
+      const float x1 = static_cast< float >(bounds.second.GetX());
+      const float y1 = static_cast< float >(bounds.second.GetY());
+      const CVector3f corners[4] = {CVector3f(x0, 0.f, -y0), CVector3f(x1, 0.f, -y0),
+                                    CVector3f(x0, 0.f, -y1), CVector3f(x1, 0.f, -y1)};
+      for (const CVector3f& corner : corners) {
+        float gx, gy;
+        if (PortGuiHit::Project(companionModel, corner, gx, gy)) {
+          mPortCompanionHit->Add(gx, gy);
+        }
+      }
+    }
+  }
   if (mPortLeftEdge != nullptr && mPortLeftEdge->GetIsVisible() && width != 0.f &&
       height != 0.f) {
     const rstl::pair< CVector2i, CVector2i >& bounds = xd4_textSupport.GetBounds();
@@ -176,7 +217,8 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
   const bool drawShadow = false;
 #endif
 #ifdef TARGET_PC
-  const auto render = [this, model, geomCol, flags, depthRead, depthWrite, drawShadow]() {
+  const auto render = [this, model, companionModel, drawCompanion, geomCol, flags, depthRead,
+                       depthWrite, drawShadow]() {
 #endif
   CGraphics::SetDepthWriteMode(depthRead, kE_LEqual, depthWrite);
 
@@ -220,6 +262,12 @@ void CGuiTextPane::Draw(const CGuiWidgetDrawParms& parms) const {
   }
   }
 #ifdef TARGET_PC
+  if (drawCompanion) {
+    CGraphics::SetModelMatrix(companionModel);
+    mPortCompanion->SetGeometryColor(geomCol);
+    CGraphics::SetBlendMode(kBM_Blend, kBF_SrcAlpha, kBF_InvSrcAlpha, kLO_Clear);
+    mPortCompanion->Render();
+  }
   };
   if (PortPauseLighting::TextPass::Deferring()) {
     const TextViewState state;

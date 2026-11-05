@@ -152,6 +152,10 @@ public:
     xPortExtraCharacterSpace = space;
     ClearRenderBuffer();
   }
+  // For a port-made text that copies a pane's look.
+  const CGuiTextProperties& PortProperties() const { return x14_props; }
+  const CColor& PortFontColor() const { return x24_fontColor; }
+  const CColor& PortOutlineColor() const { return x28_outlineColor; }
 #endif
 };
 
