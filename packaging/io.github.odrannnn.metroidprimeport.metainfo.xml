@@ -55,6 +55,12 @@
        android/app/build.gradle; tools/make_flatpak.sh refuses to build when the
        two differ, since Flatpak reports the newest entry as the app's version. -->
   <releases>
+    <release version="0.42.0" date="2026-11-06">
+      <description>
+        <p>Remastered: the thermal and X-ray visors draw the arm cannon, the suit arm and the grapple arm with Remastered's own heat and X-ray models, the X-ray models of the Chozo Ghost, Oculus and others use Remastered's, the X-ray view no longer turns the sky pale, and more room models use Remastered's instead of retail's. Cheats: moon jump, Boost Ball speed and duration, boosting in the air and steering while boosting, and moving Samus to the free camera. Difficulty: damage taken and dealt sliders. Savestates: every script object keeps its state, so cutscenes and room scripts resume as saved. Menus: a hold-to-quit Exit Game prompt on the main menu, the disc's version in the disc image section, and on Android a button that copies the shader cache into the data folder. Performance: fewer shader pipelines to compile, and texture packs shrink their cache when memory runs low. A user_textures folder is made at startup.</p>
+      </description>
+      <url type="details">https://github.com/Odrannnn/MetroidPrimePort/releases/tag/v0.42.0</url>
+    </release>
     <release version="0.41.0" date="2026-11-04">
       <description>
         <p>Mods: Metroid Prime 2: Echoes suits (Varia, Dark and Light) imported from the user's own Echoes or Trilogy disc, on the body, the first-person arms and cannon, the pause doll and the Morph and Spider Balls, and an option to play as Dark Samus. Options: a Beam colours picker, an Arm cannon FOV slider and an Arm cannon follows FOV toggle. Controls: shooting in the Scan Visor, a faster beam switch and next/previous lock-on target (left unbound by default), and a Toggle-trigger L that lets go when its lock ends; the Fire during beam switch setting is gone. Savestates: states carry their disc and a load into the hangar shows no intro text. Remastered: projected decals in the HDR scene, the sky's animated flow-map clouds, fish clouds that swim like Remastered's, the pause backdrop and pause doll lit as in Remastered, fog and room lights of hidden areas staying off, and more of Remastered's own models and room effects. Fixes: Steam picks X11 when its driver list names it, and Trilogy's "Hypermode Mode" shows as "Hypermode".</p>
