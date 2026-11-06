@@ -412,6 +412,8 @@ What the importer gets:
 | `MP_DUMP_TEXTURES` | off | `1` dumps every source texture to `<cachePath>/texture_dumps`. |
 | `MP_TEXTURE_MAX_DIM` | 0 (1024 on Android) | Caps the size a native `.dds` texture is loaded at, in px; 0 = no limit. |
 | `MP_TEXTURE_CACHE_MB` | 4096 (1024 on Android) | Memory the loaded `.dds` textures may keep cached. |
+| `MP_TEXTURE_PRESSURE_MIB` | 1024 | Below this much memory headroom (free RAM; on Windows also free commit and the GPU's budget), idle texture replacements are freed sooner and new ones load at most 2048 px; 0 = off. |
+| `MP_TEXTURE_PRESSURE_SEVERE_MIB` | 512 | Below this, replacements idle for a second are freed, new ones load at most 1024 px and drawn larger ones reload at that size; 0 = off. |
 | `MP_MEM1_MB` | 24 | Emulated MEM1 arena and game heap in MB (capped at 1024), for heavy mods. |
 | `MP_HD_FONT` | on | `0` turns HD `.sdfont` fonts off. |
 | `MP_ROOM_LIQUID` | on | `0` draws the retail liquid planes instead of a mod's. |

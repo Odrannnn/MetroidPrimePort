@@ -1067,7 +1067,7 @@ int main(int argc, char** argv) {
     }
     // Built pipelines stay until memory runs short (issue #187), areas left long ago included, so
     // walking back is free. Lazy mode trims on the system's memory warnings (port_memory_log.cpp) and
-    // on a MemAvailable check every 5 s: under 1024 MiB available it releases what a minute of
+    // on a headroom check every 5 s (MemAvailable; Windows: also commit and the GPU budget): under 1024 MiB available it releases what a minute of
     // frames didn't draw, under 512 MiB all but what the last frames drew (GLOBAL pipelines stay).
     // An 8 GB phone or tablet runs the game with 2-4 GB available; Android's own low-memory
     // threshold (logged with each memory warning) is a few hundred MiB, so 1024 trims well before
@@ -1083,6 +1083,21 @@ int main(int argc, char** argv) {
             PortLog::Write("port: pipeline trim under %d MiB available, all idle under %d MiB "
                            "(MP_PIPELINE_TRIM_MIB/MP_PIPELINE_TRIM_SEVERE_MIB)\n",
                            trimMib, severeMib);
+        }
+    }
+    // Texture replacements (issue #266: an 8 GB PC with an HD pack ran out entering a room): under
+    // 1024 MiB of headroom (RAM, commit or the GPU budget, whichever is least) Aurora frees idle
+    // replacements and loads new ones smaller, under 512 MiB more of both. Overrides:
+    // MP_TEXTURE_PRESSURE_MIB and MP_TEXTURE_PRESSURE_SEVERE_MIB (0 turns a level off).
+    {
+        const int textureMib = port::EnvInt("MP_TEXTURE_PRESSURE_MIB", 1024);
+        const int textureSevereMib = port::EnvInt("MP_TEXTURE_PRESSURE_SEVERE_MIB", 512);
+        PortMemoryLog::SetTexturePressure(textureMib, textureSevereMib);
+        if (port::EnvString("MP_TEXTURE_PRESSURE_MIB") != nullptr ||
+            port::EnvString("MP_TEXTURE_PRESSURE_SEVERE_MIB") != nullptr) {
+            PortLog::Write("port: texture pressure under %d MiB headroom, severe under %d MiB "
+                           "(MP_TEXTURE_PRESSURE_MIB/MP_TEXTURE_PRESSURE_SEVERE_MIB)\n",
+                           textureMib, textureSevereMib);
         }
     }
     if (const char* env = port::EnvString("MP_PIPELINE_EVICT"); env != nullptr && env[0] != '\0') {

@@ -1778,7 +1778,8 @@ headers, applies the same rule to its own on/off variables (`MP_LOG_COPY_TEX`,
   cache at startup. On by default on Android and on low-RAM devices (issue #162).
   In lazy mode, built pipelines are trimmed when memory runs short (issue #187):
   `MP_PIPELINE_TRIM_MIB=<n>` (default 1024) releases those a minute of frames didn't
-  draw when less than that is available, `MP_PIPELINE_TRIM_SEVERE_MIB=<n>` (default
+  draw when less than that is available (free RAM; on Windows also free commit and
+  the GPU's memory budget), `MP_PIPELINE_TRIM_SEVERE_MIB=<n>` (default
   512) all but what the last frames drew; 0 turns a level off.
   `MP_PIPELINE_EVICT=<frames>` adds a fixed sweep of pipelines idle that long.
 - `MP_PIPELINE_PBR=<0|1>`: compile the cached PBR pipelines at startup. By default
