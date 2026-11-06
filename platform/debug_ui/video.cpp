@@ -172,6 +172,8 @@ void DrawVideoDisplay() {
   }
 
   ImGui::SeparatorText("Beam colours");
+  // Its own ID scope: the suit colours' rows above push the same slot numbers.
+  ImGui::PushID("beam colours");
   for (int beam = 0; beam < PortBeamColours::kBeamCount; ++beam) {
     ImGui::PushID(beam);
     const std::optional< uint32_t > picked = PortBeamColours::Colour(beam);
@@ -199,6 +201,7 @@ void DrawVideoDisplay() {
     ImGui::EndDisabled();
     ImGui::PopID();
   }
+  ImGui::PopID();
 
   ImGui::SeparatorText("HUD and view");
   bool hudWide = sHudWide;
