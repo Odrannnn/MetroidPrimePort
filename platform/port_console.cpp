@@ -1551,6 +1551,56 @@ void CmdInfAmmo() {
   Finish();
 }
 
+// Appended to a cheat's state when the Original experience or Archipelago holds it off.
+const char* CheatRefused(bool set, bool applied) {
+  return set && !applied ? " (refused: Original experience or Archipelago)" : "";
+}
+
+void CmdMoonJump() {
+  if (sCmd.args.size() > 2) {
+    return Finish("usage: moonjump [0|1]");
+  }
+  if (sCmd.args.size() == 2) {
+    const std::string arg = Lower(sCmd.args[1]);
+    if (arg != "0" && arg != "1" && arg != "on" && arg != "off") {
+      return Finish("usage: moonjump [0|1]");
+    }
+    PortDebug::SetMoonJump(arg == "1" || arg == "on");
+  }
+  Out("moonjump %d%s", PortDebug::MoonJumpSet() ? 1 : 0,
+      CheatRefused(PortDebug::MoonJumpSet(), PortDebug::MoonJump()));
+  Finish();
+}
+
+void CmdBoost() {
+  static const char* const usage = "usage: boost [speed <1..10>] [time <1..10>]";
+  float speed = PortDebug::BoostSpeedScaleSet();
+  float duration = PortDebug::BoostDurationScaleSet();
+  if (sCmd.args.size() % 2 == 0) {
+    return Finish(usage);
+  }
+  for (size_t i = 1; i + 1 < sCmd.args.size(); i += 2) {
+    const std::string key = Lower(sCmd.args[i]);
+    float number = 0.f;
+    if (!ParseFloat(sCmd.args[i + 1], number)) {
+      return Finish(usage);
+    }
+    if (key == "speed") {
+      speed = number;
+    } else if (key == "time") {
+      duration = number;
+    } else {
+      return Finish(usage);
+    }
+  }
+  PortDebug::SetBoostScales(speed, duration);
+  const bool set = PortDebug::BoostSpeedScaleSet() != 1.f || PortDebug::BoostDurationScaleSet() != 1.f;
+  const bool applied = PortDebug::BoostSpeedScale() != 1.f || PortDebug::BoostDurationScale() != 1.f;
+  Out("boost speed %.2f time %.2f%s", PortDebug::BoostSpeedScaleSet(), PortDebug::BoostDurationScaleSet(),
+      CheatRefused(set, applied));
+  Finish();
+}
+
 void CmdHint() {
   if (sCmd.args.size() < 2 || Lower(sCmd.args[1]) != "show") {
     return Finish("usage: hint show");
@@ -2249,8 +2299,9 @@ void CmdThirdPerson() {
 // freecam [on|off|freeze on|off|player on|off|drive on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]
 void CmdFreeCam() {
   static const char* const usage =
-      "usage: freecam [on|off|freeze on|off|player on|off|drive on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]";
-  const CStateManager* mgr = PortDebug::StateManager();
+      "usage: freecam [on|off|here|freeze on|off|player on|off|drive on|off|speed <n>|pos <x> <y> <z>|"
+      "look <yaw> <pitch>]";
+  CStateManager* mgr = PortDebug::StateManager();
   if (sCmd.args.size() > 1) {
     const std::string arg = Lower(sCmd.args[1]);
     const std::string value = sCmd.args.size() > 2 ? Lower(sCmd.args[2]) : std::string();
@@ -2261,6 +2312,10 @@ void CmdFreeCam() {
         return Finish("not in a world");
       }
       PortFreeCam::SetActive(arg == "on", mgr);
+    } else if (arg == "here") {
+      if (mgr == nullptr || !PortFreeCam::MovePlayerHere(*mgr)) {
+        return Finish("the free camera is off");
+      }
     } else if (arg == "freeze" && (value == "on" || value == "off")) {
       PortFreeCam::SetFrozen(value == "on");
     } else if (arg == "player" && (value == "on" || value == "off")) {
@@ -4435,6 +4490,10 @@ const CommandSpec kCommands[] = {
      "god [on|off]               the player takes no damage (no argument: show)"},
     {"infammo", nullptr, [](CStateManager&) { CmdInfAmmo(); },
      "infammo [all|missile|powerbomb] [0|1]  firing uses no ammo, the HUD shows infinity (no state: show)"},
+    {"moonjump", nullptr, [](CStateManager&) { CmdMoonJump(); },
+     "moonjump [0|1]             Jump held in the air lifts Samus (no state: show)"},
+    {"boost", nullptr, [](CStateManager&) { CmdBoost(); },
+     "boost [speed <x>] [time <x>]  Boost Ball speed and duration multipliers, 1..10 (none: show)"},
     {"hint", nullptr, [](CStateManager&) { CmdHint(); },
      "hint show                  show the hint the game would show next"},
     {"memo", nullptr, [](CStateManager& mgr) { CmdMemo(mgr); },
@@ -4545,8 +4604,9 @@ const CommandSpec kCommands[] = {
     {"mappan", CmdMapPan, nullptr,
      "mappan <dx> <dy> [hold s]   drag the open map screen by dx,dy dp (view height 400 dp); finger down for hold s (0.25)"},
     {"freecam", CmdFreeCam, nullptr,
-     "freecam [on|off|freeze on|off|player on|off|drive on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]\n"
-     "                           fly the view away from the player (HUD hidden; freeze holds the game still)"},
+     "freecam [on|off|here|freeze on|off|player on|off|drive on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]\n"
+     "                           fly the view away from the player (HUD hidden; freeze holds the game still;\n"
+     "                           here moves Samus to the camera and turns it off)"},
     {"thirdperson", CmdThirdPerson, nullptr,
      "thirdperson [on|off] [distance <m>] [shoulder <m>] [height <m>] [clips] [feet] [clip <name>|off [phase [yaw]]] [backwalk procedural|struggle|reverse]\n"
      "                           third-person gameplay camera (also third_person* settings)"},

@@ -61,6 +61,11 @@ static inline CMaterialFilter MakeBallDamageFilter() {
   return CMaterialFilter::MakeIncludeExclude(CMaterialList(kMT_Solid), CMaterialList());
 }
 
+// The Boost Ball duration cheat (PortDebug::BoostDurationScale) stretches the boosted window.
+static inline float BoostDrainTime() {
+  return gpTweakBall->GetBoostBallDrainTime() * PortDebug::BoostDurationScale();
+}
+
 float kSpiderBallCollisionRadius;
 
 const SMorphBallModelInfo CMorphBall::skBallCharacter[8] = {
@@ -1581,7 +1586,7 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
 
     const float t = x1df4_boostDrainTime == 0.f
                         ? x1de8_boostChargeTime / gpTweakBall->GetBoostBallMaxChargeTime()
-                        : 1.f - x1df4_boostDrainTime / gpTweakBall->GetBoostBallDrainTime();
+                        : 1.f - x1df4_boostDrainTime / BoostDrainTime();
 
     CElementGen* boostBallGlowGen = x19d8_boostBallGlowGen.get();
     boostBallGlowGen->SetModulationColor(
@@ -1674,7 +1679,7 @@ void CMorphBall::UpdateEffects(float dt, CStateManager& mgr) {
           }
           float boost = 0.f;
           if (x1df4_boostDrainTime != 0.f) {
-            boost = 1.f - x1df4_boostDrainTime / gpTweakBall->GetBoostBallDrainTime();
+            boost = 1.f - x1df4_boostDrainTime / BoostDrainTime();
           } else if (x1de8_boostChargeTime != 0.f) {
             boost = x1de8_boostChargeTime / gpTweakBall->GetBoostBallMaxChargeTime();
           }
@@ -1788,12 +1793,12 @@ void CMorphBall::ComputeBoostBallMovement(const CFinalInput& input, const CState
     }
   } else {
     x1df4_boostDrainTime += dt;
-    if (x1df4_boostDrainTime > gpTweakBall->GetBoostBallDrainTime()) {
+    if (x1df4_boostDrainTime > BoostDrainTime()) {
       LeaveBoosting();
     }
 
     if (!GetIsInHalfPipeMode() && !x1df8_27_ballCloseToCollision) {
-      if (x1df4_boostDrainTime / gpTweakBall->GetBoostBallDrainTime() < 0.3f) {
+      if (x1df4_boostDrainTime / BoostDrainTime() < 0.3f) {
         DampLinearAndAngularVelocities(0.5f, 0.01f);
       }
 
@@ -1854,6 +1859,7 @@ void CMorphBall::EnterBoosting(CStateManager& mgr) {
     speedMul = 0.35f * speedDamp + (1.f - speedDamp);
   }
 
+  incSpeed *= PortDebug::BoostSpeedScale();
   x0_player.ApplyImpulseWR(lookDir * (speedMul * incSpeed * x0_player.GetMass()),
                            CAxisAngle::Identity());
 #ifdef TARGET_PC
@@ -2714,6 +2720,11 @@ float CMorphBall::CalculateSurfaceFriction() const {
   const int drainSourceCount = x0_player.x274_energyDrain.GetEnergyDrainSources().size();
   if (drainSourceCount > 0) {
     friction *= drainSourceCount * 1.5f;
+  }
+
+  // The duration cheat: a boosted ball keeps its speed that much longer.
+  if (x1de4_24_inBoost) {
+    friction /= PortDebug::BoostDurationScale();
   }
 
   return friction;

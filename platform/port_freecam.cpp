@@ -10,6 +10,8 @@
 #include "MetroidPrime/CActor.hpp"
 #include "MetroidPrime/CStateManager.hpp"
 #include "MetroidPrime/Cameras/CCameraManager.hpp"
+#include "MetroidPrime/Player/CPlayer.hpp"
+#include "MetroidPrime/Tweaks/CTweakPlayer.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -135,6 +137,22 @@ void SetPose(const Pose& pose, bool snap) {
   if (snap) {
     Snap();
   }
+}
+
+bool MovePlayerHere(CStateManager& mgr) {
+  CPlayer* player = mgr.Player();
+  if (!sActive || player == nullptr) {
+    return false;
+  }
+  const bool morphed = player->GetMorphballTransitionState() == CPlayer::kMS_Morphed;
+  const float height = morphed ? gpTweakPlayer->GetPlayerBallHalfExtent() : player->GetEyeHeight();
+  const CVector3f pos(sPose.x, sPose.y, sPose.z - height);
+  const float yaw = sPose.yaw / kDegrees;
+  const CVector3f dir(-std::sin(yaw), std::cos(yaw), 0.f);
+  player->Teleport(CTransform4f::LookAt(pos, pos + dir, CVector3f::Up()), mgr, true);
+  player->SetVelocityWR(CVector3f(0.f, 0.f, 0.f));
+  SetActive(false, &mgr);
+  return true;
 }
 
 float FovOverride() { return sActive ? sFov : 0.f; }

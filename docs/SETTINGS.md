@@ -1163,6 +1163,11 @@
   (keeping "/capacity" where the HUD shows it) with full meters. The real count is kept and
   pickups still add to it; not saved. Refused in the Original experience and while connected to
   Archipelago. `MP_INFINITE_AMMO=1` turns it on for both for one run (see below).
+  Moon jump (console `moonjump`) makes Jump held in the air lift Samus at 12 m/s, on foot only
+  (in the ball Jump is the boost). Boost Ball speed and duration (console `boost speed|time`),
+  1x to 10x, multiply the boost's push, and the time the ball stays boosted together with how
+  slowly it loses speed meanwhile; the boost still ends where the game ends it (leaving the
+  ground, hitting a wall). Neither is saved; both are refused like Infinite ammo.
 - F1 > System > Log, "Write the log to a file" (`logging`, on by default; the older `log_file` key is ignored):
   everything the game prints to stdout/stderr, including the
   line Aurora prints before it aborts, also goes to `metroid_prime_port.log` in
@@ -1473,7 +1478,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   the C stick (or a captured mouse) turns, R is four times as fast, L and Z
   (or the d-pad's down and up) go down and up. `freeze` stops the game's simulation while it flies,
   which also makes two screenshots of one view comparable. Samus's body is
-  drawn where the player stands (`player off` or "Show Samus" hides it). The Debug page's Remastered section has the console's `view`, `probe`, `hdfont`, `roomgeo` and
+  drawn where the player stands (`player off` or "Show Samus" hides it). "Move Samus here"
+  (`freecam here`) puts her at the camera, facing its way, and turns the camera off. The Debug page's Remastered section has the console's `view`, `probe`, `hdfont`, `roomgeo` and
   `roomenv` switches.
 - `MP_PBR_PROBE=<off|on|mirror|window>` (or 0-3): the reflection probe PBR mod
   materials reflect, on by default. The console's `probe` changes it live.

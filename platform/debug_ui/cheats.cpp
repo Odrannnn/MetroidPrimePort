@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -45,12 +46,14 @@ namespace {
 // UpdateTouchScroll can tell a scroll from a drag, so scrolling the page past
 // these sliders filled Samus's missiles and tanks. The value is held back
 // until release and dropped when the drag became a scroll.
-bool CheatSlider(const char* label, int& value, int max) {
+template < typename T >
+bool CheatSlider(const char* label, T& value, T min, T max, const char* format) {
   static ImGuiID sEditing = 0;
-  static int sPending = 0;
+  static T sPending{};
   const ImGuiID id = ImGui::GetID(label);
-  int shown = sEditing == id ? sPending : value;
-  ImGui::SliderInt(label, &shown, 0, max);
+  T shown = sEditing == id ? sPending : value;
+  ImGui::SliderScalar(label, std::is_same_v< T, float > ? ImGuiDataType_Float : ImGuiDataType_S32, &shown, &min,
+                      &max, format);
   if (ImGui::IsItemActive()) {
     sEditing = id;
     sPending = shown;
@@ -66,6 +69,8 @@ bool CheatSlider(const char* label, int& value, int max) {
   value = sPending;
   return true;
 }
+
+bool CheatSlider(const char* label, int& value, int max) { return CheatSlider(label, value, 0, max, "%d"); }
 
 // Raises the capacity to the amount, never lowers it, so setting a count does
 // not hand out the full expansion.
@@ -152,6 +157,22 @@ void DrawCheats() {
   ImGui::SetItemTooltip(
       "The Phazon Beam takes the Power Beam's place, in any room, without the Phazon Suit. "
       "Wave, Ice and Plasma leave it; Power enters it again. Stays on until unticked.");
+  ImGui::SameLine();
+  bool moonJump = MoonJumpSet();
+  if (ImGui::Checkbox("Moon jump", &moonJump)) {
+    SetMoonJump(moonJump);
+  }
+  ImGui::SetItemTooltip("Holding Jump in the air lifts Samus at a steady speed, on foot only. Not saved.");
+  float boostSpeed = BoostSpeedScaleSet();
+  float boostDuration = BoostDurationScaleSet();
+  bool boostChanged = CheatSlider("Boost Ball speed", boostSpeed, 1.f, kBoostScaleMax, "%.1fx");
+  ImGui::SetItemTooltip("Multiplies the Boost Ball's push. 1x is the game's. Not saved.");
+  boostChanged |= CheatSlider("Boost Ball duration", boostDuration, 1.f, kBoostScaleMax, "%.1fx");
+  ImGui::SetItemTooltip("Multiplies how long the ball stays boosted and how slowly it loses speed meanwhile. "
+                        "The boost still ends on leaving the ground or hitting a wall. 1x is the game's. Not saved.");
+  if (boostChanged) {
+    SetBoostScales(boostSpeed, boostDuration);
+  }
 
   ImGui::SeparatorText("Abilities");
   struct SItemToggle {
@@ -390,6 +411,15 @@ void DrawFreeCam() {
   bool showPlayer = PortFreeCam::ShowPlayer();
   if (ImGui::Checkbox("Show Samus", &showPlayer)) {
     PortFreeCam::SetShowPlayer(showPlayer);
+  }
+  ImGui::BeginDisabled(mgr == nullptr);
+  if (ImGui::Button("Move Samus here") && mgr != nullptr) {
+    PortFreeCam::MovePlayerHere(*mgr);
+  }
+  ImGui::EndDisabled();
+  ImGui::SetItemTooltip("Puts Samus where the camera is, facing its way, and turns the camera off.");
+  if (!PortFreeCam::Active()) {
+    return;
   }
   float speed = PortFreeCam::Speed();
   if (ImGui::SliderFloat("Speed", &speed, 1.f, 100.f, "%.0f m/s")) {
