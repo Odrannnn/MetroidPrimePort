@@ -322,7 +322,6 @@ void DrawUpdateSection() {
     PortUpdateCheck::CheckNow(); // switched on: check now, not next launch
     MarkDirty();
   }
-  ImGui::SetItemTooltip("Asks GitHub at launch whether a newer release is out. Nothing else is sent.");
   ImGui::SameLine();
   const PortUpdateCheck::EStatus status = PortUpdateCheck::Status();
   switch (status) {
@@ -426,8 +425,6 @@ void DrawOverlaySection() {
       sUiTheme = theme;
       MarkDirty();
     }
-    ItemHelp("The overlay's look. Auto uses the Remastered style while the Remastered import is "
-             "loaded, else the Metroid Prime style; Plain is stock Dear ImGui.");
     if (ImGui::Checkbox("Menu sounds", &sUiSounds)) {
       MarkDirty();
     }
