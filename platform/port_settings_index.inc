@@ -375,6 +375,8 @@
 {"Debug", "", "Cheats", "Moon jump", "cheat moon jump fly float hold jump"},
 {"Debug", "", "Cheats", "Boost Ball speed", "cheat boost ball speed morph faster"},
 {"Debug", "", "Cheats", "Boost Ball duration", "cheat boost ball duration time morph longer"},
+{"Debug", "", "Cheats", "Boost anywhere", "cheat boost ball air airborne spring bomb jump"},
+{"Debug", "", "Cheats", "Steer while boosting", "cheat boost ball steer turn control direction"},
 {"Debug", "", "Cheats", "Missiles", "cheat missile ammo count"},
 {"Debug", "", "Cheats", "Power Bombs", "cheat power bomb ammo count"},
 {"Debug", "", "Cheats", "Energy Tanks", "cheat energy tank count"},

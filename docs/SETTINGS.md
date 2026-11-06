@@ -1167,7 +1167,13 @@
   (in the ball Jump is the boost). Boost Ball speed and duration (console `boost speed|time`),
   1x to 10x, multiply the boost's push, and the time the ball stays boosted together with how
   slowly it loses speed meanwhile; the boost still ends where the game ends it (leaving the
-  ground, hitting a wall). Neither is saved; both are refused like Infinite ammo.
+  ground, hitting a wall). Boost anywhere (console `boost air`) lets the boost fire in the air
+  (after a bomb or spring jump, along the ball's motion, so straight up when it rises straight
+  up), keeps a charge through a bomb jump, and keeps a boost going, undamped, when the ball
+  leaves the ground, so a boost into a spring jump no longer halves it. Steer while boosting
+  (console `boost steer`) turns a boosted ball's course toward the stick at up to 270°/s,
+  keeping its speed, where the game only lets the stick push it sideways (half-pipes keep
+  theirs). None of these is saved; all are refused like Infinite ammo.
 - F1 > System > Log, "Write the log to a file" (`logging`, on by default; the older `log_file` key is ignored):
   everything the game prints to stdout/stderr, including the
   line Aurora prints before it aborts, also goes to `metroid_prime_port.log` in

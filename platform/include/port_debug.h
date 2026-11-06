@@ -717,6 +717,16 @@ float BoostDurationScaleSet();
 float BoostSpeedScale();
 float BoostDurationScale();
 void SetBoostScales(float speed, float duration);
+// Cheats (F1 > Debug > Cheats, console `boost air|steer`). BoostAnywhere: the Boost Ball also
+// fires in the air (after a bomb or spring jump) and a boost no longer ends, damped, when the ball
+// leaves the ground, so a boost into a spring jump keeps its height. BoostSteer: the stick turns
+// a boosted ball's course, keeping its speed. Not saved; off like the others above.
+bool BoostAnywhereSet();
+bool BoostAnywhere();
+void SetBoostAnywhere(bool enabled);
+bool BoostSteerSet();
+bool BoostSteer();
+void SetBoostSteer(bool enabled);
 // Write the log to <user folder>/metroid_prime_port.log (port_log_file.h). MP_LOG_FILE=1
 // turns it on for one run without changing the setting.
 bool LogFile();

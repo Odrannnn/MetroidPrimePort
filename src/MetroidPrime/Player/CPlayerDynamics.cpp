@@ -1391,7 +1391,14 @@ void CPlayer::BombJump(const CVector3f& position, CStateManager& mgr) {
       const CVector3f newVelocity(0.f, 0.f, velocity);
       SetVelocityWR(newVelocity);
       x768_morphball->SetDamageTimer(0.1f);
+#ifdef TARGET_PC
+      // The boost-anywhere cheat keeps a Boost Ball charge through the jump.
+      if (!PortDebug::BoostAnywhere()) {
+        x768_morphball->CancelBoosting();
+      }
+#else
       x768_morphball->CancelBoosting();
+#endif
 #ifdef TARGET_PC
       x768_morphball->PortResetTimeSinceBombJump();
 #endif

@@ -173,6 +173,19 @@ void DrawCheats() {
   if (boostChanged) {
     SetBoostScales(boostSpeed, boostDuration);
   }
+  bool boostAnywhere = BoostAnywhereSet();
+  if (ImGui::Checkbox("Boost anywhere", &boostAnywhere)) {
+    SetBoostAnywhere(boostAnywhere);
+  }
+  ImGui::SetItemTooltip("The Boost Ball also fires in the air, after a bomb or spring jump, and a boost "
+                        "no longer stops short when the ball leaves the ground, so a boost into a spring "
+                        "jump keeps its height. Not saved.");
+  ImGui::SameLine();
+  bool boostSteer = BoostSteerSet();
+  if (ImGui::Checkbox("Steer while boosting", &boostSteer)) {
+    SetBoostSteer(boostSteer);
+  }
+  ImGui::SetItemTooltip("The stick turns a boosted ball's course, keeping its speed. Not saved.");
 
   ImGui::SeparatorText("Abilities");
   struct SItemToggle {

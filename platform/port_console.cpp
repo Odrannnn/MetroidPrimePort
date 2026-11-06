@@ -1573,31 +1573,38 @@ void CmdMoonJump() {
 }
 
 void CmdBoost() {
-  static const char* const usage = "usage: boost [speed <1..10>] [time <1..10>]";
+  static const char* const usage = "usage: boost [speed <1..10>] [time <1..10>] [air 0|1] [steer 0|1]";
   float speed = PortDebug::BoostSpeedScaleSet();
   float duration = PortDebug::BoostDurationScaleSet();
+  bool air = PortDebug::BoostAnywhereSet();
+  bool steer = PortDebug::BoostSteerSet();
   if (sCmd.args.size() % 2 == 0) {
     return Finish(usage);
   }
   for (size_t i = 1; i + 1 < sCmd.args.size(); i += 2) {
     const std::string key = Lower(sCmd.args[i]);
+    const std::string value = Lower(sCmd.args[i + 1]);
     float number = 0.f;
-    if (!ParseFloat(sCmd.args[i + 1], number)) {
-      return Finish(usage);
-    }
-    if (key == "speed") {
-      speed = number;
-    } else if (key == "time") {
-      duration = number;
+    if (key == "air" || key == "steer") {
+      if (value != "0" && value != "1" && value != "on" && value != "off") {
+        return Finish(usage);
+      }
+      (key == "air" ? air : steer) = value == "1" || value == "on";
+    } else if ((key == "speed" || key == "time") && ParseFloat(value, number)) {
+      (key == "speed" ? speed : duration) = number;
     } else {
       return Finish(usage);
     }
   }
   PortDebug::SetBoostScales(speed, duration);
-  const bool set = PortDebug::BoostSpeedScaleSet() != 1.f || PortDebug::BoostDurationScaleSet() != 1.f;
-  const bool applied = PortDebug::BoostSpeedScale() != 1.f || PortDebug::BoostDurationScale() != 1.f;
-  Out("boost speed %.2f time %.2f%s", PortDebug::BoostSpeedScaleSet(), PortDebug::BoostDurationScaleSet(),
-      CheatRefused(set, applied));
+  PortDebug::SetBoostAnywhere(air);
+  PortDebug::SetBoostSteer(steer);
+  const bool set = PortDebug::BoostSpeedScaleSet() != 1.f || PortDebug::BoostDurationScaleSet() != 1.f || air ||
+                   steer;
+  const bool applied = PortDebug::BoostSpeedScale() != 1.f || PortDebug::BoostDurationScale() != 1.f ||
+                       PortDebug::BoostAnywhere() || PortDebug::BoostSteer();
+  Out("boost speed %.2f time %.2f air %d steer %d%s", PortDebug::BoostSpeedScaleSet(),
+      PortDebug::BoostDurationScaleSet(), air ? 1 : 0, steer ? 1 : 0, CheatRefused(set, applied));
   Finish();
 }
 
@@ -4493,7 +4500,9 @@ const CommandSpec kCommands[] = {
     {"moonjump", nullptr, [](CStateManager&) { CmdMoonJump(); },
      "moonjump [0|1]             Jump held in the air lifts Samus (no state: show)"},
     {"boost", nullptr, [](CStateManager&) { CmdBoost(); },
-     "boost [speed <x>] [time <x>]  Boost Ball speed and duration multipliers, 1..10 (none: show)"},
+     "boost [speed <x>] [time <x>] [air 0|1] [steer 0|1]\n"
+     "                           Boost Ball speed and duration multipliers (1..10), boosting in the air,\n"
+     "                           steering while boosted (none: show)"},
     {"hint", nullptr, [](CStateManager&) { CmdHint(); },
      "hint show                  show the hint the game would show next"},
     {"memo", nullptr, [](CStateManager& mgr) { CmdMemo(mgr); },

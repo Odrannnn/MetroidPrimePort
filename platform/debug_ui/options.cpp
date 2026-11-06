@@ -1301,6 +1301,8 @@ namespace {
 bool sMoonJump = false;
 float sBoostSpeedScale = 1.f;
 float sBoostDurationScale = 1.f;
+bool sBoostAnywhere = false;
+bool sBoostSteer = false;
 
 bool CheatsApply() { return !OriginalExperience() && !PortAp::Connected(); }
 
@@ -1321,6 +1323,12 @@ void SetBoostScales(float speed, float duration) {
   sBoostSpeedScale = ClampBoostScale(speed);
   sBoostDurationScale = ClampBoostScale(duration);
 }
+bool BoostAnywhereSet() { return sBoostAnywhere; }
+bool BoostAnywhere() { return sBoostAnywhere && CheatsApply(); }
+void SetBoostAnywhere(bool enabled) { sBoostAnywhere = enabled; }
+bool BoostSteerSet() { return sBoostSteer; }
+bool BoostSteer() { return sBoostSteer && CheatsApply(); }
+void SetBoostSteer(bool enabled) { sBoostSteer = enabled; }
 
 bool LogFile() { return Loaded(sLogFile); }
 void SetLogFile(bool enabled) { StoreSetting(sLogFile, enabled); }

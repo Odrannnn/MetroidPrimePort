@@ -1107,6 +1107,32 @@ void CMorphBall::ComputeMarioMovement(const CFinalInput& input, CStateManager& m
     CVector3f controlForce = turnForce + forwardForce;
     x1c_controlForce = controlForce;
 
+#ifdef TARGET_PC
+    // The boost steering cheat: the stick turns the boosted ball's course at up to kSteerRate,
+    // keeping its speed, where the game only lets it push sideways. Half-pipes keep theirs.
+    if (x1de4_24_inBoost && !GetIsInHalfPipeMode() && PortDebug::BoostSteer()) {
+      static const float kSteerRate = 4.7f; // radians per second at full tilt (~270 degrees)
+      const float tilt = CMath::Clamp(0.f, CVector2f(turn, forward).Magnitude(), 1.f);
+      CVector3f vel = x0_player.GetVelocityWR();
+      const CVector3f want = controlXf.Rotate(CVector3f(turn, forward, 0.f));
+      const float speed2d = CVector2f(vel.GetX(), vel.GetY()).Magnitude();
+      if (tilt > 0.1f && speed2d > 1.f) {
+        const float delta = atan2(vel.GetX() * want.GetY() - vel.GetY() * want.GetX(),
+                                  vel.GetX() * want.GetX() + vel.GetY() * want.GetY());
+        const float step = CMath::Clamp(-kSteerRate * tilt * dt, delta, kSteerRate * tilt * dt);
+        const float c = cos(step);
+        const float s = sin(step);
+        const auto turnZ = [c, s](const CVector3f& v) {
+          return CVector3f(v.GetX() * c - v.GetY() * s, v.GetX() * s + v.GetY() * c, v.GetZ());
+        };
+        // The spin turns with the course, or the ball's grip on the ground fights the new course.
+        x0_player.SetVelocityWR(turnZ(vel));
+        x0_player.SetAngularVelocityWR(
+            CAxisAngle::FromVector(turnZ(x0_player.GetAngularVelocityWR().GetVector())));
+      }
+      controlForce = CVector3f::Zero();
+    } else
+#endif
     if (x1de4_24_inBoost && !GetIsInHalfPipeMode()) {
       const CVector3f controlLocalForce = x1924_surfaceToWorld.TransposeRotate(controlForce);
       CVector3f boostControlForce;
@@ -1769,7 +1795,8 @@ void CMorphBall::ComputeBoostBallMovement(const CFinalInput& input, const CState
 
       if (x1de8_boostChargeTime >= gpTweakBall->GetBoostBallMinChargeTime()) {
         if (GetBallBoostState() == kBBS_BoostAvailable) {
-          if (GetIsInHalfPipeMode() || x1df8_27_ballCloseToCollision) {
+          if (GetIsInHalfPipeMode() || x1df8_27_ballCloseToCollision ||
+              PortDebug::BoostAnywhere()) {
             EnterBoosting(const_cast< CStateManager& >(mgr));
           } else {
             const CVector3f surfaceY = x1924_surfaceToWorld.GetColumn(kDY);
@@ -1797,7 +1824,8 @@ void CMorphBall::ComputeBoostBallMovement(const CFinalInput& input, const CState
       LeaveBoosting();
     }
 
-    if (!GetIsInHalfPipeMode() && !x1df8_27_ballCloseToCollision) {
+    // The boost-anywhere cheat lets a boost run its course off the ground, undamped.
+    if (!GetIsInHalfPipeMode() && !x1df8_27_ballCloseToCollision && !PortDebug::BoostAnywhere()) {
       if (x1df4_boostDrainTime / BoostDrainTime() < 0.3f) {
         DampLinearAndAngularVelocities(0.5f, 0.01f);
       }
