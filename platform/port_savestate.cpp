@@ -568,7 +568,7 @@ void TickRoomState(CStateManager& mgr) {
     return;
   const bool late = sRoomStats.late > 0;
   PortLog::Write("[savestate] room state: %d applied, %d generated, %d removed, %d unmatched, "
-                 "%d areas skipped, %d script messages replayed, %d enemy fields set%s\n",
+                 "%d areas skipped, %d script messages replayed, %d fields changed%s\n",
                  sRoomStats.applied, sRoomStats.generated, sRoomStats.removed, sRoomStats.unmatched,
                  sRoomStats.skipped, sRoomStats.replayed, sRoomStats.fields,
                  late ? ", neighbour areas still streaming" : "");

@@ -55,7 +55,7 @@ enum RoomTag : uint32_t {
   kTagMessages = 10,  // the script messages the enemy was sent (EncodeScriptMsgs)
   kTagBoss = 11,      // a boss's fight state beyond its health (port_savestate_boss.h)
   kTagRotate = 12,    // a turn in progress: flags, time, then per actor editor id + start rotation
-  kTagFields = 13,    // an enemy's own fields through the entity schema (port_savestate_fields.cpp)
+  kTagFields = 13,    // a script object's own fields through the entity schema (port_savestate_fields.cpp)
   kTagDock = 14,      // the dock's reference, then per reference its load-other flag
   kTagCinematic = 15, // a running cinematic camera: elapsed time, passed view point, passed target
   kTagMusic = 16,     // music playing at the save: kind (kMusicMidi/kMusicStream), stream file

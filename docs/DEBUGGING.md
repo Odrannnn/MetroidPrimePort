@@ -168,8 +168,9 @@ uncounted report, for a restore that hands over late (Metroid Prime's exo comes 
 The cinematic cameras, waypoints and sounds always show
 position warnings: they are moved by scripts the restore does not replay; ignore them.
 
-Enemies (every `CPatterned`) and generated pickups save their schema fields in the room record's `kTagFields` block
-(`platform/port_savestate_fields.cpp`; the load log's "N enemy fields set"). For a baseline without it,
+Every placed script object (except doors, docks, timers, Metroid Prime's relay and a few
+audio/teleport objects) and generated pickups save their schema fields in the room record's `kTagFields` block
+(`platform/port_savestate_fields.cpp`; the load log's "N fields changed"). For a baseline without it,
 start the game with `--start-arg=--env --start-arg=MP_SAVESTATE_FIELDS=0`. Expected leftovers in the
 "schema fields" section: `x254_` and other members the constructor never sets, `xPort*`, render and
 physics bookkeeping (`x9c_renderBounds`, `xc8_drawnToken`, `xfc_constantForce`), and what the AI state

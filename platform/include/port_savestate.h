@@ -217,7 +217,7 @@ struct RoomApplyStats {
   int skipped = 0;  // areas left alone: their loaded room script data differs
   int replayed = 0;   // journalled script messages sent again
   int generated = 0;  // script generator copies made again
-  int fields = 0;     // enemy fields set from kTagFields blocks
+  int fields = 0;     // field values kTagFields blocks changed
   int music = 0;      // music objects playing again from kTagMusic blocks
   // Saved areas not loaded yet that the last ApplyRoomState call asked the world to
   // stream in (or found streaming): they get their state when they finish, no longer
@@ -277,10 +277,10 @@ bool RoomRestoreOwnsArea(CStateManager& mgr, int area);
 // The test behind it, for a given room state and list of areas done.
 bool RoomAreaAwaitsRestore(CStateManager& mgr, const RoomState& room,
                            const std::vector< int32_t >& done, int area);
-// The kTagFields block (port_savestate_fields.cpp): an enemy's own fields through the
-// generated entity schema. Capture returns false for an entity it does not cover; Apply
-// returns how many fields it set (0 for a block of another policy). MP_SAVESTATE_FIELDS=0
-// turns both off.
+// The kTagFields block (port_savestate_fields.cpp): a script object's own fields through
+// the generated entity schema. Capture returns false for an entity it does not cover; Apply
+// returns how many writes changed a value (0: the entity already held them all, or a block
+// of another policy). MP_SAVESTATE_FIELDS=0 turns both off.
 bool CaptureEntityFields(const CStateManager& mgr, CEntity& ent, std::string& out);
 int ApplyEntityFields(CStateManager& mgr, CEntity& ent, const std::string& data);
 // Whether the block carries every schema class of `ent` (this build's fingerprints): then
