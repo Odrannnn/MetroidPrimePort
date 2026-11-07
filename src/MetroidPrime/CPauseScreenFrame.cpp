@@ -215,6 +215,7 @@ enum EPortOption {
   kPO_GunFollowsFov,
   kPO_GunFov,
   kPO_ScanShoot,
+  kPO_BallFollowsFov,
 };
 #define PORT_OPTION(opt) static_cast< EGameOption >(opt)
 
@@ -251,6 +252,7 @@ static const SGameOption skPortDisplayOptions[] = {
     {PORT_OPTION(kPO_WidescreenHUD), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_HudScale), -1, PortDebug::kHudScaleMin, PortDebug::kHudScaleMax, 5.f, kOT_Float},
     {PORT_OPTION(kPO_Fov), -1, PortDebug::kFovMin, PortDebug::kFovMax, 1.f, kOT_Float},
+    {PORT_OPTION(kPO_BallFollowsFov), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_GunFollowsFov), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
     {PORT_OPTION(kPO_GunFov), -1, PortDebug::kFovMin, PortDebug::kFovMax, 1.f, kOT_Float},
     {PORT_OPTION(kPO_AntiAliasing), -1, 0.f, 1.f, 1.f, kOT_DoubleEnum},
@@ -338,6 +340,8 @@ static const wchar_t* PortOptionTitle(EGameOption option) {
     return L"Remastered Charge";
   case kPO_Fov:
     return L"Field of View";
+  case kPO_BallFollowsFov:
+    return L"Morph Ball Follows FOV";
   case kPO_GunFollowsFov:
     return L"Arm Cannon Follows FOV";
   case kPO_GunFov:
@@ -401,6 +405,8 @@ static int GetPortOption(EGameOption option) {
     return PortDebug::RapidCharge() ? 1 : 0;
   case kPO_Fov:
     return static_cast< int >(PortDebug::FirstPersonFov() + 0.5f);
+  case kPO_BallFollowsFov:
+    return PortDebug::BallFollowsFov() ? 1 : 0;
   case kPO_GunFollowsFov:
     return PortDebug::GunFollowsFov() ? 1 : 0;
   case kPO_GunFov:
@@ -461,6 +467,7 @@ static bool IsOriginalLocked(EGameOption option) {
   case kPO_StickyCharge:
   case kPO_RapidCharge:
   case kPO_Fov:
+  case kPO_BallFollowsFov:
   case kPO_GunFollowsFov:
   case kPO_GunFov:
   case kPO_AntiAliasing:
@@ -524,6 +531,9 @@ static void SetPortOption(EGameOption option, int value) {
     break;
   case kPO_Fov:
     PortDebug::SetFirstPersonFov(static_cast< float >(value));
+    break;
+  case kPO_BallFollowsFov:
+    PortDebug::SetBallFollowsFov(value > 0);
     break;
   case kPO_GunFollowsFov:
     PortDebug::SetGunFollowsFov(value > 0);
@@ -748,6 +758,7 @@ void CGameOptions::TryRestoreDefaults(const CFinalInput& input, int category, in
         PortDebug::SetAspectMode(PortDebug::kAspect_4_3);
         PortDebug::SetHudWide(false);
         PortDebug::SetFirstPersonFov(PortDebug::kFovRetail);
+        PortDebug::SetBallFollowsFov(true);
         PortDebug::SetGunFollowsFov(false);
         PortDebug::SetGunFov(PortDebug::kFovRetail);
         PortDebug::SetMsaa(1);

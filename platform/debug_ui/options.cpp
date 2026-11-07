@@ -788,6 +788,13 @@ bool GunFollowsFov() {
 
 void SetGunFollowsFov(bool enabled) { StoreSetting(sGunFollowsFov, enabled); }
 
+bool BallFollowsFov() {
+  EnsureInitialized();
+  return sBallFollowsFov && !sOriginalExperience;
+}
+
+void SetBallFollowsFov(bool enabled) { StoreSetting(sBallFollowsFov, enabled); }
+
 float GunFov() {
   EnsureInitialized();
   return sOriginalExperience ? kFovRetail : sGunFov;

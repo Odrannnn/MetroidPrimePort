@@ -674,7 +674,9 @@
   muzzle as retail's do. With it off, shots start where the cannon is drawn and are aimed at
   where retail's would arrive (the aim target at its depth when assist aimed
   the shot at it, else what lies on retail's line), so they hit what retail's
-  hit (#134). The morph ball's cameras (its own, spline and spindle cameras, and
+  hit (#134). With Morph ball follows FOV (persisted as `ball_follows_fov`, default
+  on, off in the original experience; console `fov ball [0|1]`) the morph ball's
+  cameras (its own, spline and spindle cameras, and
   camera hints' FOVs) widen or narrow in step: each FOV is scaled by the ratio of the
   setting's view tangent to retail's 55, so retail's 60 becomes about 86 at FOV 80
   (#268). Cutscene and other scripted cameras keep their own FOVs; cutscenes that

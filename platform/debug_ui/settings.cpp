@@ -385,6 +385,7 @@ const SettingKey kSettingKeys[] = {
      },
      [](std::ostream& out) { out << sFirstPersonFov; }, false, "45", "72.5"},
     BoolKey< &sGunFollowsFov >("gun_follows_fov"),
+    BoolKey< &sBallFollowsFov >("ball_follows_fov"),
     {"gun_fov",
      [](const std::string& value) {
        const float f = static_cast< float >(std::atof(value.c_str()));

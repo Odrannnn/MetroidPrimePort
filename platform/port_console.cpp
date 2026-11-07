@@ -2564,6 +2564,13 @@ void CmdFov() {
     Out("gun %s", PortDebug::GunFollowsFov() ? "follows fov" : "own fov");
     return Finish();
   }
+  if (sCmd.args.size() > 1 && sCmd.args[1] == "ball") {
+    if (sCmd.args.size() > 2) {
+      PortDebug::SetBallFollowsFov(sCmd.args[2] != "0");
+    }
+    Out("ball %s", PortDebug::BallFollowsFov() ? "follows fov" : "retail fov");
+    return Finish();
+  }
   if (sCmd.args.size() > 1 && sCmd.args[1] == "cannon") {
     if (sCmd.args.size() > 2) {
       const float fov = static_cast< float >(std::atof(sCmd.args[2].c_str()));
@@ -2578,8 +2585,9 @@ void CmdFov() {
   const float fov =
       sCmd.args.size() > 1 ? static_cast< float >(std::atof(sCmd.args[1].c_str())) : 0.f;
   if (!(fov >= PortDebug::kFovMin && fov <= PortDebug::kFovMax)) {
-    return Finish("usage: fov <45..120> | fov gun [0|1] | fov cannon [45..120]   first-person vertical\n"
-                  "FOV (retail 55); gun 1 draws the arm cannon at it too, cannon sets its own FOV");
+    return Finish("usage: fov <45..120> | fov gun [0|1] | fov ball [0|1] | fov cannon [45..120]\n"
+                  "first-person vertical FOV (retail 55); gun 1 draws the arm cannon at it too,\n"
+                  "ball 1 scales the morph ball's cameras with it, cannon sets the cannon's own FOV");
   }
   PortDebug::SetFirstPersonFov(fov);
   Finish();
@@ -4630,8 +4638,9 @@ const CommandSpec kCommands[] = {
      "keypreset classic|mouse|<saved name>|save <name>   apply or save a keyboard preset (Controls > Remap)"},
     {"padpreset", CmdPadPreset, nullptr,
      "padpreset gamecube|remastered|modern|southpaw|<saved name>|save <name>   apply or save a controller preset"},
-    {"fov", CmdFov, nullptr, "fov <45..120>|gun [0|1]|cannon [45..120]  first-person vertical FOV, as the\n"
-                             "                           Options row does; gun 1: the arm cannon follows it;\n"
+    {"fov", CmdFov, nullptr, "fov <45..120>|gun [0|1]|ball [0|1]|cannon [45..120]  first-person vertical\n"
+                             "                           FOV, as the Options row does; gun 1: the arm cannon\n"
+                             "                           follows it; ball 1: the morph ball's cameras follow it;\n"
                              "                           cannon: the arm cannon's own FOV"},
     {"gunoffset", CmdGunOffset, nullptr,
      "gunoffset <r> <f> <u>      arm cannon offset in metres (+-1), as the Video row does"},

@@ -135,6 +135,7 @@ extern std::mutex sRandoMutex;
 extern PortRandoGen::Settings sRandoSettings;
 extern float sFirstPersonFov;
 extern bool sGunFollowsFov;
+extern bool sBallFollowsFov;
 extern float sGunFov;
 extern float sGunOffset[3];
 extern int sMsaa;

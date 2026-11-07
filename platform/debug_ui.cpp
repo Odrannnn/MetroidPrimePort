@@ -165,6 +165,7 @@ std::mutex sRandoMutex;
 PortRandoGen::Settings sRandoSettings;
 float sFirstPersonFov = PortDebug::kFovRetail;
 bool sGunFollowsFov = false;
+bool sBallFollowsFov = true;
 float sGunFov = PortDebug::kFovRetail;
 float sGunOffset[3] = {};
 int sMsaa = 1;

@@ -422,6 +422,9 @@ float FirstPersonFov();
 void SetFirstPersonFov(float degrees);
 bool GunFollowsFov();
 void SetGunFollowsFov(bool enabled);
+// Whether the morph ball's cameras widen or narrow with the FOV setting.
+bool BallFollowsFov();
+void SetBallFollowsFov(bool enabled);
 float GunFov();
 void SetGunFov(float degrees);
 // The FOV the arm cannon is drawn at, for a first-person camera whose FOV is cameraFov.

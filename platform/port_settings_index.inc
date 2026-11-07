@@ -179,6 +179,7 @@
 {"Video", "Display", "HUD and view", "Third-person camera", "third person camera behind shoulder body over the shoulder view"},
 {"Video", "Display", "HUD and view", "Hide visor effects", "visor effects static scanlines hide"},
 {"Video", "Display", "HUD and view", "Field of view", "fov field of view zoom camera"},
+{"Video", "Display", "HUD and view", "Morph ball follows FOV", "morph ball camera fov field of view wide"},
 {"Video", "Display", "HUD and view", "Arm cannon follows FOV", "arm cannon gun fov field of view viewmodel perspective scale"},
 {"Video", "Display", "HUD and view", "Arm cannon FOV", "arm cannon gun fov field of view viewmodel size slider"},
 {"Video", "Display", "HUD and view", "Arm cannon right", "arm cannon gun offset right position"},

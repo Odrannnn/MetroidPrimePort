@@ -115,6 +115,11 @@ float CCameraManager::GetDefaultThirdPersonVerticalFOV() {
 namespace {
 // The FOV setting the morph ball cameras' FOVs were last scaled for.
 float sPortBallFovSetting = PortDebug::kFovRetail;
+
+// The FOV setting the morph ball cameras follow: retail's when they don't follow it.
+float PortBallFovSetting() {
+  return PortDebug::BallFollowsFov() ? PortDebug::FirstPersonFov() : PortDebug::kFovRetail;
+}
 } // namespace
 
 float CCameraManager::PortRescaleFov(float fov, float fromSetting, float toSetting) {
@@ -129,7 +134,7 @@ float CCameraManager::PortRescaleFov(float fov, float fromSetting, float toSetti
 }
 
 float CCameraManager::PortFollowFovSetting(float fov) {
-  return PortRescaleFov(fov, PortDebug::kFovRetail, PortDebug::FirstPersonFov());
+  return PortRescaleFov(fov, PortDebug::kFovRetail, PortBallFovSetting());
 }
 #endif
 
@@ -172,7 +177,7 @@ void CCameraManager::CreateCameras(CStateManager& mgr) {
   SetCurrentCameraId(fpId);
   TUniqueId ballId = mgr.AllocateUniqueId();
 #ifdef TARGET_PC
-  sPortBallFovSetting = PortDebug::FirstPersonFov();
+  sPortBallFovSetting = PortBallFovSetting();
 #endif
   x80_ballCamera = rs_new CBallCamera(
       ballId, plId, xf, GetDefaultThirdPersonVerticalFOV(), GetDefaultFirstPersonNearClipDistance(),
@@ -205,7 +210,7 @@ void CCameraManager::UpdateCameras(float dt, CStateManager& mgr) {
   }
   // The morph ball's cameras scale their FOVs by the slider (PortFollowFovSetting) when they
   // set one, so a slider move mid-roll rescales what they hold.
-  const float fovSetting = PortDebug::FirstPersonFov();
+  const float fovSetting = PortBallFovSetting();
   if (fovSetting != sPortBallFovSetting) {
     for (idx = objList.GetFirstObjectIndex(); idx != -1; idx = objList.GetNextObjectIndex(idx)) {
       CEntity* ent = objList[idx];

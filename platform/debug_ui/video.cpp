@@ -333,9 +333,14 @@ void DrawVideoDisplay() {
                        0.017453292f;
     ImGui::SetItemTooltip("Back to the retail 55 deg.");
     ImGui::TextDisabled("About %.0f deg horizontal at this aspect.", hfov);
-    ImGui::SetItemTooltip("First-person vertical FOV (retail 55). The morph ball's cameras widen\n"
-                          "or narrow in step; cutscene cameras are unchanged.");
+    ImGui::SetItemTooltip("First-person vertical FOV (retail 55). Cutscene cameras are unchanged.");
   }
+  bool ballFollowsFov = sBallFollowsFov;
+  if (ImGui::Checkbox("Morph ball follows FOV", &ballFollowsFov)) {
+    SetBallFollowsFov(ballFollowsFov);
+  }
+  ImGui::SetItemTooltip("On: the morph ball's cameras widen or narrow in step with the field of\n"
+                        "view (retail 60 at FOV 55). Off: they keep their retail FOVs.");
   bool gunFollowsFov = sGunFollowsFov;
   if (ImGui::Checkbox("Arm cannon follows FOV", &gunFollowsFov)) {
     SetGunFollowsFov(gunFollowsFov);
