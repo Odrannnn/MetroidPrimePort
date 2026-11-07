@@ -41,6 +41,7 @@
 #include "port_remastered_import.h"
 #include "port_storage_report.h"
 #include "port_gpu_driver.h"
+#include "port_imgui_fonts.h"
 
 #include <SDL3/SDL_dialog.h>
 #include <SDL3/SDL_events.h>
@@ -1204,7 +1205,7 @@ int main(int argc, char** argv) {
         .logCallback = StderrLogCallback,
 #endif
         .logLevel = LOG_DEBUG,
-        .imGuiInitCallback = nullptr,
+        .imGuiInitCallback = PortImGuiFonts::Init,
         .mem1Size = mem1Size,
         .mem2Size = ARAM_DEFAULT_SIZE,
         .frameBufferScale = frameBufferScale,
