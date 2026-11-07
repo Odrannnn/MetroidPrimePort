@@ -1624,9 +1624,13 @@ void CmdMemo(CStateManager& mgr) {
     mgr.ShowPausedHUDMemo(CAssetId(strg), 0.f);
     return Finish();
   }
+  // "memo hint <text>": the boxed hint memo with its pulsing continue button,
+  // as a scripted HUDMemo flagged as a hint shows it.
+  const bool hint = sCmd.args.size() > 2 && sCmd.args[1] == "hint";
+  const size_t first = hint ? 2 : 1;
   std::wstring wide;
-  for (size_t i = 1; i < sCmd.args.size(); ++i) {
-    if (i > 1) {
+  for (size_t i = first; i < sCmd.args.size(); ++i) {
+    if (i > first) {
       wide += L' ';
     }
     // UTF-8, so text with accents can be tried; a stray byte reads as Latin-1.
@@ -1649,9 +1653,9 @@ void CmdMemo(CStateManager& mgr) {
     }
   }
   if (wide.empty()) {
-    return Finish("usage: memo <text>");
+    return Finish("usage: memo [hint] <text>");
   }
-  CSamusHud::DisplayHudMemo(rstl::wstring(wide.c_str()), CHUDMemoParms(5.f, true, false, false));
+  CSamusHud::DisplayHudMemo(rstl::wstring(wide.c_str()), CHUDMemoParms(5.f, true, false, hint));
   Finish();
 }
 
@@ -4514,7 +4518,7 @@ const CommandSpec kCommands[] = {
     {"hint", nullptr, [](CStateManager&) { CmdHint(); },
      "hint show                  show the hint the game would show next"},
     {"memo", nullptr, [](CStateManager& mgr) { CmdMemo(mgr); },
-     "memo <text> | pause <strg> show text as a HUD message, or a string table as the boxed one"},
+     "memo [hint] <text> | pause <strg> show text as a HUD message (hint: the boxed hint memo), or a string table as the boxed one"},
     {"strg", nullptr, [](CStateManager&) { CmdStrg(); },
      "strg <id> [index]          a string table as the game loads it (mods included)"},
     {"language", nullptr, [](CStateManager&) { CmdLanguage(); },
