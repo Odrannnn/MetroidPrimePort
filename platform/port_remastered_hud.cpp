@@ -1478,7 +1478,7 @@ bool HudConverter::Convert(uint32_t retailFrame, const uint8_t* guif, size_t siz
       }
       // The model's middle (its bounding box follows magic, version and
       // flags) goes to the middle of the pane's box, and keeps the share of
-      // the view's height it had on the disc.
+      // the view's height it had on the disc where that fits the pane.
       const Mat there = remWorld(pane->second);
       double mid[3], from[3], to[3];
       for (int c = 0; c < 3; ++c) {
@@ -1498,7 +1498,19 @@ bool HudConverter::Convert(uint32_t retailFrame, const uint8_t* guif, size_t siz
       }
       const double was = discView(from);
       const double now = remView(at);
-      const double scale = was > 1e-9 && now > 1e-9 ? now / was : 1.0;
+      double scale = was > 1e-9 && now > 1e-9 ? now / was : 1.0;
+      // No wider than the pane Remastered draws its button glyph in: the disc's
+      // GameCube Z pill is wider than the hint memo's ring holds (#272).
+      double wide = 0.0;
+      double room = 0.0;
+      for (int k = 0; k < 3; ++k) {
+        wide += std::abs(w.world.m[0][k]) *
+                std::abs(double(GetBEFloat(cmdl, 24 + size_t(k) * 4)) - GetBEFloat(cmdl, 12 + size_t(k) * 4));
+        room += std::abs(there.m[0][k]) * (hi[k] - lo[k]);
+      }
+      if (wide * scale > room && room > 1e-9) {
+        scale = room / wide;
+      }
       for (int c = 0; c < 3; ++c) {
         for (int k = 0; k < 3; ++k) {
           w.world.m[c][k] *= scale;
