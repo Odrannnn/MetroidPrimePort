@@ -88,6 +88,13 @@ float CGameCamera::VertPlusGunDrop(const float gunFov, const float aspect) {
   return std::tan(0.5f * gunFov * kDegToRad) * (kMinAspect / aspect - 1.f);
 }
 
+void CGameCamera::PortRescaleFov(float fromSetting, float toSetting) {
+  x15c_currentFov = CCameraManager::PortRescaleFov(x15c_currentFov, fromSetting, toSetting);
+  x180_perspInterpStartFov = CCameraManager::PortRescaleFov(x180_perspInterpStartFov, fromSetting, toSetting);
+  x184_perspInterpEndFov = CCameraManager::PortRescaleFov(x184_perspInterpEndFov, fromSetting, toSetting);
+  x170_24_perspDirty = true;
+}
+
 float CGameCamera::GetUnwidenedFov() const {
   const float kMinAspect = 4.f / 3.f;
   const float aspect = GetAspectRatio();

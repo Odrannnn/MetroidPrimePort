@@ -333,8 +333,8 @@ void DrawVideoDisplay() {
                        0.017453292f;
     ImGui::SetItemTooltip("Back to the retail 55 deg.");
     ImGui::TextDisabled("About %.0f deg horizontal at this aspect.", hfov);
-    ImGui::SetItemTooltip("First-person vertical FOV (retail 55). Morph ball and cutscene cameras\n"
-                          "are unchanged.");
+    ImGui::SetItemTooltip("First-person vertical FOV (retail 55). The morph ball's cameras widen\n"
+                          "or narrow in step; cutscene cameras are unchanged.");
   }
   bool gunFollowsFov = sGunFollowsFov;
   if (ImGui::Checkbox("Arm cannon follows FOV", &gunFollowsFov)) {

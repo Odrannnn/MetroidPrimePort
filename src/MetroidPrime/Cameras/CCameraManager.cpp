@@ -103,7 +103,35 @@ CCameraManager::CCameraManager(TUniqueId curCamera)
   sFirstPersonFOV = gpTweakGame->GetFirstPersonFOV();
 }
 
-float CCameraManager::GetDefaultThirdPersonVerticalFOV() { return sThirdPersonFOV; }
+float CCameraManager::GetDefaultThirdPersonVerticalFOV() {
+#ifdef TARGET_PC
+  return PortFollowFovSetting(sThirdPersonFOV);
+#else
+  return sThirdPersonFOV;
+#endif
+}
+
+#ifdef TARGET_PC
+namespace {
+// The FOV setting the morph ball cameras' FOVs were last scaled for.
+float sPortBallFovSetting = PortDebug::kFovRetail;
+} // namespace
+
+float CCameraManager::PortRescaleFov(float fov, float fromSetting, float toSetting) {
+  // The ratio of the two settings' view tangents widens or narrows fov, so the morph ball shows
+  // as much more of the world as first person does (#268).
+  constexpr float kHalfDegToRad = 0.5f * M_PIF / 180.f;
+  const float scale = std::tan(toSetting * kHalfDegToRad) / std::tan(fromSetting * kHalfDegToRad);
+  if (scale == 1.f || !(fov > 0.f && fov < 180.f)) {
+    return fov;
+  }
+  return std::min(2.f * std::atan(std::tan(fov * kHalfDegToRad) * scale) / (2.f * kHalfDegToRad), 170.f);
+}
+
+float CCameraManager::PortFollowFovSetting(float fov) {
+  return PortRescaleFov(fov, PortDebug::kFovRetail, PortDebug::FirstPersonFov());
+}
+#endif
 
 float CCameraManager::GetDefaultFirstPersonVerticalFOV() {
 #ifdef TARGET_PC
@@ -143,6 +171,9 @@ void CCameraManager::CreateCameras(CStateManager& mgr) {
   mgr.Player()->SetCameraState(CPlayer::kCS_FirstPerson, mgr);
   SetCurrentCameraId(fpId);
   TUniqueId ballId = mgr.AllocateUniqueId();
+#ifdef TARGET_PC
+  sPortBallFovSetting = PortDebug::FirstPersonFov();
+#endif
   x80_ballCamera = rs_new CBallCamera(
       ballId, plId, xf, GetDefaultThirdPersonVerticalFOV(), GetDefaultFirstPersonNearClipDistance(),
       GetDefaultFirstPersonFarClipDistance(), GetDefaultAspectRatio());
@@ -171,6 +202,19 @@ void CCameraManager::UpdateCameras(float dt, CStateManager& mgr) {
   // retail changes it later, so follow the FOV slider here.
   if (x7c_fpCamera != nullptr && x7c_fpCamera->GetFov() != GetDefaultFirstPersonVerticalFOV()) {
     x7c_fpCamera->SetFov(GetDefaultFirstPersonVerticalFOV());
+  }
+  // The morph ball's cameras scale their FOVs by the slider (PortFollowFovSetting) when they
+  // set one, so a slider move mid-roll rescales what they hold.
+  const float fovSetting = PortDebug::FirstPersonFov();
+  if (fovSetting != sPortBallFovSetting) {
+    for (idx = objList.GetFirstObjectIndex(); idx != -1; idx = objList.GetNextObjectIndex(idx)) {
+      CEntity* ent = objList[idx];
+      if (TCastToPtr< CBallCamera >(ent) || TCastToPtr< CPathCamera >(ent) ||
+          TCastToPtr< CScriptSpindleCamera >(ent)) {
+        static_cast< CGameCamera* >(ent)->PortRescaleFov(sPortBallFovSetting, fovSetting);
+      }
+    }
+    sPortBallFovSetting = fovSetting;
   }
 #endif
 

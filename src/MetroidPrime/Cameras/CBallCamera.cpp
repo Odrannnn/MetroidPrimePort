@@ -2610,7 +2610,12 @@ void CBallCamera::OverrideCameraInfo(CStateManager& mgr) {
   }
 
   if ((hint->GetOverrideFlags() & 0x8000000) != 0) {
+#ifdef TARGET_PC
+    InterpolateFOV(x15c_currentFov, CCameraManager::PortFollowFovSetting(hint->GetInfo().GetFov()), 1.f,
+                   0.f);
+#else
     InterpolateFOV(x15c_currentFov, hint->GetInfo().GetFov(), 1.f, 0.f);
+#endif
   }
   if ((hint->GetOverrideFlags() & 0x40000000) != 0) {
     x1a8_targetAnglePerSecond = hint->GetInfo().GetAnglePerSecond();

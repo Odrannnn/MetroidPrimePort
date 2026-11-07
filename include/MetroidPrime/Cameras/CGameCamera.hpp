@@ -61,6 +61,9 @@ public:
   static float VertPlusGunDrop(float gunFov, float aspect);
   // FOV before the Vert+ widening, for blending into cameras that get widened.
   float GetUnwidenedFov() const;
+  // Moves the FOV, and any FOV blend under way, from one FOV setting to another
+  // (CCameraManager::PortRescaleFov), for a camera that follows the setting.
+  void PortRescaleFov(float fromSetting, float toSetting);
   float GetRenderFov() const {
     return x170_26_fovIsFitted ? x15c_currentFov : VertPlusFov(x15c_currentFov, GetAspectRatio());
   }
