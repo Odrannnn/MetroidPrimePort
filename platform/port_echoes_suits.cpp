@@ -1057,11 +1057,32 @@ bool Import(const Io& io, Result& result, std::string& error) {
     return true;
   };
 
+  // Prime's ball ANCS, the offset of its character 0's model and skin (after the name from byte
+  // 14), for pointing them at new ones, and that skin.
+  const auto primeBall = [&io, &error](const PortDreadSamus::BallTarget& target, std::vector<uint8_t>& ancs,
+                                       size_t& at, uint32_t& skin, std::vector<uint8_t>& retailSkin) {
+    if (!io.retail(kANCS, target.ancs, ancs)) {
+      error = "Prime's ball " + Hex(target.ancs) + " is missing.";
+      return false;
+    }
+    at = 14;
+    while (at < ancs.size() && ancs[at] != 0) ++at;
+    ++at;
+    Reader a{ancs.data(), ancs.size()};
+    skin = a.U32(at + 4);
+    if (a.bad || a.U32(at) != target.cmdl || !io.retail(kCSKR, skin, retailSkin)) {
+      error = "Prime's ball " + Hex(target.ancs) + " is not the one this importer knows.";
+      return false;
+    }
+    return true;
+  };
+
   std::map<uint32_t, std::vector<EchoesJoint>> echoesCinfs;
   std::map<uint32_t, PortDread::PrimeSkeleton> primeCinfs;
   std::set<uint32_t> textures;
   std::map<uint32_t, std::vector<uint8_t>> written;  // CMDL/CSKR by Prime id, for kCopies
-  const size_t total = std::size(kTargets) + std::size(kBalls) + std::size(kArms) + 1;  // + the gun
+  // + Dark Samus's ball, the gun
+  const size_t total = std::size(kTargets) + std::size(kBalls) + 1 + std::size(kArms) + 1;
   for (size_t i = 0; i < std::size(kTargets); ++i) {
     const Target& t = kTargets[i];
     if (cancelled()) {
@@ -1148,19 +1169,10 @@ bool Import(const Io& io, Result& result, std::string& error) {
       error = "Internal error: " + what + " has no Prime ball.";
       return false;
     }
-    // Prime's ANCS, its character 0 (after the name from byte 14) pointed at the new model and skin.
     std::vector<uint8_t> ancs, retailSkin;
-    if (!io.retail(kANCS, target->ancs, ancs)) {
-      error = "Prime's ball " + Hex(target->ancs) + " is missing.";
-      return false;
-    }
-    size_t at = 14;
-    while (at < ancs.size() && ancs[at] != 0) ++at;
-    ++at;
-    Reader a{ancs.data(), ancs.size()};
-    const uint32_t skin = a.U32(at + 4);
-    if (a.bad || a.U32(at) != target->cmdl || !io.retail(kCSKR, skin, retailSkin)) {
-      error = "Prime's ball " + Hex(target->ancs) + " is not the one this importer knows.";
+    size_t at;
+    uint32_t skin;
+    if (!primeBall(*target, ancs, at, skin, retailSkin)) {
       return false;
     }
     const uint32_t modelId = PortModelVariant::Id(target->cmdl, ball.primeSuit);
@@ -1214,6 +1226,71 @@ bool Import(const Io& io, Result& result, std::string& error) {
         std::to_string(joint) + "), " + std::to_string(ballTextures.size()) + " textures");
     ++result.balls;
   }
+  // Dark Samus's ball: skinned in Echoes, but on one joint at full weight, so unskinned it is the
+  // static model the other balls are, fit the same way to each Prime ball it stands in for.
+  {
+    if (cancelled()) {
+      error = "Cancelled.";
+      return false;
+    }
+    if (io.progress) io.progress(std::size(kTargets) + std::size(kBalls), total);
+    std::string why;
+    PrimeCmdl dark;
+    std::vector<uint32_t> ballTextures;
+    std::vector<uint8_t> cmdl;
+    if (!io.echoes(kCMDL, kDarkBall, cmdl)) {
+      error = "The Echoes disc has no Dark Samus Morph Ball (" + Hex(kDarkBall) + "): is it Metroid Prime 2: "
+              "Echoes (USA)?";
+      return false;
+    }
+    if (!ConvertCmdl(cmdl, dark, ballTextures, &why)) {
+      error = "Dark Samus Morph Ball model " + Hex(kDarkBall) + ": " + why;
+      return false;
+    }
+    Set32(dark.header, 8, Reader{dark.header.data(), dark.header.size()}.U32(8) & ~0x1u);
+    if (!FloatNormals(dark, &why)) {
+      error = "Dark Samus Morph Ball: " + why;
+      return false;
+    }
+    const std::vector<uint8_t> low = WriteCmdl(dark);
+    std::set<uint32_t> ancsDone, lowDone;  // balls share them across suits
+    for (const auto& t : PortDreadSamus::kBallTargets) {
+      if (!ancsDone.insert(t.ancs).second) continue;
+      std::vector<uint8_t> ancs, retailSkin, cskr;
+      size_t at;
+      uint32_t skin, joint;
+      if (!primeBall(t, ancs, at, skin, retailSkin)) {
+        return false;
+      }
+      const uint32_t modelId = DarkBallId(t.cmdl);
+      const uint32_t skinId = DarkBallSkinId(t.cmdl);
+      const uint32_t ancsId = DarkBallId(t.ancs);
+      const uint32_t lowId = DarkBallId(t.low);
+      for (const uint32_t id : {modelId, skinId, ancsId, lowId}) {
+        if (id == 0 || io.retailId(id)) {
+          error = "Dark Samus Morph Ball: output id " + Hex(id) + " is a Prime resource.";
+          return false;
+        }
+      }
+      PrimeCmdl model = dark;
+      if (!MainJoint(retailSkin, joint, &why) || !RigidSkin(model, joint, cskr, &why)) {
+        error = "Dark Samus Morph Ball on " + Hex(t.ancs) + ": " + why;
+        return false;
+      }
+      Set32(ancs, at, modelId);
+      Set32(ancs, at + 4, skinId);
+      if (!write(Hex(modelId) + ".CMDL", WriteCmdl(model)) || !write(Hex(skinId) + ".CSKR", cskr) ||
+          !write(Hex(ancsId) + ".ANCS", ancs) ||
+          (lowDone.insert(t.low).second && !write(Hex(lowId) + ".CMDL", low))) {
+        return false;
+      }
+      log("echoes: Dark Samus Morph Ball on " + Hex(t.ancs) + " -> " + Hex(modelId) + " (rigid joint " +
+          std::to_string(joint) + ")");
+      ++result.balls;
+    }
+    textures.insert(ballTextures.begin(), ballTextures.end());
+    log("echoes: Dark Samus Morph Ball: " + std::to_string(ballTextures.size()) + " textures");
+  }
   std::vector<uint8_t> arm;
   for (size_t i = 0; i < std::size(kArms); ++i) {
     const Arm& a = kArms[i];
@@ -1221,7 +1298,7 @@ bool Import(const Io& io, Result& result, std::string& error) {
       error = "Cancelled.";
       return false;
     }
-    if (io.progress) io.progress(std::size(kTargets) + std::size(kBalls) + i, total);
+    if (io.progress) io.progress(std::size(kTargets) + std::size(kBalls) + 1 + i, total);
     const std::string what = std::string(a.suit) + " arm";
     if (arm.empty() && !io.echoes(kCMDL, kEchoesArm, arm)) {
       error = "The Echoes disc has no arm (" + Hex(kEchoesArm) + "): is it Metroid Prime 2: Echoes (USA)?";

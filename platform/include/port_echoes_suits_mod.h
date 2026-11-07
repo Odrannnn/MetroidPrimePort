@@ -20,7 +20,8 @@ inline constexpr const char* kStampName = ".echoes-suits-version";
 // 5: the cannon's Light and Annihilator sets swapped (kGunSets).
 // 6: Dark Samus, one body per skeleton under DarkSamusId/DarkSamusSkinId (kDarkBodies).
 // 7: the Varia and Light balls also as the Varia and Phazon Spider Balls.
-inline constexpr int kVersion = 7;
+// 8: Dark Samus's Morph Ball (kDarkBall).
+inline constexpr int kVersion = 8;
 
 // The first-person arm cannon (CGunWeapon::LoadGunModels: characters 0 and 1 of each beam's ANCS).
 // Echoes' gun and hologram have Prime's ids and are skinned on its own CINF 46ED31E0, the same 50
@@ -86,6 +87,15 @@ inline constexpr DarkBody kDarkBodies[] = {
     {0xA496DA02, 0x891E00FD, 0xE231AF2B}, {0xF76E70A6, 0xCC25E002, 0xA70A4FD4}, {0xF76E70A6, 0xA602C954, 0xCD2D6682},
     {0xF76E70A6, 0x11A5BC8A, 0x7A8A135C}, {0xF76E70A6, 0x5644E7A1, 0x3D6B4877},
 };
+// Her Morph Ball (Echoes' ANCS 654A3F97, character Dark_Samus_MorphBall: one joint, so rigid), fit
+// once to each Prime ball of PortDreadSamus::kBallTargets as kBalls' are: ANCS DarkBallId(ancs)
+// (character 0 on CMDL DarkBallId(cmdl), CSKR DarkBallSkinId(cmdl)) and low-poly CMDL
+// DarkBallId(low). While Dark Samus is played, the loader serves them as every suit's ball.
+inline constexpr uint32_t kDarkBall = 0x2F2C1E6F;
+inline constexpr int kDarkBallKey = 0x445342;      // "DSB"
+inline constexpr int kDarkBallSkinKey = 0x445343;  // "DSC"
+constexpr uint32_t DarkBallId(uint32_t id) { return PortModelVariant::Id(id, kDarkBallKey); }
+constexpr uint32_t DarkBallSkinId(uint32_t id) { return PortModelVariant::Id(id, kDarkBallSkinKey); }
 void SetPlayAsDarkSamus(bool on);
 bool PlayAsDarkSamus();
 // Whether the loaded mods serve Dark Samus: the setting was on when they last loaded, and the

@@ -330,9 +330,11 @@ Power Suit stays Prime's.
   (`echoes_first_person_cannon`, on by default; console `echoescannon 0|1`) switches it, from the
   next beam selected.
 - "Play as Dark Samus" (`echoes_dark_samus`, off by default; console `darksamus 0|1`) puts Echoes'
-  Dark Samus body in place of every suit's, in third person, cutscenes and the pause screen, from
-  the next mod reload. Her skeleton and bind pose are Echoes Samus's, so she is fitted like the
-  suits. The first-person arm and the Morph Ball stay the suit's (Echoes has neither for her).
+  Dark Samus body in place of every suit's, in third person, cutscenes and the pause screen, and
+  her Morph Ball (the one from the Aerie fight) in place of every suit's ball, from the next mod
+  reload. Her skeleton and bind pose are Echoes Samus's, so she is fitted like the suits. The
+  first-person arm stays the suit's (Echoes has none for her). Imports from before mod version 8
+  have no ball; import again.
 
 ## Texture packs
 

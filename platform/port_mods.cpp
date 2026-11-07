@@ -991,9 +991,27 @@ void Initialize() {
         ++served;
       }
     }
-    sDarkSamusServed = served != 0;
+    // Her Morph Ball, as every suit's (CMorphBall::GetMorphBallModel's variant ANCS and low-poly ball).
+    size_t balls = 0;
+    for (const auto& t : PortDreadSamus::kBallTargets) {
+      const LooseResource* ancs = echoes(0x414E4353u, PortEchoesSuits::DarkBallId(t.ancs));  // 'ANCS'
+      const LooseResource* low = echoes(0x434D444Cu, PortEchoesSuits::DarkBallId(t.low));    // 'CMDL'
+      if (ancs == nullptr || low == nullptr) continue;
+      for (const LooseResource* from : {ancs, low}) {
+        const uint32_t to = PortModelVariant::Id(from == ancs ? t.ancs : t.low, t.suit);
+        LooseResource resource = *from;
+        resource.id = to;
+        loose[{resource.type, to}] = std::move(resource);
+        if (const auto provider = sResourceProviders.find({from->type, from->id}); provider != sResourceProviders.end()) {
+          sResourceProviders[{from->type, to}] = provider->second;
+        }
+      }
+      ++balls;
+    }
+    sDarkSamusServed = served != 0 || balls != 0;
     if (sDarkSamusServed) {
-      PortLog::Write("mods: %s serves Dark Samus as %zu Samus body model(s)\n", PortEchoesSuits::kModName, served);
+      PortLog::Write("mods: %s serves Dark Samus as %zu Samus body model(s) and %zu Morph Ball(s)\n",
+                     PortEchoesSuits::kModName, served, balls);
     }
   }
 

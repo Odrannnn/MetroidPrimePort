@@ -2,6 +2,7 @@
 // entry segments, the CINF reader and the skin's joint mapping.
 
 #include "port_echoes_suits.h"
+#include "port_dread_samus_mod.h"
 #include "port_test.h"
 
 #include <cstring>
@@ -216,6 +217,17 @@ void TestBodies() {
     }
   }
   CHECK(written == sizeof(kBodies) / sizeof(kBodies[0]));
+  // Dark Samus's ball ids: none a body, a suit's ball, or another of hers.
+  for (const auto& t : PortDreadSamus::kBallTargets) {
+    for (const uint32_t id : {DarkBallId(t.ancs), DarkBallId(t.cmdl), DarkBallSkinId(t.cmdl), DarkBallId(t.low)}) {
+      CHECK(!IsBody(id));
+      for (int suit = 0; suit < 4; ++suit) {
+        CHECK(id != PortModelVariant::Id(t.ancs, suit) && id != PortModelVariant::Id(t.cmdl, suit) &&
+              id != PortModelVariant::Id(t.low, suit));
+      }
+    }
+    CHECK(DarkBallId(t.cmdl) != DarkBallSkinId(t.cmdl) && DarkBallId(t.ancs) != DarkBallId(t.low));
+  }
 }
 
 // A ball-shaped model: short normals and UVs, one material on texture `texture` with 8-bit
