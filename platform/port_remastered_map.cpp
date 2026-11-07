@@ -312,28 +312,6 @@ double Median(std::vector<double> values) {
   return n % 2 != 0 ? values[n / 2] : (values[n / 2 - 1] + values[n / 2]) / 2;
 }
 
-// Whether the ray from `o` along `d` passes through the triangle, beyond its start.
-bool Hits(const Vec& o, const Vec& d, const Vec& a, const Vec& b, const Vec& c) {
-  const Vec e1 = Sub(b, a);
-  const Vec e2 = Sub(c, a);
-  const Vec p = Cross(d, e2);
-  const double det = Dot(e1, p);
-  if (std::fabs(det) < 1e-9) {
-    return false;
-  }
-  const Vec t = Sub(o, a);
-  const double u = Dot(t, p) / det;
-  if (u < 0 || u > 1) {
-    return false;
-  }
-  const Vec q = Cross(t, e1);
-  const double v = Dot(d, q) / det;
-  if (v < 0 || u + v > 1) {
-    return false;
-  }
-  return Dot(e2, q) / det > 1e-3;
-}
-
 struct Triangle {
   std::array<uint32_t, 3> v{};
   Vec normal{};
@@ -437,27 +415,37 @@ bool BuildFaces(const std::vector<Vec>& points, const std::vector<std::array<uin
     const Vec c = Cross(Sub(vertices[t.v[1]], vertices[t.v[0]]), Sub(vertices[t.v[2]], vertices[t.v[0]]));
     return Dot(c, c);
   };
-  for (const auto& [root, group] : groups) {
-    // Wind the face one way, outwards from its largest triangle.
-    size_t largest = group[0];
-    for (size_t i : group) {
-      if (area2(triangles[i]) > area2(triangles[largest])) {
-        largest = i;
-      }
+  // Wind each piece of the room one way, outwards from its largest triangle,
+  // across the edges two triangles share (and within a face, any edge).
+  std::vector<bool> seen(triangles.size(), false);
+  std::vector<std::vector<size_t>> pieces;
+  std::vector<size_t> order(triangles.size());
+  for (size_t i = 0; i < order.size(); ++i) {
+    order[i] = i;
+  }
+  std::stable_sort(order.begin(), order.end(),
+                   [&](size_t x, size_t y) { return area2(triangles[x]) > area2(triangles[y]); });
+  for (size_t largest : order) {
+    if (seen[largest]) {
+      continue;
     }
-    std::set<size_t> seen = {largest};
+    seen[largest] = true;
+    std::vector<size_t> piece;
     std::vector<size_t> todo = {largest};
     while (!todo.empty()) {
       const size_t i = todo.back();
       todo.pop_back();
+      piece.push_back(i);
       const std::array<uint32_t, 3> a = triangles[i].v;
       for (size_t k = 0; k < 3; ++k) {
         const uint32_t from = a[k];
         const uint32_t to = a[(k + 1) % 3];
-        for (size_t j : edges[Undirected(from, to)]) {
-          if (find(j) != root || !seen.insert(j).second) {
+        const std::vector<size_t>& list = edges[Undirected(from, to)];
+        for (size_t j : list) {
+          if (seen[j] || (list.size() != 2 && find(j) != find(i))) {
             continue;
           }
+          seen[j] = true;
           // Neighbours wound alike run along their shared edge in opposite directions.
           const std::array<uint32_t, 3>& b = triangles[j].v;
           for (size_t m = 0; m < 3; ++m) {
@@ -470,27 +458,38 @@ bool BuildFaces(const std::vector<Vec>& points, const std::vector<std::array<uin
         }
       }
     }
-    // Into the room: an odd number of the room's other walls lies ahead. The ray
-    // is a little off the normal so that it does not run along a wall.
-    const Triangle& first = triangles[largest];
-    Vec origin{};
+    pieces.push_back(std::move(piece));
+  }
+  // Into the room: a piece faces inwards when it encloses a negative volume
+  // around the room's centre. Remastered's rooms are open, so counting the walls
+  // a ray crosses from one face says little; the whole piece's volume holds.
+  Vec middle{};
+  double weights = 0;
+  for (const Triangle& t : triangles) {
+    const double weight = std::sqrt(area2(t));
     for (size_t k = 0; k < 3; ++k) {
-      origin[k] = (vertices[first.v[0]][k] + vertices[first.v[1]][k] + vertices[first.v[2]][k]) / 3;
+      middle[k] += weight * (vertices[t.v[0]][k] + vertices[t.v[1]][k] + vertices[t.v[2]][k]) / 3;
     }
-    const Vec ray = {first.normal[0] + 0.0131, first.normal[1] + 0.0077, first.normal[2] + 0.0053};
-    int walls = 0;
-    for (size_t j = 0; j < triangles.size(); ++j) {
-      if (find(j) != root &&
-          Hits(origin, ray, vertices[triangles[j].v[0]], vertices[triangles[j].v[1]], vertices[triangles[j].v[2]])) {
-        ++walls;
-      }
+    weights += weight;
+  }
+  for (size_t k = 0; k < 3; ++k) {
+    middle[k] /= weights;
+  }
+  for (const std::vector<size_t>& piece : pieces) {
+    double volume = 0;
+    for (size_t i : piece) {
+      const Triangle& t = triangles[i];
+      const Vec c = Cross(Sub(vertices[t.v[1]], vertices[t.v[0]]), Sub(vertices[t.v[2]], vertices[t.v[0]]));
+      volume += Dot(Sub(vertices[t.v[0]], middle), c);
     }
-    if (walls % 2 == 0) {
-      for (size_t i : group) {
+    if (volume > 0) {
+      for (size_t i : piece) {
         triangles[i].Flip();
       }
     }
+  }
 
+  for (const auto& [root, group] : groups) {
     Face face;
     Vec normal{};
     double total = 0;
